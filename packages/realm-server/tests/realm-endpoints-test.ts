@@ -70,10 +70,14 @@ import {
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
+  IncrementalIndexEventContent,
   MatrixEvent,
   RealmEventEvent,
+  RealmEventEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import isEqual from 'lodash/isEqual';
+
+import wtfnode from 'wtfnode';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -925,7 +929,7 @@ module(basename(__filename), function () {
             messages,
             'index',
             'incremental',
-          );
+          ) as IncrementalIndexEventContent;
 
           id = incrementalEvent!.content.invalidations[0].split('/').pop()!;
           assert.true(uuidValidate(id!), 'card identifier is a UUID');
@@ -4075,8 +4079,14 @@ function findRealmEvent(
     (m) =>
       m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
       m.content.eventName === eventName &&
-      m.content.indexType === indexType,
+      (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
   );
+}
+
+function realmEventIsIndex(
+  event: RealmEventEventContent,
+): event is IncrementalIndexEventContent {
+  return event.eventName === 'index';
 }
 
 function matchRealmEvent(events: MatrixEvent[], event: any) {

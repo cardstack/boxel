@@ -287,7 +287,7 @@ export type IndexRealmEventContent =
   | CopiedIndexEventContent
   | IncrementalIndexInitiationContent;
 
-interface IncrementalIndexEventContent {
+export interface IncrementalIndexEventContent {
   eventName: 'index';
   indexType: 'incremental';
   invalidations: string[];
