@@ -600,13 +600,10 @@ export class Realm {
     await this.#realmIndexUpdater.update(url, {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
-        this.sendServerEvent({
-          type: 'index',
-          data: {
-            type: 'incremental',
-            realmURL: this.url,
-            invalidations: invalidatedURLs.map((u) => u.href),
-          },
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: invalidatedURLs.map((u) => u.href),
         });
       },
     });
@@ -640,9 +637,9 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.run();
-    this.sendServerEvent({
-      type: 'index',
-      data: { type: 'full', realmURL: this.url },
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'full',
     });
   }
 
@@ -651,13 +648,10 @@ export class Realm {
     let startTime = Date.now();
     if (this.#copiedFromRealm) {
       await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-      this.sendServerEvent({
-        type: 'index',
-        data: {
-          type: 'copy',
-          sourceRealmURL: this.#copiedFromRealm.href,
-          destRealmURL: this.url,
-        },
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'copy',
+        sourceRealmURL: this.#copiedFromRealm.href,
       });
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
@@ -666,9 +660,9 @@ export class Realm {
         // we only await the full indexing at boot if this is a brand new index
         await promise;
       }
-      this.sendServerEvent({
-        type: 'index',
-        data: { type: 'full', realmURL: this.url },
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'full',
       });
     }
     this.#perfLog.debug(
@@ -1968,10 +1962,6 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable,
         );
-        this.sendServerEvent({
-          type: 'message',
-          data: { cleanup: `${this.listeningClients.length} clients` },
-        });
         if (this.listeningClients.length === 0) {
           this.#adapter.unsubscribe();
         }
@@ -1984,7 +1974,12 @@ export class Realm {
         if (!tracked || tracked.isTracked) {
           return;
         }
-        this.sendServerEvent({ type: 'update', data });
+        this.broadcastRealmEvent({
+          eventName: 'update',
+          // FIXME what to do with this?
+          // @ts-expect-error
+          data,
+        });
         this.#updateItems.push({
           operation: ('added' in data
             ? 'add'
@@ -2001,11 +1996,6 @@ export class Realm {
     this.listeningClients.push(writable);
 
     console.log('subscribe about to sendServerEvent');
-
-    this.sendServerEvent({
-      type: 'message',
-      data: { count: `${this.listeningClients.length} clients` },
-    });
 
     console.log('subscribe sentServerEvent done, waitForClose');
 

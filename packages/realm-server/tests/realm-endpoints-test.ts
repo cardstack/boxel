@@ -1367,8 +1367,6 @@ module(basename(__filename), function () {
             eventName: 'index',
             indexType: 'incremental',
             invalidations: [`${testRealmURL}person-1`],
-            // FIXME realmURL should not be here…??
-            realmURL: 'http://127.0.0.1:4444/',
           });
         });
 
@@ -1655,8 +1653,6 @@ module(basename(__filename), function () {
             eventName: 'index',
             indexType: 'incremental',
             invalidations: [`${testRealmURL}unused-card.gts`],
-            // FIXME realmURL should not be here…??
-            realmURL: 'http://127.0.0.1:4444/',
           });
         });
 
