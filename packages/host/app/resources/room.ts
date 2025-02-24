@@ -100,10 +100,7 @@ export class RoomResource extends Resource<Args> {
       }
       let memberIds = this.matrixRoom.memberIds;
       // If the AI bot is not in the room, don't process the events
-      if (!memberIds) {
-        return;
-      }
-      if (!memberIds.includes(this.matrixService.aiBotUserId)) {
+      if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
       await this.loadFromEvents(roomId);

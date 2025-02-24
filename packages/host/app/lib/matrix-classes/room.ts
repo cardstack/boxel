@@ -1,4 +1,4 @@
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { type IEvent } from 'matrix-js-sdk';
 
@@ -44,6 +44,7 @@ export default class Room {
       ?.name;
   }
 
+  @cached
   get memberIds(): string[] {
     let memberEvents = (this._roomState?.events
       .get('m.room.member')
