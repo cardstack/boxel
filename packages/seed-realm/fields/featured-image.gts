@@ -178,11 +178,8 @@ export class FeaturedImageField extends FieldDef {
             -12px 0,
             0 0,
             0 12px;
-          background-image: linear-gradient(
-              45deg,
-              var(--boxel-300) 25%,
-              transparent 25%
-            ),
+          background-image:
+            linear-gradient(45deg, var(--boxel-300) 25%, transparent 25%),
             linear-gradient(-45deg, var(--boxel-300) 25%, transparent 25%),
             linear-gradient(45deg, transparent 75%, var(--boxel-300) 75%),
             linear-gradient(-45deg, transparent 75%, var(--boxel-300) 75%);

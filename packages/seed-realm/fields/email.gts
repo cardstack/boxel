@@ -1,6 +1,3 @@
-import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
-import { debounce } from 'lodash';
 import {
   StringField,
   Component,
@@ -13,8 +10,12 @@ import {
   type BoxelInputValidationState,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+
 import MailIcon from '@cardstack/boxel-icons/mail';
-import { EntityDisplay } from '../components/entity-display';
+import { debounce } from 'lodash';
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 // We use simple regex here to validate common email formats
 // This is definitely NOT a full email validation
@@ -67,18 +68,24 @@ export class EmailField extends StringField {
   static atom = class Atom extends Component<typeof EmailField> {
     <template>
       {{#if @model}}
-        <EntityDisplay @underline={{false}}>
+        <EntityDisplayWithIcon @title={{@model}} @underline={{false}}>
           <:title>
-            {{@model}}
+            <a href='mailto:{{@model}}' rel='noopener noreferrer'>
+              {{@model}}
+            </a>
           </:title>
-          <:thumbnail>
+          <:icon>
             <MailIcon class='icon' />
-          </:thumbnail>
-        </EntityDisplay>
+          </:icon>
+        </EntityDisplayWithIcon>
       {{/if}}
       <style scoped>
         .icon {
           color: var(--boxel-400);
+        }
+        a:hover {
+          text-decoration: underline;
+          color: inherit;
         }
       </style>
     </template>
