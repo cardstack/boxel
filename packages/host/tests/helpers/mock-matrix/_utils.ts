@@ -37,13 +37,14 @@ export class MockUtils {
       event_id?: string;
       state_key?: string;
       origin_server_ts?: number;
+      type?: string;
     },
   ) => {
     return this.testState.sdk!.serverState.addRoomEvent(
       sender,
       {
         room_id: roomId,
-        type: 'm.room.message',
+        type: overrides?.type ?? 'm.room.message',
         content,
       },
       overrides,

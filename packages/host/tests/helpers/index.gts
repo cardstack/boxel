@@ -36,6 +36,7 @@ import {
 } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 
+import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -59,6 +60,11 @@ import {
   type CardDef,
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
+
+import type {
+  RealmEventEvent,
+  RealmEventEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import { TestRealmAdapter } from './adapter';
 import { MockUtils } from './mock-matrix/_utils';
@@ -178,9 +184,9 @@ export interface TestContextWithSSE extends TestContext {
   expectEvents: (args: {
     assert: Assert;
     realm: Realm;
-    expectedEvents?: { type: string; data: Record<string, any> }[];
+    expectedEvents?: RealmEventEventContent[];
     expectedNumberOfEvents?: number;
-    onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
+    onEvents?: (events: RealmEventEventContent[]) => void;
     callback: () => Promise<any>;
     opts?: { timeout?: number };
   }) => Promise<any>;
@@ -319,7 +325,11 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         () =>
           defer.reject(
             new Error(
-              `expectEvent timed out, saw events ${JSON.stringify(roomEvents)}`,
+              `expectEvent timed out, saw events ${JSON.stringify(
+                roomEvents,
+                null,
+                2,
+              )}`,
             ),
           ),
         opts?.timeout ?? 10000,
@@ -341,7 +351,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
 
       let sseRoomEvents = roomEvents.filter(
         (e) =>
-          e.content?.msgtype === 'app.boxel.sse' &&
+          e.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
           e.sender === realm.matrixUsername,
       );
 

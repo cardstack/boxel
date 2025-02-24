@@ -668,10 +668,8 @@ module('Integration | card-copy', function (hooks) {
       realm: realm2,
       expectedNumberOfEvents: 2,
       onEvents: ([_, event]) => {
-        if (event.data.type === 'incremental') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Pet/${id}`,
-          ]);
+        if (event.eventName === 'index' && event.indexType === 'incremental') {
+          assert.deepEqual(event.invalidations, [`${testRealm2URL}Pet/${id}`]);
         } else {
           assert.ok(
             false,
