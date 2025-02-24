@@ -326,7 +326,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
   }
 
   <template>
-    <PageLayout>
+    <PageLayout @format='isolated'>
       <:header>
         <div class='header-container'>
           <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
@@ -603,7 +603,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       h3,
       h4,
       p {
-        margin: 0;
+        margin-block: 0;
       }
       hr {
         border: 0.5px solid var(--boxel-200);
@@ -718,7 +718,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin-top: 0.5rem;
       }
       /* Task Summary Grid & Card */
-      .tasks-summary-card :where(.task-card) {
+      .tasks-summary-card :deep(.task-card) {
         --task-card-padding: var(--boxel-sp-xxxs) 0;
       }
       .sidebar-create-button {

@@ -1,6 +1,13 @@
 import GlimmerComponent from '@glimmer/component';
 
+import type { Format } from 'https://cardstack.com/base/card-api';
+
+import { cn } from '@cardstack/boxel-ui/helpers';
+
 interface PageLayoutArgs {
+  Args: {
+    format?: Format;
+  }
   Blocks: {
     header: [];
     summary: [];
@@ -11,7 +18,7 @@ interface PageLayoutArgs {
 
 export default class PageLayout extends GlimmerComponent<PageLayoutArgs> {
   <template>
-    <div class='page-layout' ...attributes>
+    <div class={{cn 'page-layout' @format}} ...attributes>
       {{yield to='header'}}
       {{yield to='summary'}}
       {{yield to='content'}}
@@ -20,16 +27,16 @@ export default class PageLayout extends GlimmerComponent<PageLayoutArgs> {
     <style scoped>
       @layer {
         .page-layout {
-          display: var(--page-layout-display, flex);
-          flex-direction: var(--page-layout-flex-direction, column);
-          gap: var(--page-layout-gap, var(--boxel-sp-lg));
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-lg);
           width: 100%;
-          padding: var(--page-layout-padding, var(--boxel-sp-xl));
-          box-sizing: border-box;
-          background-color: var(
-            --page-layout-background-color,
-            var(--boxel-100)
-          );
+          padding: var(--boxel-sp-xl);
+        }
+        .page-layout.isolated {
+          height: max-content;
+          min-height: 100%;
+          background-color: var(--boxel-100);
         }
       }
     </style>

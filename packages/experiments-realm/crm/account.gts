@@ -362,7 +362,7 @@ class IsolatedTemplate extends Component<typeof Account> {
   }
 
   <template>
-    <PageLayout class='isolated-account'>
+    <PageLayout @format='isolated'>
       <:header>
         <div class='header-container'>
           <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
@@ -382,10 +382,10 @@ class IsolatedTemplate extends Component<typeof Account> {
               {{/if}}
             </:content>
           </AccountHeader>
-          <div class='tag-list'>
-            <@fields.statusTag @format='atom' />
-            <@fields.urgencyTag @format='atom' />
-          </div>
+          <ul class='tag-list'>
+            <li><@fields.statusTag @format='atom' /></li>
+            <li><@fields.urgencyTag @format='atom' /></li>
+          </ul>
         </div>
       </:header>
 
@@ -540,12 +540,7 @@ class IsolatedTemplate extends Component<typeof Account> {
       h2,
       h3,
       p {
-        margin: 0;
-      }
-      .isolated-account {
-        height: max-content;
-        min-height: 100%;
-        background-color: var(--boxel-100);
+        margin-block: 0;
       }
       .header-container {
         display: flex;
@@ -558,26 +553,12 @@ class IsolatedTemplate extends Component<typeof Account> {
         margin: 0;
       }
       /* Summary Grid & Card */
-      .summary-grid {
-        --summary-card-min-height: 170px;
-      }
-      .summary-title {
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xxs);
-        align-self: flex-start;
-      }
       .summary-highlight {
         font: 600 var(--boxel-font-xl);
       }
       .description {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-sm);
-      }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
       }
       .info-card {
         --summary-card-gap: var(--boxel-sp-xl);
@@ -617,15 +598,21 @@ class IsolatedTemplate extends Component<typeof Account> {
       }
       .task-button-desktop {
         display: inline-flex;
+        gap: var(--boxel-sp-xxxs);
       }
       .tasks-summary-card {
-        --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
+        --summary-card-padding: var(--boxel-sp-lg) var(--boxel-sp);
         --summary-card-content-gap: 0;
         container-type: inline-size;
         container-name: tasks-summary-card;
       }
-      .tasks-summary-card :where(.task-card) {
-        --task-card-padding: var(--boxel-sp) 0;
+      .upcoming-tasks-title {
+        font: 600 var(--boxel-font-med);
+        letter-spacing: var(--boxel-lsp-xxs);
+      }
+      .tasks-summary-card :deep(.task-card) {
+        --task-card-padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp)
+          var(--boxel-sp-xs);
         border-top: 1px solid var(--boxel-200);
       }
       .task-title {
@@ -918,10 +905,10 @@ class EmbeddedTemplate extends Component<typeof Account> {
               {{/if}}
             </:content>
           </AccountHeader>
-          <div class='tag-list'>
-            <@fields.statusTag @format='atom' />
-            <@fields.urgencyTag @format='atom' />
-          </div>
+          <ul class='tag-list'>
+            <li><@fields.statusTag @format='atom' /></li>
+            <li><@fields.urgencyTag @format='atom' /></li>
+          </ul>
         </div>
       </:header>
       <:summary>
@@ -1030,12 +1017,6 @@ class EmbeddedTemplate extends Component<typeof Account> {
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
       }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
       .tag-list {
         margin: 0;
         padding: 0;
@@ -1075,17 +1056,6 @@ class EmbeddedTemplate extends Component<typeof Account> {
         margin-top: var(--boxel-sp-xs);
       }
       /* Summary */
-      .summary-title {
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xxs);
-        margin: 0;
-      }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
       .summary-highlight {
         font: 600 var(--boxel-font-lg);
         margin: 0;
@@ -1173,10 +1143,10 @@ class FittedTemplate extends Component<typeof Account> {
         </AccountHeader>
       </:header>
       <:summary>
-        <div class='tag-list'>
-          <@fields.statusTag @format='atom' />
-          <@fields.urgencyTag @format='atom' />
-        </div>
+        <ul class='tag-list'>
+          <li><@fields.statusTag @format='atom' /></li>
+          <li><@fields.urgencyTag @format='atom' /></li>
+        </ul>
       </:summary>
     </PageLayout>
 
@@ -1216,6 +1186,9 @@ class FittedTemplate extends Component<typeof Account> {
 
       .tag-list {
         margin-top: auto;
+        margin-bottom: 0;
+        padding: 0;
+        list-style-type: none;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
@@ -1229,9 +1202,6 @@ class FittedTemplate extends Component<typeof Account> {
           --account-header-logo-size: 40px;
           --account-header-gap: var(--boxel-sp-xs);
           --account-header-logo-border-radius: var(--boxel-border-radius);
-        }
-        .account-page-layout-fitted {
-          --account-page-layout-padding: var(--boxel-sp-xs);
         }
 
         @container (224px <= height < 226px) {
@@ -1258,9 +1228,6 @@ class FittedTemplate extends Component<typeof Account> {
       /* Horizontal card (aspect-ratio > 1.0) */
       @container fitted-card (aspect-ratio > 1.0) {
         /* Base styles for smaller horizontal cards */
-        .account-page-layout-fitted {
-          --account-page-layout-padding: var(--boxel-sp-xs);
-        }
         .account-header-fitted {
           --account-header-logo-size: 40px;
           --account-header-logo-border-radius: var(--boxel-border-radius);
