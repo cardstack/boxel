@@ -144,14 +144,6 @@ module(basename(__filename), function () {
             fileSystem,
             loginMatrix: true,
           }));
-          console.log('done running runTestRealmServer');
-
-          let matrixClient = testRealm.matrixClient;
-
-          console.log(
-            'matrix client ' + matrixClient.getUserId(),
-            matrixClient.isLoggedIn(),
-          );
 
           request = supertest(testRealmHttpServer);
         },
