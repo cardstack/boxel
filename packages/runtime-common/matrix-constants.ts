@@ -16,6 +16,7 @@ export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
 export const DEFAULT_LLM = 'openai/gpt-4o';
 export const DEFAULT_LLM_LIST = [
   'anthropic/claude-3.5-sonnet',
+  'anthropic/claude-3.7-sonnet,
   'google/gemini-pro-1.5',
   'openai/gpt-4o',
   'openai/gpt-4o-mini',
