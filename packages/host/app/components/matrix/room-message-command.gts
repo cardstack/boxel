@@ -279,9 +279,20 @@ export default class RoomMessageCommand extends Component<Signature> {
       .command-result-card-preview {
         margin-top: var(--boxel-sp);
       }
+      .preview-code {
+        --spacing: var(--boxel-sp-sm);
+        --fill-container-spacing: calc(
+          -1 * var(--ai-assistant-message-padding)
+        );
+        margin: var(--boxel-sp) var(--fill-container-spacing)
+          var(--fill-container-spacing) var(--fill-container-spacing);
+        padding: var(--spacing) 0;
+        background-color: var(--boxel-dark);
+      }
       .copy-to-clipboard-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-padding: 0 var(--boxel-sp-xs);
+        --boxel-button-text-color: var(--boxel-highlight);
         --icon-color: var(--boxel-highlight);
         --icon-stroke-width: 2px;
         margin-left: var(--spacing);
@@ -289,10 +300,15 @@ export default class RoomMessageCommand extends Component<Signature> {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: var(--spacing);
+        filter: brightness(0.9);
       }
       .copy-to-clipboard-button:hover:not(:disabled) {
-        --boxel-button-text-color: var(--boxel-highlight);
         filter: brightness(1.1);
+      }
+      .monaco-container {
+        height: var(--monaco-container-height);
+        min-height: 10rem;
+        max-height: 30vh;
       }
       .header {
         --boxel-label-color: var(--boxel-450);

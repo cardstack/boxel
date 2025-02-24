@@ -348,12 +348,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         padding: var(--ai-assistant-message-padding, var(--boxel-sp));
       }
 
-      .is-from-assistant .content :deep(.message) {
-        padding: var(--ai-assistant-message-padding, var(--boxel-sp));
-      }
-
       .is-from-assistant .content {
-        padding: 0;
         background-color: var(--ai-bot-message-background-color);
         color: var(--boxel-light);
         /* the below font-smoothing options are only recommended for light-colored

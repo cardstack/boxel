@@ -621,6 +621,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       'it can preview code when a change is proposed',
     );
     assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
+    await percySnapshot(assert);
 
     await click('[data-test-view-code-button]');
     assert.dom('[data-test-code-editor]').doesNotExist();
