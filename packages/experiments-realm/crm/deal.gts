@@ -12,7 +12,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
 import DateField from 'https://cardstack.com/base/date';
-import GlimmerComponent from '@glimmer/component';
+import PageLayout from '../components/page-layout';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
 import {
@@ -319,7 +319,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
   }
 
   <template>
-    <DealPageLayout>
+    <PageLayout>
       <:header>
         <div class='header-container'>
           <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
@@ -366,7 +366,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
         </div>
       </:header>
 
-      <:dashboard>
+      <:summary>
         <SummaryCard class='dashboard' @title='Deal Value'>
           <:icon>
             {{#if @model.healthScore}}
@@ -481,9 +481,9 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </footer>
           </:content>
         </SummaryCard>
-      </:dashboard>
+      </:summary>
 
-      <:summary>
+      <:content>
         <SummaryGridContainer class='task-summary-grid'>
           <SummaryCard @iconComponent={{World}} @title='Deal Info'>
             <:content>
@@ -587,8 +587,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:content>
           </SummaryCard>
         </SummaryGridContainer>
-      </:summary>
-    </DealPageLayout>
+      </:content>
+    </PageLayout>
 
     <style scoped>
       h1,
@@ -1391,39 +1391,6 @@ export class Deal extends CardDef {
   static edit = EditTemplate;
   static isolated = IsolatedTemplate;
   static fitted = FittedTemplate;
-}
-
-interface DealPageLayoutArgs {
-  Blocks: {
-    header: [];
-    dashboard: [];
-    summary: [];
-  };
-  Element: HTMLElement;
-}
-
-class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
-  <template>
-    <div class='deal-page-layout' ...attributes>
-      {{yield to='header'}}
-      {{yield to='dashboard'}}
-      {{yield to='summary'}}
-    </div>
-
-    <style scoped>
-      @layer {
-        .deal-page-layout {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-lg);
-          width: 100%;
-          padding: var(--boxel-sp-xl);
-          box-sizing: border-box;
-          background-color: var(--boxel-100);
-        }
-      }
-    </style>
-  </template>
 }
 
 function getComponent(cardOrField: BaseDef) {

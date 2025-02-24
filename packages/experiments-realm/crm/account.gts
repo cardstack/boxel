@@ -5,7 +5,7 @@ import {
   realmURL,
 } from 'https://cardstack.com/base/card-api';
 import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
-import GlimmerComponent from '@glimmer/component';
+import PageLayout from '../components/page-layout';
 import {
   field,
   linksToMany,
@@ -359,7 +359,7 @@ class IsolatedTemplate extends Component<typeof Account> {
   }
 
   <template>
-    <AccountPageLayout class='isolated-account'>
+    <PageLayout class='isolated-account'>
       <:header>
         <div class='header-container'>
           <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
@@ -464,7 +464,7 @@ class IsolatedTemplate extends Component<typeof Account> {
         </SummaryGridContainer>
       </:summary>
 
-      <:tasks>
+      <:content>
         <SummaryCard class='tasks-summary-card'>
           <:title>
             <h3 class='upcoming-tasks-title'>Upcoming Tasks</h3>
@@ -529,8 +529,8 @@ class IsolatedTemplate extends Component<typeof Account> {
             {{/if}}
           </:content>
         </SummaryCard>
-      </:tasks>
-    </AccountPageLayout>
+      </:content>
+    </PageLayout>
 
     <style scoped>
       h1,
@@ -895,7 +895,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
   }
 
   <template>
-    <AccountPageLayout class='account-page-layout-embedded'>
+    <PageLayout class='account-page-layout-embedded'>
       <:header>
         <div class='header-container'>
           <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
@@ -999,7 +999,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
           </div>
         </section>
       </:summary>
-    </AccountPageLayout>
+    </PageLayout>
 
     <style scoped>
       h3,
@@ -1155,7 +1155,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
 
 class FittedTemplate extends Component<typeof Account> {
   <template>
-    <AccountPageLayout class='account-page-layout-fitted'>
+    <PageLayout class='account-page-layout-fitted'>
       <:header>
         <AccountHeader
           class='account-header-fitted'
@@ -1175,7 +1175,7 @@ class FittedTemplate extends Component<typeof Account> {
           <@fields.urgencyTag @format='atom' />
         </div>
       </:summary>
-    </AccountPageLayout>
+    </PageLayout>
 
     <style scoped>
       /* Base styles */
@@ -1339,39 +1339,6 @@ export class Account extends CardDef {
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
-}
-
-interface AccountPageLayoutArgs {
-  Blocks: {
-    header: [];
-    summary: [];
-    tasks: [];
-  };
-  Element: HTMLElement;
-}
-
-class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
-  <template>
-    <div class='account-page-layout' ...attributes>
-      {{yield to='header'}}
-      {{yield to='summary'}}
-      {{yield to='tasks'}}
-    </div>
-
-    <style scoped>
-      @layer {
-        .account-page-layout {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-lg);
-          width: 100%;
-          padding: var(--boxel-sp-xl);
-          box-sizing: border-box;
-          background-color: var(--boxel-100);
-        }
-      }
-    </style>
-  </template>
 }
 
 function getComponent(cardOrField: BaseDef) {
