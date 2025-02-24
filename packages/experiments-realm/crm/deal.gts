@@ -53,6 +53,7 @@ import {
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import Calendar from '@cardstack/boxel-icons/calendar';
+import DealIcon from '@cardstack/boxel-icons/handshake';
 import Info from '@cardstack/boxel-icons/info';
 import MapPin from '@cardstack/boxel-icons/map-pin';
 import Users from '@cardstack/boxel-icons/users';
@@ -1614,8 +1615,9 @@ export class ValueLineItem extends FieldDef {
 }
 
 export class Deal extends CardDef {
-  static displayName = 'CRM Deal';
+  static displayName = 'Deal';
   static headerColor = '#f8f7fa';
+  static icon = DealIcon;
   @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field account = linksTo(() => Account);

@@ -14,6 +14,7 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
+import CRMIcon from '@cardstack/boxel-icons/ship-wheel';
 
 const dateFormat = `yyyy-MM-dd`;
 
@@ -773,5 +774,6 @@ export class CrmApp extends CardDef {
   static displayName = 'CRM App';
   static prefersWideFormat = true;
   static headerColor = '#4D3FE8';
+  static icon = CRMIcon;
   static isolated = CrmAppTemplate;
 }

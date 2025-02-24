@@ -485,7 +485,7 @@ class AtomTemplate extends Component<typeof Contact> {
 }
 
 export class Contact extends CardDef {
-  static displayName = 'CRM Contact';
+  static displayName = 'Contact';
   static icon = ContactIcon;
 
   @field firstName = contains(StringField);

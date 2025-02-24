@@ -37,7 +37,7 @@ import {
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
 
-import BuildingIcon from '@cardstack/boxel-icons/building';
+import AccountIcon from '@cardstack/boxel-icons/building';
 import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import PlusIcon from '@cardstack/boxel-icons/plus';
@@ -391,7 +391,7 @@ class IsolatedTemplate extends Component<typeof Account> {
 
       <:summary>
         <SummaryGridContainer>
-          <SummaryCard @iconComponent={{BuildingIcon}} @title='Company Info'>
+          <SummaryCard @iconComponent={{AccountIcon}} @title='Company Info'>
             <:content>
               {{#if this.hasCompanyInfo}}
                 <@fields.website @format='atom' />
@@ -1267,7 +1267,9 @@ class FittedTemplate extends Component<typeof Account> {
 }
 
 export class Account extends CardDef {
-  static displayName = 'CRM Account';
+  static displayName = 'Account';
+  static headerColor = '#f8f7fa';
+  static icon = AccountIcon;
   @field crmApp = linksTo(() => CrmApp);
   @field company = linksTo(() => Company);
   @field primaryContact = linksTo(() => Contact);
