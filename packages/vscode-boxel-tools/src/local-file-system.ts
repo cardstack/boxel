@@ -70,9 +70,38 @@ export class LocalFileSystem {
     }
   }
 
+  // Get the base storage path without user nesting
+  getBaseStoragePath(): string {
+    return this.localStoragePath;
+  }
+
   // Get the current local storage path
   getLocalStoragePath(): string {
-    // Simply return the configured storage path without nesting under user ID
+    // If we have a userId, create a user-specific subfolder
+    if (this.userId) {
+      // Create a safe directory name from the user ID
+      const safeUserId = this.userId.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      console.log(
+        `[LocalFileSystem] Using user-specific path for ${this.userId}`,
+      );
+
+      // Create the user-specific directory if it doesn't exist
+      const userPath = path.join(this.localStoragePath, safeUserId);
+      if (!fs.existsSync(userPath)) {
+        fs.mkdirSync(userPath, { recursive: true });
+        console.log(`[LocalFileSystem] Created user directory: ${userPath}`);
+      }
+
+      return userPath;
+    }
+
+    console.log(
+      '[LocalFileSystem] No user ID available, using base path:',
+      this.localStoragePath,
+    );
+
+    // Return the base path if no user ID is available
     return this.localStoragePath;
   }
 
@@ -81,7 +110,7 @@ export class LocalFileSystem {
     // Create a safe directory name from the realm name
     const safeDirName = realmName.replace(/[^a-zA-Z0-9_-]/g, '_');
 
-    // Get the base storage path
+    // Get the base storage path (which may already include the user ID)
     const basePath = this.getLocalStoragePath();
     const localPath = path.join(basePath, safeDirName);
 
@@ -618,7 +647,101 @@ export class LocalFileSystem {
 
   // Update the userId after login
   updateUserId(userId: string | null): void {
+    const oldUserId = this.userId;
     this.userId = userId;
     console.log(`LocalFileSystem: Updated user ID to ${userId}`);
+
+    // If we're switching to a new user ID (not just logging out), migrate realms
+    if (userId && userId !== oldUserId) {
+      this.migrateRealmsToUserFolder();
+    }
+  }
+
+  // Migrate any existing realms to the new user-specific folder
+  private migrateRealmsToUserFolder(): void {
+    if (!this.userId) {
+      return;
+    }
+
+    try {
+      console.log(
+        '[LocalFileSystem] Checking for realms to migrate to user folder',
+      );
+      const basePath = this.localStoragePath; // This is the root path without user ID
+      const userPath = this.getLocalStoragePath(); // This includes the user ID
+
+      // If they're the same, no migration needed
+      if (basePath === userPath) {
+        return;
+      }
+
+      // Check if there are any realms in the base directory that need to be moved
+      if (fs.existsSync(basePath)) {
+        const entries = fs.readdirSync(basePath);
+
+        for (const entry of entries) {
+          const fullPath = path.join(basePath, entry);
+
+          // Skip directories that are user folders
+          if (
+            (fs.statSync(fullPath).isDirectory() && entry.startsWith('@')) ||
+            entry.includes('_')
+          ) {
+            continue;
+          }
+
+          // Check if this is a realm folder by looking for metadata
+          const metadataPath = path.join(fullPath, '.boxel-realm.json');
+          if (fs.existsSync(metadataPath)) {
+            try {
+              const metadata = JSON.parse(
+                fs.readFileSync(metadataPath, 'utf8'),
+              );
+
+              // Only migrate realms that belong to this user or have no user ID
+              if (!metadata.userId || metadata.userId === this.userId) {
+                console.log(
+                  `[LocalFileSystem] Migrating realm ${entry} to user folder`,
+                );
+
+                // Create the destination path
+                const destPath = path.join(userPath, entry);
+
+                // If the destination exists, keep the original to avoid data loss
+                if (fs.existsSync(destPath)) {
+                  console.log(
+                    `[LocalFileSystem] Destination already exists, skipping migration for ${entry}`,
+                  );
+                  continue;
+                }
+
+                // Move the directory
+                fs.mkdirSync(path.dirname(destPath), { recursive: true });
+                fs.renameSync(fullPath, destPath);
+
+                // Update our mapping
+                if (metadata.realmUrl) {
+                  this.realmUrlToLocalPath.set(metadata.realmUrl, destPath);
+                }
+
+                console.log(
+                  `[LocalFileSystem] Migrated realm ${entry} to ${destPath}`,
+                );
+              }
+            } catch (error) {
+              console.error(
+                `[LocalFileSystem] Error checking realm metadata for ${entry}:`,
+                error,
+              );
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error(
+        '[LocalFileSystem] Error migrating realms to user folder:',
+        error,
+      );
+    }
   }
 }

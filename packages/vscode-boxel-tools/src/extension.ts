@@ -14,13 +14,13 @@ import { RealmProvider, RealmItem } from './realms';
 export async function activate(context: vscode.ExtensionContext) {
   const realmAuth = new RealmAuth();
 
-  // Initialize with null user ID - don't try to authenticate immediately
-  let userId: string | null = null;
+  // Get stored user ID from global state if available
+  let userId: string | null = context.globalState.get('boxelUserId') || null;
   console.log(
-    'Boxel extension activating - deferring authentication until needed',
+    `Boxel extension activating - using stored user ID: ${userId || 'none'}`,
   );
 
-  // Create file system without immediate authentication
+  // Create file system with potentially stored user ID
   const localFileSystem = new LocalFileSystem(context, realmAuth, userId);
 
   // Create and register the skills provider
@@ -83,6 +83,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
     // Clear user ID
     userId = null;
+    await context.globalState.update('boxelUserId', null);
+    console.log('Cleared stored user ID from global state');
+
     localFileSystem.updateUserId(null);
     realmProvider.updateUserId(null);
 
@@ -140,6 +143,10 @@ export async function activate(context: vscode.ExtensionContext) {
         userId = authData.user_id;
         console.log(`Authenticated as Matrix user: ${userId}`);
         vscode.window.showInformationMessage(`Logged in as ${userId}`);
+
+        // Store the user ID in global state for persistence
+        await context.globalState.update('boxelUserId', userId);
+        console.log(`Saved user ID ${userId} to global state`);
 
         // Update the user ID in the LocalFileSystem and RealmProvider
         localFileSystem.updateUserId(userId);
@@ -351,6 +358,7 @@ export async function activate(context: vscode.ExtensionContext) {
     'boxel-tools.addRealmsToWorkspace',
     async () => {
       try {
+        // Get the base storage path without user nesting
         const rootPath = localFileSystem.getLocalStoragePath();
 
         if (!fs.existsSync(rootPath)) {
@@ -377,10 +385,11 @@ export async function activate(context: vscode.ExtensionContext) {
         }
 
         // Add folder to workspace
+        const folderName = userId ? `Boxel Realms (${userId})` : 'Boxel Realms';
         const added = await vscode.workspace.updateWorkspaceFolders(
           existingFolders.length, // Add at the end
           0, // Don't remove any
-          { uri: rootUri, name: 'Boxel Realms' },
+          { uri: rootUri, name: folderName },
         );
 
         if (added) {
@@ -542,6 +551,45 @@ export async function activate(context: vscode.ExtensionContext) {
       }
     },
   );
+
+  // Try to silently retrieve the current session (after we already have the stored ID)
+  async function trySilentSessionRefresh() {
+    try {
+      // Only try this if we already have a stored user ID
+      if (userId) {
+        console.log('Attempting to silently refresh Matrix session...');
+        const session = await vscode.authentication.getSession('synapse', [], {
+          createIfNone: false,
+          silent: true,
+        });
+
+        if (session) {
+          const authData = JSON.parse(session.accessToken);
+          console.log(`Silently refreshed session for ${authData.user_id}`);
+
+          // If the session has a different user than our stored one, update it
+          if (authData.user_id !== userId) {
+            console.log(
+              `User ID from session (${authData.user_id}) differs from stored ID (${userId}), updating...`,
+            );
+            userId = authData.user_id;
+            await context.globalState.update('boxelUserId', userId);
+            localFileSystem.updateUserId(userId);
+            realmProvider.updateUserId(userId);
+            updateStatusBar();
+          }
+        } else {
+          console.log('No active session found during silent refresh');
+        }
+      }
+    } catch (error) {
+      // Don't show UI for this silent operation
+      console.log('Silent session refresh failed:', error);
+    }
+  }
+
+  // Try to refresh the session silently during activation
+  trySilentSessionRefresh();
 
   // Initial status bar update
   updateStatusBar();
