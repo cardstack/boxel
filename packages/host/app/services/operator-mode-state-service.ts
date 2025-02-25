@@ -318,6 +318,7 @@ export default class OperatorModeStateService extends Service {
 
     if (submode === Submodes.Code) {
       this.matrixService.setLLMForCodeMode();
+      this.matrixService.activateCodingSkill();
     }
   }
 
