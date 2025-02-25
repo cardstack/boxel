@@ -27,6 +27,7 @@ import type {
   LeaveEvent,
   CardMessageEvent,
   MessageEvent,
+  CommandDefinitionsEvent,
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -113,7 +114,15 @@ export class RoomResource extends Resource<Args> {
             await this.loadRoomMemberEvent(roomId, event);
             break;
           case 'm.room.message':
-            await this.loadRoomMessage({ roomId, event, index });
+            if (this.isCardFragmentEvent(event)) {
+              await this.loadCardFragment(event);
+            } else {
+              await this.loadRoomMessage({
+                roomId,
+                event: event as MessageEvent | CommandEvent | CardMessageEvent, // this cast can be removed when we add awareness of CommandDefinitionsEvent to this resource
+                index,
+              });
+            }
             break;
           case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
             this.updateMessageCommandResult({ roomId, event, index });
@@ -320,24 +329,28 @@ export class RoomResource extends Resource<Args> {
     });
   }
 
-  private loadRoomMessage({
-    roomId,
-    event,
-    index,
-  }: {
-    roomId: string;
-    event: MessageEvent | CommandEvent | CardMessageEvent;
-    index: number;
-  }) {
-    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-      this._fragmentCache.set(event.event_id, event.content);
-      return;
-    }
-
-    this.upsertMessage({ roomId, event, index });
+  private isCardFragmentEvent(
+    event:
+      | MessageEvent
+      | CommandEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent,
+  ): event is CardMessageEvent & {
+    content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
+  } {
+    return event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE;
   }
 
-  private upsertMessage({
+  private async loadCardFragment(
+    event: CardMessageEvent & {
+      content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
+    },
+  ) {
+    let eventId = event.event_id;
+    this._fragmentCache.set(eventId, event.content);
+  }
+
+  private loadRoomMessage({
     roomId,
     event,
     index,
@@ -387,7 +400,8 @@ export class RoomResource extends Resource<Args> {
       (e: any) =>
         e.type === 'm.room.message' &&
         e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-        e.content['m.relates_to']?.event_id === effectiveEventId,
+        (e.event_id === effectiveEventId ||
+          e.content['m.relates_to']?.event_id === effectiveEventId),
     )! as CommandEvent | undefined;
     let message = this._messageCache.get(effectiveEventId);
     if (!message || !commandEvent) {

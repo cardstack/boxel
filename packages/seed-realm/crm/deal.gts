@@ -1,56 +1,64 @@
-// TODO: please organize imports
 import {
   CardDef,
+  BaseDef,
+  Component,
   contains,
-  linksTo,
-  StringField,
-  field,
-  linksToMany,
   containsMany,
-  FieldDef,
+  field,
+  linksTo,
+  linksToMany,
   realmURL,
+  FieldDef,
+  StringField,
 } from 'https://cardstack.com/base/card-api';
-import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
+
+import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
-import GlimmerComponent from '@glimmer/component';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+
+import { getCards, Query } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+
+import { action } from '@ember/object';
+import { restartableTask } from 'ember-concurrency';
+import { on } from '@ember/modifier';
+
+import { Account } from './account';
+import { Company } from './company';
+import { Contact } from './contact';
+import { CrmApp } from '../crm-app';
+import { DealEvent } from './deal-event';
+import { DealPriority } from './deal-priority';
+import { DealStatus } from './deal-status';
+
+import { Address as AddressField } from '../fields/address';
+import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
+import { PercentageField } from '../fields/percentage';
+import { WebsiteField } from '../fields/website';
+
+import AccountHeader from '../components/account-header';
+import { ContactRow } from '../components/contact-row';
+import CrmProgressBar from '../components/crm-progress-bar';
+import EntityDisplayWithIcon from '../components/entity-icon-display';
+import PageLayout from '../components/page-layout';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
+
 import {
-  Pill,
   BoxelButton,
   FieldContainer,
+  Pill,
   SkeletonPlaceholder,
 } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
-import Info from '@cardstack/boxel-icons/info';
-import AccountHeader from '../components/account-header';
-import CrmProgressBar from '../components/crm-progress-bar';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
-import { Account } from './account';
-import { action } from '@ember/object';
-import { PercentageField } from '../fields/percentage';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Address as AddressField } from '../fields/address';
-import { WebsiteField } from '../fields/website';
-import { Contact } from './contact';
-import { ContactRow } from '../components/contact-row';
-import Users from '@cardstack/boxel-icons/users';
-import World from '@cardstack/boxel-icons/world';
-import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import { getCards } from '@cardstack/runtime-common';
-import { Query } from '@cardstack/runtime-common/query';
-import { Company } from './company';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { restartableTask } from 'ember-concurrency';
-import { on } from '@ember/modifier';
-import { DealEvent } from './deal-event';
-import { DealStatus } from './deal-status';
-import { DealPriority } from './deal-priority';
-import { CrmApp } from '../crm-app';
-import MapPin from '@cardstack/boxel-icons/map-pin';
+
 import Calendar from '@cardstack/boxel-icons/calendar';
+import DealIcon from '@cardstack/boxel-icons/handshake';
+import Info from '@cardstack/boxel-icons/info';
+import MapPin from '@cardstack/boxel-icons/map-pin';
+import Users from '@cardstack/boxel-icons/users';
 import UsersGroup from '@cardstack/boxel-icons/users-group';
+import World from '@cardstack/boxel-icons/world';
 
 interface DealSizeSummary {
   summary: string;
@@ -319,7 +327,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
   }
 
   <template>
-    <DealPageLayout>
+    <PageLayout @format='isolated'>
       <:header>
         <div class='header-container'>
           <AccountHeader @logoURL={{this.logoURL}} @name={{@model.name}}>
@@ -330,16 +338,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:name>
             <:content>
               <div class='info-container'>
-                <@fields.company
-                  @format='atom'
-                  @displayContainer={{false}}
-                  class='info-atom'
-                />
-                <@fields.primaryContact
-                  @format='atom'
-                  @displayContainer={{false}}
-                  class='info-atom'
-                />
+                <@fields.company @format='atom' @displayContainer={{false}} />
+                {{#if @model.primaryContact}}
+                  <@fields.primaryContact
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />
+                {{/if}}
               </div>
             </:content>
           </AccountHeader>
@@ -366,11 +371,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
         </div>
       </:header>
 
-      <:dashboard>
-        <SummaryCard class='dashboard'>
-          <:title>
-            <h2 class='summary-title'>Deal Value</h2>
-          </:title>
+      <:summary>
+        <SummaryCard class='dashboard' @title='Deal Value'>
           <:icon>
             {{#if @model.healthScore}}
               <div class='progress-container'>
@@ -484,17 +486,11 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </footer>
           </:content>
         </SummaryCard>
-      </:dashboard>
+      </:summary>
 
-      <:summary>
+      <:content>
         <SummaryGridContainer class='task-summary-grid'>
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='info-card-title'>Deal Info</h3>
-            </:title>
-            <:icon>
-              <World class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{World}} @title='Deal Info'>
             <:content>
               {{#if this.hasDealEventInfo}}
                 <EntityDisplayWithIcon @title={{this.eventLocation}}>
@@ -521,14 +517,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               {{/if}}
             </:content>
           </SummaryCard>
-
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='info-card-title'>Key Stakeholders</h3>
-            </:title>
-            <:icon>
-              <Users class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{Users}} @title='Key Stakeholders'>
             <:content>
               {{#if this.hasStakeholders}}
                 {{#if @model.primaryStakeholder}}
@@ -554,11 +543,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
               {{/if}}
             </:content>
           </SummaryCard>
-
-          <SummaryCard class='info-card tasks-summary-card'>
-            <:title>
-              <h3 class='info-card-title'>Active Tasks</h3>
-            </:title>
+          <SummaryCard class='tasks-summary-card' @title='Active Tasks'>
             <:icon>
               <BoxelButton
                 class='sidebar-create-button'
@@ -607,8 +592,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:content>
           </SummaryCard>
         </SummaryGridContainer>
-      </:summary>
-    </DealPageLayout>
+      </:content>
+    </PageLayout>
 
     <style scoped>
       h1,
@@ -616,7 +601,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
       h3,
       h4,
       p {
-        margin: 0;
+        margin-block: 0;
       }
       hr {
         border: 0.5px solid var(--boxel-200);
@@ -649,7 +634,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
         gap: var(--boxel-sp-4xs);
       }
       .dashboard {
-        --summary-card-padding: var(--boxel-sp);
+        --summary-card-content-gap: 0;
         container-type: inline-size;
       }
       .dashboard-cards {
@@ -692,11 +677,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
       .info-field {
         --entity-display-title-font-weight: 400;
       }
-      .summary-title,
-      .info-card-title {
+      .summary-title {
         font: 600 var(--boxel-font);
         letter-spacing: var(--boxel-lsp-xxs);
         align-self: flex-start;
+      }
+      .summary-highlight {
+        font: 600 var(--boxel-font-lg);
       }
       .description {
         color: var(--boxel-450);
@@ -729,10 +716,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
         margin-top: 0.5rem;
       }
       /* Task Summary Grid & Card */
-      .task-summary-grid {
-        --summary-card-min-height: 170px;
-      }
-      .tasks-summary-card :where(.task-card) {
+      .tasks-summary-card :deep(.task-card) {
         --task-card-padding: var(--boxel-sp-xxxs) 0;
       }
       .sidebar-create-button {
@@ -764,23 +748,287 @@ class IsolatedTemplate extends Component<typeof Deal> {
           grid-template-columns: 1fr;
         }
       }
-      .info-atom {
-        width: fit-content;
-        display: inline-flex;
-      }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
-      .info-card {
-        --summary-card-gap: var(--boxel-sp-xl);
-        --summary-card-padding: var(--boxel-sp);
-        --entity-display-title-font-weight: 400;
-      }
       .new-item-button {
         font-weight: 600;
+      }
+    </style>
+  </template>
+}
+
+class EmbeddedTemplate extends Component<typeof Deal> {
+  get logoURL() {
+    return this.args.model?.thumbnailURL?.length
+      ? this.args.model.thumbnailURL
+      : this.args.model.account?.thumbnailURL;
+  }
+
+  get primaryContactName() {
+    return this.args.model.account?.primaryContact?.name;
+  }
+
+  get hasValueBreakdown() {
+    return (
+      this.args.model.valueBreakdown &&
+      this.args.model.valueBreakdown.length > 0
+    );
+  }
+
+  get hasStakeholders() {
+    return (
+      this.args.model.primaryStakeholder ||
+      (this.args.model.stakeholders?.length ?? 0) > 0
+    );
+  }
+
+  <template>
+    <article class='deal-card-embedded'>
+      <header class='deal-header'>
+        <AccountHeader
+          @logoURL={{this.logoURL}}
+          @name={{@model.name}}
+          class='account-header-embedded'
+        >
+          <:name>
+            <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+              {{#if @model.title}}<@fields.title />{{else}}Missing Deal Name{{/if}}
+            </h1>
+          </:name>
+          <:content>
+            <@fields.company @format='atom' @displayContainer={{false}} />
+            {{#if @model.primaryContact}}
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+              />
+            {{/if}}
+          </:content>
+        </AccountHeader>
+
+        <div class='deal-status'>
+          <@fields.status @format='atom' @displayContainer={{false}} />
+        </div>
+
+        <div class='account-info-grid-view'>
+          <@fields.company @format='atom' @displayContainer={{false}} />
+          {{#if @model.primaryContact}}
+            <@fields.primaryContact
+              @format='atom'
+              @displayContainer={{false}}
+            />
+          {{/if}}
+        </div>
+      </header>
+
+      <div class='deal-content'>
+        <div class='deal-details'>
+          <div class='deal-field'>
+            <span class='label'>Current Value</span>
+            <@fields.computedValue class='highlight-value' @format='atom' />
+          </div>
+
+          <div class='deal-field'>
+            <span class='label'>Close Date</span>
+            <div class='highlight-value'>
+              <@fields.closeDate @format='atom' />
+            </div>
+          </div>
+
+          {{#if @model.healthScore}}
+            <div class='deal-field'>
+              <span class='label'>Health Score</span>
+              <div class='progress-container'>
+                <CrmProgressBar
+                  @value={{@model.healthScore}}
+                  @max={{100}}
+                  @color='var(--boxel-green)'
+                />
+                <div class='highlight-value'>
+                  {{@model.healthScore}}
+                </div>
+              </div>
+            </div>
+          {{/if}}
+        </div>
+
+        {{#if @model.event}}
+          <div class='event-details'>
+            <@fields.event @format='atom' @displayContainer={{false}} />
+          </div>
+        {{/if}}
+      </div>
+    </article>
+
+    {{! template-lint-disable no-whitespace-for-layout  }}
+    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
+    <style scoped>
+      h1,
+      p {
+        margin: 0;
+      }
+      .label {
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-sm);
+      }
+      .default-value {
+        color: var(--boxel-400);
+      }
+      .highlight-value {
+        font-weight: 600;
+        font-size: var(--boxel-font-size);
+        white-space: nowrap;
+      }
+      .progress-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .account-name {
+        font: 600 var(--boxel-font-med);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        width: 100%;
+      }
+      .account-info-grid-view {
+        display: none; /* Hidden by default */
+      }
+
+      /* Default card layout with container query setup */
+      .deal-card-embedded {
+        display: grid;
+        width: 100%;
+        height: 100%;
+        grid-template-areas: 'deal-header' 'deal-content';
+        grid-template-columns: 100%;
+        grid-template-rows: max-content auto;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        container-type: inline-size;
+      }
+      .deal-header {
+        grid-area: deal-header;
+        display: grid;
+        grid-template-areas: 'account-header-embedded deal-status';
+        grid-template-columns: 1fr auto;
+        align-items: start;
+        gap: var(--boxel-sp-lg);
+      }
+      .deal-content {
+        grid-area: deal-content;
+        display: grid;
+        grid-template-areas: 'deal-details event-details';
+        grid-template-columns: 1fr auto;
+        grid-template-rows: max-content;
+        align-items: end;
+        justify-content: space-between;
+        gap: var(--boxel-sp-lg);
+        margin-top: auto;
+      }
+      .deal-content:not(:has(.event-details)) {
+        grid-template-areas: 'deal-details';
+        grid-template-columns: 100%;
+        grid-template-rows: 1fr;
+      }
+      .deal-content:not(:has(.deal-details)) {
+        grid-template-areas: 'event-details';
+        grid-template-columns: 100%;
+        grid-template-rows: 1fr;
+      }
+      .deal-status {
+        grid-area: deal-status;
+        margin-left: auto;
+      }
+      .deal-details {
+        grid-area: deal-details;
+        display: grid;
+        grid-template-rows: auto;
+        grid-template-columns: max-content max-content max-content;
+        gap: var(--boxel-sp-xl);
+      }
+      .deal-field {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxs);
+      }
+      .deal-field:nth-child(1),
+      .deal-field:nth-child(2),
+      .deal-field:nth-child(3) {
+        grid-row: 1;
+      }
+      .account-header-embedded {
+        --account-header-logo-size: 40px;
+        --account-header-gap: var(--boxel-sp-xs);
+        --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+        grid-area: account-header-embedded;
+        overflow: hidden;
+      }
+      .event-details {
+        grid-area: event-details;
+      }
+
+      /* Container query for mobile adjustments */
+      @container (max-inline-size: 600px) {
+        /* Stack deal-header into a column */
+        .deal-header {
+          grid-template-areas:
+            'account-header-embedded'
+            'deal-status';
+          grid-template-columns: 100%;
+          grid-template-rows: auto auto;
+          gap: var(--boxel-sp-sm);
+        }
+        .deal-status {
+          display: none;
+        }
+
+        /* Stack deal-content  */
+        .deal-content {
+          grid-template-areas:
+            'deal-details'
+            'event-details';
+          grid-template-columns: 100%;
+          grid-template-rows: auto auto;
+          gap: var(--boxel-sp-sm);
+          margin-top: var(--boxel-sp-lg);
+        }
+        .deal-details {
+          grid-template-columns: 1fr 1fr;
+          gap: var(--boxel-sp);
+        }
+        .deal-details :deep(.progress-bar) {
+          flex-grow: 1;
+        }
+
+        .event-details {
+          --event-summary-icon-size: 0px;
+          --entity-display-gap: 0px;
+        }
+
+        /* Ensure that the first two fields appear in row 1 */
+        .deal-field:nth-child(1),
+        .deal-field:nth-child(2) {
+          grid-row: 1;
+        }
+
+        /* Make the health score field take full width in row 2 */
+        .deal-field:nth-child(3) {
+          grid-row: 2;
+          grid-column: 1 / -1;
+        }
+
+        .account-header-embedded {
+          --account-header-info-content-display: none;
+        }
+        .account-info-grid-view {
+          display: grid;
+          width: 100%;
+          grid-template-columns: 1fr;
+          gap: var(--boxel-sp-xs);
+        }
       }
     </style>
   </template>
@@ -813,53 +1061,43 @@ class FittedTemplate extends Component<typeof Deal> {
   }
 
   <template>
-    <article class='fitted-deal-card'>
+    <article class='deal-card-fitted'>
       <header class='deal-header'>
         <AccountHeader
           @logoURL={{this.logoURL}}
           @name={{@model.name}}
-          class='crm-account-header'
+          class='account-header-fitted'
         >
           <:name>
-            {{#if @model.name}}
-              <h1 class='account-name'>{{@model.name}}</h1>
-            {{else}}
-              <h1 class='account-name default-value'>Missing Deal Name</h1>
-            {{/if}}
+            <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+              {{#if @model.title}}<@fields.title />{{else}}Missing Deal Name{{/if}}
+            </h1>
           </:name>
           <:content>
-            <div class='account-info'>
-              <@fields.company
-                @format='atom'
-                @displayContainer={{false}}
-                class='info-atom'
-              />
+            <@fields.company @format='atom' @displayContainer={{false}} />
+            {{#if @model.primaryContact}}
               <@fields.primaryContact
                 @format='atom'
                 @displayContainer={{false}}
-                class='info-atom'
               />
-            </div>
+            {{/if}}
           </:content>
         </AccountHeader>
 
         <div class='deal-status'>
           <@fields.status @format='atom' @displayContainer={{false}} />
         </div>
-      </header>
 
-      <div class='account-info account-info-grid-view'>
-        <@fields.company
-          @format='atom'
-          @displayContainer={{false}}
-          class='info-atom'
-        />
-        <@fields.primaryContact
-          @format='atom'
-          @displayContainer={{false}}
-          class='info-atom'
-        />
-      </div>
+        <div class='account-info-grid-view'>
+          <@fields.company @format='atom' @displayContainer={{false}} />
+          {{#if @model.primaryContact}}
+            <@fields.primaryContact
+              @format='atom'
+              @displayContainer={{false}}
+            />
+          {{/if}}
+        </div>
+      </header>
 
       <div class='deal-content'>
         <div class='deal-details'>
@@ -901,6 +1139,7 @@ class FittedTemplate extends Component<typeof Deal> {
     </article>
 
     <style scoped>
+      /* Base styles */
       h1,
       p {
         margin: 0;
@@ -913,22 +1152,45 @@ class FittedTemplate extends Component<typeof Deal> {
       .default-value {
         color: var(--boxel-400);
       }
-      .fitted-deal-card {
+      .highlight-value {
+        font-weight: 600;
+        font-size: var(--boxel-font-size);
+        white-space: nowrap;
+      }
+      .progress-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+      }
+      .account-name {
+        font: 600 var(--boxel-font-med);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        width: 100%;
+      }
+      .account-info-grid-view {
+        display: none;
+      }
+
+      /* Default card layout */
+      .deal-card-fitted {
         display: grid;
         width: 100%;
         height: 100%;
-        grid-template-areas:
-          'deal-header'
-          'deal-content';
+        grid-template-areas: 'deal-header' 'deal-content';
+        grid-template-columns: 100%;
         grid-template-rows: max-content auto;
         gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp);
+        padding: var(--boxel-sp-xs);
       }
       .deal-header {
         grid-area: deal-header;
         display: grid;
-        grid-template-areas: 'crm-account-header deal-status';
-        grid-template-columns: 75% auto;
+        grid-template-areas: 'account-header-fitted deal-status';
+        grid-template-columns: 1fr auto;
         align-items: start;
         gap: var(--boxel-sp-lg);
       }
@@ -937,208 +1199,332 @@ class FittedTemplate extends Component<typeof Deal> {
         display: grid;
         grid-template-areas: 'deal-details event-details';
         grid-template-columns: 1fr auto;
+        grid-template-rows: max-content;
         align-items: end;
         justify-content: space-between;
         gap: var(--boxel-sp-lg);
         margin-top: auto;
       }
-      .crm-account-header {
-        grid-area: crm-account-header;
-        overflow: hidden;
+      .deal-content:not(:has(.event-details)) {
+        grid-template-areas: 'deal-details';
+        grid-template-columns: 100%;
+        grid-template-rows: 1fr;
+      }
+      .deal-content:not(:has(.deal-details)) {
+        grid-template-areas: 'event-details';
+        grid-template-columns: 100%;
+        grid-template-rows: 1fr;
       }
       .deal-status {
         grid-area: deal-status;
         margin-left: auto;
       }
-      .account-name {
-        grid-area: account-name;
-        font-size: var(--boxel-font-size-med);
-        font-weight: 600;
-      }
-      .account-info {
-        --entity-display-title-font-size: var(--boxel-font-size-sm);
-        --entity-display-title-font-weight: 500;
-        display: flex;
-        align-items: start;
-        gap: var(--boxel-sp-xs);
-        overflow: hidden;
-      }
-      .account-info-grid-view {
-        display: none;
-      }
-      .account-name,
-      .account-info:deep(.entity-name) {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 1;
-        width: 100%;
-      }
-      .info-atom {
-        width: fit-content;
-        display: inline-flex;
-      }
-      /* deal details */
       .deal-details {
         grid-area: deal-details;
-        display: flex;
-        gap: var(--boxel-sp-lg);
+        display: grid;
+        grid-template-rows: auto;
+        grid-template-columns: max-content max-content max-content;
+        gap: var(--boxel-sp-xl);
       }
+
       .deal-field {
+        width: 100%;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xxs);
       }
-      .highlight-value {
-        font-weight: 600;
-        font-size: calc(var(--boxel-font-size) - 1px);
+
+      /* Make the first three fields appear in row 1 */
+      .deal-field:nth-child(1),
+      .deal-field:nth-child(2),
+      .deal-field:nth-child(3) {
+        grid-row: 1;
       }
-      .progress-container {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
+
+      .account-header-fitted {
+        --account-header-logo-size: 40px;
+        --account-header-gap: var(--boxel-sp-xs);
+        --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+        grid-area: account-header-fitted;
+        overflow: hidden;
       }
       .event-details {
         grid-area: event-details;
       }
-      .deal-header:deep(.account-header-logo) {
-        grid-area: account-header-logo;
-      }
-      /* Catch all because deal is too dense*/
-      @container fitted-card (height < 180px) {
-        .fitted-deal-card {
-          grid-template-areas: 'deal-header';
-          grid-template-rows: auto;
-          padding: var(--boxel-sp-sm);
+
+      /* Vertical card (aspect-ratio <= 1.0) */
+      @container fitted-card (aspect-ratio <= 1.0) {
+        .deal-card-fitted {
+          padding: var(--boxel-sp-xs);
         }
-        .crm-account-header {
+        .account-header-fitted {
           --account-header-logo-size: 40px;
+          --account-header-gap: var(--boxel-sp-xs);
+          --account-header-logo-border-radius: var(--boxel-border-radius);
+          --account-header-info-content-display: none;
         }
-        .deal-content {
-          display: none;
+        .account-info-grid-view :deep(.avatar) {
+          --profile-avatar-icon-size: var(--boxel-font-size);
+          --profile-avatar-icon-border: 0px;
         }
-        .deal-header {
-          grid-area: deal-header;
-          display: grid;
-          grid-template-areas: 'crm-account-header';
-          grid-template-columns: 100%;
-          align-items: start;
-          gap: var(--boxel-sp-lg);
+        .account-name {
+          font: 600 var(--boxel-font);
         }
         .deal-status {
           display: none;
-        }
-        .account-name {
-          font-size: var(--boxel-font-size-sm);
-        }
-      }
-
-      /* Show event details when width >= 800px because the content is too compact */
-      @container fitted-card (width >= 800px) {
-        .event-details {
-          display: block;
-        }
-      }
-
-      @container fitted-card (width < 800px) {
-        .event-details {
-          display: none;
-        }
-      }
-
-      /* Container query: Show .event-details if aspect-ratio <= 2.0, example grid view */
-      @container fitted-card (aspect-ratio <= 2.0) {
-        .fitted-deal-card {
-          display: grid;
-          width: 100%;
-          height: 100%;
-          grid-template-areas:
-            'deal-header'
-            'grid-account-info'
-            'deal-content';
-          grid-template-rows: max-content max-content auto;
-          gap: var(--boxel-sp-xs);
-          padding: var(--boxel-sp);
-        }
-        .crm-account-header {
-          --account-header-logo-size: 40px;
-        }
-        .account-name {
-          font-size: var(--boxel-font-size-sm);
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 3;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .account-info {
-          display: none;
-        }
-        .info-atom {
-          --entity-display-icon-size: var(--boxel-icon-sm);
-          --entity-display-title-font-size: var(--boxel-font-size-xs);
-        }
-        .account-info-grid-view {
-          display: flex;
-          flex-direction: column;
-        }
-        .deal-header {
-          grid-template-columns: auto;
-          gap: 0;
-        }
-        .deal-status {
-          display: none;
-        }
-        .deal-content {
-          grid-template-areas:
-            'deal-details'
-            'event-details';
-          grid-template-columns: 1fr;
-        }
-        .deal-content:has(.deal-details):not(:has(.event-details)) {
-          grid-template-areas: 'deal-details';
-        }
-        .deal-content:has(.event-details):not(:has(.deal-details)) {
-          grid-template-areas: 'event-details';
         }
         .deal-details {
-          display: grid;
-          grid-template-rows: auto auto;
           grid-template-columns: 1fr 1fr;
-          gap: var(--boxel-sp-xs);
         }
-        .deal-field {
-          width: 100%;
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xxs);
-        }
-        /* Make the first two fields appear in row 1 */
+
+        /* Ensure that the first two fields appear in row 1 */
         .deal-field:nth-child(1),
         .deal-field:nth-child(2) {
           grid-row: 1;
         }
+
         /* Make the health score field take full width in row 2 */
         .deal-field:nth-child(3) {
           grid-row: 2;
           grid-column: 1 / -1;
         }
-        .highlight-value {
-          font: 600 var(--boxel-font-xs);
+
+        /* Base styles for deal-content and event-details */
+        .deal-content {
+          grid-template-areas:
+            'deal-details'
+            'event-details';
+          grid-template-rows: max-content auto;
+          grid-template-columns: 100%;
+          gap: var(--boxel-sp);
         }
-        .progress-bar {
-          width: 100%;
+        .deal-details {
+          gap: var(--boxel-sp);
+        }
+        .deal-details :deep(.progress-bar) {
+          flex-grow: 1;
         }
         .event-details {
-          --event-summary-content-font-size: var(--boxel-font-size-xs);
-          --event-summary-gap: var(--boxel-sp-sm);
           --event-summary-padding: var(--boxel-sp-xs);
-          --entity-display-content-gap: var(--boxel-sp-4xs);
-          display: block;
+          --event-summary-gap: var(--boxel-sp);
+          --event-summary-icon-size: 0px;
+          --event-summary-content-font-size: var(--boxel-font-size-xs);
+          --entity-display-gap: 0px;
         }
-        .event-details :where(.entity-icon) {
+        .highlight-value {
+          font-size: var(--boxel-font-size-xs);
+        }
+
+        /* Height-specific overrides */
+        @container fitted-card (height >= 275px) {
+          .deal-header {
+            grid-template-areas: 'account-header-fitted' 'account-info-grid-view';
+            grid-template-columns: 100%;
+            grid-template-rows: max-content max-content;
+            gap: var(--boxel-sp-sm);
+          }
+          .account-info-grid-view {
+            display: flex;
+            flex-direction: column;
+            gap: var(--boxel-sp-sm);
+            --entity-display-icon-size: var(--boxel-font-size);
+            --entity-display-thumbnail-size: var(--boxel-font-size);
+            --entity-display-title-font-size: var(--boxel-font-size-xs);
+          }
+        }
+
+        @container fitted-card (height < 275px) and (height >= 250px) {
+          .deal-header {
+            grid-template-areas: 'account-header-fitted';
+            grid-template-columns: 100%;
+            grid-template-rows: max-content;
+            gap: var(--boxel-sp-xs);
+          }
+          .account-info-grid-view {
+            display: none;
+          }
+        }
+
+        @container fitted-card (height < 250px) {
+          .deal-card-fitted {
+            grid-template-areas: 'deal-header';
+            grid-template-rows: 1fr;
+          }
+          .deal-content {
+            display: none;
+          }
+          .deal-header {
+            grid-template-areas: 'account-header-fitted';
+          }
+          .account-header-fitted {
+            --account-header-logo-size: 25px;
+            --account-header-logo-border-radius: var(--boxel-border-radius);
+          }
+        }
+
+        @container fitted-card (height <= 170px) {
+          .account-header-fitted {
+            --account-header-logo-size: 25px;
+            --account-header-logo-border-radius: var(--boxel-border-radius);
+          }
+          .account-info-grid-view {
+            display: none;
+          }
+        }
+      }
+
+      /* Horizontal card (aspect-ratio > 1.0) */
+      @container fitted-card (1.0 < aspect-ratio) {
+        .deal-card-fitted {
+          padding: var(--boxel-sp-xs);
+        }
+        .account-header-fitted {
+          --account-header-logo-size: 60px;
+          --account-header-gap: var(--boxel-sp-xs);
+          --account-header-logo-border-radius: var(--boxel-border-radius-xl);
+          --account-header-info-content-display: none;
+        }
+        .account-name {
+          font: 600 var(--boxel-font-med);
+          -webkit-line-clamp: 1;
+        }
+
+        /* Height > 180px */
+        @container fitted-card (180px < height) {
+          .deal-content {
+            grid-template-areas: 'deal-details' 'event-details';
+            grid-template-columns: 100%;
+            gap: var(--boxel-sp-lg);
+          }
+          .deal-details {
+            gap: var(--boxel-sp);
+          }
+          .event-details {
+            --event-summary-padding: var(--boxel-sp-xs);
+            --event-summary-gap: var(--boxel-sp);
+            --event-summary-icon-size: 0px;
+            --event-summary-content-font-size: var(--boxel-font-size-xs);
+            --entity-display-gap: 0px;
+          }
+          .highlight-value {
+            font-size: var(--boxel-font-size-xs);
+          }
+        }
+
+        /* Height < 180px */
+        @container fitted-card (height < 180px) {
+          .deal-card-fitted {
+            grid-template-areas: 'deal-header';
+            grid-template-rows: 1fr;
+          }
+          .deal-content,
+          .deal-status {
+            display: none;
+          }
+          .deal-header {
+            grid-template-areas: 'account-header-fitted';
+          }
+          .account-header-fitted {
+            --account-header-logo-size: 25px;
+            --account-header-logo-border-radius: var(--boxel-border-radius);
+          }
+        }
+
+        /* Height 115px - 150px */
+        @container fitted-card (115px <= height <= 150px) {
+          .deal-header {
+            grid-template-areas: 'account-header-fitted' 'account-info-grid-view';
+            grid-template-rows: max-content max-content;
+            gap: var(--boxel-sp-xs);
+          }
+          .account-info-grid-view {
+            display: flex;
+            flex-direction: column;
+            gap: var(--boxel-sp);
+            --entity-display-icon-size: var(--boxel-font-size);
+            --entity-display-thumbnail-size: var(--boxel-font-size);
+            --entity-display-title-font-size: var(--boxel-font-size-xs);
+          }
+        }
+
+        /* Height <= 57px */
+        @container fitted-card (height <= 57px) {
+          .account-header-fitted {
+            --account-header-logo-size: 25px;
+          }
+          .account-name {
+            font: 600 var(--boxel-font-sm);
+            -webkit-line-clamp: 1;
+          }
+        }
+      }
+
+      /* Custom breakpoints */
+      @container fitted-card (width < 200px) and (226px <= height) and (aspect-ratio <= 1.0) {
+        .deal-header {
+          grid-template-areas: 'account-header-fitted';
+        }
+        .account-info-grid-view {
           display: none;
+        }
+        .deal-details {
+          gap: var(--boxel-sp-xs);
+        }
+        .account-name {
+          -webkit-line-clamp: 2;
+        }
+      }
+
+      @container fitted-card (aspect-ratio >= 1.0) and (width < 400px) and (height <= 275px) {
+        .account-header-fitted {
+          --account-header-logo-size: 25px;
+          --account-header-gap: var(--boxel-sp-xs);
+          --account-header-logo-border-radius: var(--boxel-border-radius);
+          --account-header-info-content-display: none;
+        }
+        .account-name {
+          font: 600 var(--boxel-font);
+          -webkit-line-clamp: 1;
+        }
+        .deal-header {
+          grid-template-areas: 'account-header-fitted';
+        }
+        .account-info-grid-view,
+        .deal-status,
+        .deal-content {
+          display: none;
+        }
+      }
+
+      @container fitted-card (800px < width) and (170px < height) {
+        .account-header-fitted {
+          --account-header-info-content-display: flex;
+        }
+        .deal-content {
+          grid-template-areas: 'deal-details event-details';
+          grid-template-columns: max-content auto;
+        }
+        .event-details {
+          --event-summary-padding: var(--boxel-sp);
+          --event-summary-gap: var(--boxel-sp-lg);
+          --event-summary-icon-size: var(--boxel-font-size);
+          --event-summary-content-font-size: var(--boxel-font-size);
+          --entity-display-content-gap: var(--boxel-sp-xs);
+          --event-summary-venue-text-max-width: 300px;
+        }
+      }
+
+      @container fitted-card (width < 800px) {
+        @container fitted-card (height < 170px) {
+          .event-details {
+            display: none;
+          }
+        }
+        @container fitted-card (height <= 275px) {
+          .deal-status,
+          .deal-details {
+            display: none;
+          }
         }
       }
     </style>
@@ -1182,8 +1568,9 @@ export class ValueLineItem extends FieldDef {
 }
 
 export class Deal extends CardDef {
-  static displayName = 'CRM Deal';
+  static displayName = 'Deal';
   static headerColor = '#f8f7fa';
+  static icon = DealIcon;
   @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field account = linksTo(() => Account);
@@ -1260,38 +1647,8 @@ export class Deal extends CardDef {
 
   static edit = EditTemplate;
   static isolated = IsolatedTemplate;
+  static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
-}
-
-interface DealPageLayoutArgs {
-  Blocks: {
-    header: [];
-    dashboard: [];
-    summary: [];
-  };
-  Element: HTMLElement;
-}
-
-class DealPageLayout extends GlimmerComponent<DealPageLayoutArgs> {
-  <template>
-    <div class='deal-page-layout' ...attributes>
-      {{yield to='header'}}
-      {{yield to='dashboard'}}
-      {{yield to='summary'}}
-    </div>
-
-    <style scoped>
-      .deal-page-layout {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        width: 100%;
-        padding: var(--boxel-sp-xl);
-        box-sizing: border-box;
-        background-color: var(--boxel-100);
-      }
-    </style>
-  </template>
 }
 
 function getComponent(cardOrField: BaseDef) {
