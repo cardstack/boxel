@@ -727,6 +727,76 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
   });
 
+  test('it can apply change when the command event is not a replacement event', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+
+    await waitFor('[data-test-person="Fadhlan"]');
+    assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
+
+    let payload = {
+      name: 'patchCard',
+      arguments: {
+        attributes: {
+          cardId: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: {
+              firstName: 'Joy',
+              address: { shippingInfo: { preferredCarrier: 'UPS' } },
+            },
+          },
+        },
+      },
+      eventId: 'event1',
+    };
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'A patch',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      formatted_body: 'A patch',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({ toolCall: payload }),
+    });
+
+    await waitFor('[data-test-view-code-button]');
+    await click('[data-test-view-code-button]');
+
+    await waitForCodeEditor();
+    assert.deepEqual(
+      JSON.parse(getMonacoContent()),
+
+      {
+        name: 'patchCard',
+        payload: {
+          attributes: {
+            cardId: 'http://test-realm/test/Person/fadhlan',
+            patch: {
+              attributes: {
+                address: {
+                  shippingInfo: {
+                    preferredCarrier: 'UPS',
+                  },
+                },
+                firstName: 'Joy',
+              },
+            },
+          },
+        },
+      },
+      'it can preview code when a change is proposed',
+    );
+    assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
+
+    await click('[data-test-view-code-button]');
+    assert.dom('[data-test-code-editor]').doesNotExist();
+
+    await click('[data-test-command-apply="ready"]');
+    await waitFor('[data-test-command-card-idle]');
+    assert.dom('[data-test-apply-state="applied"]').exists();
+    assert.dom('[data-test-person]').hasText('Joy');
+    assert.dom(`[data-test-preferredcarrier]`).hasText('UPS');
+    assert.dom(`[data-test-city="Bandung"]`).exists();
+    assert.dom(`[data-test-country="Indonesia"]`).exists();
+  });
+
   test('it does not crash when applying change to a card with preexisting nested linked card', async function (assert) {
     let id = `${testRealmURL}Person/mickey`;
     let roomId = await renderAiAssistantPanel(id);
