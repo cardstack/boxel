@@ -112,7 +112,7 @@ export class RoomResource extends Resource<Args> {
           case 'm.room.member':
             await this.loadRoomMemberEvent(roomId, event);
             break;
-          case 'm.room.message': {
+          case 'm.room.message':
             await this.loadRoomMessage({ roomId, event, index });
             break;
           case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
