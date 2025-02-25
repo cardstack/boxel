@@ -39,7 +39,6 @@ import {
   saveCard,
   provideConsumeContext,
   lookupLoaderService,
-  lookupNetworkService,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -83,7 +82,6 @@ module('Integration | card-basics', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    lookupNetworkService();
     loader = lookupLoaderService().loader;
   });
 
