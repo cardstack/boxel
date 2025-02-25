@@ -325,18 +325,6 @@ export class RoomResource extends Resource<Args> {
     return event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
   }
 
-  private isCardFragmentEvent(
-    event:
-      | MessageEvent
-      | CommandEvent
-      | CardMessageEvent
-      | CommandDefinitionsEvent,
-  ): event is CardMessageEvent & {
-    content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
-  } {
-    return event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE;
-  }
-
   private async loadSkillCardIntoCache(eventId: string) {
     let cardDoc = this.serializedCardFromFragments(eventId);
     if (!cardDoc.data.id) {
@@ -354,6 +342,18 @@ export class RoomResource extends Resource<Args> {
     this._skillEventIdToCardIdCache.set(eventId, cardId);
   }
 
+  private isCardFragmentEvent(
+    event:
+      | MessageEvent
+      | CommandEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent,
+  ): event is CardMessageEvent & {
+    content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
+  } {
+    return event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE;
+  }
+
   private async loadCardFragment(
     event: CardMessageEvent & {
       content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
@@ -361,6 +361,7 @@ export class RoomResource extends Resource<Args> {
   ) {
     let eventId = event.event_id;
     this._fragmentCache.set(eventId, event.content);
+
     if (
       !this.allSkillEventIds.has(eventId) ||
       this._skillEventIdToCardIdCache.has(eventId)
