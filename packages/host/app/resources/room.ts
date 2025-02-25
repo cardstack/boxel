@@ -27,6 +27,7 @@ import type {
   LeaveEvent,
   CardMessageEvent,
   MessageEvent,
+  CommandDefinitionsEvent,
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -116,7 +117,11 @@ export class RoomResource extends Resource<Args> {
             if (this.isCardFragmentEvent(event)) {
               await this.loadCardFragment(event);
             } else {
-              await this.loadRoomMessage({ roomId, event, index });
+              await this.loadRoomMessage({
+                roomId,
+                event: event as MessageEvent | CommandEvent | CardMessageEvent, // this cast can be removed when we add awareness of CommandDefinitionsEvent to this resource
+                index,
+              });
             }
             break;
           case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
@@ -325,7 +330,11 @@ export class RoomResource extends Resource<Args> {
   }
 
   private isCardFragmentEvent(
-    event: MessageEvent | CommandEvent | CardMessageEvent,
+    event:
+      | MessageEvent
+      | CommandEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent,
   ): event is CardMessageEvent & {
     content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
   } {
