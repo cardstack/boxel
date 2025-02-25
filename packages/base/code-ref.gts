@@ -1,3 +1,4 @@
+import { tracked } from '@glimmer/tracking';
 import {
   Component,
   primitive,
@@ -14,6 +15,8 @@ import {
   type JSONAPISingleResourceDocument,
 } from './card-api';
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import { not } from '@cardstack/boxel-ui/helpers';
+import { BoxelInput } from '@cardstack/boxel-ui/components';
 import CodeIcon from '@cardstack/boxel-icons/code';
 
 function moduleIsUrlLike(module: string) {
@@ -33,6 +36,38 @@ class BaseView extends Component<typeof CodeRefField> {
       {{@model.name}}
     </div>
   </template>
+}
+
+class EditView extends Component<typeof CodeRefField> {
+  @tracked private rawInput: string | undefined = maybeSerializeCodeRef(
+    this.args.model ?? undefined,
+  );
+
+  <template>
+    <BoxelInput
+      @value={{this.rawInput}}
+      @onInput={{this.onInput}}
+      @disabled={{not @canEdit}}
+    />
+  </template>
+
+  private onInput = (inputVal: string) => {
+    this.rawInput = inputVal;
+    if (this.rawInput.length === 0) {
+      this.args.set(undefined);
+      return;
+    }
+
+    let parts = this.rawInput.split('/');
+    if (parts.length < 2) {
+      this.args.set(undefined);
+      return;
+    }
+
+    let name = parts.pop();
+    let module = parts.join('/');
+    this.args.set({ module, name });
+  };
 }
 
 export default class CodeRefField extends FieldDef {
@@ -71,8 +106,8 @@ export default class CodeRefField extends FieldDef {
   }
 
   static embedded = class Embedded extends BaseView {};
-  // The edit template is meant to be read-only, this field card is not mutable
-  static edit = class Edit extends BaseView {};
+
+  static edit = EditView;
 }
 
 function maybeSerializeCodeRef(

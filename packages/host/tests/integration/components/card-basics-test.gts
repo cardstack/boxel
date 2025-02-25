@@ -660,7 +660,7 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
-    test('render codeRef fields are not editable', async function (assert) {
+    test('can edit a CodeRef', async function (assert) {
       class DriverCard extends CardDef {
         @field ref = contains(CodeRefField);
         static edit = class Edit extends Component<typeof this> {
@@ -674,10 +674,53 @@ module('Integration | card-basics', function (hooks) {
       let driver = new DriverCard({ ref });
 
       await renderCard(loader, driver, 'edit');
-      assert.dom('input').doesNotExist('no input fields exist');
+
       assert
-        .dom('[data-test-ref]')
-        .containsText(`Module: http://localhost:4202/test/person Name: Person`);
+        .dom('[data-test-ref] input')
+        .hasValue(
+          `http://localhost:4202/test/person/Person`,
+          'input field is correct',
+        );
+
+      await fillIn('[data-test-ref] input', '@cardstack');
+      assert
+        .dom('[data-test-ref] input')
+        .hasValue(`@cardstack`, 'input field is correct');
+      assert.deepEqual(
+        driver.ref,
+        undefined,
+        'code ref is set to undefined when there are not enough parts to make a code ref',
+      );
+
+      await fillIn(
+        '[data-test-ref] input',
+        '@cardstack/test-host/skillA/SkillA',
+      );
+      assert
+        .dom('[data-test-ref] input')
+        .hasValue(
+          `@cardstack/test-host/skillA/SkillA`,
+          'input field is correct',
+        );
+      assert.deepEqual(
+        driver.ref,
+        { module: '@cardstack/test-host/skillA', name: 'SkillA' },
+        'code ref can be set to non-URL style code ref',
+      );
+
+      await fillIn('[data-test-ref] input', `${testRealmURL}dog/Dog`);
+      assert
+        .dom('[data-test-ref] input')
+        .hasValue(`${testRealmURL}dog/Dog`, 'input field is correct');
+      assert.deepEqual(
+        driver.ref,
+        { module: `${testRealmURL}dog`, name: 'Dog' },
+        'code ref can be set to URL style code ref',
+      );
+
+      await fillIn('[data-test-ref] input', ``);
+      assert.dom('[data-test-ref] input').hasNoValue();
+      assert.deepEqual(driver.ref, undefined, 'code ref can be unset');
     });
 
     test('render base64 image card', async function (assert) {
