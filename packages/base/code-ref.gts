@@ -76,10 +76,10 @@ class EditView extends Component<typeof CodeRefField> {
   };
 
   private setIfValid = restartableTask(
-    async (maybeCodeRef: string, args?: { checkOnly?: true }) => {
+    async (maybeCodeRef: string, opts?: { checkOnly?: true }) => {
       this.validationState = 'initial';
       if (maybeCodeRef.length === 0) {
-        if (!args?.checkOnly) {
+        if (!opts?.checkOnly) {
           this.args.set(undefined);
         }
         return;
@@ -103,14 +103,14 @@ class EditView extends Component<typeof CodeRefField> {
             },
           );
           this.validationState = 'valid';
-          if (!args?.checkOnly) {
+          if (!opts?.checkOnly) {
             this.args.set({ module, name });
           }
         } else {
           let code = (await import(module))[name];
           if (code) {
             this.validationState = 'valid';
-            if (!args?.checkOnly) {
+            if (!opts?.checkOnly) {
               this.args.set({ module, name });
             }
           } else {
