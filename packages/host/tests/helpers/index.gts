@@ -372,8 +372,11 @@ export function setupServerSentEvents(hooks: NestedHooks) {
 
       if (expectedEvents) {
         assert.deepEqual(
-          sseRoomEvents.forEach((e) => e.content.invalidations?.sort()),
-          expectedEvents.forEach((e) => e.data.invalidations?.sort()),
+          sseRoomEvents.map((e) => {
+            delete e.content.clientRequestId;
+            return e.content;
+          }),
+          expectedEvents,
           'sse response is correct',
         );
       } else {
