@@ -3144,7 +3144,7 @@ module(basename(__filename), function () {
     module('various other realm tests', function (hooks) {
       let testRealmHttpServer2: Server;
       let testRealm2: Realm;
-      let dbAdapter: PgAdapter;
+      let dbAdapter2: PgAdapter;
       let publisher: QueuePublisher;
       let runner: QueueRunner;
       let testRealmDir: string;
@@ -3189,13 +3189,13 @@ module(basename(__filename), function () {
 
       setupDB(hooks, {
         beforeEach: async (_dbAdapter, _publisher, _runner) => {
-          dbAdapter = _dbAdapter;
+          dbAdapter2 = _dbAdapter;
           publisher = _publisher;
           runner = _runner;
           testRealmDir = join(dir.name, 'realm_server_2', 'test');
           ensureDirSync(testRealmDir);
           copySync(join(__dirname, 'cards'), testRealmDir);
-          await startRealmServer(dbAdapter, publisher, runner);
+          await startRealmServer(dbAdapter2, publisher, runner);
 
           // FIXME how to remove this?
           testRealmEventSource = new eventSource(`${testRealmHref}_message`);
@@ -3254,6 +3254,18 @@ module(basename(__filename), function () {
           undefined,
         );
         assert.strictEqual(person.firstName, 'Mango', 'card data is correct');
+      });
+
+      test('can load a module when "last_modified" field in index is null', async function (assert) {
+        await dbAdapter.execute('update boxel_index set last_modified = null');
+        let response = await request
+          .get(`/person`)
+          .set('Accept', '*/*')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+          );
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
       });
 
       test('can instantiate a card that uses a code-ref field', async function (assert) {

@@ -1047,7 +1047,9 @@ export class Realm {
           body: source,
           init: {
             headers: {
-              'last-modified': formatRFC7231(lastModified * 1000),
+              ...(lastModified != null
+                ? { 'last-modified': formatRFC7231(lastModified * 1000) }
+                : {}),
             },
           },
           requestContext,
@@ -1089,7 +1091,7 @@ export class Realm {
   private async getSourceFromIndex(url: URL): Promise<
     | {
         source: string;
-        lastModified: number;
+        lastModified: number | null;
         canonicalURL: URL;
       }
     | undefined
@@ -1116,10 +1118,10 @@ export class Realm {
           ? module.lastModified
           : instance?.type === 'instance'
             ? instance.lastModified
-            : undefined;
-      if (canonicalURL == null || source == null || lastModified == null) {
+            : null;
+      if (canonicalURL == null || source == null) {
         throw new Error(
-          `missing 'canonicalURL', 'source', and/or 'lastModified' from index entry ${
+          `missing 'canonicalURL' and/or 'source' from index entry ${
             url.href
           }, where type is ${
             module?.type === 'module' ? 'module' : 'instance'

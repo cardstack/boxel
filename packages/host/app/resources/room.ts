@@ -27,6 +27,7 @@ import type {
   LeaveEvent,
   CardMessageEvent,
   MessageEvent,
+  CommandDefinitionsEvent,
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -103,7 +104,37 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
-      await this.loadFromEvents(roomId);
+
+      let index = this._messageCache.size;
+      // This is brought up to this level so if the
+      // load task is rerun we can stop processing
+      for (let event of this.sortedEvents) {
+        switch (event.type) {
+          case 'm.room.member':
+            await this.loadRoomMemberEvent(roomId, event);
+            break;
+          case 'm.room.message':
+            if (this.isCardFragmentEvent(event)) {
+              await this.loadCardFragment(event);
+            } else {
+              await this.loadRoomMessage({
+                roomId,
+                event: event as MessageEvent | CommandEvent | CardMessageEvent, // this cast can be removed when we add awareness of CommandDefinitionsEvent to this resource
+                index,
+              });
+            }
+            break;
+          case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+            this.updateMessageCommandResult({ roomId, event, index });
+            break;
+          case 'm.room.create':
+            await this.loadRoomCreateEvent(event);
+            break;
+          case 'm.room.name':
+            await this.loadRoomNameEvent(event);
+            break;
+        }
+      }
     } catch (e) {
       throw new Error(`Error loading room ${e}`);
     }
@@ -280,30 +311,6 @@ export class RoomResource extends Resource<Args> {
     }
   });
 
-  private async loadFromEvents(roomId: string) {
-    let index = this._messageCache.size;
-
-    for (let event of this.sortedEvents) {
-      switch (event.type) {
-        case 'm.room.member':
-          await this.loadRoomMemberEvent(roomId, event);
-          break;
-        case 'm.room.message':
-          this.loadRoomMessage({ roomId, event, index });
-          break;
-        case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
-          this.updateMessageCommandResult({ roomId, event, index });
-          break;
-        case 'm.room.create':
-          await this.loadRoomCreateEvent(event);
-          break;
-        case 'm.room.name':
-          await this.loadRoomNameEvent(event);
-          break;
-      }
-    }
-  }
-
   private async loadRoomMemberEvent(
     roomId: string,
     event: InviteEvent | JoinEvent | LeaveEvent,
@@ -322,24 +329,28 @@ export class RoomResource extends Resource<Args> {
     });
   }
 
-  private loadRoomMessage({
-    roomId,
-    event,
-    index,
-  }: {
-    roomId: string;
-    event: MessageEvent | CommandEvent | CardMessageEvent;
-    index: number;
-  }) {
-    if (event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-      this._fragmentCache.set(event.event_id, event.content);
-      return;
-    }
-
-    this.upsertMessage({ roomId, event, index });
+  private isCardFragmentEvent(
+    event:
+      | MessageEvent
+      | CommandEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent,
+  ): event is CardMessageEvent & {
+    content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
+  } {
+    return event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE;
   }
 
-  private upsertMessage({
+  private async loadCardFragment(
+    event: CardMessageEvent & {
+      content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
+    },
+  ) {
+    let eventId = event.event_id;
+    this._fragmentCache.set(eventId, event.content);
+  }
+
+  private loadRoomMessage({
     roomId,
     event,
     index,
@@ -389,7 +400,8 @@ export class RoomResource extends Resource<Args> {
       (e: any) =>
         e.type === 'm.room.message' &&
         e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-        e.content['m.relates_to']?.event_id === effectiveEventId,
+        (e.event_id === effectiveEventId ||
+          e.content['m.relates_to']?.event_id === effectiveEventId),
     )! as CommandEvent | undefined;
     let message = this._messageCache.get(effectiveEventId);
     if (!message || !commandEvent) {

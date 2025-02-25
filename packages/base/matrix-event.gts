@@ -16,6 +16,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { type SerializedFile } from './file-api';
 
@@ -162,6 +163,17 @@ export interface CardMessageEvent extends BaseMatrixEvent {
   };
 }
 
+export interface CommandDefinitionsEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: CommandDefinitionsContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 export interface Tool {
   type: 'function';
   function: {
@@ -249,6 +261,19 @@ export interface CommandResultEvent extends BaseMatrixEvent {
   };
 }
 
+export interface CommandDefinitionsContent {
+  msgtype: typeof APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
+  body: string;
+  data: {
+    commandDefinitions: {
+      codeRef: {
+        module: string;
+        name: string;
+      };
+      tool: Tool;
+    }[];
+  };
+}
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
     rel_type: 'm.annotation';
@@ -338,6 +363,7 @@ export type MatrixEvent =
   | MessageEvent
   | CommandEvent
   | CommandResultEvent
+  | CommandDefinitionsEvent
   | CardMessageEvent
   | RealmEventEvent
   | RoomNameEvent

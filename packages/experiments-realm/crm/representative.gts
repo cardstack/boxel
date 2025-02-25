@@ -4,7 +4,7 @@ import PresentationAnalytics from '@cardstack/boxel-icons/presentation-analytics
 import { StatusTagField } from './contact-status-tag';
 
 export class Representative extends Contact {
-  static displayName = 'CRM Representative';
+  static displayName = 'Representative';
   static icon = PresentationAnalytics;
   @field statusTag = contains(StatusTagField, {
     computeVia: function (this: Representative) {
