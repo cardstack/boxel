@@ -299,7 +299,6 @@ export default class RoomMessageCommand extends Component<Signature> {
         display: grid;
         grid-template-columns: auto 1fr;
         gap: var(--spacing);
-        filter: brightness(0.9);
       }
       .code-copy-button > .copy-text {
         color: transparent;
