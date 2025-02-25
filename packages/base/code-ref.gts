@@ -1,3 +1,4 @@
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import {
   Component,
@@ -14,7 +15,14 @@ import {
   type SerializeOpts,
   type JSONAPISingleResourceDocument,
 } from './card-api';
-import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import { restartableTask } from 'ember-concurrency';
+import { consume } from 'ember-provide-consume-context';
+import {
+  type ResolvedCodeRef,
+  type Loader,
+  loadCard,
+  CardURLContextName,
+} from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import CodeIcon from '@cardstack/boxel-icons/code';
@@ -39,35 +47,81 @@ class BaseView extends Component<typeof CodeRefField> {
 }
 
 class EditView extends Component<typeof CodeRefField> {
-  @tracked private rawInput: string | undefined = maybeSerializeCodeRef(
+  @consume(CardURLContextName) declare cardURL: string | undefined;
+  @tracked validationState: 'initial' | 'valid' | 'invalid' = 'initial';
+  @tracked private maybeCodeRef: string | undefined = maybeSerializeCodeRef(
     this.args.model ?? undefined,
   );
 
   <template>
     <BoxelInput
-      @value={{this.rawInput}}
+      data-test-hasValidated={{this.setIfValid.isIdle}}
+      @value={{this.maybeCodeRef}}
+      @state={{this.validationState}}
       @onInput={{this.onInput}}
       @disabled={{not @canEdit}}
     />
   </template>
 
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    if (this.maybeCodeRef != null) {
+      this.setIfValid.perform(this.maybeCodeRef, true);
+    }
+  }
+
   private onInput = (inputVal: string) => {
-    this.rawInput = inputVal;
-    if (this.rawInput.length === 0) {
-      this.args.set(undefined);
-      return;
-    }
-
-    let parts = this.rawInput.split('/');
-    if (parts.length < 2) {
-      this.args.set(undefined);
-      return;
-    }
-
-    let name = parts.pop();
-    let module = parts.join('/');
-    this.args.set({ module, name });
+    this.maybeCodeRef = inputVal;
+    this.setIfValid.perform(this.maybeCodeRef);
   };
+
+  private setIfValid = restartableTask(
+    async (maybeCodeRef: string, checkOnly?: true) => {
+      this.validationState = 'initial';
+      if (maybeCodeRef.length === 0) {
+        if (!checkOnly) {
+          this.args.set(undefined);
+        }
+        return;
+      }
+
+      let parts = maybeCodeRef.split('/');
+      if (parts.length < 2) {
+        this.validationState = 'invalid';
+        return;
+      }
+
+      let name = parts.pop()!;
+      let module = parts.join('/');
+      try {
+        if (moduleIsUrlLike(module)) {
+          await loadCard(
+            { module, name },
+            {
+              loader: myLoader(),
+              relativeTo: this.cardURL ? new URL(this.cardURL) : undefined,
+            },
+          );
+          this.validationState = 'valid';
+          if (!checkOnly) {
+            this.args.set({ module, name });
+          }
+        } else {
+          let code = (await import(module))[name];
+          if (code) {
+            this.validationState = 'valid';
+            if (!checkOnly) {
+              this.args.set({ module, name });
+            }
+          } else {
+            this.validationState = 'invalid';
+          }
+        }
+      } catch (err) {
+        this.validationState = 'invalid';
+      }
+    },
+  );
 }
 
 export default class CodeRefField extends FieldDef {
@@ -127,4 +181,15 @@ function maybeSerializeCodeRef(
     }
   }
   return undefined;
+}
+
+function myLoader(): Loader {
+  // we know this code is always loaded by an instance of our Loader, which sets
+  // import.meta.loader.
+
+  // When type-checking realm-server, tsc sees this file and thinks
+  // it will be transpiled to CommonJS and so it complains about this line. But
+  // this file is always loaded through our loader and always has access to import.meta.
+  // @ts-ignore
+  return (import.meta as any).loader;
 }

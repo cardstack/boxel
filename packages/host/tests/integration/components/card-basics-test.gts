@@ -39,6 +39,7 @@ import {
   saveCard,
   provideConsumeContext,
   lookupLoaderService,
+  lookupNetworkService,
 } from '../../helpers';
 import {
   Base64ImageField,
@@ -75,12 +76,14 @@ import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
+const testModuleRealm = 'http://localhost:4202/test/';
 
 module('Integration | card-basics', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
+    lookupNetworkService();
     loader = lookupLoaderService().loader;
   });
 
@@ -660,7 +663,7 @@ module('Integration | card-basics', function (hooks) {
       );
     });
 
-    test('can edit a CodeRef', async function (assert) {
+    test('can render a CodeRef field in edit mode with an initial value', async function (assert) {
       class DriverCard extends CardDef {
         @field ref = contains(CodeRefField);
         static edit = class Edit extends Component<typeof this> {
@@ -670,53 +673,220 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      let ref = { module: `${testRealmURL}person`, name: 'Person' };
+      let ref = { module: `${testModuleRealm}person`, name: 'Person' };
       let driver = new DriverCard({ ref });
+      await renderCard(loader, driver, 'edit');
+      await waitFor('[data-test-hasValidated]');
+
+      assert
+        .dom('[data-test-ref] input')
+        .hasValue(`${testModuleRealm}person/Person`, 'input field is correct');
+      assert
+        .dom('[data-test-ref] [data-test-boxel-input-validation-state="valid"]')
+        .exists('code ref is valid');
+    });
+
+    test('can edit a CodeRef field with a valid URL-like code ref', async function (assert) {
+      class DriverCard extends CardDef {
+        @field ref = contains(CodeRefField);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <div data-test-ref><@fields.ref /></div>
+          </template>
+        };
+      }
+
+      let driver = new DriverCard();
 
       await renderCard(loader, driver, 'edit');
-
+      await fillIn('[data-test-ref] input', `${testModuleRealm}person/Person`);
+      await waitFor('[data-test-hasValidated]');
       assert
         .dom('[data-test-ref] input')
-        .hasValue(`${testRealmURL}person/Person`, 'input field is correct');
-
-      await fillIn('[data-test-ref] input', '@cardstack');
+        .hasValue(`${testModuleRealm}person/Person`, 'input field is correct');
       assert
-        .dom('[data-test-ref] input')
-        .hasValue(`@cardstack`, 'input field is correct');
+        .dom('[data-test-ref] [data-test-boxel-input-validation-state="valid"]')
+        .exists('code ref is valid');
       assert.deepEqual(
         driver.ref,
-        undefined,
-        'code ref is set to undefined when there are not enough parts to make a code ref',
+        {
+          module: `${testModuleRealm}person`,
+          name: 'Person',
+        },
+        'code ref field value is correct',
       );
+    });
 
+    test('can edit a CodeRef field with a valid non-URL code ref', async function (assert) {
+      class DriverCard extends CardDef {
+        @field ref = contains(CodeRefField);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <div data-test-ref><@fields.ref /></div>
+          </template>
+        };
+      }
+
+      let driver = new DriverCard();
+
+      await renderCard(loader, driver, 'edit');
       await fillIn(
         '[data-test-ref] input',
-        '@cardstack/test-host/skillA/SkillA',
+        `@cardstack/boxel-host/commands/save-card/default`,
       );
+      await waitFor('[data-test-hasValidated]');
       assert
         .dom('[data-test-ref] input')
         .hasValue(
-          `@cardstack/test-host/skillA/SkillA`,
+          `@cardstack/boxel-host/commands/save-card/default`,
           'input field is correct',
         );
+      assert
+        .dom('[data-test-ref] [data-test-boxel-input-validation-state="valid"]')
+        .exists('code ref is valid');
+
       assert.deepEqual(
         driver.ref,
-        { module: '@cardstack/test-host/skillA', name: 'SkillA' },
-        'code ref can be set to non-URL style code ref',
+        {
+          module: `@cardstack/boxel-host/commands/save-card`,
+          name: `default`,
+        },
+        'code ref field value is correct',
       );
+    });
 
-      await fillIn('[data-test-ref] input', `${testRealmURL}dog/Dog`);
+    test('can edit a CodeRef field with an invalid non-URL code ref', async function (assert) {
+      class DriverCard extends CardDef {
+        @field ref = contains(CodeRefField);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <div data-test-ref><@fields.ref /></div>
+          </template>
+        };
+      }
+
+      let ref = { module: `${testModuleRealm}person`, name: 'Person' };
+      let driver = new DriverCard({ ref });
+      await renderCard(loader, driver, 'edit');
+      await waitFor('[data-test-hasValidated]');
+      await fillIn(
+        '[data-test-ref] input',
+        `@cardstack/boxel-host/commands/save-card/doesNotExist`,
+      );
+      await waitFor('[data-test-hasValidated]');
       assert
         .dom('[data-test-ref] input')
-        .hasValue(`${testRealmURL}dog/Dog`, 'input field is correct');
+        .hasValue(
+          `@cardstack/boxel-host/commands/save-card/doesNotExist`,
+          'input field is correct',
+        );
+      assert
+        .dom(
+          '[data-test-ref] [data-test-boxel-input-validation-state="invalid"]',
+        )
+        .exists('code ref is invalid');
+
       assert.deepEqual(
         driver.ref,
-        { module: `${testRealmURL}dog`, name: 'Dog' },
-        'code ref can be set to URL style code ref',
+        {
+          module: `${testModuleRealm}person`,
+          name: 'Person',
+        },
+        'code ref field value is correct',
       );
+    });
 
-      await fillIn('[data-test-ref] input', ``);
-      assert.dom('[data-test-ref] input').hasNoValue();
+    test('can edit a CodeRef field with an invalid URL-like code ref', async function (assert) {
+      class DriverCard extends CardDef {
+        @field ref = contains(CodeRefField);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <div data-test-ref><@fields.ref /></div>
+          </template>
+        };
+      }
+      let ref = { module: `${testModuleRealm}person`, name: 'Person' };
+      let driver = new DriverCard({ ref });
+      await renderCard(loader, driver, 'edit');
+      await waitFor('[data-test-hasValidated]');
+
+      await fillIn(
+        '[data-test-ref] input',
+        `${testModuleRealm}doesNotExist/Nothing`,
+      );
+      await waitFor('[data-test-hasValidated]');
+      assert
+        .dom('[data-test-ref] input')
+        .hasValue(
+          `${testModuleRealm}doesNotExist/Nothing`,
+          'input field is correct',
+        );
+      assert
+        .dom(
+          '[data-test-ref] [data-test-boxel-input-validation-state="invalid"]',
+        )
+        .exists('code ref is invalid');
+      assert.deepEqual(
+        driver.ref,
+        {
+          module: `${testModuleRealm}person`,
+          name: 'Person',
+        },
+        'code ref field value is correct',
+      );
+    });
+
+    test('can edit a CodeRef field with a code ref that is invalid because its too short', async function (assert) {
+      class DriverCard extends CardDef {
+        @field ref = contains(CodeRefField);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <div data-test-ref><@fields.ref /></div>
+          </template>
+        };
+      }
+      let ref = { module: `${testModuleRealm}person`, name: 'Person' };
+      let driver = new DriverCard({ ref });
+      await renderCard(loader, driver, 'edit');
+      await waitFor('[data-test-hasValidated]');
+
+      await fillIn('[data-test-ref] input', `@cardstack`);
+      await waitFor('[data-test-hasValidated]');
+      assert
+        .dom('[data-test-ref] input')
+        .hasValue(`@cardstack`, 'input field is correct');
+      assert
+        .dom(
+          '[data-test-ref] [data-test-boxel-input-validation-state="invalid"]',
+        )
+        .exists('code ref is invalid');
+      assert.deepEqual(
+        driver.ref,
+        {
+          module: `${testModuleRealm}person`,
+          name: 'Person',
+        },
+        'code ref field value is correct',
+      );
+    });
+
+    test('can clear a CodeRef field in edit mode', async function (assert) {
+      class DriverCard extends CardDef {
+        @field ref = contains(CodeRefField);
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <div data-test-ref><@fields.ref /></div>
+          </template>
+        };
+      }
+      let ref = { module: `${testModuleRealm}person`, name: 'Person' };
+      let driver = new DriverCard({ ref });
+      await renderCard(loader, driver, 'edit');
+      await waitFor('[data-test-hasValidated]');
+      await fillIn('[data-test-ref] input', '');
+      assert
+        .dom('[data-test-ref] input')
+        .hasValue('', 'input field is correct');
       assert.deepEqual(driver.ref, undefined, 'code ref can be unset');
     });
 
