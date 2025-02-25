@@ -21,6 +21,11 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  IncrementalIndexEventContent,
+  IndexRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
+
+import {
   percySnapshot,
   testRealmURL,
   setupCardLogs,
@@ -771,7 +776,7 @@ module('Integration | card-copy', function (hooks) {
       expectedNumberOfEvents: 4,
       onEvents: (events) => {
         assert.deepEqual(
-          events.map((e) => e.data.type),
+          events.map((e: IndexRealmEventContent) => e.indexType),
           [
             'incremental-index-initiation',
             'incremental',
@@ -782,8 +787,10 @@ module('Integration | card-copy', function (hooks) {
         );
         assert.deepEqual(
           flatMap(
-            events.filter((e) => e.data.type === 'incremental'),
-            (e) => e.data.invalidations,
+            events.filter(
+              (e: IndexRealmEventContent) => e.indexType === 'incremental',
+            ),
+            (e: IncrementalIndexEventContent) => e.invalidations,
           ),
           [savedCards[0].data.id, savedCards[1].data.id],
           'event invalidations are correct',
@@ -919,10 +926,11 @@ module('Integration | card-copy', function (hooks) {
       realm: realm2,
       expectedNumberOfEvents: 2,
       onEvents: ([_, event]) => {
-        if (event.data.type === 'incremental') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Person/${id}`,
-          ]);
+        if (event.eventName === 'index' && event.indexType === 'incremental') {
+          assert.deepEqual(
+            (event as IncrementalIndexEventContent).invalidations,
+            [`${testRealm2URL}Person/${id}`],
+          );
         } else {
           assert.ok(
             false,
