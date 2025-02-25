@@ -485,7 +485,7 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
         {{#if this.hasShortId}}
           <Pill
             class='task-status-pill'
-            @pillBackgroundColor='var(--boxel-100)'
+            @pillBackgroundColor='#f8f7fa'
           >
             <:default>{{@model.shortId}}</:default>
           </Pill>
@@ -494,7 +494,7 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
         {{#if this.hasDueDate}}
           <Pill
             class='task-status-pill'
-            @pillBackgroundColor='var(--boxel-100)'
+            @pillBackgroundColor='#f8f7fa'
           >
             <:iconLeft>
               <Calendar width='14px' height='14px' class='calendar-icon' />

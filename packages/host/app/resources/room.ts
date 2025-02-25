@@ -95,8 +95,36 @@ export class RoomResource extends Resource<Args> {
       this.matrixRoom = roomId
         ? await this.matrixService.getRoomData(roomId)
         : undefined; //look at the note in the EventSendingContext interface for why this is awaited
-      if (this.matrixRoom) {
-        await this.loadFromEvents(roomId);
+      if (!this.matrixRoom) {
+        return;
+      }
+      let memberIds = this.matrixRoom.memberIds;
+      // If the AI bot is not in the room, don't process the events
+      if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
+        return;
+      }
+
+      let index = this._messageCache.size;
+      // This is brought up to this level so if the
+      // load task is rerun we can stop processing
+      for (let event of this.sortedEvents) {
+        switch (event.type) {
+          case 'm.room.member':
+            await this.loadRoomMemberEvent(roomId, event);
+            break;
+          case 'm.room.message':
+            await this.loadRoomMessage({ roomId, event, index });
+            break;
+          case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
+            this.updateMessageCommandResult({ roomId, event, index });
+            break;
+          case 'm.room.create':
+            await this.loadRoomCreateEvent(event);
+            break;
+          case 'm.room.name':
+            await this.loadRoomNameEvent(event);
+            break;
+        }
       }
     } catch (e) {
       throw new Error(`Error loading room ${e}`);
@@ -273,30 +301,6 @@ export class RoomResource extends Resource<Args> {
       this.llmBeingActivated = undefined;
     }
   });
-
-  private async loadFromEvents(roomId: string) {
-    let index = this._messageCache.size;
-
-    for (let event of this.sortedEvents) {
-      switch (event.type) {
-        case 'm.room.member':
-          await this.loadRoomMemberEvent(roomId, event);
-          break;
-        case 'm.room.message':
-          this.loadRoomMessage({ roomId, event, index });
-          break;
-        case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
-          this.updateMessageCommandResult({ roomId, event, index });
-          break;
-        case 'm.room.create':
-          await this.loadRoomCreateEvent(event);
-          break;
-        case 'm.room.name':
-          await this.loadRoomNameEvent(event);
-          break;
-      }
-    }
-  }
 
   private async loadRoomMemberEvent(
     roomId: string,
