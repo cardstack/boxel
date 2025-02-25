@@ -19,6 +19,77 @@ export class LocalFileSystem {
   ) {
     this.userId = userId;
     this.updateLocalStoragePath();
+    this.loadExistingRealmMappings();
+  }
+
+  // Load existing realm mappings from the file system
+  private loadExistingRealmMappings(): void {
+    try {
+      const rootPath = this.getLocalStoragePath();
+      if (!fs.existsSync(rootPath)) {
+        return;
+      }
+
+      console.log(
+        `[LocalFileSystem] Loading existing realm mappings from: ${rootPath}`,
+      );
+      const entries = fs.readdirSync(rootPath, { withFileTypes: true });
+
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const folderPath = path.join(rootPath, entry.name);
+          try {
+            const metadataPath = path.join(folderPath, '.boxel-realm.json');
+            if (fs.existsSync(metadataPath)) {
+              const metadata = JSON.parse(
+                fs.readFileSync(metadataPath, 'utf8'),
+              );
+              if (metadata && metadata.realmUrl) {
+                // Skip realms belonging to other users if we have a userId
+                if (
+                  this.userId &&
+                  metadata.userId &&
+                  metadata.userId !== this.userId
+                ) {
+                  continue;
+                }
+
+                // Add to our mapping
+                this.realmUrlToLocalPath.set(metadata.realmUrl, folderPath);
+                console.log(
+                  `[LocalFileSystem] Mapped realm URL: ${metadata.realmUrl} to ${folderPath}`,
+                );
+
+                // If file watching is enabled, start it
+                if (metadata.fileWatchingEnabled === true) {
+                  this.enableFileWatching(folderPath);
+                }
+              }
+            }
+          } catch (error) {
+            console.error(
+              `[LocalFileSystem] Error processing realm folder ${folderPath}:`,
+              error,
+            );
+            // Continue to next folder even if this one had an error
+          }
+        }
+      }
+
+      console.log(
+        `[LocalFileSystem] Loaded ${this.realmUrlToLocalPath.size} realm mappings`,
+      );
+    } catch (error) {
+      console.error(`[LocalFileSystem] Error loading realm mappings:`, error);
+    }
+  }
+
+  // Refresh all realm mappings (can be called from outside)
+  refreshRealmMappings(): void {
+    // Clear existing mappings
+    this.realmUrlToLocalPath.clear();
+    // Reload mappings from disk
+    this.loadExistingRealmMappings();
   }
 
   // Update the local storage path from settings
@@ -430,19 +501,43 @@ export class LocalFileSystem {
     let realmUrl: string | undefined;
     let relativePath: string | undefined;
 
+    // Normalize the path to use consistent separators
+    const normalizedFilePath = path.normalize(localFilePath);
+
     for (const [url, localPath] of this.realmUrlToLocalPath.entries()) {
-      if (localFilePath.startsWith(localPath)) {
+      // Normalize the local path as well
+      const normalizedLocalPath = path.normalize(localPath);
+
+      // Check if the file path starts with the local path
+      if (normalizedFilePath.startsWith(normalizedLocalPath)) {
         realmUrl = url;
         // Calculate the relative path from the local base path
-        relativePath = localFilePath.substring(localPath.length);
+        relativePath = normalizedFilePath.substring(normalizedLocalPath.length);
         // Normalize path separators to forward slashes for the API
         relativePath = relativePath.replace(/\\/g, '/');
+        // Remove leading slash if present
+        if (relativePath.startsWith('/') || relativePath.startsWith('\\')) {
+          relativePath = relativePath.substring(1);
+        }
+        console.log(
+          `Found matching realm: ${url} for file: ${normalizedFilePath}`,
+        );
+        console.log(`Relative path: ${relativePath}`);
         break;
       }
     }
 
     if (!realmUrl || !relativePath) {
       console.log(`File ${localFilePath} is not part of any synced realm`);
+
+      // Debug logging - list all available realm mappings
+      console.log(
+        `Available realm mappings (${this.realmUrlToLocalPath.size}):`,
+      );
+      this.realmUrlToLocalPath.forEach((path, url) => {
+        console.log(`  ${url} => ${path}`);
+      });
+
       return;
     }
 

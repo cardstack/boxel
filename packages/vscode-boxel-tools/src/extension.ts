@@ -313,6 +313,9 @@ export async function activate(context: vscode.ExtensionContext) {
             );
           }
 
+          // Refresh realm mappings to ensure all new realms are tracked
+          localFileSystem.refreshRealmMappings();
+
           // Refresh the realm list view to show the new realms
           realmProvider.refresh();
 
@@ -416,6 +419,9 @@ export async function activate(context: vscode.ExtensionContext) {
     'boxel-tools.enableFileWatching',
     async (item: RealmItem) => {
       if (item && item.localPath) {
+        // Refresh realm mappings first to ensure we have all the latest data
+        localFileSystem.refreshRealmMappings();
+        // Then enable file watching
         localFileSystem.enableFileWatching(item.localPath);
         realmProvider.refresh();
       }
