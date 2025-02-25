@@ -387,7 +387,8 @@ export class RoomResource extends Resource<Args> {
       (e: any) =>
         e.type === 'm.room.message' &&
         e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-        (e.event_id === effectiveEventId || e.content['m.relates_to']?.event_id === effectiveEventId),
+        (e.event_id === effectiveEventId ||
+          e.content['m.relates_to']?.event_id === effectiveEventId),
     )! as CommandEvent | undefined;
     let message = this._messageCache.get(effectiveEventId);
     if (!message || !commandEvent) {
