@@ -444,17 +444,10 @@ export async function activate(context: vscode.ExtensionContext) {
     'boxel-tools.syncRealm',
     async (item: RealmItem) => {
       if (item && item.localPath) {
-        await vscode.window.withProgress(
-          {
-            location: vscode.ProgressLocation.Notification,
-            title: `Syncing realm ${item.realmName}...`,
-            cancellable: false,
-          },
-          async () => {
-            await localFileSystem.syncRealmFromPath(item.localPath);
-            realmProvider.refresh();
-          },
-        );
+        // We don't need an additional progress bar here because syncRealmFromPath
+        // now implements its own progress reporting via syncFromRemote
+        await localFileSystem.syncRealmFromPath(item.localPath);
+        realmProvider.refresh();
       }
     },
   );

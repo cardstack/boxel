@@ -288,16 +288,114 @@ export class LocalFileSystem {
 
       const localPath = this.getLocalPathForRealm(realmUrl, realmName);
       const filesProcessed: Set<string> = new Set();
+      const directoryStack: string[] = [];
+      let currentDirectory = '';
+      let filesSkipped = 0;
+      let filesDownloaded = 0;
 
       // Create or update metadata file
       this.createMetadataFile(localPath, realmUrl, realmName);
 
-      // Process root directory to recursively sync all files
-      await this.processRemoteDirectory(
-        realmUrl,
-        '/',
-        localPath,
-        filesProcessed,
+      // Process root directory to recursively sync all files with progress
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Syncing realm ${realmName}`,
+          cancellable: false,
+        },
+        async (progress) => {
+          // Initial progress message
+          progress.report({
+            message: 'Starting sync...',
+            increment: 0,
+          });
+
+          // Create a message for the current status
+          const updateProgressMessage = () => {
+            let message = '';
+
+            // Add file counts
+            if (filesDownloaded > 0 || filesSkipped > 0) {
+              message += `Files: ${filesDownloaded} downloaded, ${filesSkipped} unchanged`;
+            }
+
+            // Add current directory if available
+            if (currentDirectory) {
+              // Trim very long directory paths
+              const displayDir =
+                currentDirectory.length > 30
+                  ? '...' +
+                    currentDirectory.substring(currentDirectory.length - 30)
+                  : currentDirectory;
+
+              message += `\nProcessing: ${displayDir}`;
+
+              // Add directory depth indicator
+              if (directoryStack.length > 0) {
+                message += ` (depth: ${directoryStack.length})`;
+              }
+            }
+
+            return message;
+          };
+
+          await this.processRemoteDirectory(
+            realmUrl,
+            '/',
+            localPath,
+            filesProcessed,
+            {
+              reportFileStatus: (status) => {
+                // Update counts based on file status
+                if (status === 'downloaded') {
+                  filesDownloaded++;
+                } else if (status === 'skipped') {
+                  filesSkipped++;
+                }
+
+                // Report progress without incrementing the bar
+                progress.report({
+                  message: updateProgressMessage(),
+                });
+              },
+              reportDirectoryStart: (dir) => {
+                // Keep track of current directory and directory stack
+                currentDirectory = dir;
+                directoryStack.push(dir);
+
+                // Report progress
+                progress.report({
+                  message: updateProgressMessage(),
+                });
+              },
+              reportDirectoryEnd: (dir) => {
+                // Remove from stack and update current directory
+                const index = directoryStack.indexOf(dir);
+                if (index !== -1) {
+                  directoryStack.splice(index, 1);
+                }
+
+                // Set current directory to the parent directory (top of stack)
+                currentDirectory =
+                  directoryStack.length > 0
+                    ? directoryStack[directoryStack.length - 1]
+                    : '';
+
+                // Report progress
+                progress.report({
+                  message: updateProgressMessage(),
+                });
+              },
+            },
+          );
+
+          // Final progress message
+          const totalFiles = filesDownloaded + filesSkipped;
+          progress.report({
+            message: `Sync complete. ${totalFiles} files processed (${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
+            increment: 100,
+          });
+        },
       );
 
       if (filesProcessed.size === 0) {
@@ -314,7 +412,7 @@ export class LocalFileSystem {
 
         // Show a notification
         vscode.window.showInformationMessage(
-          `Successfully synced realm "${realmName}" to local storage (${filesProcessed.size} files)`,
+          `Successfully synced realm "${realmName}" to local storage (${filesProcessed.size} files, ${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
         );
       }
     } catch (error: unknown) {
@@ -333,7 +431,17 @@ export class LocalFileSystem {
     remotePath: string,
     localBasePath: string,
     filesProcessed: Set<string> = new Set(),
+    progress?: {
+      reportFileStatus: (status: 'skipped' | 'downloaded') => void;
+      reportDirectoryStart: (dir: string) => void;
+      reportDirectoryEnd: (dir: string) => void;
+    },
   ): Promise<void> {
+    // Report directory start
+    if (progress) {
+      progress.reportDirectoryStart(remotePath);
+    }
+
     console.log(`Processing remote directory: ${remotePath}`);
 
     // Ensure path has trailing slash for directory listings
@@ -362,6 +470,9 @@ export class LocalFileSystem {
         console.log(
           `Directory API returned ${response.status}: ${response.statusText}`,
         );
+        if (progress) {
+          progress.reportDirectoryEnd(remotePath);
+        }
         return;
       }
 
@@ -378,29 +489,57 @@ export class LocalFileSystem {
             continue;
           }
 
-          const entry = info as { meta: { kind: string } };
+          const entry = info as {
+            meta: { kind: string; lastModified?: number };
+          };
           const isFile = entry.meta.kind === 'file';
           const entryPath = path.posix.join(remotePath, name);
+          console.log(
+            `Processing entry: ${entryPath}, meta: ${JSON.stringify(
+              entry.meta,
+            )}`,
+          );
 
           if (isFile) {
-            // Download the file
+            console.log(`Processing file: ${entryPath}`);
+            // Download the file, passing the lastModified from the directory listing
             const fileUrl = `${realmUrl}${entryPath}`;
             const localFilePath = path.join(localBasePath, entryPath);
+
+            // Get the lastModified timestamp from the entry metadata
+            const lastModified = entry.meta.lastModified
+              ? new Date(entry.meta.lastModified * 1000)
+              : undefined;
+
+            // Log the timestamp information
+            if (lastModified) {
+              console.log(
+                `File timestamp from directory listing: ${lastModified.toISOString()} (Unix: ${
+                  entry.meta.lastModified
+                })`,
+              );
+            } else {
+              console.log(
+                `No lastModified timestamp in directory entry for: ${entryPath}`,
+              );
+            }
+
             const success = await this.downloadFile(
               fileUrl,
               localFilePath,
               filesProcessed,
+              progress ? progress.reportFileStatus : undefined,
+              lastModified,
             );
-            if (success) {
-              console.log(`Downloaded file: ${entryPath}`);
-            }
           } else {
+            console.log(`Processing subdirectory: ${entryPath}`);
             // Process subdirectory
             await this.processRemoteDirectory(
               realmUrl,
               entryPath,
               localBasePath,
               filesProcessed,
+              progress,
             );
           }
         }
@@ -416,6 +555,11 @@ export class LocalFileSystem {
         }`,
       );
     }
+
+    // Report directory end
+    if (progress) {
+      progress.reportDirectoryEnd(remotePath);
+    }
   }
 
   // Download a file from a specific URL
@@ -423,8 +567,10 @@ export class LocalFileSystem {
     url: string,
     localFilePath: string,
     filesProcessed: Set<string>,
+    progressCallback?: (status: 'skipped' | 'downloaded') => void,
+    remoteLastModified?: Date,
   ): Promise<boolean> {
-    console.log(`Downloading file: ${url}`);
+    console.log(`Processing file: ${url}`);
 
     try {
       // Ensure parent directory exists
@@ -433,10 +579,43 @@ export class LocalFileSystem {
         fs.mkdirSync(dirPath, { recursive: true });
       }
 
-      // Get the JWT for authentication - use the URL object directly
+      // Check if local file exists and compare modification times
+      if (fs.existsSync(localFilePath) && remoteLastModified) {
+        const localStats = fs.statSync(localFilePath);
+        const localLastModified = localStats.mtime;
+
+        // Log timestamps for debugging
+        console.log(`File: ${url}`);
+        console.log(
+          `  Local timestamp: ${localLastModified.toISOString()} (${localLastModified.getTime()})`,
+        );
+        console.log(
+          `  Remote timestamp: ${remoteLastModified.toISOString()} (${remoteLastModified.getTime()})`,
+        );
+
+        // If local file is newer or same age as remote file, skip downloading
+        if (localLastModified >= remoteLastModified) {
+          console.log(`  SKIPPING: Local file is newer or same age as remote`);
+
+          // Calculate relative path for tracking processed files
+          const localBasePath = path.dirname(path.dirname(localFilePath));
+          const relativePath = localFilePath.substring(localBasePath.length);
+          filesProcessed.add(relativePath);
+
+          if (progressCallback) {
+            progressCallback('skipped');
+          }
+
+          return true;
+        }
+
+        console.log(`  DOWNLOADING: Local file is older than remote`);
+      }
+
+      // Get the JWT for authentication
       const jwt = await this.realmAuth.getJWT(url);
 
-      // Fetch the file
+      // Fetch the file content
       const response = await fetch(url, {
         headers: {
           Accept: SupportedMimeType.CardSource,
@@ -483,12 +662,23 @@ export class LocalFileSystem {
       const relativePath = localFilePath.substring(localBasePath.length);
       filesProcessed.add(relativePath);
 
-      // Update last sync timestamp
-      this.updateLastSyncTimestamp(path.dirname(localFilePath));
+      // If we have a last modified date from the server, set the file's mtime to match
+      if (remoteLastModified) {
+        try {
+          fs.utimesSync(localFilePath, remoteLastModified, remoteLastModified);
+        } catch (error) {
+          console.log(`Failed to set file modification time: ${error}`);
+        }
+      }
 
+      if (progressCallback) {
+        progressCallback('downloaded');
+      }
+
+      console.log(`Downloaded file: ${url}`);
       return true;
     } catch (error) {
-      console.error(`Error downloading file ${url}:`, error);
+      console.error(`Error processing file ${url}:`, error);
       return false;
     }
   }
@@ -676,30 +866,8 @@ export class LocalFileSystem {
 
       console.log(`Syncing realm from URL: ${realmUrl}`);
 
-      // Get the JWT for authentication
-      const jwt = await this.realmAuth.getJWT(realmUrl);
-
-      // Instead of fetching realm info, just get the last segment of the URL
-      let realmName = '';
-      try {
-        const url = new URL(realmUrl);
-        // Split the pathname by '/' and filter out empty strings
-        const segments = url.pathname
-          .split('/')
-          .filter((segment) => segment.length > 0);
-        // Use the last segment as the realm name, or fallback to the hostname
-        realmName =
-          segments.length > 0 ? segments[segments.length - 1] : url.hostname;
-        console.log(
-          `[LocalFileSystem] Using URL last segment as realm name: ${realmName}`,
-        );
-      } catch (error) {
-        // Fallback: use the URL as is
-        realmName = realmUrl.replace(/https?:\/\//, '').replace(/\//g, '_');
-        console.log(
-          `[LocalFileSystem] Using fallback realm name: ${realmName}`,
-        );
-      }
+      const realmName =
+        metadata.realmName || this.extractRealmNameFromUrl(realmUrl);
 
       // Sync data from remote to local
       await this.syncFromRemote(realmUrl, realmName);
@@ -708,6 +876,35 @@ export class LocalFileSystem {
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       vscode.window.showErrorMessage(`Error syncing realm: ${errorMessage}`);
+    }
+  }
+
+  // Extract a realm name from a URL
+  private extractRealmNameFromUrl(url: string): string {
+    try {
+      const parsedUrl = new URL(url);
+
+      // Get all path segments that aren't empty
+      const pathSegments = parsedUrl.pathname.split('/').filter((p) => p);
+
+      // For boxel.ai URLs, we need to get the realm name which is typically the last segment
+      if (parsedUrl.hostname.includes('boxel.ai') && pathSegments.length >= 1) {
+        // Get the last segment as the realm name
+        return pathSegments[pathSegments.length - 1] || 'unknown-realm';
+      }
+
+      // For other URLs, use a fallback approach
+      // Try to get a meaningful name from the hostname
+      let hostname = parsedUrl.hostname;
+      hostname = hostname.replace(/^www\.|^api\.|^realm-/, '');
+
+      // If there's a path, use the last segment as part of the name
+      const lastPathSegment = pathSegments[pathSegments.length - 1];
+
+      return lastPathSegment ? `${hostname}-${lastPathSegment}` : hostname;
+    } catch (e) {
+      // If URL parsing fails, just return a sanitized version of the URL
+      return url.replace(/[^a-zA-Z0-9_-]/g, '_');
     }
   }
 
