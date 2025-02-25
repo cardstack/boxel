@@ -73,13 +73,8 @@ export async function reloadAndOpenAiAssistant(page: Page) {
 
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
-  await page.waitForFunction(() =>
-    document.querySelector('[data-test-close-ai-assistant]'),
-  );
-
-  await page.waitForFunction(() =>
-    document.querySelector('[data-test-room]')?.getAttribute('data-test-room'),
-  ); // Opening the AI assistant either opens last room or creates one - wait for it to settle
+  await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
+  await expect(page.locator('[data-test-room]')).toHaveCount(1);
 }
 
 export async function createRealm(
@@ -265,9 +260,7 @@ export async function login(
 ) {
   await openRoot(page, opts?.url);
 
-  await page.waitForFunction(() =>
-    document.querySelector('[data-test-username-field]'),
-  );
+  await expect(page.locator('[data-test-username-field]')).toBeEditable();
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
