@@ -36,7 +36,10 @@ import {
 } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+  APP_BOXEL_TEST_SENTINEL,
+} from '@cardstack/runtime-common/matrix-constants';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -319,6 +322,19 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
       let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
 
+      // FIXME duplicated from setupTestRealm, also this is the user’s username elsewher, not the realm’s username
+      let realmSessionRoomId = `session-room-for-${realm.matrixUsername}`;
+
+      // FIXME timestamp instead? Same in realm server tests
+      mockMatrixUtils.simulateRemoteMessage(
+        realmSessionRoomId,
+        realm.matrixUsername,
+        {},
+        {
+          type: APP_BOXEL_TEST_SENTINEL,
+        },
+      );
+
       let roomEvents: IEvent[] = [];
 
       let timeout = setTimeout(
@@ -344,12 +360,13 @@ export function setupServerSentEvents(hooks: NestedHooks) {
         );
       }
 
-      // FIXME duplicated from setupTestRealm, also this is the user’s username elsewher, not the realm’s username
-      let realmSessionRoomId = `session-room-for-${realm.matrixUsername}`;
-
       roomEvents = mockMatrixUtils.getRoomEvents(realmSessionRoomId);
 
-      let sseRoomEvents = roomEvents.filter(
+      let eventsAfterSentinel = roomEvents.slice(
+        roomEvents.findIndex((e) => e.type === APP_BOXEL_TEST_SENTINEL),
+      );
+
+      let sseRoomEvents = eventsAfterSentinel.filter(
         (e) =>
           e.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
           e.sender === realm.matrixUsername,
@@ -372,7 +389,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       }
 
       if (onEvents) {
-        onEvents(sseRoomEvents.map((e) => JSON.parse(e.content.body)));
+        onEvents(sseRoomEvents.map((e) => e.content));
       }
 
       clearTimeout(timeout);
