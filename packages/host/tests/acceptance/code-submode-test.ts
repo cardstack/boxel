@@ -1865,6 +1865,9 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await click('[data-test-select-card-type]');
       await waitFor('[data-test-card-catalog-modal]');
+      await waitFor(
+        `[data-test-card-type-icon]`,
+      );
       await percySnapshot(assert);
       let cardCatalogModalOverlay = document.querySelector(
         '[data-test-card-catalog-modal]',
