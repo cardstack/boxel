@@ -428,15 +428,13 @@ export class Spec extends CardDef {
             overflow: hidden;
           }
           .card-title {
-            display: -webkit-box;
-            -webkit-box-orient: vertical;
-            -webkit-line-clamp: 2;
-            overflow: hidden;
             margin-block: 0;
             font: 600 var(--boxel-font-sm);
             letter-spacing: var(--boxel-lsp-sm);
             line-height: 1.25;
             text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
           }
           .card-description {
             margin-top: var(--boxel-sp-4xs);
