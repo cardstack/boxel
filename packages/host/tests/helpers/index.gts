@@ -309,11 +309,9 @@ export function setupServerSentEvents(hooks: NestedHooks) {
     }: {
       assert: Assert;
       realm: Realm;
-      expectedEvents?: { type: string; data: Record<string, any> }[];
+      expectedEvents?: RealmEventEventContent[];
       expectedNumberOfEvents?: number;
-      onEvents?: (
-        events: { type: string; data: Record<string, any> }[],
-      ) => void;
+      onEvents?: (events: RealmEventEventContent[]) => void;
       callback: () => Promise<T>;
       opts?: { timeout?: number };
     }): Promise<T> => {
@@ -389,7 +387,7 @@ export function setupServerSentEvents(hooks: NestedHooks) {
       }
 
       if (onEvents) {
-        onEvents(sseRoomEvents.map((e) => e.content));
+        onEvents(sseRoomEvents.map((e) => e.content as RealmEventEventContent));
       }
 
       clearTimeout(timeout);
