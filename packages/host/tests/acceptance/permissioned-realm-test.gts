@@ -24,7 +24,10 @@ module('Acceptance | permissioned realm tests', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     let loader = lookupLoaderService().loader;

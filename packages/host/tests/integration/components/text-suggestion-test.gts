@@ -15,6 +15,7 @@ import {
   setupLocalIndexing,
   lookupLoaderService,
 } from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let cardApi: typeof import('https://cardstack.com/base/card-api');
@@ -24,6 +25,7 @@ let loader: Loader;
 module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = lookupLoaderService().loader;

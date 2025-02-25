@@ -57,6 +57,7 @@ import {
   EthereumAddressField,
 } from '../../helpers/base-realm';
 
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -77,6 +78,7 @@ module('Integration | serialization', function (hooks) {
     loader = lookupLoaderService().loader;
   });
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),

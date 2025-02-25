@@ -26,6 +26,9 @@ export function setupMockMatrix(
     sdk: undefined,
     opts: undefined,
   };
+
+  let mockUtils = new MockUtils(testState);
+
   hooks.beforeEach(async function () {
     testState.owner = this.owner;
     testState.opts = { ...opts };
@@ -53,6 +56,17 @@ export function setupMockMatrix(
         instantiate: false,
       },
     );
+    this.owner.register(
+      'service:matrix-mock-utils',
+      {
+        async load() {
+          return mockUtils;
+        },
+      },
+      {
+        instantiate: false,
+      },
+    );
     if (opts.autostart) {
       let matrixService = this.owner.lookup(
         'service:matrix-service',
@@ -61,5 +75,5 @@ export function setupMockMatrix(
       await matrixService.start();
     }
   });
-  return new MockUtils(testState);
+  return mockUtils;
 }

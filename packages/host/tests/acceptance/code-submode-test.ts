@@ -428,7 +428,10 @@ module('Acceptance | code submode tests', function (_hooks) {
     }
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+      matrixRoomId = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
       setupUserSubscription(matrixRoomId);
 
       let realmServerService = this.owner.lookup(
@@ -533,7 +536,10 @@ module('Acceptance | code submode tests', function (_hooks) {
     });
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+      matrixRoomId = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
       setupUserSubscription(matrixRoomId);
 
       monacoService = this.owner.lookup(

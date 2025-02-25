@@ -21,6 +21,8 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import { asURL } from '../services/store';
 
 import { type CardResource, getCard } from './card-resource';
@@ -66,13 +68,15 @@ export class Search extends Resource<Args> {
         url: `${realm}_message`,
         unsubscribe: subscribeToRealm(
           realm,
-          ({ type, data }: { type: string; data: string }) => {
+          (event: RealmEventEventContent) => {
             if (query === undefined) {
               return;
             }
-            let eventData = JSON.parse(data);
             // we are only interested in incremental index events
-            if (type !== 'index' || eventData.type !== 'incremental') {
+            if (
+              event.eventName !== 'index' ||
+              event.indexType !== 'incremental'
+            ) {
               return;
             }
             this.search.perform(query);

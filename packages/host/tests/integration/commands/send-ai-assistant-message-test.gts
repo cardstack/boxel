@@ -56,7 +56,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('send an ai assistant message', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
@@ -73,7 +76,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('send an ai assistant message with command call, not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
@@ -96,7 +102,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('send an ai assistant message with command call, explicitly not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
@@ -120,7 +129,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('send an ai assistant message with command call, explicitly required to be called', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
@@ -144,7 +156,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('multiple commands are allowed if not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(

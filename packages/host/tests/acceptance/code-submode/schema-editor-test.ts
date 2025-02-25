@@ -26,6 +26,7 @@ import {
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import { MockUtils } from '../../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../../helpers/setup';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
@@ -209,6 +210,7 @@ const ambiguousDisplayNamesCardSource = `
 let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let realm: Realm;
+  let mockMatrixUtils: MockUtils;
 
   async function saveField(
     context: TestContextWithSSE,
@@ -228,13 +230,19 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
   setupServerSentEvents(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
+
+  mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
+  let { createAndJoinRoom } = mockMatrixUtils;
+
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings

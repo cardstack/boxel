@@ -63,6 +63,12 @@ module('Integration | card-copy', function (hooks) {
   );
   setupServerSentEvents(hooks);
 
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
+    autostart: true,
+  });
+
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = async (
       leftCards: string[],
@@ -268,12 +274,6 @@ module('Integration | card-copy', function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
-  });
-
-  setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
-    autostart: true,
   });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {
@@ -668,10 +668,8 @@ module('Integration | card-copy', function (hooks) {
       realm: realm2,
       expectedNumberOfEvents: 2,
       onEvents: ([_, event]) => {
-        if (event.data.type === 'incremental') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Pet/${id}`,
-          ]);
+        if (event.eventName === 'index' && event.indexType === 'incremental') {
+          assert.deepEqual(event.invalidations, [`${testRealm2URL}Pet/${id}`]);
         } else {
           assert.ok(
             false,

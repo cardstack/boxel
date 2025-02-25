@@ -2,6 +2,7 @@ import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm';
 import { Deferred } from './deferred';
+import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 
 export interface MatrixAccess {
   accessToken: string;
@@ -279,16 +280,7 @@ export class MatrixClient {
       `_matrix/client/v3/rooms/${roomId}/messages?dir=b`,
     );
     let json = (await response.json()) as {
-      chunk: {
-        type: string;
-        sender: string;
-        origin_server_ts: number;
-        event_id: string;
-        content: {
-          body: string;
-          msgtype: string;
-        };
-      }[];
+      chunk: MatrixEvent[];
     };
     return json.chunk;
   }

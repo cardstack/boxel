@@ -54,6 +54,7 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
+
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
     setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
@@ -61,7 +62,10 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     let loader = lookupLoaderService().loader;
@@ -1756,6 +1760,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSSE>('stack item live updates with error', async function (assert) {
+      console.log('test started?');
       assert.expect(7);
       let expectedEvents = [
         {
@@ -1774,6 +1779,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           },
         },
       ];
+      console.log('visitOperatorMode');
       await visitOperatorMode({
         stacks: [
           [
@@ -1784,6 +1790,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+      console.log('visit cgomplete');
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
         .exists('card is displayed');
@@ -1792,6 +1799,8 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
         )
         .doesNotExist('card error state is NOT displayed');
+
+      console.log('about to expect events');
 
       await this.expectEvents({
         assert,

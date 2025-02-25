@@ -37,13 +37,14 @@ export class MockUtils {
       event_id?: string;
       state_key?: string;
       origin_server_ts?: number;
+      type?: string;
     },
   ) => {
     return this.testState.sdk!.serverState.addRoomEvent(
       sender,
       {
         room_id: roomId,
-        type: 'm.room.message',
+        type: overrides?.type ?? 'm.room.message',
         content,
       },
       overrides,
@@ -65,11 +66,22 @@ export class MockUtils {
   setActiveRealms = (realmURLs: string[]) => {
     this.testState.opts!.activeRealms = realmURLs;
   };
-  createAndJoinRoom = (sender: string, name: string, timestamp?: number) => {
+  createAndJoinRoom = ({
+    sender,
+    name,
+    id,
+    timestamp,
+  }: {
+    sender: string;
+    name: string;
+    id?: string;
+    timestamp?: number;
+  }) => {
     let roomId = this.testState.sdk!.serverState.createRoom(
       sender,
       name,
       timestamp,
+      id,
     );
     return roomId;
   };
