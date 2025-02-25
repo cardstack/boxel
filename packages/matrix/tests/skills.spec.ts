@@ -181,9 +181,6 @@ test.describe('Skills', () => {
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
-    // await getRoomId(page);
-    // await expect(page.locator('[data-test-new-session]')).toHaveCount(1);
-    // await expect(page.locator('[data-test-skill-menu]')).toHaveCount(1);
 
     await page.locator('[data-test-submode-switcher] button').click();
     await page.locator('[data-test-boxel-menu-item-text="Code"]').click();
