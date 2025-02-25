@@ -444,11 +444,15 @@ export class LocalFileSystem {
 
     console.log(`Processing remote directory: ${remotePath}`);
 
-    // Ensure path has trailing slash for directory listings
-    const apiPath = remotePath.endsWith('/') ? remotePath : `${remotePath}/`;
+    // remove leading slash if present
+    const apiPath = remotePath.startsWith('/')
+      ? remotePath.substring(1)
+      : remotePath;
 
     // Construct the full API URL
-    const apiUrl = `${realmUrl}${apiPath}`;
+    let apiUrl = new URL(apiPath, realmUrl).href;
+    // Ensure path has trailing slash for directory listings
+    apiUrl = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
     console.log(`API URL: ${apiUrl}`);
 
     try {
@@ -752,7 +756,12 @@ export class LocalFileSystem {
       }
 
       // Construct the API URL
-      const apiUrl = `${realmUrl}${relativePath}`;
+      // remove leading slash if present
+      relativePath = relativePath.startsWith('/')
+        ? relativePath.substring(1)
+        : relativePath;
+
+      const apiUrl = new URL(relativePath, realmUrl).href;
 
       // Upload the file
       const response = await fetch(apiUrl, {
