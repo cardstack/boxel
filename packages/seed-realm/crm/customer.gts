@@ -4,7 +4,7 @@ import HeartHandshakeIcon from '@cardstack/boxel-icons/heart-handshake';
 import { StatusTagField } from './contact-status-tag';
 
 export class Customer extends Contact {
-  static displayName = 'CRM Customer';
+  static displayName = 'Customer';
   static icon = HeartHandshakeIcon;
   @field statusTag = contains(StatusTagField, {
     computeVia: function (this: Customer) {
