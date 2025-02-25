@@ -111,7 +111,7 @@ const CONTACT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Contacts',
     icon: ContactIcon,
-    cardTypeName: 'CRM Contact',
+    cardTypeName: 'Contact',
     createNewButtonText: 'Create Contact',
     sortOptions: [
       {
@@ -124,19 +124,19 @@ const CONTACT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'Leads',
     icon: TargetArrowIcon,
-    cardTypeName: 'CRM Lead',
+    cardTypeName: 'Lead',
     createNewButtonText: 'Create Lead',
   },
   {
     displayName: 'Customers',
     icon: HeartHandshakeIcon,
-    cardTypeName: 'CRM Customer',
+    cardTypeName: 'Customer',
     createNewButtonText: 'Create Customer',
   },
   {
     displayName: 'Representatives',
     icon: PresentationAnalytics,
-    cardTypeName: 'CRM Representative',
+    cardTypeName: 'Representative',
     createNewButtonText: 'Create Representative',
   },
 ];
@@ -144,13 +144,13 @@ const DEAL_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Deals',
     icon: ContactIcon,
-    cardTypeName: 'CRM Deal',
+    cardTypeName: 'Deal',
     createNewButtonText: 'Create Deal',
   },
   ...DEAL_STATUS_VALUES.map((status) => ({
     displayName: status.label,
     icon: status.icon,
-    cardTypeName: 'CRM Deal',
+    cardTypeName: 'Deal',
     createNewButtonText: 'Create Deal',
   })),
 ];
@@ -159,13 +159,13 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Accounts',
     icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
+    cardTypeName: 'Account',
     createNewButtonText: 'Create Account',
   },
   ...URGENCY_TAG_VALUES.map((tag) => ({
     displayName: tag.label,
     icon: tag.icon,
-    cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
+    cardTypeName: 'Account', // without cardTypeName, the filter is not applied
     createNewButtonText: 'Create Account',
   })),
 ];
@@ -404,7 +404,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       },
     ];
 
-    // filter field value by CRM Account
+    // filter field value by Account
     const accountFilter =
       activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
         ? [
@@ -417,7 +417,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           ]
         : [];
 
-    // filter field value by CRM Deal
+    // filter field value by Deal
     const dealFilter =
       activeTabId === 'Deal' && activeFilter.displayName !== 'All Deals'
         ? [
