@@ -20,7 +20,6 @@ import { consume } from 'ember-provide-consume-context';
 import {
   type ResolvedCodeRef,
   type Loader,
-  loadCard,
   CardURLContextName,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -94,28 +93,14 @@ class EditView extends Component<typeof CodeRefField> {
       let name = parts.pop()!;
       let module = parts.join('/');
       try {
-        if (moduleIsUrlLike(module)) {
-          await loadCard(
-            { module, name },
-            {
-              loader: myLoader(),
-              relativeTo: this.cardURL ? new URL(this.cardURL) : undefined,
-            },
-          );
+        let code = (await import(module))[name];
+        if (code) {
           this.validationState = 'valid';
           if (!opts?.checkOnly) {
             this.args.set({ module, name });
           }
         } else {
-          let code = (await import(module))[name];
-          if (code) {
-            this.validationState = 'valid';
-            if (!opts?.checkOnly) {
-              this.args.set({ module, name });
-            }
-          } else {
-            this.validationState = 'invalid';
-          }
+          this.validationState = 'invalid';
         }
       } catch (err) {
         this.validationState = 'invalid';
