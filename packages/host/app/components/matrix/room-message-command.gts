@@ -198,7 +198,7 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{#if @isDisplayingCode}}
         <div class='preview-code'>
           <Button
-            class='copy-to-clipboard-button'
+            class='code-copy-button'
             @kind='text-only'
             @size='extra-small'
             {{on 'click' this.copyToClipboard}}
@@ -210,7 +210,7 @@ export default class RoomMessageCommand extends Component<Signature> {
               role='presentation'
               aria-hidden='true'
             />
-            Copy to clipboard
+            <span class='copy-text'>Copy to clipboard</span>
           </Button>
           <div
             class='monaco-container'
@@ -279,7 +279,17 @@ export default class RoomMessageCommand extends Component<Signature> {
       .command-result-card-preview {
         margin-top: var(--boxel-sp);
       }
-      .copy-to-clipboard-button {
+      .preview-code {
+        --spacing: var(--boxel-sp-sm);
+        --fill-container-spacing: calc(
+          -1 * var(--ai-assistant-message-padding)
+        );
+        margin: var(--boxel-sp) var(--fill-container-spacing)
+          var(--fill-container-spacing) var(--fill-container-spacing);
+        padding: var(--spacing) 0;
+        background-color: var(--boxel-dark);
+      }
+      .code-copy-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-padding: 0 var(--boxel-sp-xs);
         --icon-color: var(--boxel-highlight);
@@ -290,9 +300,16 @@ export default class RoomMessageCommand extends Component<Signature> {
         grid-template-columns: auto 1fr;
         gap: var(--spacing);
       }
-      .copy-to-clipboard-button:hover:not(:disabled) {
-        --boxel-button-text-color: var(--boxel-highlight);
-        filter: brightness(1.1);
+      .code-copy-button > .copy-text {
+        color: transparent;
+      }
+      .code-copy-button:hover:not(:disabled) > .copy-text {
+        color: var(--boxel-highlight);
+      }
+      .monaco-container {
+        height: var(--monaco-container-height);
+        min-height: 10rem;
+        max-height: 30vh;
       }
       .header {
         --boxel-label-color: var(--boxel-450);
