@@ -17,6 +17,8 @@ import LoaderService from '@cardstack/host/services/loader-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
+import { IndexRealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import {
   CardDocFiles,
   lookupLoaderService,
@@ -326,21 +328,16 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
     assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
 
-    let expectedEvents = [
+    let expectedEvents: IndexRealmEventContent[] = [
       {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}book/3`,
-        },
+        eventName: 'index',
+        indexType: 'incremental-index-initiation',
+        updatedFile: `${testRealmURL}book/3`,
       },
       {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}book/3`],
-        },
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}book/3`],
       },
     ];
     await this.expectEvents({
@@ -403,21 +400,16 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual((search.instances[0] as any).author.firstName, `Mango`);
 
-    let expectedEvents = [
+    let expectedEvents: IndexRealmEventContent[] = [
       {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}book/1`,
-        },
+        eventName: 'index',
+        indexType: 'incremental-index-initiation',
+        updatedFile: `${testRealmURL}book/1`,
       },
       {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}book/1`],
-        },
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}book/1`],
       },
     ];
 
