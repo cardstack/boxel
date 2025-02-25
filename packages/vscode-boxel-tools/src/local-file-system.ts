@@ -10,11 +10,14 @@ export class LocalFileSystem {
   private realmUrlToLocalPath: Map<string, string> = new Map();
   private fileWatchers: Map<string, vscode.FileSystemWatcher> = new Map();
   private syncInProgress: boolean = false;
+  private userId: string | null = null;
 
   constructor(
     private context: vscode.ExtensionContext,
     private realmAuth: RealmAuth,
+    userId: string | null = null,
   ) {
+    this.userId = userId;
     this.updateLocalStoragePath();
   }
 
@@ -69,6 +72,7 @@ export class LocalFileSystem {
 
   // Get the current local storage path
   getLocalStoragePath(): string {
+    // Simply return the configured storage path without nesting under user ID
     return this.localStoragePath;
   }
 
@@ -76,7 +80,10 @@ export class LocalFileSystem {
   getLocalPathForRealm(realmUrl: string, realmName: string): string {
     // Create a safe directory name from the realm name
     const safeDirName = realmName.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const localPath = path.join(this.localStoragePath, safeDirName);
+
+    // Get the base storage path
+    const basePath = this.getLocalStoragePath();
+    const localPath = path.join(basePath, safeDirName);
 
     // Store the mapping for future reference
     this.realmUrlToLocalPath.set(realmUrl, localPath);
@@ -99,8 +106,9 @@ export class LocalFileSystem {
     const metadata = {
       realmUrl,
       realmName,
-      lastSync: new Date().toISOString(),
+      lastSync: null, // No files synced yet
       fileWatchingEnabled: false,
+      userId: this.userId, // Store the user ID in metadata
     };
 
     try {
@@ -108,6 +116,25 @@ export class LocalFileSystem {
       console.log(`Created realm metadata file at ${metadataPath}`);
     } catch (error) {
       console.error(`Error creating metadata file: ${error}`);
+    }
+  }
+
+  // Update last sync timestamp in metadata
+  private updateLastSyncTimestamp(localPath: string): void {
+    const metadataPath = path.join(localPath, '.boxel-realm.json');
+
+    try {
+      if (fs.existsSync(metadataPath)) {
+        const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+        metadata.lastSync = new Date().toISOString();
+        fs.writeFileSync(
+          metadataPath,
+          JSON.stringify(metadata, null, 2),
+          'utf8',
+        );
+      }
+    } catch (error) {
+      console.error(`Error updating lastSync timestamp: ${error}`);
     }
   }
 
@@ -181,6 +208,9 @@ export class LocalFileSystem {
         console.log(
           `Sync completed for realm: ${realmName}, ${filesProcessed.size} files processed`,
         );
+
+        // Update the last sync timestamp
+        this.updateLastSyncTimestamp(localPath);
 
         // Show a notification
         vscode.window.showInformationMessage(
@@ -303,11 +333,14 @@ export class LocalFileSystem {
         fs.mkdirSync(dirPath, { recursive: true });
       }
 
+      // Get the JWT for authentication - use the URL object directly
+      const jwt = await this.realmAuth.getJWT(url);
+
       // Fetch the file
       const response = await fetch(url, {
         headers: {
           Accept: '*/*',
-          Authorization: `${await this.realmAuth.getJWT(url)}`,
+          Authorization: jwt,
         },
       });
 
@@ -349,6 +382,9 @@ export class LocalFileSystem {
       const localBasePath = path.dirname(path.dirname(localFilePath));
       const relativePath = localFilePath.substring(localBasePath.length);
       filesProcessed.add(relativePath);
+
+      // Update last sync timestamp
+      this.updateLastSyncTimestamp(path.dirname(localFilePath));
 
       return true;
     } catch (error) {
@@ -423,120 +459,153 @@ export class LocalFileSystem {
 
       console.log(`Successfully uploaded file: ${localFilePath}`);
     } catch (error: unknown) {
-      console.error(`Error uploading file ${localFilePath}:`, error);
+      console.error(`Error uploading file:`, error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`Error uploading file: ${errorMessage}`);
+      vscode.window.showErrorMessage(`Failed to upload file: ${errorMessage}`);
     }
   }
 
-  // Setup a file watcher for a realm directory
-  private setupFileWatcher(realmUrl: string, localPath: string): void {
-    // Remove any existing watcher for this realm
-    if (this.fileWatchers.has(realmUrl)) {
-      this.fileWatchers.get(realmUrl)!.dispose();
+  // Enable file watching for a realm folder
+  enableFileWatching(folderPath: string): void {
+    // Update metadata first
+    this.updateFileWatchingStatus(folderPath, true);
+
+    // If already watching, return
+    if (this.fileWatchers.has(folderPath)) {
+      return;
     }
 
-    // Create a new file watcher
-    const watcher = vscode.workspace.createFileSystemWatcher(
-      new vscode.RelativePattern(localPath, '**/*'),
-      false, // Don't ignore create events
-      false, // Don't ignore change events
-      false, // Don't ignore delete events
-    );
-
-    // Handle file creation and modification
-    watcher.onDidCreate((uri) => {
-      if (fs.statSync(uri.fsPath).isFile()) {
-        this.uploadFile(uri.fsPath);
-      }
-    });
-
-    watcher.onDidChange((uri) => {
-      if (fs.statSync(uri.fsPath).isFile()) {
-        this.uploadFile(uri.fsPath);
-      }
-    });
-
-    // Store the watcher for later disposal
-    this.fileWatchers.set(realmUrl, watcher);
-  }
-
-  // Enable file watching for a realm
-  enableFileWatching(localPath: string): void {
     try {
-      const metadata = this.readRealmMetadata(localPath);
-      if (!metadata) {
-        vscode.window.showErrorMessage(
-          "This doesn't appear to be a valid Boxel realm folder.",
-        );
-        return;
-      }
+      // Create a file watcher for this folder
+      const watcher = vscode.workspace.createFileSystemWatcher(
+        new vscode.RelativePattern(folderPath, '**/*'),
+      );
 
-      const realmUrl = metadata.realmUrl;
+      // Handle file changes
+      watcher.onDidChange(async (uri) => {
+        if (this.syncInProgress) {
+          return; // Skip during sync
+        }
+        console.log(`File changed: ${uri.fsPath}`);
+        await this.uploadFile(uri.fsPath);
+      });
 
-      // Setup file watcher for this realm
-      this.setupFileWatcher(realmUrl, localPath);
+      // Handle file creations
+      watcher.onDidCreate(async (uri) => {
+        if (this.syncInProgress) {
+          return; // Skip during sync
+        }
+        console.log(`File created: ${uri.fsPath}`);
+        await this.uploadFile(uri.fsPath);
+      });
 
-      // Update metadata
-      this.updateFileWatchingStatus(localPath, true);
+      // Store the watcher
+      this.fileWatchers.set(folderPath, watcher);
 
+      console.log(`File watching enabled for ${folderPath}`);
       vscode.window.showInformationMessage(
-        `File watching enabled for realm "${metadata.realmName}"`,
+        `File watching enabled for realm folder.`,
       );
     } catch (error) {
       console.error('Error enabling file watching:', error);
-      vscode.window.showErrorMessage('Failed to enable file watching.');
+      vscode.window.showErrorMessage(
+        `Error enabling file watching: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
     }
   }
 
-  // Disable file watching for a realm
-  disableFileWatching(localPath: string): void {
+  // Disable file watching for a realm folder
+  disableFileWatching(folderPath: string): void {
+    // Update metadata first
+    this.updateFileWatchingStatus(folderPath, false);
+
+    // Remove and dispose the watcher if it exists
+    const watcher = this.fileWatchers.get(folderPath);
+    if (watcher) {
+      watcher.dispose();
+      this.fileWatchers.delete(folderPath);
+      console.log(`File watching disabled for ${folderPath}`);
+      vscode.window.showInformationMessage(
+        `File watching disabled for realm folder.`,
+      );
+    }
+  }
+
+  // Sync a realm from its local path
+  async syncRealmFromPath(localPath: string): Promise<void> {
     try {
+      // Read the metadata file to get the realm URL and last sync time
       const metadata = this.readRealmMetadata(localPath);
       if (!metadata) {
-        vscode.window.showErrorMessage(
-          "This doesn't appear to be a valid Boxel realm folder.",
+        throw new Error(
+          'No metadata found. Please make sure this is a valid Boxel realm folder.',
         );
-        return;
       }
 
       const realmUrl = metadata.realmUrl;
-
-      // Remove file watcher if it exists
-      if (this.fileWatchers.has(realmUrl)) {
-        this.fileWatchers.get(realmUrl)!.dispose();
-        this.fileWatchers.delete(realmUrl);
+      if (!realmUrl) {
+        throw new Error('No realm URL found in metadata.');
       }
 
-      // Update metadata
-      this.updateFileWatchingStatus(localPath, false);
+      console.log(`Syncing realm from URL: ${realmUrl}`);
 
-      vscode.window.showInformationMessage(
-        `File watching disabled for realm "${metadata.realmName}"`,
-      );
-    } catch (error) {
-      console.error('Error disabling file watching:', error);
-      vscode.window.showErrorMessage('Failed to disable file watching.');
+      // Get the JWT for authentication
+      const jwt = await this.realmAuth.getJWT(realmUrl);
+
+      // Fetch realm info for directory organization
+      const realmInfoUrl = new URL('api/realm-info', realmUrl);
+      let response = await fetch(realmInfoUrl.toString(), {
+        headers: {
+          Authorization: jwt,
+          Accept: 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Failed to fetch realm info: ${response.status} ${response.statusText}`,
+        );
+      }
+
+      const realmInfo = await response.json();
+      console.log('Realm info:', realmInfo);
+
+      // Sync data from remote to local
+      await this.syncFromRemote(realmUrl, realmInfo.realmName);
+    } catch (error: unknown) {
+      console.error(`Error syncing realm from path:`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Error syncing realm: ${errorMessage}`);
     }
   }
 
-  // Sync a realm from the local path
-  async syncRealmFromPath(localPath: string): Promise<void> {
+  // Check if a folder is a valid Boxel realm folder
+  isBoxelRealmFolder(folderPath: string): boolean {
     try {
-      const metadata = this.readRealmMetadata(localPath);
-      if (!metadata) {
-        vscode.window.showErrorMessage(
-          "This doesn't appear to be a valid Boxel realm folder.",
-        );
-        return;
+      const metadataPath = path.join(folderPath, '.boxel-realm.json');
+      if (!fs.existsSync(metadataPath)) {
+        return false;
       }
 
-      await this.syncFromRemote(metadata.realmUrl, metadata.realmName);
+      // Basic check that the file exists and is valid JSON
+      const metadata = JSON.parse(fs.readFileSync(metadataPath, 'utf8'));
+
+      // Just check that realmUrl exists - don't filter by user here
+      return !!metadata.realmUrl;
     } catch (error) {
-      console.error('Error syncing realm:', error);
-      vscode.window.showErrorMessage('Failed to sync realm.');
+      console.error(`Error checking if folder is a realm folder:`, error);
+      return false;
     }
+  }
+
+  // Check if file watching is enabled for a realm
+  isFileWatchingEnabled(folderPath: string): boolean {
+    const metadata = this.readRealmMetadata(folderPath);
+    return metadata?.fileWatchingEnabled === true;
   }
 
   // Dispose all file watchers
@@ -547,26 +616,9 @@ export class LocalFileSystem {
     this.fileWatchers.clear();
   }
 
-  // Check if a directory is a valid Boxel realm folder
-  isBoxelRealmFolder(folderPath: string): boolean {
-    console.log('Checking if', folderPath, 'is a Boxel realm folder');
-    const metadataPath = path.join(folderPath, '.boxel-realm.json');
-    try {
-      if (fs.existsSync(metadataPath)) {
-        const content = fs.readFileSync(metadataPath, 'utf8');
-        const metadata = JSON.parse(content);
-        // Basic validation of the metadata
-        return !!(metadata.realmUrl && metadata.realmName);
-      }
-    } catch (error) {
-      console.error(`Error checking realm folder: ${error}`);
-    }
-    return false;
-  }
-
-  // Check if file watching is enabled for a realm folder
-  isFileWatchingEnabled(folderPath: string): boolean {
-    const metadata = this.readRealmMetadata(folderPath);
-    return metadata ? !!metadata.fileWatchingEnabled : false;
+  // Update the userId after login
+  updateUserId(userId: string | null): void {
+    this.userId = userId;
+    console.log(`LocalFileSystem: Updated user ID to ${userId}`);
   }
 }

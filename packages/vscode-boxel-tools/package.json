@@ -17,12 +17,14 @@
     "Other"
   ],
   "activationEvents": [
-    "onAuthenticationRequest:synapse",
     "onStartupFinished",
     "onView:codingSkillList",
+    "onView:boxelRealmList",
     "onFileSystem:boxel",
     "onCommand:boxel-tools.syncFromRemote",
-    "onCommand:boxel-tools.attachToBoxelWorkspaces"
+    "onCommand:boxel-tools.attachToBoxelWorkspaces",
+    "onCommand:boxel-tools.login",
+    "onCommand:boxel-tools.checkMatrixConnection"
   ],
   "icon": "images/boxel-icon.png",
   "main": "./dist/extension.js",
@@ -40,7 +42,7 @@
       },
       {
         "command": "boxel-tools.syncFromRemote",
-        "title": "Sync Realm from Remote",
+        "title": "Find Realms",
         "category": "Boxel Tools"
       },
       {
@@ -52,6 +54,12 @@
         "command": "boxel-tools.reloadSkills",
         "title": "Reload Skills",
         "category": "Boxel Tools"
+      },
+      {
+        "command": "boxel-tools.addRealmsToWorkspace",
+        "title": "Add Realms Folder to Workspace",
+        "category": "Boxel Tools",
+        "icon": "$(add)"
       },
       {
         "command": "boxel-tools.enableFileWatching",
@@ -70,6 +78,18 @@
         "title": "Sync Realm",
         "category": "Boxel Tools",
         "icon": "$(sync)"
+      },
+      {
+        "command": "boxel-tools.login",
+        "title": "Boxel: Log in to Matrix",
+        "category": "Boxel",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "boxel-tools.checkMatrixConnection",
+        "title": "Boxel: Check Matrix Server Connection",
+        "category": "Boxel",
+        "icon": "$(server)"
       }
     ],
     "menus": {
@@ -85,6 +105,15 @@
         },
         {
           "command": "boxel-tools.openSettings"
+        },
+        {
+          "command": "boxel-tools.addRealmsToWorkspace"
+        },
+        {
+          "command": "boxel-tools.login"
+        },
+        {
+          "command": "boxel-tools.checkMatrixConnection"
         }
       ],
       "view/title": [
@@ -95,6 +124,11 @@
         },
         {
           "command": "boxel-tools.syncFromRemote",
+          "when": "view == boxelRealmList",
+          "group": "navigation"
+        },
+        {
+          "command": "boxel-tools.addRealmsToWorkspace",
           "when": "view == boxelRealmList",
           "group": "navigation"
         }
@@ -149,7 +183,7 @@
       },
       {
         "view": "boxelRealmList",
-        "contents": "Connect to your Boxel realms to sync and manage local copies. [Connect to Boxel](command:boxel-tools.syncFromRemote)"
+        "contents": "Connect to your Boxel account to find available realms.\n\n[Log in to Matrix](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)\n[Find Realms](command:boxel-tools.syncFromRemote)"
       }
     ],
     "configuration": [
