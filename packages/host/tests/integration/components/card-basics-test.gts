@@ -644,13 +644,13 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
+      let ref = { module: `${testRealmURL}person`, name: 'Person' };
       let driver = new DriverCard({ ref });
 
       await renderCard(loader, driver, 'embedded');
       assert
         .dom('[data-test-ref]')
-        .containsText(`Module: http://localhost:4202/test/person Name: Person`);
+        .containsText(`Module: ${testRealmURL}person Name: Person`);
 
       // is this worth an assertion? or is it just obvious?
       assert.strictEqual(
@@ -670,17 +670,14 @@ module('Integration | card-basics', function (hooks) {
         };
       }
 
-      let ref = { module: `http://localhost:4202/test/person`, name: 'Person' };
+      let ref = { module: `${testRealmURL}person`, name: 'Person' };
       let driver = new DriverCard({ ref });
 
       await renderCard(loader, driver, 'edit');
 
       assert
         .dom('[data-test-ref] input')
-        .hasValue(
-          `http://localhost:4202/test/person/Person`,
-          'input field is correct',
-        );
+        .hasValue(`${testRealmURL}person/Person`, 'input field is correct');
 
       await fillIn('[data-test-ref] input', '@cardstack');
       assert
