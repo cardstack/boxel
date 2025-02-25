@@ -198,7 +198,7 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{#if @isDisplayingCode}}
         <div class='preview-code'>
           <Button
-            class='copy-to-clipboard-button'
+            class='code-copy-button'
             @kind='text-only'
             @size='extra-small'
             {{on 'click' this.copyToClipboard}}
@@ -210,7 +210,7 @@ export default class RoomMessageCommand extends Component<Signature> {
               role='presentation'
               aria-hidden='true'
             />
-            Copy to clipboard
+            <span class='copy-text'>Copy to clipboard</span>
           </Button>
           <div
             class='monaco-container'
@@ -289,10 +289,9 @@ export default class RoomMessageCommand extends Component<Signature> {
         padding: var(--spacing) 0;
         background-color: var(--boxel-dark);
       }
-      .copy-to-clipboard-button {
+      .code-copy-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-padding: 0 var(--boxel-sp-xs);
-        --boxel-button-text-color: var(--boxel-highlight);
         --icon-color: var(--boxel-highlight);
         --icon-stroke-width: 2px;
         margin-left: var(--spacing);
@@ -302,8 +301,11 @@ export default class RoomMessageCommand extends Component<Signature> {
         gap: var(--spacing);
         filter: brightness(0.9);
       }
-      .copy-to-clipboard-button:hover:not(:disabled) {
-        filter: brightness(1.1);
+      .code-copy-button > .copy-text {
+        color: transparent;
+      }
+      .code-copy-button:hover:not(:disabled) > .copy-text {
+        color: var(--boxel-highlight);
       }
       .monaco-container {
         height: var(--monaco-container-height);
