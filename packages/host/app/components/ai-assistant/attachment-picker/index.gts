@@ -19,7 +19,6 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
-import ENV from '@cardstack/host/config/environment';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -42,8 +41,6 @@ interface Signature {
   };
 }
 
-const isAttachingFilesEnabled =
-  ENV.featureFlags?.AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED;
 const MAX_ITEMS_TO_DISPLAY = 4;
 
 export default class AiAssistantAttachmentPicker extends Component<Signature> {
@@ -74,7 +71,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               @removeCard={{@removeCard}}
             />
           {{/if}}
-        {{else if isAttachingFilesEnabled}}
+        {{else}}
           {{#if (this.isAutoAttachedFile item)}}
             <Tooltip @placement='top'>
               <:trigger>
@@ -112,7 +109,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
         </Pill>
       {{/if}}
       {{#if this.canDisplayAddButton}}
-        {{#if (and (eq @submode 'code') isAttachingFilesEnabled)}}
+        {{#if (eq @submode 'code')}}
           <AddButton
             class={{cn 'attach-button' icon-only=this.files.length}}
             @variant='pill'

@@ -471,7 +471,9 @@ export default class AiAssistantPanel extends Component<Signature> {
       );
       await addSkillsToRoomCommand.execute({
         roomId,
-        skills: await this.matrixService.loadDefaultSkills(),
+        skills: await this.matrixService.loadDefaultSkills(
+          this.operatorModeStateService.state.submode,
+        ),
       });
       window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
       this.enterRoom(roomId);

@@ -7,7 +7,7 @@ import {
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
 export class Document extends CardDef {
-  static displayName = 'CRM Document';
+  static displayName = 'Document';
   @field title = contains(StringField, {
     computeVia: function (this: Document) {
       return 'Document';
@@ -16,7 +16,7 @@ export class Document extends CardDef {
 }
 
 export class Proposal extends Document {
-  static displayName = 'CRM Proposal';
+  static displayName = 'Proposal';
   @field summary = contains(MarkdownField);
   @field terms = contains(MarkdownField);
   @field title = contains(StringField, {

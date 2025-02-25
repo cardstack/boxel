@@ -22,7 +22,7 @@ export function markedSync(markdown: string) {
           // also note that since we are in common, we don't have ember-window-mock
           // available to us.
           globalThis.localStorage?.setItem(id, code);
-          return `<pre id="${id}" class="language-${language}" data-codeblock="${language}">${code}</pre></div>`;
+          return `<pre id="${id}" class="language-${language}" data-codeblock="${language}">${escapeHtmlInPreTags(code)}</pre></div>`;
         },
       },
     })
@@ -31,4 +31,12 @@ export function markedSync(markdown: string) {
 
 export function markdownToHtml(markdown: string | null | undefined): string {
   return markdown ? sanitizeHtml(markedSync(markdown)) : '';
+}
+
+function escapeHtmlInPreTags(html: string) {
+  // For example, html can be <pre><code><h1>Hello</h1></code></pre>
+  // We want to escape the <h1>Hello</h1> so that it is rendered as
+  // <pre><code>&lt;h1&gt;Hello&lt;/h1&gt;</code></pre>, otherwise the h1 will
+  // be rendered as a real header, not code (same applies for other html tags, such as <template>, <style>, ...)
+  return html.replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

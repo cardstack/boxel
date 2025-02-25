@@ -5,7 +5,7 @@ import { StatusTagField } from './contact-status-tag';
 import TargetArrowIcon from '@cardstack/boxel-icons/target-arrow';
 
 export class Lead extends Contact {
-  static displayName = 'CRM Lead';
+  static displayName = 'Lead';
   static icon = TargetArrowIcon;
   @field statusTag = contains(StatusTagField, {
     computeVia: function (this: Lead) {
