@@ -235,10 +235,7 @@ test.describe('Room creation', () => {
 
     // Open assistant without waiting for [data-test-room] which won’t show on a new account
     await page.locator('[data-test-open-ai-assistant]').click();
-    await page.waitForFunction(() =>
-      document.querySelector('[data-test-close-ai-assistant]'),
-    );
-
+    await expect(page.locator(`[data-test-close-ai-assistant]`)).toHaveCount(1);
     await expect(page.locator(`[data-test-chat-title]`)).not.toHaveText(
       'New AI Assistant Chat',
     );
