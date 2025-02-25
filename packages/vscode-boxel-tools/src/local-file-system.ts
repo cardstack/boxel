@@ -439,7 +439,7 @@ export class LocalFileSystem {
       // Fetch the file
       const response = await fetch(url, {
         headers: {
-          Accept: '*/*',
+          Accept: SupportedMimeType.CardSource,
           Authorization: jwt,
         },
       });
