@@ -6,6 +6,7 @@ import { inject as service } from '@ember/service';
 
 import {
   LooseSingleCardDocument,
+  ResolvedCodeRef,
   sanitizeHtml,
 } from '@cardstack/runtime-common';
 
@@ -16,12 +17,12 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { Skill } from '@cardstack/host/components/ai-assistant/skill-menu';
 import type CommandService from '@cardstack/host/services/command-service';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
 
 import type { CommandStatus } from 'https://cardstack.com/base/command';
-
 import { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
@@ -50,6 +51,7 @@ export default class MessageBuilder {
       author: RoomMember;
       index: number;
       serializedCardFromFragments: (eventId: string) => LooseSingleCardDocument;
+      skills: Skill[];
       events: DiscreteMatrixEvent[];
       commandResultEvent?: CommandResultEvent;
     },
@@ -156,10 +158,6 @@ export default class MessageBuilder {
   }
 
   updateMessage(message: Message) {
-    if (this.event.content['m.relates_to']?.rel_type !== 'm.replace') {
-      return;
-    }
-
     if (message.created.getTime() > this.event.origin_server_ts) {
       message.created = new Date(this.event.origin_server_ts);
       return;
@@ -173,11 +171,11 @@ export default class MessageBuilder {
         : undefined;
     message.updated = new Date();
 
-    if (this.event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE) {
-      if (!message.command) {
-        message.command = this.buildMessageCommand(message);
-      }
-
+    if (
+      this.event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
+      this.event.content.data?.toolCall
+    ) {
+      message.command = this.buildMessageCommand(message);
       message.isStreamingFinished = true;
       message.formattedMessage = this.formattedMessageForCommand;
 
@@ -219,11 +217,22 @@ export default class MessageBuilder {
       }) as CommandResultEvent | undefined);
 
     let command = event.content.data.toolCall;
+    // Find command in skills
+    let codeRef: ResolvedCodeRef | undefined;
+    findCommand: for (let skill of this.builderContext.skills) {
+      for (let skillCommand of skill.card.commands) {
+        if (command.name === skillCommand.functionName) {
+          codeRef = skillCommand.codeRef;
+          break findCommand;
+        }
+      }
+    }
     let messageCommand = new MessageCommand(
       message,
       command.id,
       command.name,
       command.arguments,
+      codeRef,
       this.builderContext.effectiveEventId,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
