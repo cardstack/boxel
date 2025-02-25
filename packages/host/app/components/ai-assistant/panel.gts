@@ -187,9 +187,14 @@ export default class AiAssistantPanel extends Component<Signature> {
             <NewSession @errorAction={{this.createNewSession}} />
           </div>
         {{else if this.isReady}}
+          {{log 'AiAssistantPanel: this.isReady true'}}
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
           {{#if this.roomResource}}
+            {{log 'AiAssistantPanel: this.roomResource present'}}
             {{#if this.matrixService.currentRoomId}}
+              {{log
+                'AiAssistantPanel: this.matrixService.currentRoomId present'
+              }}
               <Room
                 @roomId={{this.matrixService.currentRoomId}}
                 @roomResource={{this.roomResource}}

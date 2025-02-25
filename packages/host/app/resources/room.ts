@@ -343,6 +343,7 @@ export class RoomResource extends Resource<Args> {
       return;
     }
     let cardId = cardDoc.data.id;
+    // resource issue
     let skillCard = (await this.cardService.createFromSerialized(
       cardDoc.data,
       cardDoc,

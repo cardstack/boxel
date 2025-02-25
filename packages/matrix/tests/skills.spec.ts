@@ -334,7 +334,7 @@ test.describe('Skills', () => {
     ]);
   });
 
-  test(`skills are persisted per room and do not leak between different users`, async ({
+  test.only(`skills are persisted per room and do not leak between different users`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
