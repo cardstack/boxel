@@ -567,8 +567,6 @@ class IsolatedTemplate extends Component<typeof Account> {
       }
       .primary-contact-group {
         --entity-display-thumbnail-size: var(--boxel-icon-sm);
-        --profile-avatar-icon-size: var(--boxel-icon-sm);
-        --profile-avatar-icon-border: 0px;
         display: inline-flex;
         align-items: start;
         gap: var(--boxel-sp-xs);
@@ -633,15 +631,6 @@ class IsolatedTemplate extends Component<typeof Account> {
         font-size: var(--boxel-font-xs);
         color: var(--boxel-color-gray);
         margin-left: auto;
-      }
-      .avatar {
-        --profile-avatar-icon-size: 25px;
-        --profile-avatar-icon-border: 0px;
-        flex-shrink: 0;
-      }
-      .info-atom {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
       }
       /* Skeleton Placeholder */
       .skeleton-placeholder-deal-summary-highlight {
@@ -900,7 +889,6 @@ class EmbeddedTemplate extends Component<typeof Account> {
                 <@fields.primaryContact
                   @format='atom'
                   @displayContainer={{false}}
-                  class='info-atom'
                 />
               {{/if}}
             </:content>
@@ -955,12 +943,10 @@ class EmbeddedTemplate extends Component<typeof Account> {
             <article>
               <label>KEY CONTACT</label>
               {{#if @model.primaryContact}}
-                <div class='contact-display'>
-                  <@fields.primaryContact
-                    @format='atom'
-                    @displayContainer={{false}}
-                  />
-                </div>
+                <@fields.primaryContact
+                  @format='atom'
+                  @displayContainer={{false}}
+                />
               {{/if}}
             </article>
 
@@ -1052,8 +1038,10 @@ class EmbeddedTemplate extends Component<typeof Account> {
         flex-direction: column;
         gap: var(--boxel-sp-xl);
       }
-      article > * + * {
-        margin-top: var(--boxel-sp-xs);
+      article {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
       }
       /* Summary */
       .summary-highlight {
@@ -1069,10 +1057,6 @@ class EmbeddedTemplate extends Component<typeof Account> {
         color: var(--boxel-500);
         letter-spacing: var(--boxel-lsp-xxs);
         margin: 0;
-      }
-      .contact-display {
-        --profile-avatar-icon-size: var(--boxel-icon-sm);
-        --profile-avatar-icon-border: 0px;
       }
       .next-steps-display {
         --entity-display-icon-size: var(--boxel-icon-sm);
@@ -1100,10 +1084,6 @@ class EmbeddedTemplate extends Component<typeof Account> {
       .task-card-embedded :where(.task-card) {
         --task-card-padding: var(--boxel-sp) 0;
         border-top: 1px solid var(--boxel-200);
-      }
-      .info-atom {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
       }
       /* Skeleton Placeholder */
       .skeleton-placeholder-task {

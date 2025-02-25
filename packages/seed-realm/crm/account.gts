@@ -1,44 +1,47 @@
 import {
   CardDef,
-  linksTo,
+  BaseDef,
+  Component,
   contains,
-  realmURL,
-} from 'https://cardstack.com/base/card-api';
-import { Component, BaseDef } from 'https://cardstack.com/base/card-api';
-import GlimmerComponent from '@glimmer/component';
-import {
   field,
+  linksTo,
   linksToMany,
+  realmURL,
   StringField,
 } from 'https://cardstack.com/base/card-api';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import { getCards, Query } from '@cardstack/runtime-common';
+import { restartableTask } from 'ember-concurrency';
+
 import { Address as AddressField } from '../fields/address';
 import { Company } from './company';
 import { Contact } from './contact';
 import { CrmApp } from '../crm-app';
+import { Deal } from './deal';
 import { StatusTagField } from './contact-status-tag';
+import { UrgencyTag } from './urgency-tag';
+import { WebsiteField } from '../fields/website';
+
+import AccountHeader from '../components/account-header';
+import PageLayout from '../components/page-layout';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
-import BuildingIcon from '@cardstack/boxel-icons/building';
-import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
-import AccountHeader from '../components/account-header';
-import { WebsiteField } from '../fields/website';
-import TrendingUp from '@cardstack/boxel-icons/trending-up';
-import ContactIcon from '@cardstack/boxel-icons/contact';
+
 import {
   BoxelButton,
+  FieldContainer,
+  Pill,
   SkeletonPlaceholder,
 } from '@cardstack/boxel-ui/components';
-import PlusIcon from '@cardstack/boxel-icons/plus';
-import { Pill } from '@cardstack/boxel-ui/components';
-import { Query } from '@cardstack/runtime-common/query';
-import { getCards } from '@cardstack/runtime-common';
-import { Deal } from './deal';
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { restartableTask } from 'ember-concurrency';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { on } from '@ember/modifier';
-import { not } from '@cardstack/boxel-ui/helpers';
-import { UrgencyTag } from './urgency-tag';
+
+import AccountIcon from '@cardstack/boxel-icons/building';
+import ChartBarPopular from '@cardstack/boxel-icons/chart-bar-popular';
+import ContactIcon from '@cardstack/boxel-icons/contact';
+import PlusIcon from '@cardstack/boxel-icons/plus';
+import TrendingUp from '@cardstack/boxel-icons/trending-up';
 
 const taskSource = {
   module: new URL('./task', import.meta.url).href,
@@ -359,41 +362,36 @@ class IsolatedTemplate extends Component<typeof Account> {
   }
 
   <template>
-    <AccountPageLayout>
+    <PageLayout @format='isolated'>
       <:header>
-        <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
-          <:name>
-            {{#if @model.name}}
-              <h1 class='account-name'>{{@model.name}}</h1>
-            {{else}}
-              <h1 class='account-name default-value'>Missing Account Name</h1>
-            {{/if}}
-          </:name>
-          <:content>
-            {{#if @model.primaryContact}}
-              <@fields.primaryContact
-                @format='atom'
-                @displayContainer={{false}}
-                class='primary-contact'
-              />
-              <div class='tag-container'>
-                <@fields.statusTag @format='atom' />
-                <@fields.urgencyTag @format='atom' />
-              </div>
-            {{/if}}
-          </:content>
-        </AccountHeader>
+        <div class='header-container'>
+          <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
+            <:name>
+              <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+                {{#if @model.title}}<@fields.title />{{else}}Missing Account
+                  Name{{/if}}
+              </h1>
+            </:name>
+            <:content>
+              {{#if @model.primaryContact}}
+                <@fields.primaryContact
+                  @format='atom'
+                  @displayContainer={{false}}
+                  class='info-atom'
+                />
+              {{/if}}
+            </:content>
+          </AccountHeader>
+          <ul class='tag-list'>
+            <li><@fields.statusTag @format='atom' /></li>
+            <li><@fields.urgencyTag @format='atom' /></li>
+          </ul>
+        </div>
       </:header>
 
       <:summary>
-        <SummaryGridContainer class='summary-grid'>
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='summary-title'>Company Info</h3>
-            </:title>
-            <:icon>
-              <BuildingIcon class='header-icon' />
-            </:icon>
+        <SummaryGridContainer>
+          <SummaryCard @iconComponent={{AccountIcon}} @title='Company Info'>
             <:content>
               {{#if this.hasCompanyInfo}}
                 <@fields.website @format='atom' />
@@ -406,13 +404,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='summary-title'>Contacts</h3>
-            </:title>
-            <:icon>
-              <ContactIcon class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{ContactIcon}} @title='Contacts'>
             <:content>
               {{#if this.hasContacts}}
                 <div class='primary-contact-group'>
@@ -434,13 +426,10 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='summary-title'>Lifetime Value</h3>
-            </:title>
-            <:icon>
-              <ChartBarPopular class='header-icon' />
-            </:icon>
+          <SummaryCard
+            @iconComponent={{ChartBarPopular}}
+            @title='Lifetime Value'
+          >
             <:content>
               {{#if this.lifetimeValueDeals.isLoading}}
                 <SkeletonPlaceholder
@@ -460,13 +449,7 @@ class IsolatedTemplate extends Component<typeof Account> {
             </:content>
           </SummaryCard>
 
-          <SummaryCard class='info-card'>
-            <:title>
-              <h3 class='summary-title'>Active Deals</h3>
-            </:title>
-            <:icon>
-              <TrendingUp class='header-icon' />
-            </:icon>
+          <SummaryCard @iconComponent={{TrendingUp}} @title='Active Deals'>
             <:content>
               {{#if this.deals.isLoading}}
                 <SkeletonPlaceholder
@@ -484,10 +467,10 @@ class IsolatedTemplate extends Component<typeof Account> {
         </SummaryGridContainer>
       </:summary>
 
-      <:tasks>
+      <:content>
         <SummaryCard class='tasks-summary-card'>
           <:title>
-            <h2 class='task-title'>Upcoming Tasks</h2>
+            <h3 class='upcoming-tasks-title'>Upcoming Tasks</h3>
           </:title>
           <:icon>
             <BoxelButton
@@ -549,29 +532,27 @@ class IsolatedTemplate extends Component<typeof Account> {
             {{/if}}
           </:content>
         </SummaryCard>
-      </:tasks>
-    </AccountPageLayout>
+      </:content>
+    </PageLayout>
 
     <style scoped>
       h1,
       h2,
       h3,
       p {
-        margin: 0;
+        margin-block: 0;
+      }
+      .header-container {
+        display: flex;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-lg);
       }
       .account-name {
         font: 600 var(--boxel-font-lg);
         margin: 0;
       }
       /* Summary Grid & Card */
-      .summary-grid {
-        --summary-card-min-height: 170px;
-      }
-      .summary-title {
-        font: 600 var(--boxel-font);
-        letter-spacing: var(--boxel-lsp-xxs);
-        align-self: flex-start;
-      }
       .summary-highlight {
         font: 600 var(--boxel-font-xl);
       }
@@ -579,22 +560,13 @@ class IsolatedTemplate extends Component<typeof Account> {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-sm);
       }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
       .info-card {
         --summary-card-gap: var(--boxel-sp-xl);
         --summary-card-padding: var(--boxel-sp);
         --entity-display-title-font-weight: 400;
       }
-      .primary-contact {
-        width: fit-content;
-        display: inline-block;
-      }
       .primary-contact-group {
+        --entity-display-thumbnail-size: var(--boxel-icon-sm);
         display: inline-flex;
         align-items: start;
         gap: var(--boxel-sp-xs);
@@ -606,11 +578,14 @@ class IsolatedTemplate extends Component<typeof Account> {
         --pill-border: none;
         flex-shrink: 0;
       }
-      .tag-container {
+      .tag-list {
+        margin: 0;
+        padding: 0;
+        list-style-type: none;
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
+        align-items: start;
+        gap: var(--boxel-sp-xs);
       }
       .default-value {
         color: var(--boxel-400);
@@ -621,15 +596,21 @@ class IsolatedTemplate extends Component<typeof Account> {
       }
       .task-button-desktop {
         display: inline-flex;
+        gap: var(--boxel-sp-xxxs);
       }
       .tasks-summary-card {
-        --summary-card-padding: var(--boxel-sp-xl) var(--boxel-sp);
+        --summary-card-padding: var(--boxel-sp-lg) var(--boxel-sp);
         --summary-card-content-gap: 0;
         container-type: inline-size;
         container-name: tasks-summary-card;
       }
-      .tasks-summary-card :where(.task-card) {
-        --task-card-padding: var(--boxel-sp) 0;
+      .upcoming-tasks-title {
+        font: 600 var(--boxel-font-med);
+        letter-spacing: var(--boxel-lsp-xxs);
+      }
+      .tasks-summary-card :deep(.task-card) {
+        --task-card-padding: var(--boxel-sp) var(--boxel-sp) var(--boxel-sp)
+          var(--boxel-sp-xs);
         border-top: 1px solid var(--boxel-200);
       }
       .task-title {
@@ -650,11 +631,6 @@ class IsolatedTemplate extends Component<typeof Account> {
         font-size: var(--boxel-font-xs);
         color: var(--boxel-color-gray);
         margin-left: auto;
-      }
-      .avatar {
-        --profile-avatar-icon-size: 20px;
-        --profile-avatar-icon-border: 0px;
-        flex-shrink: 0;
       }
       /* Skeleton Placeholder */
       .skeleton-placeholder-deal-summary-highlight {
@@ -898,39 +874,39 @@ class EmbeddedTemplate extends Component<typeof Account> {
   }
 
   <template>
-    <AccountPageLayout class='account-page-layout-embedded'>
+    <PageLayout class='account-page-layout-embedded'>
       <:header>
-        <div class='top-bar'>
+        <div class='header-container'>
           <AccountHeader @logoURL={{@model.thumbnailURL}} @name={{@model.name}}>
             <:name>
-              {{#if @model.name}}
-                <h1 class='account-name'>{{@model.name}}</h1>
-              {{else}}
-                <h1 class='account-name default-value'>Missing Account Name</h1>
-              {{/if}}
+              <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+                {{#if @model.title}}<@fields.title />{{else}}Missing Account
+                  Name{{/if}}
+              </h1>
             </:name>
             <:content>
               {{#if @model.primaryContact}}
-                <div class='tag-container'>
-                  <@fields.statusTag @format='atom' />
-                  <@fields.urgencyTag @format='atom' />
-                </div>
+                <@fields.primaryContact
+                  @format='atom'
+                  @displayContainer={{false}}
+                />
               {{/if}}
             </:content>
           </AccountHeader>
-          <BuildingIcon class='header-icon' />
+          <ul class='tag-list'>
+            <li><@fields.statusTag @format='atom' /></li>
+            <li><@fields.urgencyTag @format='atom' /></li>
+          </ul>
         </div>
       </:header>
       <:summary>
         <section class='summary-articles-container'>
           <SummaryGridContainer>
-            <SummaryCard>
-              <:title>
-                <h3 class='summary-title'>Lifetime Value</h3>
-              </:title>
-              <:icon>
-                <ChartBarPopular class='header-icon' />
-              </:icon>
+            <SummaryCard
+              @size='small'
+              @iconComponent={{ChartBarPopular}}
+              @title='Lifetime Value'
+            >
               <:content>
                 {{#if this.lifetimeValueDeals.isLoading}}
                   <h3 class='summary-highlight'>Loading...</h3>
@@ -946,13 +922,11 @@ class EmbeddedTemplate extends Component<typeof Account> {
               </:content>
             </SummaryCard>
 
-            <SummaryCard>
-              <:title>
-                <h3 class='summary-title'>Active Deals</h3>
-              </:title>
-              <:icon>
-                <TrendingUp class='header-icon' />
-              </:icon>
+            <SummaryCard
+              @size='small'
+              @iconComponent={{TrendingUp}}
+              @title='Active Deals'
+            >
               <:content>
                 {{#if this.deals.isLoading}}
                   <h3 class='summary-highlight'>Loading...</h3>
@@ -968,14 +942,12 @@ class EmbeddedTemplate extends Component<typeof Account> {
           <div class='summary-articles'>
             <article>
               <label>KEY CONTACT</label>
-              <div class='contact-display'>
-                {{#if @model.primaryContact}}
-                  <@fields.primaryContact
-                    @format='atom'
-                    @displayContainer={{false}}
-                  />
-                {{/if}}
-              </div>
+              {{#if @model.primaryContact}}
+                <@fields.primaryContact
+                  @format='atom'
+                  @displayContainer={{false}}
+                />
+              {{/if}}
             </article>
 
             <article>
@@ -1003,19 +975,20 @@ class EmbeddedTemplate extends Component<typeof Account> {
           </div>
         </section>
       </:summary>
-    </AccountPageLayout>
+    </PageLayout>
+
     <style scoped>
       h3,
       p {
         margin: 0;
       }
       .account-page-layout-embedded {
-        --account-page-layout-padding: var(--boxel-sp-sm);
-        height: 100%;
         container-type: inline-size;
         container-name: account-page-layout-embedded;
+        padding: var(--boxel-sp-sm);
+        height: 100%;
       }
-      .top-bar {
+      .header-container {
         display: flex;
         align-items: start;
         justify-content: space-between;
@@ -1030,18 +1003,14 @@ class EmbeddedTemplate extends Component<typeof Account> {
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
       }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
-      .tag-container {
-        margin-top: auto;
+      .tag-list {
+        margin: 0;
+        padding: 0;
+        list-style-type: none;
         display: flex;
         flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
+        align-items: start;
+        gap: var(--boxel-sp-xs);
       }
       .summary-articles-container {
         --boxel-light-50: #fafafa;
@@ -1069,21 +1038,12 @@ class EmbeddedTemplate extends Component<typeof Account> {
         flex-direction: column;
         gap: var(--boxel-sp-xl);
       }
-      article > * + * {
-        margin-top: var(--boxel-sp-xs);
+      article {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
       }
       /* Summary */
-      .summary-title {
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xxs);
-        margin: 0;
-      }
-      .header-icon {
-        width: var(--boxel-icon-sm);
-        height: var(--boxel-icon-sm);
-        flex-shrink: 0;
-        margin-left: auto;
-      }
       .summary-highlight {
         font: 600 var(--boxel-font-lg);
         margin: 0;
@@ -1097,10 +1057,6 @@ class EmbeddedTemplate extends Component<typeof Account> {
         color: var(--boxel-500);
         letter-spacing: var(--boxel-lsp-xxs);
         margin: 0;
-      }
-      .contact-display {
-        --entity-display-icon-size: var(--boxel-icon-sm);
-        --entity-display-content-gap: var(--boxel-sp-xs);
       }
       .next-steps-display {
         --entity-display-icon-size: var(--boxel-icon-sm);
@@ -1135,6 +1091,9 @@ class EmbeddedTemplate extends Component<typeof Account> {
       }
 
       @container account-page-layout-embedded (max-width: 447px) {
+        .header-container {
+          flex-direction: column;
+        }
         .summary-articles-container {
           grid-template-columns: 1fr;
           gap: var(--boxel-sp-lg);
@@ -1149,7 +1108,7 @@ class EmbeddedTemplate extends Component<typeof Account> {
 
 class FittedTemplate extends Component<typeof Account> {
   <template>
-    <AccountPageLayout class='account-page-layout-fitted'>
+    <PageLayout class='account-page-layout-fitted'>
       <:header>
         <AccountHeader
           class='account-header-fitted'
@@ -1157,123 +1116,130 @@ class FittedTemplate extends Component<typeof Account> {
           @name={{@model.name}}
         >
           <:name>
-            {{#if @model.name}}
-              <h1 class='account-name'>{{@model.name}}</h1>
-            {{else}}
-              <h1 class='account-name default-value'>Missing Account Name</h1>
-            {{/if}}
+            <h1 class={{cn 'account-name' default-value=(not @model.name)}}>
+              {{#if @model.title}}<@fields.title />{{else}}Missing Account Name{{/if}}
+            </h1>
           </:name>
         </AccountHeader>
       </:header>
       <:summary>
-        {{#if @model.primaryContact}}
-          <div class='tag-container'>
-            <@fields.statusTag @format='atom' />
-            <@fields.urgencyTag @format='atom' />
-          </div>
-        {{/if}}
+        <ul class='tag-list'>
+          <li><@fields.statusTag @format='atom' /></li>
+          <li><@fields.urgencyTag @format='atom' /></li>
+        </ul>
       </:summary>
-    </AccountPageLayout>
+    </PageLayout>
 
     <style scoped>
-      .account-page-layout-fitted {
-        --account-page-layout-padding: var(--boxel-sp-sm);
-        height: 100%;
-      }
-      .account-header-fitted {
-        gap: var(--boxel-sp-sm);
-        --account-header-logo-size: 40px;
-      }
-      .account-name {
-        font: 600 var(--boxel-font);
+      /* Base styles */
+      h1,
+      p {
         margin: 0;
+      }
+      .account-page-layout-fitted {
+        height: 100%;
+        padding: var(--boxel-sp-xs);
+      }
+
+      .account-header-fitted {
+        --account-header-logo-size: 40px;
+        --account-header-gap: var(--boxel-sp-xs);
+        --account-header-logo-border-radius: var(--boxel-border-radius-sm);
+        grid-area: account-header-fitted;
+        overflow: hidden;
+      }
+
+      .account-name {
+        font: 600 var(--boxel-font-med);
         overflow: hidden;
         text-overflow: ellipsis;
         display: -webkit-box;
         -webkit-box-orient: vertical;
         -webkit-line-clamp: 2;
+        width: 100%;
       }
+
       .description {
         font: 500 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
       }
-      .tag-container {
+
+      .tag-list {
         margin-top: auto;
+        margin-bottom: 0;
+        padding: 0;
+        list-style-type: none;
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-xxs);
       }
 
-      @container fitted-card (aspect-ratio <= 1.0) and (128px <= height < 148px) {
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 1.0) and (118px <= height < 128px) {
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card (aspect-ratio <= 0.5) and (height < 300px) {
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (78px <= height <= 114px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (500px <= width) and (58px <= height <= 77px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (226px <= width <= 499px) and (58px <= height <= 77px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (width <= 225px) and (58px <= height <= 77px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card ((1.0 < aspect-ratio) and (height <= 57px)) {
-        .account-name {
-          font: 600 var(--boxel-font-sm);
-        }
-        .tag-container {
-          display: none;
-        }
-      }
-
-      @container fitted-card (2.0 < aspect-ratio) and (height <= 57px) {
-        .account-page-layout-fitted {
-          --account-page-layout-padding: var(--boxel-sp-xs);
-        }
+      /* Vertical card (aspect-ratio <= 1.0) */
+      @container fitted-card (aspect-ratio <= 1.0) {
+        /* Base styles for smaller vertical cards */
         .account-header-fitted {
-          --account-header-logo-display: none;
+          --account-header-logo-size: 40px;
+          --account-header-gap: var(--boxel-sp-xs);
+          --account-header-logo-border-radius: var(--boxel-border-radius);
+        }
+
+        @container (224px <= height < 226px) {
+          .account-name {
+            -webkit-line-clamp: 3;
+          }
+        }
+
+        @container (height < 180px) {
+          .account-header-fitted {
+            --account-header-logo-size: 30px;
+          }
+          .account-name {
+            font: 600 var(--boxel-font);
+            -webkit-line-clamp: 2;
+          }
+
+          .tag-list {
+            display: none;
+          }
+        }
+      }
+
+      /* Horizontal card (aspect-ratio > 1.0) */
+      @container fitted-card (aspect-ratio > 1.0) {
+        /* Base styles for smaller horizontal cards */
+        .account-header-fitted {
+          --account-header-logo-size: 40px;
+          --account-header-logo-border-radius: var(--boxel-border-radius);
+        }
+
+        /* Height-specific adjustments */
+        @container (115px <= height <= 150px) {
+          .tag-list {
+            display: none;
+          }
+        }
+
+        @container (height <= 114px) {
+          .account-header-fitted {
+            --account-header-logo-size: 30px;
+          }
+          .account-name {
+            font: 600 var(--boxel-font);
+            -webkit-line-clamp: 2;
+          }
+          .tag-list {
+            display: none;
+          }
+        }
+
+        @container (height <= 57px) {
+          .account-header-fitted {
+            --account-header-logo-size: 20px;
+          }
+          .account-name {
+            -webkit-line-clamp: 1;
+          }
         }
       }
     </style>
@@ -1281,7 +1247,9 @@ class FittedTemplate extends Component<typeof Account> {
 }
 
 export class Account extends CardDef {
-  static displayName = 'CRM Account';
+  static displayName = 'Account';
+  static headerColor = '#f8f7fa';
+  static icon = AccountIcon;
   @field crmApp = linksTo(() => CrmApp);
   @field company = linksTo(() => Company);
   @field primaryContact = linksTo(() => Contact);
@@ -1323,37 +1291,6 @@ export class Account extends CardDef {
   static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
-}
-
-interface AccountPageLayoutArgs {
-  Blocks: {
-    header: [];
-    summary: [];
-    tasks: [];
-  };
-  Element: HTMLElement;
-}
-
-class AccountPageLayout extends GlimmerComponent<AccountPageLayoutArgs> {
-  <template>
-    <div class='account-page-layout' ...attributes>
-      {{yield to='header'}}
-      {{yield to='summary'}}
-      {{yield to='tasks'}}
-    </div>
-
-    <style scoped>
-      .account-page-layout {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        width: 100%;
-        padding: var(--account-page-layout-padding, 20px);
-        box-sizing: border-box;
-        background-color: var(--boxel-100);
-      }
-    </style>
-  </template>
 }
 
 function getComponent(cardOrField: BaseDef) {

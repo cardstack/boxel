@@ -338,16 +338,13 @@ class IsolatedTemplate extends Component<typeof Deal> {
             </:name>
             <:content>
               <div class='info-container'>
-                <@fields.company
-                  @format='atom'
-                  @displayContainer={{false}}
-                  class='info-atom'
-                />
-                <@fields.primaryContact
-                  @format='atom'
-                  @displayContainer={{false}}
-                  class='info-atom'
-                />
+                <@fields.company @format='atom' @displayContainer={{false}} />
+                {{#if @model.primaryContact}}
+                  <@fields.primaryContact
+                    @format='atom'
+                    @displayContainer={{false}}
+                  />
+                {{/if}}
               </div>
             </:content>
           </AccountHeader>
@@ -751,12 +748,6 @@ class IsolatedTemplate extends Component<typeof Deal> {
           grid-template-columns: 1fr;
         }
       }
-      .info-atom {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
-        width: fit-content;
-        display: inline-flex;
-      }
       .new-item-button {
         font-weight: 600;
       }
@@ -803,16 +794,13 @@ class EmbeddedTemplate extends Component<typeof Deal> {
             </h1>
           </:name>
           <:content>
-            <@fields.company
-              @format='atom'
-              @displayContainer={{false}}
-              class='info-atom'
-            />
-            <@fields.primaryContact
-              @format='atom'
-              @displayContainer={{false}}
-              class='info-atom'
-            />
+            <@fields.company @format='atom' @displayContainer={{false}} />
+            {{#if @model.primaryContact}}
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+              />
+            {{/if}}
           </:content>
         </AccountHeader>
 
@@ -821,16 +809,13 @@ class EmbeddedTemplate extends Component<typeof Deal> {
         </div>
 
         <div class='account-info-grid-view'>
-          <@fields.company
-            @format='atom'
-            @displayContainer={{false}}
-            class='info-atom'
-          />
-          <@fields.primaryContact
-            @format='atom'
-            @displayContainer={{false}}
-            class='info-atom'
-          />
+          <@fields.company @format='atom' @displayContainer={{false}} />
+          {{#if @model.primaryContact}}
+            <@fields.primaryContact
+              @format='atom'
+              @displayContainer={{false}}
+            />
+          {{/if}}
         </div>
       </header>
 
@@ -888,12 +873,6 @@ class EmbeddedTemplate extends Component<typeof Deal> {
       .default-value {
         color: var(--boxel-400);
       }
-      .info-atom {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
-        width: fit-content;
-        display: inline-flex;
-      }
       .highlight-value {
         font-weight: 600;
         font-size: var(--boxel-font-size);
@@ -915,10 +894,6 @@ class EmbeddedTemplate extends Component<typeof Deal> {
       }
       .account-info-grid-view {
         display: none; /* Hidden by default */
-      }
-      .account-info-grid-view :deep(.avatar) {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
       }
 
       /* Default card layout with container query setup */
@@ -990,10 +965,6 @@ class EmbeddedTemplate extends Component<typeof Deal> {
         --account-header-logo-border-radius: var(--boxel-border-radius-sm);
         grid-area: account-header-embedded;
         overflow: hidden;
-      }
-      .account-header-embedded :deep(.avatar) {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
       }
       .event-details {
         grid-area: event-details;
@@ -1103,16 +1074,13 @@ class FittedTemplate extends Component<typeof Deal> {
             </h1>
           </:name>
           <:content>
-            <@fields.company
-              @format='atom'
-              @displayContainer={{false}}
-              class='info-atom'
-            />
-            <@fields.primaryContact
-              @format='atom'
-              @displayContainer={{false}}
-              class='info-atom'
-            />
+            <@fields.company @format='atom' @displayContainer={{false}} />
+            {{#if @model.primaryContact}}
+              <@fields.primaryContact
+                @format='atom'
+                @displayContainer={{false}}
+              />
+            {{/if}}
           </:content>
         </AccountHeader>
 
@@ -1121,16 +1089,13 @@ class FittedTemplate extends Component<typeof Deal> {
         </div>
 
         <div class='account-info-grid-view'>
-          <@fields.company
-            @format='atom'
-            @displayContainer={{false}}
-            class='info-atom'
-          />
-          <@fields.primaryContact
-            @format='atom'
-            @displayContainer={{false}}
-            class='info-atom'
-          />
+          <@fields.company @format='atom' @displayContainer={{false}} />
+          {{#if @model.primaryContact}}
+            <@fields.primaryContact
+              @format='atom'
+              @displayContainer={{false}}
+            />
+          {{/if}}
         </div>
       </header>
 
@@ -1187,12 +1152,6 @@ class FittedTemplate extends Component<typeof Deal> {
       .default-value {
         color: var(--boxel-400);
       }
-      .info-atom {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
-        width: fit-content;
-        display: inline-flex;
-      }
       .highlight-value {
         font-weight: 600;
         font-size: var(--boxel-font-size);
@@ -1214,10 +1173,6 @@ class FittedTemplate extends Component<typeof Deal> {
       }
       .account-info-grid-view {
         display: none;
-      }
-      .account-info-grid-view :deep(.avatar) {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
       }
 
       /* Default card layout */
@@ -1293,10 +1248,6 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-area: account-header-fitted;
         overflow: hidden;
       }
-      .account-header-fitted :deep(.avatar) {
-        --profile-avatar-icon-size: var(--boxel-font-size);
-        --profile-avatar-icon-border: 0px;
-      }
       .event-details {
         grid-area: event-details;
       }
@@ -1311,6 +1262,10 @@ class FittedTemplate extends Component<typeof Deal> {
           --account-header-gap: var(--boxel-sp-xs);
           --account-header-logo-border-radius: var(--boxel-border-radius);
           --account-header-info-content-display: none;
+        }
+        .account-info-grid-view :deep(.avatar) {
+          --profile-avatar-icon-size: var(--boxel-font-size);
+          --profile-avatar-icon-border: 0px;
         }
         .account-name {
           font: 600 var(--boxel-font);
@@ -1375,10 +1330,6 @@ class FittedTemplate extends Component<typeof Deal> {
             --entity-display-icon-size: var(--boxel-font-size);
             --entity-display-thumbnail-size: var(--boxel-font-size);
             --entity-display-title-font-size: var(--boxel-font-size-xs);
-          }
-          .account-info-grid-view :deep(.avatar) {
-            --profile-avatar-icon-size: var(--boxel-font-size);
-            --profile-avatar-icon-border: 0px;
           }
         }
 
