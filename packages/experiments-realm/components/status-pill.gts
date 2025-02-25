@@ -1,6 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import { Pill } from '@cardstack/boxel-ui/components';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { cssVar, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
 
 interface StatusPillSignature {
@@ -21,7 +21,10 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
       {{#if @icon}}
         <div
           class='status-icon'
-          style={{cssVar status-icon-background-color=@iconDarkColor}}
+          style={{cssVar
+            status-icon-background-color=@iconDarkColor
+            status-icon-font-color=(getContrastColor @iconDarkColor)
+          }}
         >
           <@icon />
         </div>
@@ -55,6 +58,7 @@ export class StatusPill extends GlimmerComponent<StatusPillSignature> {
       }
       .status-icon {
         background-color: var(--status-icon-background-color);
+        color: var(--status-icon-font-color, var(--boxel-dark));
         flex-shrink: 0;
         border-radius: 0;
         width: auto;

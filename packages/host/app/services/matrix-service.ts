@@ -78,6 +78,7 @@ import type {
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
+import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -100,7 +101,6 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -814,9 +814,23 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills() {
+  async loadDefaultSkills(submode: Submode) {
+    let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
+
+    let codeModeDefaultSkills = [
+      `${baseRealm.url}SkillCard/code-module-editing`,
+    ];
+
+    let defaultSkills;
+
+    if (submode === 'code') {
+      defaultSkills = codeModeDefaultSkills;
+    } else {
+      defaultSkills = interactModeDefaultSkills;
+    }
+
     return await Promise.all(
-      DefaultSkillCards.map(async (skillCardURL) => {
+      defaultSkills.map(async (skillCardURL) => {
         return await this.cardService.getCard<SkillCard>(skillCardURL);
       }),
     );
@@ -1363,6 +1377,20 @@ export default class MatrixService extends Service {
       // we need to scroll back to capture any room events fired before this one
       await this.client?.scrollback(room);
     }
+  }
+
+  async activateCodingSkill() {
+    if (!this.currentRoomId) {
+      return;
+    }
+
+    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      this.commandService.commandContext,
+    );
+    await addSkillsToRoomCommand.execute({
+      roomId: this.currentRoomId,
+      skills: await this.loadDefaultSkills('code'),
+    });
   }
 
   async setLLMForCodeMode() {
