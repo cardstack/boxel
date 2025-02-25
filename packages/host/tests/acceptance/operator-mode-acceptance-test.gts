@@ -544,9 +544,6 @@ module('Acceptance | operator mode tests', function (hooks) {
             'the last known good state of the instance is displayed',
           );
 
-        await waitFor(
-          `[data-cards-grid-item="${testRealmURL}person-entry"] [data-test-card-type-icon]`,
-        );
         await percySnapshot(assert);
         await click(
           `[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`,
