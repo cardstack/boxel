@@ -16,6 +16,14 @@ import {
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
 import CodeIcon from '@cardstack/boxel-icons/code';
 
+function moduleIsUrlLike(module: string) {
+  return (
+    module.startsWith('http') ||
+    module.startsWith('.') ||
+    module.startsWith('/')
+  );
+}
+
 class BaseView extends Component<typeof CodeRefField> {
   <template>
     <div data-test-ref>
@@ -39,7 +47,9 @@ export default class CodeRefField extends FieldDef {
   ) {
     return {
       ...codeRef,
-      ...(opts?.maybeRelativeURL && !opts?.useAbsoluteURL
+      ...(opts?.maybeRelativeURL &&
+      !opts?.useAbsoluteURL &&
+      moduleIsUrlLike(codeRef.module)
         ? { module: opts.maybeRelativeURL(codeRef.module) }
         : {}),
     };
@@ -70,12 +80,16 @@ function maybeSerializeCodeRef(
   stack: CardDef[] = [],
 ) {
   if (codeRef) {
-    // if a stack is passed in, use the containing card to resolve relative references
-    let moduleHref =
-      stack.length > 0
-        ? new URL(codeRef.module, stack[0][relativeTo]).href
-        : codeRef.module;
-    return `${moduleHref}/${codeRef.name}`;
+    if (moduleIsUrlLike(codeRef.module)) {
+      // if a stack is passed in, use the containing card to resolve relative references
+      let moduleHref =
+        stack.length > 0
+          ? new URL(codeRef.module, stack[0][relativeTo]).href
+          : codeRef.module;
+      return `${moduleHref}/${codeRef.name}`;
+    } else {
+      return `${codeRef.module}/${codeRef.name}`;
+    }
   }
   return undefined;
 }

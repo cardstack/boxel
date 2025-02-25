@@ -63,7 +63,7 @@ module('Integration | card-editor', function (hooks) {
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
   setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });

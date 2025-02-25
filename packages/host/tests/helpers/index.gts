@@ -555,7 +555,7 @@ export function setupUserSubscription(matrixRoomId: string) {
       type: 'user',
       id: 1,
       attributes: {
-        matrixUserId: '@testuser:staging',
+        matrixUserId: '@testuser:localhost',
         stripeCustomerId: 'stripe-id-1',
         creditsAvailableInPlanAllowance: 1000,
         creditsIncludedInPlanAllowance: 1000,
@@ -623,7 +623,7 @@ export function setupUserSubscription(matrixRoomId: string) {
             headers: {
               Authorization: createJWT(
                 {
-                  user: '@testuser:staging',
+                  user: '@testuser:localhost',
                   sessionRoom: matrixRoomId,
                 },
                 '1d',
@@ -759,7 +759,7 @@ export function setupRealmServerEndpoints(
             headers: {
               Authorization: createJWT(
                 {
-                  user: '@testuser:staging',
+                  user: '@testuser:localhost',
                   sessionRoom: 'boxel-session-room-id',
                 },
                 '1d',
@@ -779,7 +779,7 @@ export function setupRealmServerEndpoints(
               type: 'user',
               id: 1,
               attributes: {
-                matrixUserId: '@testuser:staging',
+                matrixUserId: '@testuser:localhost',
                 stripeCustomerId: 'stripe-id-1',
                 creditsAvailableInPlanAllowance: null,
                 creditsIncludedInPlanAllowance: null,

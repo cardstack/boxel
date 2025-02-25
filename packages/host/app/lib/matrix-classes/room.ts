@@ -1,4 +1,4 @@
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { type IEvent } from 'matrix-js-sdk';
 
@@ -42,6 +42,15 @@ export default class Room {
   get name() {
     return this._roomState?.events.get('m.room.name')?.get('')?.event.content
       ?.name;
+  }
+
+  @cached
+  get memberIds(): string[] {
+    let memberEvents = (this._roomState?.events
+      .get('m.room.member')
+      ?.values() ?? []) as MatrixSDK.MatrixEvent[];
+    let memberIds = [...memberEvents.map((ev) => ev.event.state_key)];
+    return memberIds.filter((id) => id !== undefined) as string[];
   }
 
   notifyRoomStateUpdated(rs: MatrixSDK.RoomState) {
