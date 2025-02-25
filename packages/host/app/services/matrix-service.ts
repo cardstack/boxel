@@ -860,6 +860,12 @@ export default class MatrixService extends Service {
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
     this.cardHashes = new Map();
+    this.skillCardHashes = new Map();
+    this._currentRoomId = undefined;
+    this.messagesToSend = new TrackedMap();
+    this.cardsToSend = new TrackedMap();
+    this.filesToSend = new TrackedMap();
+    this.currentUserEventReadReceipts = new TrackedMap();
   }
 
   private bindEventListeners() {
