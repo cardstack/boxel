@@ -88,21 +88,6 @@ export class RoomResource extends Resource<Args> {
     this.loading = this.load.perform(named.roomId);
   }
 
-  private isNewRoom(roomId: string) {
-    return this._previousRoomId && roomId !== this._previousRoomId;
-  }
-
-  private resetCache() {
-    this._messageCache = new TrackedMap();
-    this._memberCache = new TrackedMap();
-    this._fragmentCache = new TrackedMap();
-    this._nameEventsCache = new TrackedMap();
-    this._skillCardsCache = new TrackedMap();
-    this._skillEventIdToCardIdCache = new TrackedMap();
-    this._isDisplayingViewCodeMap = new TrackedMap();
-    this._createEvent = undefined;
-  }
-
   private load = restartableTask(async (roomId: string) => {
     try {
       this.matrixRoom = roomId
