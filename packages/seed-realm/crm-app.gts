@@ -14,6 +14,7 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
+import CRMIcon from '@cardstack/boxel-icons/ship-wheel';
 
 const dateFormat = `yyyy-MM-dd`;
 
@@ -110,7 +111,7 @@ const CONTACT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Contacts',
     icon: ContactIcon,
-    cardTypeName: 'CRM Contact',
+    cardTypeName: 'Contact',
     createNewButtonText: 'Create Contact',
     sortOptions: [
       {
@@ -123,19 +124,19 @@ const CONTACT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'Leads',
     icon: TargetArrowIcon,
-    cardTypeName: 'CRM Lead',
+    cardTypeName: 'Lead',
     createNewButtonText: 'Create Lead',
   },
   {
     displayName: 'Customers',
     icon: HeartHandshakeIcon,
-    cardTypeName: 'CRM Customer',
+    cardTypeName: 'Customer',
     createNewButtonText: 'Create Customer',
   },
   {
     displayName: 'Representatives',
     icon: PresentationAnalytics,
-    cardTypeName: 'CRM Representative',
+    cardTypeName: 'Representative',
     createNewButtonText: 'Create Representative',
   },
 ];
@@ -143,13 +144,13 @@ const DEAL_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Deals',
     icon: ContactIcon,
-    cardTypeName: 'CRM Deal',
+    cardTypeName: 'Deal',
     createNewButtonText: 'Create Deal',
   },
   ...DEAL_STATUS_VALUES.map((status) => ({
     displayName: status.label,
     icon: status.icon,
-    cardTypeName: 'CRM Deal',
+    cardTypeName: 'Deal',
     createNewButtonText: 'Create Deal',
   })),
 ];
@@ -158,13 +159,13 @@ const ACCOUNT_FILTERS: LayoutFilter[] = [
   {
     displayName: 'All Accounts',
     icon: CalendarExclamation,
-    cardTypeName: 'CRM Account',
+    cardTypeName: 'Account',
     createNewButtonText: 'Create Account',
   },
   ...URGENCY_TAG_VALUES.map((tag) => ({
     displayName: tag.label,
     icon: tag.icon,
-    cardTypeName: 'CRM Account', // without cardTypeName, the filter is not applied
+    cardTypeName: 'Account', // without cardTypeName, the filter is not applied
     createNewButtonText: 'Create Account',
   })),
 ];
@@ -248,6 +249,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   // Only show strip and grid views for Deal tab for now
   get dealView(): ViewItem[] {
     return [
+      { id: 'card', icon: CardIcon },
       { id: 'strip', icon: StripIcon },
       { id: 'grid', icon: GridIcon },
     ];
@@ -262,9 +264,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   }
 
   get tabViews(): ViewItem[] {
-    const views =
-      this.activeTabId === 'Deal' ? this.dealView : this.commonViews;
-    return views;
+    return this.commonViews;
   }
 
   @tracked private searchKey = '';
@@ -324,7 +324,6 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
 
   //Tabs
   @action setActiveTab(id: string) {
-    this.selectedView = id === 'Deal' ? 'strip' : 'card';
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
@@ -405,7 +404,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       },
     ];
 
-    // filter field value by CRM Account
+    // filter field value by Account
     const accountFilter =
       activeTabId === 'Account' && activeFilter.displayName !== 'All Accounts'
         ? [
@@ -418,7 +417,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           ]
         : [];
 
-    // filter field value by CRM Deal
+    // filter field value by Deal
     const dealFilter =
       activeTabId === 'Deal' && activeFilter.displayName !== 'All Deals'
         ? [
@@ -761,6 +760,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       /* Deal tab */
       .crm-app.Deal {
         --strip-view-min-width: 1fr;
+        --embedded-card-min-height: 200px;
       }
       .crm-app.Task:deep(.content-grid) {
         padding-bottom: 0;
@@ -774,5 +774,6 @@ export class CrmApp extends CardDef {
   static displayName = 'CRM App';
   static prefersWideFormat = true;
   static headerColor = '#4D3FE8';
+  static icon = CRMIcon;
   static isolated = CrmAppTemplate;
 }

@@ -73,63 +73,74 @@ export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDispla
     </div>
     <style scoped>
       .entity-icon-display {
-        --icon-size: var(--entity-display-icon-size, var(--boxel-icon-sm));
-        --title-font-size: var(
-          --entity-display-title-font-size,
-          var(--boxel-font-size-sm)
-        );
-        --title-color: var(--entity-display-title-color, var(--boxel-dark));
-        --title-font-weight: var(--entity-display-title-font-weight, 600);
-        --content-font-size: var(
-          --entity-display-content-font-size,
-          var(--boxel-font-size-xs)
-        );
-        --content-font-weight: var(
-          --entity-display-content-font-weight,
-          var(--boxel-font-weight-normal)
-        );
-        --content-color: var(--entity-display-content-color, var(--boxel-400));
-        --content-gap: var(--entity-display-content-gap, var(--boxel-sp-xxxs));
-        display: flex;
-        align-items: flex-start;
-        gap: var(--content-gap);
+        display: var(--entity-display-display, flex);
+        align-items: var(--entity-display-align-items, flex-start);
+        flex-direction: var(--entity-display-flex-direction, row);
+        gap: var(--entity-display-gap, var(--boxel-sp-xxxs));
       }
       .entity-icon-display.center {
         align-items: center;
       }
       .entity-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
+        display: var(--entity-display-icon-display, inline-flex);
+        align-items: var(--entity-display-icon-align-items, center);
+        justify-content: var(--entity-display-icon-justify-content, center);
         flex-shrink: 0;
-        width: var(--icon-size);
-        height: var(--icon-size);
+        width: var(--entity-display-icon-size, var(--boxel-icon-sm));
+        height: var(--entity-display-icon-size, var(--boxel-icon-sm));
       }
       .entity-info {
-        display: flex;
-        flex-direction: column;
-        gap: var(--content-gap);
+        display: var(--entity-display-info-display, flex);
+        flex-direction: var(--entity-display-info-flex-direction, column);
+        gap: var(--entity-display-info-gap, var(--boxel-sp-xxxs));
       }
       .entity-title-tag-container {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--content-gap);
+        display: var(--entity-display-title-tag-container-display, flex);
+        flex-wrap: var(--entity-display-title-tag-container-flex-wrap, wrap);
+        align-items: var(
+          --entity-display-title-tag-container-align-items,
+          center
+        );
+        gap: var(
+          --entity-display-title-tag-container-gap,
+          var(--boxel-sp-xxxs)
+        );
       }
       .entity-title {
-        word-break: break-word;
-        color: var(--title-color);
-        font-size: var(--title-font-size);
-        font-weight: var(--title-font-weight);
+        color: var(--entity-display-title-color, var(--boxel-dark));
+        font-size: var(
+          --entity-display-title-font-size,
+          var(--boxel-font-size-sm)
+        );
+        font-weight: var(--entity-display-title-font-weight, 600);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: var(--entity-display-title-line-clamp, 1);
+        margin: var(--entity-display-title-margin, 0);
+        word-break: var(--entity-display-title-word-break, break-word);
       }
       .entity-title.underline {
-        text-decoration: underline;
+        text-decoration: var(--entity-display-title-underline, underline);
       }
       .entity-content {
-        margin: 0;
-        font-size: var(--content-font-size);
-        font-weight: var(--content-font-weight);
-        color: var(--content-color);
+        color: var(--entity-display-content-color, var(--boxel-400));
+        font-size: var(
+          --entity-display-content-font-size,
+          var(--boxel-font-size-xs)
+        );
+        font-weight: var(
+          --entity-display-content-font-weight,
+          var(--boxel-font-weight-normal)
+        );
+        overflow: hidden;
+        text-overflow: ellipsis;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: var(--entity-display-content-line-clamp, 1);
+        margin: var(--entity-display-content-margin, 0);
+        word-break: var(--entity-display-content-word-break, break-word);
       }
     </style>
   </template>

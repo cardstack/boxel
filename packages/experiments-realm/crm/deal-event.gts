@@ -98,9 +98,18 @@ class AtomTemplate extends Component<typeof DealEvent> {
     </div>
     <style scoped>
       .event-summary {
-        --entity-display-icon-size: var(--event-summary-icon-size, 16px);
-        --entity-display-title-font-size: var(--boxel-font-size-xs);
-        --entity-display-title-font-weight: 500;
+        --entity-display-icon-size: var(
+          --event-summary-icon-size,
+          var(--boxel-font-size)
+        );
+        --entity-display-title-font-size: var(
+          --event-summary-title-font-size,
+          var(--boxel-font-size-xs)
+        );
+        --entity-display-title-font-weight: var(
+          --event-summary-title-font-weight,
+          500
+        );
         --entity-display-title-color: var(--event-summary-title-color, #777);
         --entity-display-content-font-size: var(
           --event-summary-content-font-size,
@@ -126,6 +135,8 @@ class AtomTemplate extends Component<typeof DealEvent> {
           --event-summary-border-radius,
           var(--boxel-form-control-border-radius)
         );
+        width: 100%;
+        overflow: hidden;
       }
     </style>
   </template>
