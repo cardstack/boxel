@@ -261,7 +261,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{/if}}
 
           {{#if @resources.errors.length}}
-            <div class='error-container'>
+            <div class='error-container error-footer'>
               {{#each @resources.errors as |resourceError|}}
                 <FailureBordered class='error-icon' />
                 <div class='error-message' data-test-card-error>
@@ -416,6 +416,13 @@ export default class AiAssistantMessage extends Component<Signature> {
         color: var(--boxel-light);
         font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
+      }
+      .error-footer {
+        --fill-container-spacing: calc(
+          -1 * var(--ai-assistant-message-padding)
+        );
+        margin-inline: var(--fill-container-spacing);
+        margin-bottom: var(--fill-container-spacing);
       }
       .error-icon {
         --icon-background-color: var(--boxel-light);
