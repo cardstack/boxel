@@ -584,26 +584,30 @@ export class LocalFileSystem {
       // Get the JWT for authentication
       const jwt = await this.realmAuth.getJWT(realmUrl);
 
-      // Fetch realm info for directory organization
-      const realmInfoUrl = new URL('api/realm-info', realmUrl);
-      let response = await fetch(realmInfoUrl.toString(), {
-        headers: {
-          Authorization: jwt,
-          Accept: 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(
-          `Failed to fetch realm info: ${response.status} ${response.statusText}`,
+      // Instead of fetching realm info, just get the last segment of the URL
+      let realmName = '';
+      try {
+        const url = new URL(realmUrl);
+        // Split the pathname by '/' and filter out empty strings
+        const segments = url.pathname
+          .split('/')
+          .filter((segment) => segment.length > 0);
+        // Use the last segment as the realm name, or fallback to the hostname
+        realmName =
+          segments.length > 0 ? segments[segments.length - 1] : url.hostname;
+        console.log(
+          `[LocalFileSystem] Using URL last segment as realm name: ${realmName}`,
+        );
+      } catch (error) {
+        // Fallback: use the URL as is
+        realmName = realmUrl.replace(/https?:\/\//, '').replace(/\//g, '_');
+        console.log(
+          `[LocalFileSystem] Using fallback realm name: ${realmName}`,
         );
       }
 
-      const realmInfo = await response.json();
-      console.log('Realm info:', realmInfo);
-
       // Sync data from remote to local
-      await this.syncFromRemote(realmUrl, realmInfo.realmName);
+      await this.syncFromRemote(realmUrl, realmName);
     } catch (error: unknown) {
       console.error(`Error syncing realm from path:`, error);
       const errorMessage =
