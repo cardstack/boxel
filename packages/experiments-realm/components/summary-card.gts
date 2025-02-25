@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+// @ts-ignore
 import type { ComponentLike } from '@glint/template';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
