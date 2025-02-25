@@ -873,6 +873,8 @@ class EmbeddedTemplate extends Component<typeof Deal> {
       </div>
     </article>
 
+    {{! template-lint-disable no-whitespace-for-layout  }}
+    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       h1,
       p {
@@ -929,7 +931,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
         grid-template-rows: max-content auto;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
-        container-type: inline-size; /* Enable container queries */
+        container-type: inline-size;
       }
       .deal-header {
         grid-area: deal-header;
@@ -1023,7 +1025,7 @@ class EmbeddedTemplate extends Component<typeof Deal> {
           margin-top: var(--boxel-sp-lg);
         }
         .deal-details {
-          grid-template-columns: 1fr 1fr; /* Switch to 2 items per row */
+          grid-template-columns: 1fr 1fr;
           gap: var(--boxel-sp);
         }
         .deal-details :deep(.progress-bar) {
@@ -1194,7 +1196,7 @@ class FittedTemplate extends Component<typeof Deal> {
       .highlight-value {
         font-weight: 600;
         font-size: var(--boxel-font-size);
-        white-space: nowrap; /* Added globally */
+        white-space: nowrap;
       }
       .progress-container {
         display: flex;
@@ -1266,7 +1268,7 @@ class FittedTemplate extends Component<typeof Deal> {
         grid-area: deal-details;
         display: grid;
         grid-template-rows: auto;
-        grid-template-columns: max-content max-content max-content; /* 3 items per row initially */
+        grid-template-columns: max-content max-content max-content;
         gap: var(--boxel-sp-xl);
       }
 
@@ -1317,7 +1319,7 @@ class FittedTemplate extends Component<typeof Deal> {
           display: none;
         }
         .deal-details {
-          grid-template-columns: 1fr 1fr; /* Switch to 2 items per row */
+          grid-template-columns: 1fr 1fr;
         }
 
         /* Ensure that the first two fields appear in row 1 */
