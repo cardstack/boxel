@@ -855,6 +855,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
     test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
       assert.expect(1);
       await visitOperatorMode();
+      await waitFor(`[data-test-card-type-icon]`);
       await openNewFileModal('Card Definition');
 
       // select card type
