@@ -1,7 +1,7 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import { WebsiteField } from '../website';
-import { Address } from '../address';
+import { WebsiteField } from '../fields/website';
+import { Address } from '../fields/address';
 import EntityDisplayWithIcon from '../components/entity-icon-display';
 import { CrmApp } from '../crm-app';
 
@@ -13,7 +13,7 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
-import BuildingIcon from '@cardstack/boxel-icons/building';
+import CompanyIcon from '@cardstack/boxel-icons/building';
 
 class CompanyEditTemplate extends Component<typeof Company> {
   <template>
@@ -56,7 +56,7 @@ class ViewCompanyTemplate extends Component<typeof Company> {
     <div class='company-group'>
       <EntityDisplayWithIcon @title={{@model.name}} @underline={{true}}>
         <:icon>
-          <BuildingIcon />
+          <@model.constructor.icon />
         </:icon>
       </EntityDisplayWithIcon>
     </div>
@@ -65,6 +65,7 @@ class ViewCompanyTemplate extends Component<typeof Company> {
 
 export class Company extends CardDef {
   static displayName = 'Company';
+  static icon = CompanyIcon;
   @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field industry = contains(StringField);

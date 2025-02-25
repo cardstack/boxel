@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import MapIcon from '@cardstack/boxel-icons/map';
-import { Address } from './address';
+import { Address } from './fields/address';
 
 function or(value: number | undefined, defaultValue: number) {
   return value || defaultValue;

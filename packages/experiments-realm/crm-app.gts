@@ -14,6 +14,7 @@ import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
 import { format, startOfWeek, endOfWeek } from 'date-fns';
+import CRMIcon from '@cardstack/boxel-icons/ship-wheel';
 
 const dateFormat = `yyyy-MM-dd`;
 
@@ -248,6 +249,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   // Only show strip and grid views for Deal tab for now
   get dealView(): ViewItem[] {
     return [
+      { id: 'card', icon: CardIcon },
       { id: 'strip', icon: StripIcon },
       { id: 'grid', icon: GridIcon },
     ];
@@ -262,9 +264,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   }
 
   get tabViews(): ViewItem[] {
-    const views =
-      this.activeTabId === 'Deal' ? this.dealView : this.commonViews;
-    return views;
+    return this.commonViews;
   }
 
   @tracked private searchKey = '';
@@ -324,7 +324,6 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
 
   //Tabs
   @action setActiveTab(id: string) {
-    this.selectedView = id === 'Deal' ? 'strip' : 'card';
     this.activeTabId = id;
     this.searchKey = '';
     this.setActiveFilter();
@@ -761,6 +760,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
       /* Deal tab */
       .crm-app.Deal {
         --strip-view-min-width: 1fr;
+        --embedded-card-min-height: 200px;
       }
       .crm-app.Task:deep(.content-grid) {
         padding-bottom: 0;
@@ -774,5 +774,6 @@ export class CrmApp extends CardDef {
   static displayName = 'CRM App';
   static prefersWideFormat = true;
   static headerColor = '#4D3FE8';
+  static icon = CRMIcon;
   static isolated = CrmAppTemplate;
 }

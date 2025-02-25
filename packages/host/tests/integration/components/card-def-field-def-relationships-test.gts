@@ -56,7 +56,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });

@@ -68,14 +68,14 @@ module('Acceptance | Commands tests', function (hooks) {
   setupOnSave(hooks);
   let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [baseRealm.url, testRealmURL],
     });
 
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    matrixRoomId = await createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = await createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     class Pet extends CardDef {

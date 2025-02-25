@@ -11,7 +11,7 @@ import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
-import { ColorField } from '../color';
+import { ColorField } from '../fields/color';
 import { StatusPill } from '../components/status-pill';
 
 import ClockExclamation from '@cardstack/boxel-icons/clock-exclamation';
@@ -121,7 +121,7 @@ class UrgencyTagEdit extends Component<typeof UrgencyTag> {
 
 export class UrgencyTag extends FieldDef {
   static icon = CalendarExclamation;
-  static displayName = 'CRM Urgency Tag';
+  static displayName = 'Urgency Tag';
   static values = URGENCY_TAG_VALUES;
   @field index = contains(NumberField);
   @field label = contains(StringField);
