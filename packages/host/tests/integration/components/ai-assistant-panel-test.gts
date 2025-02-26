@@ -745,10 +745,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     };
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'A patch',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({ toolCall: payload }),
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [payload],
     });
 
     await waitFor('[data-test-view-code-button]');

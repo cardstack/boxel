@@ -840,20 +840,22 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Switching to code submode',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'switch-submode_dd88',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          name: 'patchCard',
           arguments: {
             attributes: {
-              submode: 'code',
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Dave' },
+              },
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
     });
     // Click on the apply button
     await waitFor('[data-test-message-idx="0"]');
