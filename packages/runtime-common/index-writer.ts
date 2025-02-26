@@ -516,54 +516,62 @@ export class Batch {
     let visited = new Set<string>();
 
     await this.#query(['BEGIN']);
-    let invalidations = [
-      ...new Set([
-        ...(!this.nodeResolvedInvalidations.includes(alias) ? [url.href] : []),
-        ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-      ]),
-    ];
+    let invalidations: string[] = [];
+    try {
+      invalidations = [
+        ...new Set([
+          ...(!this.nodeResolvedInvalidations.includes(alias)
+            ? [url.href]
+            : []),
+          ...(alias ? await this.calculateInvalidations(alias, visited) : []),
+        ]),
+      ];
 
-    if (invalidations.length === 0) {
+      if (invalidations.length === 0) {
+        await this.#query(['COMMIT']);
+        return [];
+      }
+
+      // insert tombstone into next version of the realm index
+      let columns = [
+        'url',
+        'file_alias',
+        'type',
+        'realm_version',
+        'realm_url',
+        'is_deleted',
+      ].map((c) => [c]);
+      let rows = invalidations.map((id) =>
+        [
+          id,
+          trimExecutableExtension(new URL(id)).href,
+          hasExecutableExtension(id) ? 'module' : 'instance',
+          this.realmVersion,
+          this.realmURL.href,
+          true,
+        ].map((v) => [param(v)]),
+      );
+
+      let insertStart = Date.now();
+      await this.#query([
+        ...upsertMultipleRows(
+          'boxel_index_working',
+          'boxel_index_working_pkey',
+          columns,
+          rows,
+        ),
+      ]);
       await this.#query(['COMMIT']);
-      return [];
+
+      this.#perfLog.debug(
+        `inserted invalidated rows for  ${url.href} in ${
+          Date.now() - insertStart
+        } ms`,
+      );
+    } catch (e) {
+      await this.#query(['ROLLBACK']);
+      throw e;
     }
-
-    // insert tombstone into next version of the realm index
-    let columns = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_version',
-      'realm_url',
-      'is_deleted',
-    ].map((c) => [c]);
-    let rows = invalidations.map((id) =>
-      [
-        id,
-        trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id) ? 'module' : 'instance',
-        this.realmVersion,
-        this.realmURL.href,
-        true,
-      ].map((v) => [param(v)]),
-    );
-
-    let insertStart = Date.now();
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
-    await this.#query(['COMMIT']);
-
-    this.#perfLog.debug(
-      `inserted invalidated rows for  ${url.href} in ${
-        Date.now() - insertStart
-      } ms`,
-    );
 
     this.#perfLog.debug(
       `completed invalidation of ${url.href} in ${Date.now() - start} ms`,
