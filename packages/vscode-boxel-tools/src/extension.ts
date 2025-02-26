@@ -59,11 +59,6 @@ export async function activate(context: vscode.ExtensionContext) {
     treeDataProvider: realmProvider,
   });
 
-  const diagnosticCollection =
-    vscode.languages.createDiagnosticCollection('boxel-tools');
-
-  context.subscriptions.push(diagnosticCollection);
-
   // Register the SynapseAuthProvider but don't immediately trigger authentication
   const authProvider = new SynapseAuthProvider(context);
   context.subscriptions.push(
