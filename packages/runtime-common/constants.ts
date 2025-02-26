@@ -30,6 +30,8 @@ export const DefaultFormatsContextName = 'default-format-context';
 
 export const PermissionsContextName = 'permissions-context';
 
+export const CardURLContextName = 'card-url-context';
+
 export const RealmURLContextName = 'realm-url-context';
 
 export interface Permissions {

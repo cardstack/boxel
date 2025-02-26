@@ -188,16 +188,16 @@ const TASK_FILTERS: LayoutFilter[] = [
 
 const TABS = [
   {
+    tabId: 'Account',
+    displayName: 'Accounts',
+  },
+  {
     tabId: 'Contact',
     displayName: 'Contacts',
   },
   {
     tabId: 'Deal',
     displayName: 'Deals',
-  },
-  {
-    tabId: 'Account',
-    displayName: 'Accounts',
   },
   {
     tabId: 'Task',
@@ -209,12 +209,12 @@ const TABS = [
 class CrmAppTemplate extends Component<typeof CrmApp> {
   //filters
   filterMap: TrackedMap<string, LayoutFilter[]> = new TrackedMap([
+    ['Account', ACCOUNT_FILTERS],
     ['Contact', CONTACT_FILTERS],
     ['Deal', DEAL_FILTERS],
-    ['Account', ACCOUNT_FILTERS],
     ['Task', TASK_FILTERS],
   ]);
-  @tracked private activeFilter: LayoutFilter = CONTACT_FILTERS[0];
+  @tracked private activeFilter: LayoutFilter = ACCOUNT_FILTERS[0];
   @action private onFilterChange(filter: LayoutFilter) {
     this.activeFilter = filter;
     if (this.activeTabId === 'Task') {

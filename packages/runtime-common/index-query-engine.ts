@@ -64,7 +64,7 @@ interface IndexedModule {
   executableCode: string;
   source: string;
   canonicalURL: string;
-  lastModified: number;
+  lastModified: number | null;
   resourceCreatedAt: number;
   deps: string[] | null;
 }
@@ -74,7 +74,7 @@ export interface IndexedInstance {
   instance: CardResource;
   source: string;
   canonicalURL: string;
-  lastModified: number;
+  lastModified: number | null;
   resourceCreatedAt: number;
   isolatedHtml: string | null;
   embeddedHtml: { [refURL: string]: string } | null;
@@ -225,7 +225,7 @@ export class IndexQueryEngine {
       canonicalURL,
       executableCode,
       source,
-      lastModified: parseInt(lastModified),
+      lastModified: lastModified != null ? parseInt(lastModified) : null,
       resourceCreatedAt: parseInt(resourceCreatedAt),
       deps: moduleEntry.deps,
     };
@@ -311,7 +311,10 @@ export class IndexQueryEngine {
       type: 'instance',
       instance,
       source: instanceEntry.source,
-      lastModified: parseInt(instanceEntry.last_modified),
+      lastModified:
+        instanceEntry.last_modified != null
+          ? parseInt(instanceEntry.last_modified)
+          : null,
       resourceCreatedAt: parseInt(instanceEntry.resource_created_at),
     };
   }
@@ -1158,7 +1161,7 @@ function assertIndexEntrySource<T>(obj: T): Omit<
   'source' | 'last_modified' | 'resource_created_at'
 > & {
   source: string;
-  last_modified: string;
+  last_modified: string | null;
   resource_created_at: string;
 } {
   if (!obj || typeof obj !== 'object') {
@@ -1167,7 +1170,7 @@ function assertIndexEntrySource<T>(obj: T): Omit<
   if (!('source' in obj) || typeof obj.source !== 'string') {
     throw new Error(`expected index entry to have "source" string property`);
   }
-  if (!('last_modified' in obj) || typeof obj.last_modified !== 'string') {
+  if (!('last_modified' in obj)) {
     throw new Error(`expected index entry to have "last_modified" property`);
   }
   if (
