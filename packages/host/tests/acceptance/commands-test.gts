@@ -20,6 +20,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
@@ -845,13 +846,11 @@ module('Acceptance | Commands tests', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'patchCard',
+          id: 'abc123',
+          name: 'switch-submode_dd88',
           arguments: {
             attributes: {
-              cardId: `${testRealmURL}Person/fadhlan`,
-              patch: {
-                attributes: { firstName: 'Dave' },
-              },
+              submode: 'code',
             },
           },
         },
@@ -864,6 +863,23 @@ module('Acceptance | Commands tests', function (hooks) {
     // check we're in code mode
     await waitFor('[data-test-submode-switcher=code]');
     assert.dom('[data-test-submode-switcher=code]').exists();
+
+    // verify that command result event was created correctly
+    await waitUntil(() => getRoomIds().length > 0);
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(
+      message.content.msgtype,
+      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(
+      message.content['m.relates_to']?.rel_type,
+      'm.annotation',
+    );
+    assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
+    assert.strictEqual(
+      JSON.parse(message.content.data).commandRequestId,
+      'abc123',
+    );
   });
 
   test('a command executed via the AI Assistant shows the result as an embedded card', async function (assert) {
