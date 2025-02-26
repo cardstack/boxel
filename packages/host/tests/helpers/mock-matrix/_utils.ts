@@ -37,6 +37,13 @@ export class MockUtils {
     ) as RealmEventEvent[];
   };
 
+  getRealmEventMessagesSince = (roomId: string, since: number) => {
+    return this.testState.sdk!.serverState.getRoomEvents(roomId).filter(
+      (e: MatrixEvent) =>
+        e.type === 'app.boxel.realm-event' && e.origin_server_ts > since, // FIXME import
+    ) as RealmEventEvent[];
+  };
+
   setRealmPermissions = (permissions: Record<string, string[]>) => {
     this.testState.opts!.realmPermissions = permissions;
     (this.testState.owner!.lookup('service:realm') as RealmService).logout();

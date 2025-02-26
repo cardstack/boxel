@@ -69,11 +69,12 @@ module('Integration | card-copy', function (hooks) {
   );
   setupServerSentEvents(hooks);
 
-  let { getRoomIds, getRealmEventMessages } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
-    autostart: true,
-  });
+  let { getRoomIds, getRealmEventMessages, getRealmEventMessagesSince } =
+    setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
+      autostart: true,
+    });
 
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = async (
@@ -670,6 +671,8 @@ module('Integration | card-copy', function (hooks) {
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
     });
 
+    let realmEventTimestampStart = Date.now();
+
     await click(
       `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
@@ -698,27 +701,30 @@ module('Integration | card-copy', function (hooks) {
     let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
 
     await waitUntil(async () => {
-      let matrixMessages = await getRealmEventMessages(realmSessionRoomId);
+      let matrixMessages = await getRealmEventMessagesSince(
+        realmSessionRoomId,
+        realmEventTimestampStart,
+      );
       console.log(matrixMessages);
       return matrixMessages.some(
         (m) =>
           m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
           m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental' &&
-          // FIXME another incremental event is present for Person/sakura… why?
-          m.content.invalidations.some((i: string) => i.includes('Pet/')),
+          m.content.indexType === 'incremental',
       );
     });
 
-    let realmEventMessages = getRealmEventMessages(realmSessionRoomId);
+    let realmEventMessages = getRealmEventMessagesSince(
+      realmSessionRoomId,
+      realmEventTimestampStart,
+    );
 
     let incrementalIndexEvent: IncrementalIndexEventContent | undefined =
       realmEventMessages.find(
         (m) =>
           m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
           m.content.eventName === 'index' &&
-          m.content.indexType === 'incremental' &&
-          m.content.invalidations.some((i: string) => i.includes('Pet/')),
+          m.content.indexType === 'incremental',
       )?.content;
 
     assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
@@ -789,6 +795,8 @@ module('Integration | card-copy', function (hooks) {
       savedCards.push(json);
     });
 
+    let realmEventTimestampStart = Date.now();
+
     await click(
       `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
     );
@@ -827,7 +835,10 @@ module('Integration | card-copy', function (hooks) {
     );
 
     let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
-    let realmEventMessages = getRealmEventMessages(realmSessionRoomId)
+    let realmEventMessages = getRealmEventMessagesSince(
+      realmSessionRoomId,
+      realmEventTimestampStart,
+    )
       .filter((m) => m.content.eventName === 'index')
       .map((m) => m.content);
 
