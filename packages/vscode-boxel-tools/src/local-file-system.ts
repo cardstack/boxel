@@ -104,26 +104,23 @@ export class LocalFileSystem {
   // Update the local storage path from settings
   updateLocalStoragePath(): void {
     const config = vscode.workspace.getConfiguration('boxel-tools');
-    let storagePath =
-      config.get<string>('localStoragePath') ||
-      '${workspaceFolder}/.boxel-realms';
+    let storagePath = config.get<string>('localStoragePath') || '';
 
-    // Handle tilde expansion for home directory
-    if (storagePath.startsWith('~/') || storagePath === '~') {
-      const homedir = os.homedir();
-      storagePath = storagePath.replace(/^~(?=$|\/|\\)/, homedir);
-    }
-
-    // Replace ${workspaceFolder} with the actual workspace folder path if available
-    if (
-      storagePath.includes('${workspaceFolder}') &&
-      vscode.workspace.workspaceFolders &&
-      vscode.workspace.workspaceFolders.length > 0
-    ) {
-      storagePath = storagePath.replace(
-        '${workspaceFolder}',
-        vscode.workspace.workspaceFolders[0].uri.fsPath,
+    // If the storage path is empty, use the extension's global storage path
+    if (!storagePath) {
+      storagePath = path.join(
+        this.context.globalStorageUri.fsPath,
+        'boxel-workspaces',
       );
+      console.log(
+        `[LocalFileSystem] Using extension storage path: ${storagePath}`,
+      );
+    } else {
+      // Handle tilde expansion for home directory
+      if (storagePath.startsWith('~/') || storagePath === '~') {
+        const homedir = os.homedir();
+        storagePath = storagePath.replace(/^~(?=$|\/|\\)/, homedir);
+      }
     }
 
     this.localStoragePath = storagePath;
@@ -138,14 +135,6 @@ export class LocalFileSystem {
         error instanceof Error ? error.message : String(error);
       vscode.window.showErrorMessage(
         `Failed to create storage directory: ${errorMessage}. Please check your permissions or choose a different path in settings.`,
-      );
-      // Use a fallback to temp directory
-      this.localStoragePath = path.join(os.tmpdir(), 'boxel-realms');
-      if (!fs.existsSync(this.localStoragePath)) {
-        fs.mkdirSync(this.localStoragePath, { recursive: true });
-      }
-      vscode.window.showInformationMessage(
-        `Using temporary directory instead: ${this.localStoragePath}`,
       );
     }
   }

@@ -198,12 +198,12 @@
     },
     "viewsWelcome": [
       {
-        "view": "codingSkillList",
-        "contents": "In [Cursor](https://cursor.com), you can load Skill Cards from your workspaces to assist in editing. [Load skills now](command:boxel-tools.reloadSkills)"
+        "view": "boxelRealmList",
+        "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Matrix](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)"
       },
       {
-        "view": "boxelRealmList",
-        "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Matrix](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)\n[Find Boxel Workspaces](command:boxel-tools.syncFromRemote)"
+        "view": "codingSkillList",
+        "contents": "In [Cursor](https://cursor.com), you can load Skill Cards from your workspaces to assist in editing. [Load skills now](command:boxel-tools.reloadSkills)"
       }
     ],
     "configuration": [
@@ -217,8 +217,8 @@
           },
           "boxel-tools.localStoragePath": {
             "type": "string",
-            "description": "The local directory where boxel workspace data will be stored. Each workspace will have its own subdirectory. You can use '~/' for your home directory or '${workspaceFolder}' for the current workspace folder.",
-            "default": "${workspaceFolder}/.boxel-workspaces"
+            "description": "The local directory where boxel workspace data will be stored. Each workspace will have its own subdirectory. You can use '~/' for your home directory. Leave empty to use the VS Code extension storage path.",
+            "default": ""
           }
         }
       }
