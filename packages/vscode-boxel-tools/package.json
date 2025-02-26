@@ -17,10 +17,8 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished",
     "onView:codingSkillList",
     "onView:boxelRealmList",
-    "onFileSystem:boxel",
     "onCommand:boxel-tools.syncFromRemote",
     "onCommand:boxel-tools.attachToBoxelWorkspaces",
     "onCommand:boxel-tools.login",
