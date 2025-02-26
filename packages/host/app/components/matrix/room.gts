@@ -39,7 +39,7 @@ import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { getRoom } from '@cardstack/host/resources/room';
+import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
@@ -67,6 +67,7 @@ import type { Skill } from '../ai-assistant/skill-menu';
 interface Signature {
   Args: {
     roomId: string;
+    roomResource: RoomResource;
     monacoSDK: MonacoSDK;
   };
 }
@@ -78,7 +79,7 @@ export default class Room extends Component<Signature> {
         class='room'
         data-room-settled={{this.doWhenRoomChanges.isIdle}}
         data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-        data-test-room-name={{this.roomResource.name}}
+        data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
       >
         <AiAssistantConversation
@@ -88,7 +89,7 @@ export default class Room extends Component<Signature> {
           {{#each this.messages key='eventId' as |message i|}}
             <RoomMessage
               @roomId={{@roomId}}
-              @message={{message}}
+              @roomResource={{@roomResource}}
               @index={{i}}
               @registerScroller={{this.registerMessageScroller}}
               @isPending={{this.isPendingMessage message}}
@@ -149,10 +150,10 @@ export default class Room extends Component<Signature> {
                 @filesToAttach={{this.filesToAttach}}
               />
               <LLMSelect
-                @selected={{this.roomResource.activeLLM}}
-                @onChange={{this.roomResource.activateLLM}}
+                @selected={{@roomResource.activeLLM}}
+                @onChange={{@roomResource.activateLLM}}
                 @options={{this.supportedLLMs}}
-                @disabled={{this.roomResource.isActivatingLLM}}
+                @disabled={{@roomResource.isActivatingLLM}}
               />
             </div>
           </div>
@@ -193,8 +194,6 @@ export default class Room extends Component<Signature> {
       .chat-input-area__bottom-section {
         display: flex;
         justify-content: space-between;
-        gap: 10px;
-        align-items: center;
         padding-right: var(--boxel-sp-xxs);
         gap: var(--boxel-sp-xxl);
       }
@@ -217,11 +216,6 @@ export default class Room extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare loaderService: LoaderService;
 
-  private roomResource = getRoom(
-    this,
-    () => this.args.roomId,
-    () => this.matrixService.getRoomData(this.args.roomId)?.events,
-  );
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,
@@ -230,6 +224,7 @@ export default class Room extends Component<Signature> {
 
   @tracked private currentMonacoContainer: number | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
+  private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
     RoomData,
     {
@@ -354,7 +349,7 @@ export default class Room extends Component<Signature> {
   }: {
     index: number;
     element: HTMLElement;
-    scrollTo: () => void;
+    scrollTo: (arg?: any) => void;
   }) => {
     this.messageElements.set(element, index);
     this.messageScrollers.set(index, scrollTo);
@@ -382,13 +377,17 @@ export default class Room extends Component<Signature> {
       index === this.lastReadMessageIndex + 1
     ) {
       scrollTo();
+    } else if (this.isScrolledToBottom) {
+      this.scrollConversationToBottom?.();
     }
   };
 
   private registerConversationScroller = (
     isConversationScrollable: () => boolean,
+    scrollToBottom: () => void,
   ) => {
     this.getConversationScrollability = isConversationScrollable;
+    this.scrollConversationToBottom = scrollToBottom;
   };
 
   private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
@@ -512,25 +511,25 @@ export default class Room extends Component<Signature> {
   };
 
   private isDisplayingCode = (message: Message) => {
-    return this.roomResource?.isDisplayingCode(message);
+    return this.args.roomResource.isDisplayingCode(message);
   };
 
   private toggleViewCode = (message: Message) => {
-    this.roomResource.toggleViewCode(message);
+    this.args.roomResource.toggleViewCode(message);
   };
 
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
-    await this.roomResource.loading;
+    await this.args.roomResource.loading;
   });
 
   private get messages() {
-    return this.roomResource.messages;
+    return this.args.roomResource.messages;
   }
 
   private get skills(): Skill[] {
-    return this.roomResource.skills;
+    return this.args.roomResource.skills;
   }
 
   private get supportedLLMs(): string[] {
@@ -548,7 +547,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
-    let room = this.roomResource.matrixRoom;
+    let room = this.args.roomResource.matrixRoom;
     return room;
   }
 

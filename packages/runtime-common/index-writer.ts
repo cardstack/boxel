@@ -102,7 +102,7 @@ export class Batch {
   #dbAdapter: DBAdapter;
   #perfLog = logger('index-perf');
   #log = logger('index-writer');
-  private declare realmVersion: number;
+  declare private realmVersion: number;
 
   constructor(
     dbAdapter: DBAdapter,
@@ -274,26 +274,26 @@ export class Batch {
             error_doc: null,
           }
         : entry.type === 'module'
-        ? {
-            type: 'module',
-            deps: [...entry.deps],
-            source: entry.source,
-            last_modified: entry.lastModified,
-            resource_created_at: entry.resourceCreatedAt,
-            transpiled_code: transpileJS(
-              entry.source,
-              new RealmPaths(this.realmURL).local(url),
-            ),
-            error_doc: null,
-          }
-        : {
-            types: entry.types,
-            search_doc: entry.searchData,
-            // favor the last known good types over the types derived from the error state
-            ...((await this.getProductionVersion(url)) ?? {}),
-            type: 'error',
-            error_doc: entry.error,
-          }),
+          ? {
+              type: 'module',
+              deps: [...entry.deps],
+              source: entry.source,
+              last_modified: entry.lastModified,
+              resource_created_at: entry.resourceCreatedAt,
+              transpiled_code: transpileJS(
+                entry.source,
+                new RealmPaths(this.realmURL).local(url),
+              ),
+              error_doc: null,
+            }
+          : {
+              types: entry.types,
+              search_doc: entry.searchData,
+              // favor the last known good types over the types derived from the error state
+              ...((await this.getProductionVersion(url)) ?? {}),
+              type: 'error',
+              error_doc: entry.error,
+            }),
     } as Omit<BoxelIndexTable, 'last_modified' | 'indexed_at'> & {
       // we do this because pg automatically casts big ints into strings, so
       // we unwind that to accurately type the structure that we want to pass
@@ -514,51 +514,64 @@ export class Batch {
     this.#perfLog.debug(`starting invalidation of ${url.href}`);
     let alias = trimExecutableExtension(url).href;
     let visited = new Set<string>();
-    let invalidations = [
-      ...new Set([
-        ...(!this.nodeResolvedInvalidations.includes(alias) ? [url.href] : []),
-        ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-      ]),
-    ];
 
-    if (invalidations.length === 0) {
-      return [];
+    await this.#query(['BEGIN']);
+    let invalidations: string[] = [];
+    try {
+      invalidations = [
+        ...new Set([
+          ...(!this.nodeResolvedInvalidations.includes(alias)
+            ? [url.href]
+            : []),
+          ...(alias ? await this.calculateInvalidations(alias, visited) : []),
+        ]),
+      ];
+
+      if (invalidations.length === 0) {
+        await this.#query(['COMMIT']);
+        return [];
+      }
+
+      // insert tombstone into next version of the realm index
+      let columns = [
+        'url',
+        'file_alias',
+        'type',
+        'realm_version',
+        'realm_url',
+        'is_deleted',
+      ].map((c) => [c]);
+      let rows = invalidations.map((id) =>
+        [
+          id,
+          trimExecutableExtension(new URL(id)).href,
+          hasExecutableExtension(id) ? 'module' : 'instance',
+          this.realmVersion,
+          this.realmURL.href,
+          true,
+        ].map((v) => [param(v)]),
+      );
+
+      let insertStart = Date.now();
+      await this.#query([
+        ...upsertMultipleRows(
+          'boxel_index_working',
+          'boxel_index_working_pkey',
+          columns,
+          rows,
+        ),
+      ]);
+      await this.#query(['COMMIT']);
+
+      this.#perfLog.debug(
+        `inserted invalidated rows for  ${url.href} in ${
+          Date.now() - insertStart
+        } ms`,
+      );
+    } catch (e) {
+      await this.#query(['ROLLBACK']);
+      throw e;
     }
-
-    // insert tombstone into next version of the realm index
-    let columns = [
-      'url',
-      'file_alias',
-      'type',
-      'realm_version',
-      'realm_url',
-      'is_deleted',
-    ].map((c) => [c]);
-    let rows = invalidations.map((id) =>
-      [
-        id,
-        trimExecutableExtension(new URL(id)).href,
-        hasExecutableExtension(id) ? 'module' : 'instance',
-        this.realmVersion,
-        this.realmURL.href,
-        true,
-      ].map((v) => [param(v)]),
-    );
-
-    let insertStart = Date.now();
-    await this.#query([
-      ...upsertMultipleRows(
-        'boxel_index_working',
-        'boxel_index_working_pkey',
-        columns,
-        rows,
-      ),
-    ]);
-    this.#perfLog.debug(
-      `inserted invalidated rows for  ${url.href} in ${
-        Date.now() - insertStart
-      } ms`,
-    );
 
     this.#perfLog.debug(
       `completed invalidation of ${url.href} in ${Date.now() - start} ms`,

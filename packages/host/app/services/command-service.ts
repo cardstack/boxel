@@ -16,7 +16,10 @@ import {
   CommandContextStamp,
   ResolvedCodeRef,
   isResolvedCodeRef,
+  getClass,
 } from '@cardstack/runtime-common';
+
+import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -32,7 +35,6 @@ import CardService from './card-service';
 import RealmServerService from './realm-server';
 
 import type LoaderService from './loader-service';
-import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -42,12 +44,12 @@ type GenericCommand = Command<
 >;
 
 export default class CommandService extends Service {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
-  @service private declare realm: Realm;
-  @service private declare realmServer: RealmServerService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private cardService: CardService;
+  @service declare private loaderService: LoaderService;
+  @service declare private realm: Realm;
+  @service declare private realmServer: RealmServerService;
   currentlyExecutingCommandEventIds = new TrackedSet<string>();
 
   private commands: Map<
@@ -131,7 +133,21 @@ export default class CommandService extends Service {
       this.currentlyExecutingCommandEventIds.add(eventId);
 
       // lookup command
-      let { command: commandToRun } = this.commands.get(command.name!) ?? {};
+      let { command: commandToRun } =
+        this.commands.get(command.commandRequest.name ?? '') ?? {};
+
+      // If we don't find it in the one-offs, start searching for
+      // one in the skills we can construct
+      if (!commandToRun) {
+        let commandCodeRef = command.codeRef;
+        if (commandCodeRef) {
+          let CommandConstructor = (await getClass(
+            commandCodeRef,
+            this.loaderService.loader,
+          )) as { new (context: CommandContext): Command<any, any> };
+          commandToRun = new CommandConstructor(this.commandContext);
+        }
+      }
 
       if (commandToRun) {
         // Get the input type and validate/construct the payload
@@ -193,8 +209,8 @@ export default class CommandService extends Service {
         typeof e === 'string'
           ? new Error(e)
           : e instanceof Error
-          ? e
-          : new Error('Command failed.');
+            ? e
+            : new Error('Command failed.');
       console.warn(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(eventId, error);

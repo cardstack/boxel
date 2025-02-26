@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import TagIcon from '@cardstack/boxel-icons/tag';
 import { Pill } from '@cardstack/boxel-ui/components';
-import { ColorField } from './color';
+import { ColorField } from './fields/color';
 
 export class Tag extends CardDef {
   static displayName = 'Tag';

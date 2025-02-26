@@ -41,11 +41,7 @@ module.exports = function (environment) {
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
-    featureFlags: {
-      ENABLE_PLAYGROUND: process.env.ENABLE_PLAYGROUND || false,
-      AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED:
-        process.env.AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED || false,
-    },
+    featureFlags: {},
   };
 
   if (environment === 'development') {
@@ -54,10 +50,7 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
-    ENV.featureFlags = {
-      ENABLE_PLAYGROUND: true,
-      AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED: true,
-    };
+    ENV.featureFlags = {};
   }
 
   if (environment === 'test') {
@@ -77,10 +70,7 @@ module.exports = function (environment) {
     ENV.loginMessageTimeoutMs = 0;
     ENV.minSaveTaskDurationMs = 0;
     ENV.sqlSchema = sqlSchema;
-    ENV.featureFlags = {
-      ENABLE_PLAYGROUND: true,
-      AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED: true,
-    };
+    ENV.featureFlags = {};
   }
 
   if (environment === 'production') {

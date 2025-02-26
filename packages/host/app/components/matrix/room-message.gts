@@ -14,7 +14,7 @@ import { bool } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
-import { Message } from '@cardstack/host/lib/matrix-classes/message';
+import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -31,7 +31,11 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     roomId: string;
-    message: Message;
+    // use a RoomResource as an arg instead of message to keep this component stable
+    // when new messages are received--otherwise a RoomMessage component is created for
+    // _every_ matrix event received regardless if the event had anything to do with this
+    // message.
+    roomResource: RoomResource;
     index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
@@ -60,13 +64,17 @@ export default class RoomMessage extends Component<Signature> {
 
   @tracked private streamingTimeout = false;
 
+  private get message() {
+    return this.args.roomResource.messages[this.args.index];
+  }
+
   private checkStreamingTimeout = task(async () => {
     if (!this.isFromAssistant || !this.args.isStreaming) {
       return;
     }
 
     // If message is streaming and hasn't been updated in the last minute, show a timeout message
-    if (Date.now() - Number(this.args.message.updated) > STREAMING_TIMEOUT_MS) {
+    if (Date.now() - Number(this.message.updated) > STREAMING_TIMEOUT_MS) {
       this.streamingTimeout = true;
       return;
     }
@@ -78,16 +86,14 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   private get isFromAssistant() {
-    return this.args.message.author.userId === aiBotUserId;
+    return this.message.author.userId === aiBotUserId;
   }
 
-  run = task(async () => {
-    if (!this.args.message.command) {
+  private run = task(async () => {
+    if (!this.message.command) {
       throw new Error('No command to run');
     }
-    return this.commandService.run
-      .unlinked()
-      .perform(this.args.message.command);
+    return this.commandService.run.unlinked().perform(this.message.command);
   });
 
   <template>
@@ -102,31 +108,32 @@ export default class RoomMessage extends Component<Signature> {
         id='message-container-{{@index}}'
         class='room-message'
         @formattedMessage={{htmlSafe
-          (markdownToHtml @message.formattedMessage)
+          (markdownToHtml this.message.formattedMessage)
         }}
-        @datetime={{@message.created}}
+        @monacoSDK={{@monacoSDK}}
+        @datetime={{this.message.created}}
         @index={{@index}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         @profileAvatar={{component
           Avatar
           isReady=true
-          userId=@message.author.userId
-          displayName=@message.author.displayName
+          userId=this.message.author.userId
+          displayName=this.message.author.displayName
         }}
         @resources={{this.resources}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
-        @retryAction={{if @message.command (perform this.run) @retryAction}}
+        @retryAction={{if this.message.command (perform this.run) @retryAction}}
         @isPending={{@isPending}}
-        data-test-boxel-message-from={{@message.author.name}}
-        data-test-boxel-message-instance-id={{@message.instanceId}}
+        data-test-boxel-message-from={{this.message.author.name}}
+        data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
-        {{#if @message.command}}
+        {{#if this.message.command}}
           <RoomMessageCommand
-            @messageCommand={{@message.command}}
-            @messageIndex={{@message.index}}
+            @messageCommand={{this.message.command}}
+            @messageIndex={{this.message.index}}
             @runCommand={{perform this.run}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
@@ -156,20 +163,18 @@ export default class RoomMessage extends Component<Signature> {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
 
-    let promises = this.args.message.attachedResources?.map(
-      async (resource) => {
-        await resource.loaded;
-        if (resource.card) {
-          cards.push(resource.card);
-        } else if (resource.cardError) {
-          let { id, error } = resource.cardError;
-          errors.push({
-            id,
-            error,
-          });
-        }
-      },
-    );
+    let promises = this.message.attachedResources?.map(async (resource) => {
+      await resource.loaded;
+      if (resource.card) {
+        cards.push(resource.card);
+      } else if (resource.cardError) {
+        let { id, error } = resource.cardError;
+        errors.push({
+          id,
+          error,
+        });
+      }
+    });
 
     if (promises) {
       await Promise.all(promises);
@@ -177,6 +182,9 @@ export default class RoomMessage extends Component<Signature> {
 
     return {
       cards: cards.length ? cards : undefined,
+      files: this.message.attachedFiles?.length
+        ? this.message.attachedFiles
+        : undefined,
       errors: errors.length ? errors : undefined,
     };
   });
@@ -187,11 +195,11 @@ export default class RoomMessage extends Component<Signature> {
 
   @cached
   private get failedCommandState() {
-    if (!this.args.message.command?.eventId) {
+    if (!this.message.command?.eventId) {
       return undefined;
     }
     return this.matrixService.failedCommandState.get(
-      this.args.message.command.eventId,
+      this.message.command.eventId,
     );
   }
 
@@ -199,8 +207,8 @@ export default class RoomMessage extends Component<Signature> {
     if (this.failedCommandState) {
       return `Failed to apply changes. ${this.failedCommandState.message}`;
     }
-    if (this.args.message.errorMessage) {
-      return this.args.message.errorMessage;
+    if (this.message.errorMessage) {
+      return this.message.errorMessage;
     }
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';

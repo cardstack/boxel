@@ -404,7 +404,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   setupServerSentEvents(hooks);
   setupOnSave(hooks);
   let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL, testRealmURL2],
   });
 
@@ -414,7 +414,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       [testRealmURL2]: ['read', 'write'],
     });
 
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings
@@ -648,6 +648,39 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       )
       .includesText('Test Workspace B');
     assert.dom('[data-test-card-instance-definition]').doesNotExist();
+  });
+
+  test('can switch between inspector showing module definition and inspector showing json instance definition in card inheritance panel', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert.dom('[data-test-card-module-definition]').includesText('Card');
+    assert.dom('[data-test-card-instance-definition]').doesNotExist();
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-directory="Person/"]');
+    await waitFor('[data-test-file="Person/1.json"]');
+    await click('[data-test-file="Person/1.json"]');
+
+    await click('[data-test-inspector-toggle]');
+    await waitFor('[data-test-card-inspector-panel]');
+    await waitFor('[data-test-card-module-definition]');
+
+    assert
+      .dom('[data-test-card-instance-definition]')
+      .includesText('Hassan Abdel-Rahman');
+    assert
+      .dom(
+        '[data-test-card-instance-definition] [data-test-definition-file-extension]',
+      )
+      .includesText('.JSON');
   });
 
   test('"in-this-file" panel displays all elements and re-highlights upon selection', async function (assert) {

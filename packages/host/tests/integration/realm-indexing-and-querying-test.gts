@@ -706,6 +706,190 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     }
   });
 
+  test('absolute urls will be serialised into relative into relative code-ref fields', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+    }
+
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      contents: {
+        'person.gts': { Person },
+        'person-spec.json': {
+          data: {
+            attributes: {
+              title: 'Person Card',
+              description: 'Spec for Person card',
+              specType: 'card',
+              ref: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'people-skill.json': {
+          data: {
+            attributes: {
+              instructions: 'How to win friends and influence people',
+              commands: [
+                {
+                  codeRef: {
+                    module: `@cardstack/boxel-host/commands/switch-submode`,
+                    name: 'default',
+                  },
+                },
+              ],
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/skill-card',
+                name: 'SkillCard',
+              },
+            },
+          },
+        },
+      },
+    });
+    let indexer = realm.realmIndexQueryEngine;
+    let entry = await indexer.cardDocument(
+      new URL(`${testRealmURL}person-spec`),
+    );
+    if (entry?.type === 'doc') {
+      assert.deepEqual(entry.doc.data, {
+        id: `${testRealmURL}person-spec`,
+        type: 'card',
+        links: {
+          self: `${testRealmURL}person-spec`,
+        },
+        attributes: {
+          title: 'Person Card',
+          description: 'Spec for Person card',
+          moduleHref: `${testRealmURL}person`,
+          name: null,
+          readMe: null,
+          specType: 'card',
+          isCard: true,
+          isField: false,
+          thumbnailURL: null,
+          ref: {
+            module: `./person`,
+            name: 'Person',
+          },
+          containedExamples: [],
+        },
+        relationships: {
+          linkedExamples: {
+            links: {
+              self: null,
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/spec',
+            name: 'Spec',
+          },
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}person-spec.json`,
+          ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}person-spec.json`,
+          ),
+          realmInfo: testRealmInfo,
+          realmURL: testRealmURL,
+        },
+      });
+      let instance = await indexer.instance(
+        new URL(`${testRealmURL}person-spec`),
+      );
+      assert.deepEqual(instance?.searchDoc, {
+        _cardType: 'Spec',
+        description: 'Spec for Person card',
+        id: `${testRealmURL}person-spec`,
+        specType: 'card',
+        moduleHref: `${testRealmURL}person`,
+        ref: `${testRealmURL}person/Person`,
+        title: 'Person Card',
+        linkedExamples: null,
+        containedExamples: null,
+        isCard: true,
+        isField: false,
+      });
+    } else {
+      assert.ok(
+        false,
+        `search entry was an error: ${entry?.error.errorDetail.message}`,
+      );
+    }
+    entry = await indexer.cardDocument(new URL(`${testRealmURL}people-skill`));
+    if (entry?.type === 'doc') {
+      assert.deepEqual(entry.doc.data, {
+        id: `${testRealmURL}people-skill`,
+        type: 'card',
+        links: {
+          self: `${testRealmURL}people-skill`,
+        },
+        attributes: {
+          commands: [
+            {
+              codeRef: {
+                module: '@cardstack/boxel-host/commands/switch-submode',
+                name: 'default',
+              },
+              functionName: 'switch-submode_dd88',
+              requiresApproval: null,
+            },
+          ],
+          description: null,
+          instructions: 'How to win friends and influence people',
+          thumbnailURL: null,
+          title: null,
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/skill-card',
+            name: 'SkillCard',
+          },
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}people-skill.json`,
+          ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}people-skill.json`,
+          ),
+          realmInfo: testRealmInfo,
+          realmURL: testRealmURL,
+        },
+      });
+      let instance = await indexer.instance(
+        new URL(`${testRealmURL}people-skill`),
+      );
+      assert.deepEqual(instance?.searchDoc, {
+        _cardType: 'Skill',
+        id: `${testRealmURL}people-skill`,
+        instructions: 'How to win friends and influence people',
+        commands: [
+          {
+            codeRef: `@cardstack/boxel-host/commands/switch-submode/default`,
+            functionName: 'switch-submode_dd88',
+            requiresApproval: false,
+          },
+        ],
+      });
+    } else {
+      assert.ok(
+        false,
+        `search entry was an error: ${entry?.error.errorDetail.message}`,
+      );
+    }
+  });
+
   test('can recover from rendering a card that has a template error', async function (assert) {
     {
       class Person extends CardDef {
@@ -4285,6 +4469,22 @@ posts/ignore-me.json
       assert.deepEqual(
         matching.map((m) => m.id),
         [`${testRealmURL}empty`, `${testRealmURL}missing`],
+      );
+    });
+
+    test(`can use 'eq' to find empty linksTo field`, async function (assert) {
+      let { data: matching } = await queryEngine.search({
+        filter: {
+          on: {
+            module: `${testModuleRealm}friend`,
+            name: 'Friend',
+          },
+          every: [{ eq: { firstName: 'Mango' } }, { eq: { friend: null } }],
+        },
+      });
+      assert.deepEqual(
+        matching.map((m) => m.id),
+        [`${testRealmURL}friend2`],
       );
     });
 

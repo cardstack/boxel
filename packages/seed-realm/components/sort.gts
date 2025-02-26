@@ -113,7 +113,9 @@ export class SortMenu extends GlimmerComponent<SortMenuSignature> {
       return new MenuItem(option.displayName, 'action', {
         action: () => this.args.onSort(option),
         icon: option.sort?.[0].direction === 'desc' ? ArrowDown : ArrowUp,
-        selected: option.displayName === this.args.selected.displayName,
+        selected:
+          option.displayName === this.args.selected.displayName &&
+          option.sort?.[0].direction === this.args.selected.sort?.[0].direction,
       });
     });
   }

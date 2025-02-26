@@ -35,7 +35,7 @@ module('Integration | card-catalog', function (hooks) {
   setupLocalIndexing(hooks);
   setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
@@ -120,7 +120,7 @@ module('Integration | card-catalog', function (hooks) {
           description: 'Spec for PublishingPacket',
           specType: 'card',
           ref: {
-            module: `../publishing-packet`,
+            module: `${testRealmURL}publishing-packet`,
             name: 'PublishingPacket',
           },
         }),

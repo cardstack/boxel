@@ -26,8 +26,8 @@ import {
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
@@ -84,7 +84,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     getRoomEvents,
     setReadReceipt,
   } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
     now: (() => {
@@ -359,7 +359,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     messagesHaveBeenRead = true,
   ) {
     for (let i = 0; i < 20; i++) {
-      simulateRemoteMessage(roomId, '@testuser:staging', {
+      simulateRemoteMessage(roomId, '@testuser:localhost', {
         body: `question #${i + 1}`,
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         formatted_body: `question #${i + 1}`,
@@ -373,7 +373,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         isStreamingFinished: true,
       });
       if (messagesHaveBeenRead) {
-        setReadReceipt(roomId, eventId, '@testuser:staging');
+        setReadReceipt(roomId, eventId, '@testuser:localhost');
       }
     }
   }
@@ -435,8 +435,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
-    let room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+    let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let room2Id = createAndJoinRoom('@testuser:localhost', 'test room 2');
     simulateRemoteMessage(room2Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Incorrect command',
@@ -617,6 +617,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       'it can preview code when a change is proposed',
     );
     assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
+    await percySnapshot(assert);
 
     await click('[data-test-view-code-button]');
     assert.dom('[data-test-code-editor]').doesNotExist();
@@ -719,6 +720,76 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
     assert.dom(`${stackCard} [data-test-city="Bandung"]`).exists();
     assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
+  });
+
+  test('it can apply change when the command event is not a replacement event', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+
+    await waitFor('[data-test-person="Fadhlan"]');
+    assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
+
+    let payload = {
+      name: 'patchCard',
+      arguments: {
+        attributes: {
+          cardId: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: {
+              firstName: 'Joy',
+              address: { shippingInfo: { preferredCarrier: 'UPS' } },
+            },
+          },
+        },
+      },
+      eventId: 'event1',
+    };
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'A patch',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      formatted_body: 'A patch',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({ toolCall: payload }),
+    });
+
+    await waitFor('[data-test-view-code-button]');
+    await click('[data-test-view-code-button]');
+
+    await waitForCodeEditor();
+    assert.deepEqual(
+      JSON.parse(getMonacoContent()),
+
+      {
+        name: 'patchCard',
+        payload: {
+          attributes: {
+            cardId: 'http://test-realm/test/Person/fadhlan',
+            patch: {
+              attributes: {
+                address: {
+                  shippingInfo: {
+                    preferredCarrier: 'UPS',
+                  },
+                },
+                firstName: 'Joy',
+              },
+            },
+          },
+        },
+      },
+      'it can preview code when a change is proposed',
+    );
+    assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
+
+    await click('[data-test-view-code-button]');
+    assert.dom('[data-test-code-editor]').doesNotExist();
+
+    await click('[data-test-command-apply="ready"]');
+    await waitFor('[data-test-command-card-idle]');
+    assert.dom('[data-test-apply-state="applied"]').exists();
+    assert.dom('[data-test-person]').hasText('Joy');
+    assert.dom(`[data-test-preferredcarrier]`).hasText('UPS');
+    assert.dom(`[data-test-city="Bandung"]`).exists();
+    assert.dom(`[data-test-country="Indonesia"]`).exists();
   });
 
   test('it does not crash when applying change to a card with preexisting nested linked card', async function (assert) {
@@ -1017,7 +1088,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it renders only new/updated messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    simulateRemoteMessage(roomId, '@testuser:staging', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: `question #0`,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: `question #1`,
@@ -1036,8 +1107,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       formatted_body: `Thinking...`,
       format: 'org.matrix.custom.html',
     });
-    setReadReceipt(roomId, messageEventId, '@testuser:staging');
-    setReadReceipt(roomId, commandEventId, '@testuser:staging');
+    setReadReceipt(roomId, messageEventId, '@testuser:localhost');
+    setReadReceipt(roomId, commandEventId, '@testuser:localhost');
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1160,9 +1231,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      createAndJoinRoom('@testuser:staging', 'test room 0');
-      let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
-      const room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+      createAndJoinRoom('@testuser:localhost', 'test room 0');
+      let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
+      const room2Id = createAndJoinRoom('@testuser:localhost', 'test room 2');
       await settled();
 
       await openAiAssistant();
@@ -1396,7 +1467,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
+    let anotherRoomId = createAndJoinRoom(
+      '@testuser:localhost',
+      'Another Room',
+    );
 
     simulateRemoteMessage(
       anotherRoomId,
@@ -1557,7 +1631,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     fillRoomWithReadMessages(roomId, false);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1579,7 +1653,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     fillRoomWithReadMessages(roomId);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1590,10 +1664,59 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
   });
 
+  test('scrolling stays at the bottom if a message is streaming in', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    fillRoomWithReadMessages(roomId);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `thinking...`,
+      msgtype: 'm.text',
+      formatted_body: `thinking...`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
+      msgtype: 'm.text',
+      formatted_body: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      ['m.relates_to']: {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+  });
+
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    simulateRemoteMessage(roomId, '@testuser:staging', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'Say one word.',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Say one word.',
@@ -1617,7 +1740,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
 
-    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
+    let anotherRoomId = createAndJoinRoom(
+      '@testuser:localhost',
+      'Another Room',
+    );
 
     let eventId3 = simulateRemoteMessage(
       anotherRoomId,
@@ -1651,7 +1777,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@testuser:staging', {
+    await simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
@@ -1668,7 +1794,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       errorMessage: 'AI bot error',
     });
 
-    await simulateRemoteMessage(roomId, '@testuser:staging', {
+    await simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
@@ -1989,7 +2115,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity
     let anotherRoomId = await createAndJoinRoom(
-      '@testuser:staging',
+      '@testuser:localhost',
       'Another Room',
     );
 
@@ -2086,7 +2212,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
@@ -2158,7 +2284,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2527,7 +2653,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2575,5 +2701,103 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
+  });
+
+  test('it shows the copy code to clipboard button', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        formatted_body:
+          'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('button.code-copy-button')
+      .exists('the copy code to clipboard button exists');
+
+    // assert that new messages don't destabilize the RoomMessage component
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'this is another message',
+        formatted_body: 'this is another message',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 13, 30).getTime(),
+      },
+    );
+    await settled();
+
+    assert
+      .dom('button.code-copy-button')
+      .exists('the copy code to clipboard button exists');
+
+    // the chrome security model prevents the clipboard API
+    // from working when tests are run in a headless mode, so we are unable to
+    // assert the button actually copies contents to the clipboard
+  });
+
+  test('it renders codeblock in monaco', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    await simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        formatted_body:
+          'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+    let monacoContent = getMonacoContent();
+    assert.strictEqual(
+      monacoContent,
+      `console.log("hello world");`,
+      'monaco content is correct',
+    );
+
+    // assert that new messages don't destabilize the RoomMessage component
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'this is another message',
+        formatted_body: 'this is another message',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 13, 30).getTime(),
+      },
+    );
+    await settled();
+
+    monacoContent = getMonacoContent();
+    assert.strictEqual(
+      monacoContent,
+      `console.log("hello world");`,
+      'monaco content is correct',
+    );
+
+    await percySnapshot(assert);
   });
 });

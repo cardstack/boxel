@@ -13,7 +13,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type ResetService from './reset';
 
 export default class RecentCardsService extends Service {
-  @service private declare reset: ResetService;
+  @service declare private reset: ResetService;
   @tracked declare recentCards: TrackedArray<CardDef>;
 
   constructor(owner: Owner) {

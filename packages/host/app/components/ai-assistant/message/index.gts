@@ -14,11 +14,18 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { and, cn } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
 import CardPill from '@cardstack/host/components/card-pill';
+import FilePill from '@cardstack/host/components/file-pill';
 
 import type CardService from '@cardstack/host/services/card-service';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
+
+import FormattedMessage from '../formatted-message';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -59,9 +66,11 @@ interface Signature {
     profileAvatar?: ComponentLike;
     resources?: {
       cards: CardDef[] | undefined;
+      files: FileDef[] | undefined;
       errors: { id: string; error: Error }[] | undefined;
     };
     index: number;
+    monacoSDK: MonacoSDK;
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
@@ -89,6 +98,7 @@ interface MessageScrollerSignature {
 
 class MessageScroller extends Modifier<MessageScrollerSignature> {
   private hasRegistered = false;
+  private observer?: MutationObserver;
   modify(
     element: HTMLElement,
     _positional: [],
@@ -102,6 +112,21 @@ class MessageScroller extends Modifier<MessageScrollerSignature> {
         scrollTo: element.scrollIntoView.bind(element),
       });
     }
+
+    this.observer?.disconnect();
+
+    this.observer = new MutationObserver(() => {
+      registerScroller({
+        index,
+        element,
+        scrollTo: element.scrollIntoView.bind(element),
+      });
+    });
+    this.observer.observe(element, { childList: true, subtree: true });
+
+    registerDestructor(this, () => {
+      this.observer?.disconnect();
+    });
   }
 }
 
@@ -109,7 +134,10 @@ interface ScrollPositionSignature {
   Args: {
     Named: {
       setScrollPosition: (args: { isBottom: boolean }) => void;
-      registerConversationScroller: (isScrollable: () => boolean) => void;
+      registerConversationScroller: (
+        isScrollable: () => boolean,
+        scrollToBottom: () => void,
+      ) => void;
     };
   };
 }
@@ -131,6 +159,9 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
       this.hasRegistered = true;
       registerConversationScroller(
         () => element.scrollHeight > element.clientHeight,
+        () => {
+          element.scrollTop = element.scrollHeight - element.clientHeight;
+        },
       );
     }
 
@@ -199,24 +230,38 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{/if}}
 
         <div class='content' data-test-ai-message-content>
-          {{if
-            (and @isFromAssistant @isStreaming)
-            (wrapLastTextNodeInStreamingTextSpan @formattedMessage)
-            @formattedMessage
-          }}
+          {{#if (and @isFromAssistant @isStreaming)}}
+            <FormattedMessage
+              @renderCodeBlocks={{false}}
+              @monacoSDK={{@monacoSDK}}
+              @sanitizedHtml={{wrapLastTextNodeInStreamingTextSpan
+                @formattedMessage
+              }}
+            />
+          {{else}}
+            <FormattedMessage
+              @renderCodeBlocks={{true}}
+              @monacoSDK={{@monacoSDK}}
+              @sanitizedHtml={{@formattedMessage}}
+            />
+          {{/if}}
 
           {{yield}}
 
-          {{#if @resources.cards.length}}
-            <div class='cards' data-test-message-cards>
-              {{#each @resources.cards as |card|}}
-                <CardPill @card={{card}} />
+          {{#if this.items.length}}
+            <div class='items' data-test-message-items>
+              {{#each this.items as |item|}}
+                {{#if (isCardInstance item)}}
+                  <CardPill @card={{item}} />
+                {{else}}
+                  <FilePill @file={{item}} />
+                {{/if}}
               {{/each}}
             </div>
           {{/if}}
 
           {{#if @resources.errors.length}}
-            <div class='error-container'>
+            <div class='error-container error-footer'>
               {{#each @resources.errors as |resourceError|}}
                 <FailureBordered class='error-icon' />
                 <div class='error-message' data-test-card-error>
@@ -302,6 +347,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
         padding: var(--ai-assistant-message-padding, var(--boxel-sp));
       }
+
       .is-from-assistant .content {
         background-color: var(--ai-bot-message-background-color);
         color: var(--boxel-light);
@@ -320,15 +366,15 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .is-pending .content,
-      .is-pending .content .cards > :deep(.card-pill),
-      .is-pending .content .cards > :deep(.card-pill .boxel-card-container) {
+      .is-pending .content .items > :deep(.card-pill),
+      .is-pending .content .items > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
 
       .is-error .content,
-      .is-error .content .cards > :deep(.card-pill),
-      .is-error .content .cards > :deep(.card-pill .boxel-card-container) {
+      .is-error .content .items > :deep(.card-pill),
+      .is-error .content .items > :deep(.card-pill .boxel-card-container) {
         background: var(--boxel-200);
         color: var(--boxel-500);
         max-height: 300px;
@@ -371,6 +417,13 @@ export default class AiAssistantMessage extends Component<Signature> {
         font: 600 var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp);
       }
+      .error-footer {
+        --fill-container-spacing: calc(
+          -1 * var(--ai-assistant-message-padding)
+        );
+        margin-inline: var(--fill-container-spacing);
+        margin-bottom: var(--fill-container-spacing);
+      }
       .error-icon {
         --icon-background-color: var(--boxel-light);
         --icon-color: var(--boxel-danger);
@@ -389,7 +442,7 @@ export default class AiAssistantMessage extends Component<Signature> {
         border-color: var(--boxel-light);
       }
 
-      .cards {
+      .items {
         color: var(--boxel-dark);
         display: flex;
         flex-wrap: wrap;
@@ -401,13 +454,23 @@ export default class AiAssistantMessage extends Component<Signature> {
   private get isAvatarAnimated() {
     return this.args.isStreaming && !this.args.errorMessage;
   }
+
+  private get items() {
+    return [
+      ...(this.args.resources?.cards ?? []),
+      ...(this.args.resources?.files ?? []),
+    ];
+  }
 }
 
 interface AiAssistantConversationSignature {
   Element: HTMLDivElement;
   Args: {
     setScrollPosition: (args: { isBottom: boolean }) => void;
-    registerConversationScroller: (isScrollable: () => boolean) => void;
+    registerConversationScroller: (
+      isScrollable: () => boolean,
+      scrollToBottom: () => void,
+    ) => void;
   };
   Blocks: {
     default: [];

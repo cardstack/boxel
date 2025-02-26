@@ -40,8 +40,6 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import { testOnlyResetLiveCardState } from '@cardstack/host/resources/card-resource';
-
 import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
@@ -295,7 +293,6 @@ export function setupServerSentEvents(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSSE>(function () {
     this.subscribers = [];
     let self = this;
-    testOnlyResetLiveCardState();
 
     class MockMessageService extends Service {
       register() {
@@ -558,7 +555,7 @@ export function setupUserSubscription(matrixRoomId: string) {
       type: 'user',
       id: 1,
       attributes: {
-        matrixUserId: '@testuser:staging',
+        matrixUserId: '@testuser:localhost',
         stripeCustomerId: 'stripe-id-1',
         creditsAvailableInPlanAllowance: 1000,
         creditsIncludedInPlanAllowance: 1000,
@@ -626,7 +623,7 @@ export function setupUserSubscription(matrixRoomId: string) {
             headers: {
               Authorization: createJWT(
                 {
-                  user: '@testuser:staging',
+                  user: '@testuser:localhost',
                   sessionRoom: matrixRoomId,
                 },
                 '1d',
@@ -762,7 +759,7 @@ export function setupRealmServerEndpoints(
             headers: {
               Authorization: createJWT(
                 {
-                  user: '@testuser:staging',
+                  user: '@testuser:localhost',
                   sessionRoom: 'boxel-session-room-id',
                 },
                 '1d',
@@ -782,7 +779,7 @@ export function setupRealmServerEndpoints(
               type: 'user',
               id: 1,
               attributes: {
-                matrixUserId: '@testuser:staging',
+                matrixUserId: '@testuser:localhost',
                 stripeCustomerId: 'stripe-id-1',
                 creditsAvailableInPlanAllowance: null,
                 creditsIncludedInPlanAllowance: null,

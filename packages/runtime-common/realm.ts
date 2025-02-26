@@ -524,8 +524,8 @@ export class Realm {
     let type = opts?.isDelete
       ? 'removed'
       : (await this.#adapter.exists(path))
-      ? 'updated'
-      : 'added';
+        ? 'updated'
+        : 'added';
     let messageHash = `${type}-${JSON.stringify({ [type]: path })}`;
     this.#recentWrites.set(
       messageHash,
@@ -729,15 +729,14 @@ export class Realm {
         if (!request.headers.get('X-Boxel-Building-Index')) {
           let timeout = await Promise.race<void | Error>([
             this.#startedUp.promise,
-            new Promise(
-              (resolve) =>
-                setTimeout(() => {
-                  resolve(
-                    new Error(
-                      `Timeout waiting for realm ${this.url} to become ready`,
-                    ),
-                  );
-                }, 60 * 1000).unref?.(),
+            new Promise((resolve) =>
+              setTimeout(() => {
+                resolve(
+                  new Error(
+                    `Timeout waiting for realm ${this.url} to become ready`,
+                  ),
+                );
+              }, 60 * 1000).unref?.(),
             ),
           ]);
           if (timeout) {
@@ -1041,7 +1040,9 @@ export class Realm {
           body: source,
           init: {
             headers: {
-              'last-modified': formatRFC7231(lastModified * 1000),
+              ...(lastModified != null
+                ? { 'last-modified': formatRFC7231(lastModified * 1000) }
+                : {}),
             },
           },
           requestContext,
@@ -1083,7 +1084,7 @@ export class Realm {
   private async getSourceFromIndex(url: URL): Promise<
     | {
         source: string;
-        lastModified: number;
+        lastModified: number | null;
         canonicalURL: URL;
       }
     | undefined
@@ -1097,23 +1098,23 @@ export class Realm {
         module?.type === 'module'
           ? module.canonicalURL
           : instance?.type === 'instance'
-          ? instance.canonicalURL
-          : undefined;
+            ? instance.canonicalURL
+            : undefined;
       let source =
         module?.type === 'module'
           ? module.source
           : instance?.type === 'instance'
-          ? instance.source
-          : undefined;
+            ? instance.source
+            : undefined;
       let lastModified =
         module?.type === 'module'
           ? module.lastModified
           : instance?.type === 'instance'
-          ? instance.lastModified
-          : undefined;
-      if (canonicalURL == null || source == null || lastModified == null) {
+            ? instance.lastModified
+            : null;
+      if (canonicalURL == null || source == null) {
         throw new Error(
-          `missing 'canonicalURL', 'source', and/or 'lastModified' from index entry ${
+          `missing 'canonicalURL' and/or 'source' from index entry ${
             url.href
           }, where type is ${
             module?.type === 'module' ? 'module' : 'instance'
@@ -1289,9 +1290,8 @@ export class Realm {
     }
 
     let url = this.paths.fileURL(localPath);
-    let originalMaybeError = await this.#realmIndexQueryEngine.cardDocument(
-      url,
-    );
+    let originalMaybeError =
+      await this.#realmIndexQueryEngine.cardDocument(url);
     if (!originalMaybeError) {
       return notFound(request, requestContext);
     }
@@ -1953,8 +1953,8 @@ export class Realm {
           operation: ('added' in data
             ? 'add'
             : 'updated' in data
-            ? 'update'
-            : 'removed') as UpdateItem['operation'],
+              ? 'update'
+              : 'removed') as UpdateItem['operation'],
           url: tracked.url,
         });
         this.drainUpdates();

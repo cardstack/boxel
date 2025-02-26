@@ -5,6 +5,7 @@ import { provide } from 'ember-provide-consume-context';
 import {
   CardContextName,
   DefaultFormatsContextName,
+  CardURLContextName,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -44,6 +45,14 @@ export default class Preview extends Component<Signature> {
       prerenderedCardSearchComponent: PrerenderedCardSearch,
       ...this.args.cardContext,
     };
+  }
+
+  @provide(CardURLContextName)
+  // @ts-ignore "cardURL is declared but not used"
+  private get cardURL() {
+    return 'id' in this.args.card
+      ? (this.args.card?.id as string | undefined)
+      : undefined;
   }
 
   <template>

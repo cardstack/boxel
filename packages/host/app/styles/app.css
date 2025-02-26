@@ -49,6 +49,7 @@
   border: 0;
 }
 
-.ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.top, .ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.below {
+.ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.top,
+.ember-application .monaco-editor .monaco-editor-overlaymessage .anchor.below {
   display: none;
 }

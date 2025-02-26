@@ -9,10 +9,7 @@
   >Move Inner</button>
 
   <AnimationContext @use={{this.transition}} class="context">
-    <div
-      {{sprite id="outer"}}
-      class="outer {{if this.moveOuter 'right'}}"
-    >
+    <div {{sprite id="outer"}} class="outer {{if this.moveOuter 'right'}}">
       Outer Sprite
       <AnimationContext @use={{this.transition}} class="context">
         <div

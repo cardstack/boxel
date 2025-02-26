@@ -74,8 +74,8 @@ const moduleInfoCache: Map<string, ModuleInfo> = new Map();
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
-  @service private declare cardService: CardService;
-  @service private declare network: NetworkService;
+  @service declare private cardService: CardService;
+  @service declare private network: NetworkService;
   declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
   ready: Promise<void> | undefined;

@@ -24,7 +24,7 @@ import type {
   Tool,
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
-import { EventStatus, IRoomEvent } from 'matrix-js-sdk';
+import { EventStatus } from 'matrix-js-sdk';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { readFileSync } from 'fs-extra';
 import * as path from 'path';
@@ -57,7 +57,7 @@ function oldPatchTool(card: CardDef, properties: any): Tool {
 }
 
 module('getModifyPrompt', () => {
-  test('should generate a prompt from the user', () => {
+  test('should generate a prompt from the user', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -80,7 +80,7 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const result = getModifyPrompt(history, '@ai-bot:localhost');
+    const result = await getModifyPrompt(history, '@ai-bot:localhost');
 
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 2);
@@ -92,7 +92,7 @@ module('getModifyPrompt', () => {
     );
   });
 
-  test('should generate a more structured response if the user uploads a card', () => {
+  test('should generate a more structured response if the user uploads a card', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -138,7 +138,7 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const result = getModifyPrompt(history, '@ai-bot:localhost');
+    const result = await getModifyPrompt(history, '@ai-bot:localhost');
 
     // Should include the body as well as the card
     assert.equal(result.length, 2);
@@ -162,7 +162,7 @@ module('getModifyPrompt', () => {
     }
   });
 
-  test('should raise an error if we do not pass in a full id', () => {
+  test('should raise an error if we do not pass in a full id', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -185,10 +185,15 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    // Assert raises an exception when we don't use a full id
-    assert.throws(() => {
-      getModifyPrompt(history, 'ai-bot');
-    });
+    try {
+      await getModifyPrompt(history, 'ai-bot');
+      assert.notOk(true, 'should have raised an exception');
+    } catch (e) {
+      assert.equal(
+        (e as Error).message,
+        "Username must be a full id, e.g. '@ai-bot:localhost'",
+      );
+    }
   });
 
   test('Gets only the latest version of cards uploaded', () => {
@@ -384,6 +389,170 @@ module('getModifyPrompt', () => {
     assert.equal(attachedCards.length, 0);
   });
 
+  test('downloads attached files', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hey I am attaching a couple of files',
+          formatted_body: 'Hey I am attaching a couple of files',
+          data: {
+            context: {
+              tools: [],
+              submode: undefined,
+            },
+            attachedFiles: [
+              {
+                sourceUrl:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+                url: 'http://test.com/spaghetti-recipe.gts',
+                name: 'spaghetti-recipe.gts',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
+                url: 'http://test.com/best-friends.txt',
+                name: 'best-friends.txt',
+                contentType: 'text/plain',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        sender: '@ai-bot:localhost',
+        content: {
+          body: 'Ok. What do you want me to do with these files?',
+          msgtype: 'm.text',
+          formatted_body: 'Ok. What do you want me to do with these files?',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+        },
+        origin_server_ts: 2,
+        unsigned: {
+          age: 17305,
+          transaction_id: 'm1722242836705.8',
+        },
+        event_id: '2',
+        room_id: 'room1',
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 3,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Nevermind, those files are now outdated, I am attaching new ones',
+          formatted_body:
+            'Nevermind, those files are now outdated, I am attaching new ones',
+          data: {
+            context: {
+              tools: [],
+              submode: undefined,
+            },
+            attachedFiles: [
+              {
+                sourceUrl:
+                  'http://test-realm-server/my-realm/spaghetti-recipe.gts',
+                url: 'http://test.com/spaghetti-recipe.gts',
+                name: 'spaghetti-recipe.gts',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl: 'http://test-realm-server/my-realm/best-friends.txt',
+                url: 'http://test.com/best-friends.txt',
+                name: 'best-friends.txt',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl:
+                  'http://test.com/my-realm/file-that-does-not-exist.txt',
+                url: 'http://test.com/file-that-does-not-exist.txt',
+                name: 'file-that-does-not-exist.txt',
+                contentType: 'text/plain',
+              },
+              {
+                sourceUrl: 'http://test.com/my-realm/example.pdf',
+                url: 'http://test.com/example.pdf',
+                name: 'example.pdf',
+                contentType: 'application/pdf',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '1',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    // monkey patch fetch so that we can fake file downloads in getModifyPrompt
+    const originalFetch = (globalThis as any).fetch;
+    let fetchCount = 0;
+    (globalThis as any).fetch = async (url: string) => {
+      fetchCount++;
+      if (url === 'http://test.com/spaghetti-recipe.gts') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () =>
+            'this is the content of the spaghetti-recipe.gts file',
+        };
+      } else if (url === 'http://test.com/best-friends.txt') {
+        return {
+          ok: true,
+          status: 200,
+          text: async () => 'this is the content of the best-friends.txt file',
+        };
+      } else if (url === 'http://test.com/file-that-does-not-exist.txt') {
+        return {
+          ok: false,
+          status: 404,
+          text: async () => 'Not found',
+        };
+      }
+      return originalFetch(url);
+    };
+
+    let prompt = await getModifyPrompt(history, '@aibot:localhost');
+
+    assert.equal(
+      fetchCount,
+      3,
+      'downloads only recently attached files, not older ones',
+    );
+    assert.ok(
+      prompt[0].content?.includes(
+        `
+Attached files:
+spaghetti-recipe.gts: this is the content of the spaghetti-recipe.gts file
+best-friends.txt: this is the content of the best-friends.txt file
+file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 404
+example.pdf: Unsupported file type: application/pdf. For now, only text files are supported.
+      `.trim(),
+      ),
+    );
+    (globalThis as any).fetch = originalFetch; // restore the original fetch
+  });
+
   test('Gets uploaded cards if no shared context', () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -527,7 +696,7 @@ module('getModifyPrompt', () => {
     assert.equal(attachedCards.length, 2);
   });
 
-  test('Gets multiple uploaded cards in the system prompt', () => {
+  test('Gets multiple uploaded cards in the system prompt', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
@@ -616,7 +785,7 @@ module('getModifyPrompt', () => {
         status: EventStatus.SENT,
       },
     ];
-    const fullPrompt = getModifyPrompt(history, '@aibot:localhost');
+    const fullPrompt = await getModifyPrompt(history, '@aibot:localhost');
     const systemMessage = fullPrompt.find(
       (message) => message.role === 'system',
     );
@@ -791,7 +960,7 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getTools(history, [], '@aibot:localhost');
     assert.equal(functions.length, 1);
     assert.deepEqual(functions[0], {
       type: 'function',
@@ -861,7 +1030,7 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getTools(history, [], '@aibot:localhost');
     assert.equal(functions.length, 1);
     assert.deepEqual(functions[0], {
       type: 'function',
@@ -973,7 +1142,7 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const functions = getTools(history, '@aibot:localhost');
+    const functions = getTools(history, [], '@aibot:localhost');
     assert.equal(functions.length, 1);
     if (functions.length > 0) {
       assert.deepEqual(functions[0], {
@@ -1018,7 +1187,7 @@ module('getModifyPrompt', () => {
     }
   });
 
-  test('should include instructions in system prompt for skill cards', () => {
+  test('should include instructions in system prompt for skill cards', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(__dirname, 'resources/chats/added-skill.json'),
@@ -1043,7 +1212,7 @@ module('getModifyPrompt', () => {
     );
   });
 
-  test('can include both skill cards and attached cards', () => {
+  test('can include both skill cards and attached cards', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1054,7 +1223,8 @@ module('getModifyPrompt', () => {
       ),
     );
 
-    const result = getPromptParts(eventList, '@ai-bot:localhost').messages;
+    const result = (await getPromptParts(eventList, '@ai-bot:localhost'))
+      .messages;
 
     const { attachedCards } = getRelevantCards(eventList, '@ai-bot:localhost');
     assert.equal(attachedCards.length, 1);
@@ -1076,7 +1246,7 @@ module('getModifyPrompt', () => {
     );
   });
 
-  test('should update system prompt with only active skills', () => {
+  test('should update system prompt with only active skills', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1086,7 +1256,7 @@ module('getModifyPrompt', () => {
         'utf-8',
       ),
     );
-    const { messages } = getPromptParts(eventList, '@aibot:localhost');
+    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
     assert.true(messages.length > 0);
     assert.true(messages[0].role === 'system');
     let systemPrompt = messages[0].content;
@@ -1095,7 +1265,7 @@ module('getModifyPrompt', () => {
     assert.true(systemPrompt?.includes('SKILL_2'));
   });
 
-  test('If there are no skill cards active in the latest matrix room state, remove from system prompt', () => {
+  test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1105,7 +1275,7 @@ module('getModifyPrompt', () => {
         'utf-8',
       ),
     );
-    const { messages } = getPromptParts(eventList, '@aibot:localhost');
+    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
     assert.true(messages.length > 0);
     assert.true(messages[0].role === 'system');
     let systemPrompt = messages[0].content;
@@ -1115,7 +1285,7 @@ module('getModifyPrompt', () => {
   });
 });
 
-test('should support skill cards without ids', () => {
+test('should support skill cards without ids', async () => {
   // The responsibility of handling deduplication/etc of skill cards
   // lies with the host application, the AI bot should not need to
   // handle that.
@@ -1125,14 +1295,14 @@ test('should support skill cards without ids', () => {
       'utf-8',
     ),
   );
-  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
   assert.equal(messages.length, 2);
   assert.equal(messages[0].role, 'system');
   assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
   assert.true(messages[0].content?.includes('Skill Instructions'));
 });
 
-test('Has the skill card specified by the last state update, even if there are other skill cards with the same id', () => {
+test('Has the skill card specified by the last state update, even if there are other skill cards with the same id', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1142,16 +1312,15 @@ test('Has the skill card specified by the last state update, even if there are o
       'utf-8',
     ),
   );
-  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
   assert.true(messages.length > 0);
   assert.equal(messages[0].role, 'system');
-  console.log(messages[0].content);
   assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
   assert.false(messages[0].content?.includes('SKILL_INSTRUCTIONS_V1'));
   assert.true(messages[0].content?.includes('SKILL_INSTRUCTIONS_V2'));
 });
 
-test('if tool calls are required, ensure they are set', () => {
+test('if tool calls are required, ensure they are set', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/forced-function-call.json'),
@@ -1159,7 +1328,7 @@ test('if tool calls are required, ensure they are set', () => {
     ),
   );
 
-  const { messages, tools, toolChoice } = getPromptParts(
+  const { messages, tools, toolChoice } = await getPromptParts(
     eventList,
     '@ai-bot:localhost',
   );
@@ -1175,13 +1344,15 @@ test('if tool calls are required, ensure they are set', () => {
 });
 
 test('Create search function calls', () => {
-  const history: IRoomEvent[] = [
+  const history: DiscreteMatrixEvent[] = [
     {
       type: 'm.room.message',
+      room_id: 'room-id-1',
       sender: '@ian:localhost',
       content: {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'set the name to dave',
+        format: 'org.matrix.custom.html',
         formatted_body: '<p>set the name to dave</p>\n',
         data: {
           context: {
@@ -1194,19 +1365,20 @@ test('Create search function calls', () => {
       origin_server_ts: 1696813813166,
       unsigned: {
         age: 115498,
+        transaction_id: 'm1722242836705.8',
       },
       event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-      age: 115498,
+      status: EventStatus.SENT,
     },
   ];
 
-  const functions = getTools(history, '@aibot:localhost');
+  const functions = getTools(history, [], '@aibot:localhost');
   assert.equal(functions.length, 1);
   assert.deepEqual(functions[0], getSearchTool());
 });
 
-test('Return host result of tool call back to open ai', () => {
-  const history: IRoomEvent[] = [
+test('Return host result of tool call back to open ai', async () => {
+  const history: DiscreteMatrixEvent[] = [
     {
       type: 'm.room.message',
       room_id: 'room-id-1',
@@ -1280,7 +1452,7 @@ test('Return host result of tool call back to open ai', () => {
                   firstName: 'Alice',
                   lastName: 'Enwunder',
                   photo: null,
-                  body: 'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.',
+                  body: 'Alice is a software engineer at Google.',
                   description: null,
                   thumbnailURL: null,
                 },
@@ -1319,9 +1491,10 @@ test('Return host result of tool call back to open ai', () => {
       origin_server_ts: 1722242833562,
       unsigned: {
         age: 20470,
+        transaction_id: 'm1722242836705.1',
       },
       event_id: '$p_NQ4tvokzQrIkT24Wj08mdAxBBvmdLOz6ph7UQfMDw',
-      age: 20470,
+      status: EventStatus.SENT,
     },
     {
       type: 'm.room.message',
@@ -1333,13 +1506,6 @@ test('Return host result of tool call back to open ai', () => {
         formatted_body:
           'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
         format: 'org.matrix.custom.html',
-        'm.new_content': {
-          body: 'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
-          msgtype: 'm.text',
-          formatted_body:
-            'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
-          format: 'org.matrix.custom.html',
-        },
         isStreamingFinished: true,
         'm.relates_to': {
           rel_type: 'm.replace',
@@ -1349,10 +1515,10 @@ test('Return host result of tool call back to open ai', () => {
       origin_server_ts: 1722242836727,
       unsigned: {
         age: 17305,
-        transaction_id: 'm1722242836705.8',
+        transaction_id: 'm1722242836705.2',
       },
       event_id: 'message-event-id-1',
-      age: 17305,
+      status: EventStatus.SENT,
     },
     {
       type: 'm.room.message',
@@ -1427,7 +1593,7 @@ test('Return host result of tool call back to open ai', () => {
                   firstName: 'Alice',
                   lastName: 'Enwunder',
                   photo: null,
-                  body: 'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.',
+                  body: 'Alice is a software engineer at Google.',
                   description: null,
                   thumbnailURL: null,
                 },
@@ -1466,9 +1632,10 @@ test('Return host result of tool call back to open ai', () => {
       origin_server_ts: 1722242847418,
       unsigned: {
         age: 6614,
+        transaction_id: 'm1722242836705.3',
       },
       event_id: '$FO2XfB0xFiTpm5FmOUiWQqFh_DPQSr4zix41Vj3eqNc',
-      age: 6614,
+      status: EventStatus.SENT,
     },
     {
       type: 'm.room.message',
@@ -1501,7 +1668,7 @@ test('Return host result of tool call back to open ai', () => {
         transaction_id: 'm1722242849075.10',
       },
       event_id: 'command-event-id-1',
-      age: 4938,
+      status: EventStatus.SENT,
     },
     {
       type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -1516,7 +1683,7 @@ test('Return host result of tool call back to open ai', () => {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
         data: {
           commandRequestId: 'tool-call-id-1',
-          card: JSON.stringify({
+          card: {
             data: {
               type: 'card',
               attributes: {
@@ -1531,7 +1698,7 @@ test('Return host result of tool call back to open ai', () => {
                         firstName: 'Alice',
                         lastName: 'Enwunder',
                         photo: null,
-                        body: 'Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.',
+                        body: 'Alice is a software engineer at Google.',
                         description: null,
                         thumbnailURL: null,
                       },
@@ -1542,27 +1709,35 @@ test('Return host result of tool call back to open ai', () => {
                   },
                 ],
               },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/search-results',
+                  name: 'SearchResults',
+                },
+              },
             },
-          }),
+          },
         },
       },
       origin_server_ts: 1722242853988,
       unsigned: {
         age: 44,
+        transaction_id: 'm1722242836705.4',
       },
       event_id: 'command-result-id-1',
-      age: 44,
+      status: EventStatus.SENT,
     },
   ];
-  const tools = getTools(history, '@ai-bot:localhost');
-  const result = getModifyPrompt(history, '@ai-bot:localhost', tools);
+  const tools = getTools(history, [], '@ai-bot:localhost');
+  const result = await getModifyPrompt(history, '@ai-bot:localhost', tools);
   assert.equal(result[5].role, 'tool');
   assert.equal(result[5].tool_call_id, 'tool-call-id-1');
-  const expected = `Command applied, with result card: "{\\"data\\":{\\"type\\":\\"card\\",\\"attributes\\":{\\"title\\":\\"Search Results\\",\\"description\\":\\"Here are the search results\\",\\"results\\":[{\\"data\\":{\\"type\\":\\"card\\",\\"id\\":\\"http://localhost:4201/drafts/Author/1\\",\\"attributes\\":{\\"firstName\\":\\"Alice\\",\\"lastName\\":\\"Enwunder\\",\\"photo\\":null,\\"body\\":\\"Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.\\",\\"description\\":null,\\"thumbnailURL\\":null},\\"meta\\":{\\"adoptsFrom\\":{\\"module\\":\\"../author\\",\\"name\\":\\"Author\\"}}}}]}}}".\n`;
-  assert.equal(result[5].content, expected);
+  const expected = `Command applied, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
+
+  assert.equal(result[5].content!.trim(), expected.trim());
 });
 
-test('Tools remain available in prompt parts even when not in last message', () => {
+test('Tools remain available in prompt parts even when not in last message', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1573,7 +1748,10 @@ test('Tools remain available in prompt parts even when not in last message', () 
     ),
   );
 
-  const { messages, tools } = getPromptParts(eventList, '@aibot:localhost');
+  const { messages, tools } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+  );
   assert.true(tools.length > 0, 'Should have tools available');
   assert.true(messages.length > 0, 'Should have messages');
 
@@ -1584,7 +1762,7 @@ test('Tools remain available in prompt parts even when not in last message', () 
   assert.ok(alertTool, 'Should have AlertTheUser function available');
 });
 
-test('Tools are not required unless they are in the last message', () => {
+test('Tools are not required unless they are in the last message', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1595,11 +1773,11 @@ test('Tools are not required unless they are in the last message', () => {
     ),
   );
 
-  const { toolChoice } = getPromptParts(eventList, '@aibot:localhost');
+  const { toolChoice } = await getPromptParts(eventList, '@aibot:localhost');
   assert.equal(toolChoice, 'auto');
 });
 
-test('Tools can be required to be called if done so in the last message', () => {
+test('Tools can be required to be called if done so in the last message', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1610,7 +1788,7 @@ test('Tools can be required to be called if done so in the last message', () => 
     ),
   );
 
-  const { toolChoice } = getPromptParts(eventList, '@aibot:localhost');
+  const { toolChoice } = await getPromptParts(eventList, '@aibot:localhost');
   assert.deepEqual(toolChoice, {
     type: 'function',
     function: {
@@ -1619,7 +1797,7 @@ test('Tools can be required to be called if done so in the last message', () => 
   });
 });
 
-test('Tools calls are connected to their results', () => {
+test('Tools calls are connected to their results', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(
@@ -1630,7 +1808,7 @@ test('Tools calls are connected to their results', () => {
     ),
   );
 
-  const { messages } = getPromptParts(eventList, '@aibot:localhost');
+  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
   // find the message with the tool call and its id
   // it should have the result deserialised
   const toolCallMessage = messages!.find((message) => message.role === 'tool');
@@ -1689,8 +1867,40 @@ test('Responds to second tool call result when two tool calls were made', functi
   );
 });
 
+test('Tools on enabled skills are available in prompt', async () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(__dirname, 'resources/chats/enabled-skill-with-commands.json'),
+    ),
+  );
+
+  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
+  assert.true(tools.length > 0, 'Should have tools available');
+
+  // Verify that the tools array contains the command from the skill
+  const switchSubmodeTool = tools.find(
+    (tool) => tool.function?.name === 'switch-submode_dd88',
+  );
+  assert.ok(
+    switchSubmodeTool,
+    'Should have SwitchSubmodeCommand function available',
+  );
+});
+
+test('No tools are available if skill is not enabled', async () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(__dirname, 'resources/chats/disabled-skill-with-commands.json'),
+    ),
+  );
+
+  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
+  // we should not have any tools available
+  assert.true(tools.length == 0, 'Should not have tools available');
+});
+
 module('set model in prompt', () => {
-  test('default active LLM must be equal to `DEFAULT_LLM`', () => {
+  test('default active LLM must be equal to `DEFAULT_LLM`', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1701,11 +1911,11 @@ module('set model in prompt', () => {
       ),
     );
 
-    const { model } = getPromptParts(eventList, '@aibot:localhost');
+    const { model } = await getPromptParts(eventList, '@aibot:localhost');
     assert.strictEqual(model, DEFAULT_LLM);
   });
 
-  test('use latest active llm', () => {
+  test('use latest active llm', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(__dirname, 'resources/chats/set-active-llm.json'),
@@ -1713,7 +1923,7 @@ module('set model in prompt', () => {
       ),
     );
 
-    const { model } = getPromptParts(eventList, '@aibot:localhost');
+    const { model } = await getPromptParts(eventList, '@aibot:localhost');
     assert.strictEqual(model, 'google/gemini-pro-1.5');
   });
 });

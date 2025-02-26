@@ -1,7 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 
 import { service } from '@ember/service';
-import { waitForPromise } from '@ember/test-waiters';
+import { buildWaiter } from '@ember/test-waiters';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
@@ -21,10 +21,14 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { type CardResource, getCard, asURL } from './card-resource';
+import { asURL } from '../services/store';
+
+import { type CardResource, getCard } from './card-resource';
 
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
+
+const waiter = buildWaiter('search-resource:search-waiter');
 
 interface Args {
   named: {
@@ -36,8 +40,8 @@ interface Args {
 }
 
 export class Search extends Resource<Args> {
-  @service private declare cardService: CardService;
-  @service private declare realmServer: RealmServerService;
+  @service declare private cardService: CardService;
+  @service declare private realmServer: RealmServerService;
   @tracked private realmsToSearch: string[] = [];
   loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
@@ -56,7 +60,6 @@ export class Search extends Resource<Args> {
         : realms;
 
     this.loaded = this.search.perform(query);
-    waitForPromise(this.loaded);
 
     if (isLive) {
       this.subscriptions = this.realmsToSearch.map((realm) => ({
@@ -156,53 +159,63 @@ export class Search extends Resource<Args> {
   }
 
   private search = restartableTask(async (query: Query) => {
-    let results = flatMap(
-      await Promise.all(
-        this.realmsToSearch.map(async (realm) => {
-          let json = await this.cardService.fetchJSON(
-            `${realm}_search?${stringify(query)}`,
-          );
-          if (!isCardCollectionDocument(json)) {
-            throw new Error(
-              `The realm search response was not a card collection document:
-        ${JSON.stringify(json, null, 2)}`,
+    // we cannot use the `waitForPromise` test waiter helper as that will cast
+    // the Task instance to a promise which makes it uncancellable. When this is
+    // uncancellable it results in a flaky test.
+    let token = waiter.beginAsync();
+    try {
+      let results = flatMap(
+        await Promise.all(
+          this.realmsToSearch.map(async (realm) => {
+            let json = await this.cardService.fetchJSON(
+              `${realm}_search?${stringify(query, {
+                strictNullHandling: true,
+              })}`,
             );
-          }
-          let collectionDoc = json;
-          return (
-            // use Promise.allSettled so that if one particular realm is
-            // misbehaving it doesn't effect results from other realms
-            (
+            if (!isCardCollectionDocument(json)) {
+              throw new Error(
+                `The realm search response was not a card collection document:
+        ${JSON.stringify(json, null, 2)}`,
+              );
+            }
+            let collectionDoc = json;
+            return (
+              // use Promise.allSettled so that if one particular realm is
+              // misbehaving it doesn't effect results from other realms
               (
-                await Promise.allSettled(
-                  collectionDoc.data.map(async (doc) =>
-                    this.getOrCreateCardResource({ data: doc }),
-                  ),
-                )
-              ).filter(
-                (p) => p.status === 'fulfilled',
-              ) as PromiseFulfilledResult<CardResource>[]
-            ).map((p) => p.value)
-          );
-        }),
-      ),
-    );
+                (
+                  await Promise.allSettled(
+                    collectionDoc.data.map(async (doc) =>
+                      this.getOrCreateCardResource({ data: doc }),
+                    ),
+                  )
+                ).filter(
+                  (p) => p.status === 'fulfilled',
+                ) as PromiseFulfilledResult<CardResource>[]
+              ).map((p) => p.value)
+            );
+          }),
+        ),
+      );
 
-    await Promise.all(results.map((r) => r.loaded));
-    let resultsWithoutErrors = results.filter((r) => r.card && r.url);
-    let resultMap = new Map<string, CardResource>();
-    for (let resource of resultsWithoutErrors) {
-      resultMap.set(resource.url!, resource);
-    }
-    for (let url of this.currentResults.keys()) {
-      if (!resultMap.has(url)) {
-        this.currentResults.delete(url);
+      await Promise.all(results.map((r) => r.loaded));
+      let resultsWithoutErrors = results.filter((r) => r.card && r.url);
+      let resultMap = new Map<string, CardResource>();
+      for (let resource of resultsWithoutErrors) {
+        resultMap.set(resource.url!, resource);
       }
-    }
-    for (let [url, resource] of resultMap) {
-      if (!this.currentResults.has(url)) {
-        this.currentResults.set(url, resource);
+      for (let url of this.currentResults.keys()) {
+        if (!resultMap.has(url)) {
+          this.currentResults.delete(url);
+        }
       }
+      for (let [url, resource] of resultMap) {
+        if (!this.currentResults.has(url)) {
+          this.currentResults.set(url, resource);
+        }
+      }
+    } finally {
+      waiter.endAsync(token);
     }
   });
 

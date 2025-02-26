@@ -22,7 +22,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import CreateAIAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import PatchCardCommand from '@cardstack/host/commands/patch-card';
@@ -68,14 +68,14 @@ module('Acceptance | Commands tests', function (hooks) {
   setupOnSave(hooks);
   let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [baseRealm.url, testRealmURL],
     });
 
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    matrixRoomId = await createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = await createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
 
     class Pet extends CardDef {
@@ -152,7 +152,7 @@ module('Acceptance | Commands tests', function (hooks) {
           cardType: Meeting,
         });
 
-        let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+        let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandContext,
         );
         let { roomId } = await createAIAssistantRoomCommand.execute({
@@ -219,7 +219,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+          let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
             commandContext,
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
@@ -272,7 +272,7 @@ module('Acceptance | Commands tests', function (hooks) {
             console.error('No command context found');
             return;
           }
-          let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+          let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
             commandContext,
           );
           let { roomId } = await createAIAssistantRoomCommand.execute({
@@ -384,6 +384,33 @@ module('Acceptance | Commands tests', function (hooks) {
           pet: mangoPet,
           friends: [mangoPet],
         }),
+        'Skill/switcher.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              instructions:
+                'Use the tool SwitchSubmodeCommand with "code" to go to codemode and "interact" to go to interact mode.',
+              commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '@cardstack/boxel-host/commands/switch-submode',
+                  },
+                  executors: [],
+                },
+              ],
+              title: 'Switcher',
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/skill-card',
+                name: 'SkillCard',
+              },
+            },
+          },
+        },
         'index.json': new CardsGrid(),
         '.realm.json': {
           name: 'Test Workspace B',
@@ -784,6 +811,57 @@ module('Acceptance | Commands tests', function (hooks) {
         '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
       )
       .includesText('Meeting with Hassan');
+  });
+
+  test('a command added from a skill can be executed when clicked on', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    // open assistant
+    await click('[data-test-open-ai-assistant]');
+    // open skill menu
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+
+    // add switcher skill
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/switcher"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Switching to code submode',
+      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      formatted_body: 'Switching to code submode',
+      format: 'org.matrix.custom.html',
+      data: JSON.stringify({
+        toolCall: {
+          name: 'switch-submode_dd88',
+          arguments: {
+            attributes: {
+              submode: 'code',
+            },
+          },
+        },
+        eventId: '__EVENT_ID__',
+      }),
+    });
+    // Click on the apply button
+    await waitFor('[data-test-message-idx="0"]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+
+    // check we're in code mode
+    await waitFor('[data-test-submode-switcher=code]');
+    assert.dom('[data-test-submode-switcher=code]').exists();
   });
 
   test('a command executed via the AI Assistant shows the result as an embedded card', async function (assert) {

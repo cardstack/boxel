@@ -29,7 +29,7 @@ export class AutoAttachment extends Resource<Args> {
   cards: TrackedSet<CardDef> = new TrackedSet(); // auto-attached cards
   private lastStackedItems: StackItem[] = [];
   private lastRemovedCards: Set<string> = new Set(); // internal state, changed from the outside. It tracks, everytime a card is removed in the ai-panel
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   modify(_positional: never[], named: Args['named']) {
     const { topMostStackItems, attachedCards } = named;

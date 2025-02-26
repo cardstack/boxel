@@ -4,6 +4,7 @@ import { inject as service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -24,6 +25,7 @@ export default class MessageCommand {
   constructor(
     public message: Message,
     commandRequest: Partial<CommandRequestContent>,
+    public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
     commandStatus: CommandStatus,
     commandResultCardEventId: string | undefined,

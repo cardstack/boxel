@@ -8,7 +8,7 @@ import {
   FieldDef,
   containsMany,
   getCardMeta,
-  type CardorFieldTypeIcon,
+  type CardOrFieldTypeIcon,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
@@ -21,7 +21,12 @@ import {
   Pill,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { loadCard, Loader } from '@cardstack/runtime-common';
+import {
+  codeRefWithAbsoluteURL,
+  Loader,
+  loadCard,
+  isResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -82,7 +87,7 @@ export class Spec extends CardDef {
   });
 
   static isolated = class Isolated extends Component<typeof this> {
-    icon: CardorFieldTypeIcon | undefined;
+    icon: CardOrFieldTypeIcon | undefined;
 
     get defaultIcon() {
       return this.args.model.constructor?.icon;
@@ -101,6 +106,18 @@ export class Spec extends CardDef {
         this.icon = card.icon;
       }
     });
+
+    get absoluteRef() {
+      if (!this.args.model.ref || !this.args.model.id) {
+        return undefined;
+      }
+      let url = new URL(this.args.model.id);
+      let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+      if (!isResolvedCodeRef(ref)) {
+        throw new Error('ref is not a resolved code ref');
+      }
+      return ref;
+    }
 
     private get realmInfo() {
       return getCardMeta(this.args.model as CardDef, 'realmInfo');
@@ -130,7 +147,9 @@ export class Spec extends CardDef {
             <BookOpenText width='20' height='20' role='presentation' />
             <h2 id='readme'>Read Me</h2>
           </header>
-          <@fields.readMe />
+          <div data-test-readme>
+            <@fields.readMe />
+          </div>
         </section>
         <section class='examples section'>
           <header class='row-header' aria-labelledby='examples'>
@@ -140,7 +159,7 @@ export class Spec extends CardDef {
           {{#if (eq @model.specType 'field')}}
             <@fields.containedExamples />
           {{else}}
-            <@fields.linkedExamples />
+            <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
           {{/if}}
         </section>
         <section class='module section'>
@@ -343,6 +362,259 @@ export class Spec extends CardDef {
   };
 
   static edit = Spec.isolated;
+
+  static fitted = class Fitted extends Component<typeof this> {
+    icon: CardOrFieldTypeIcon | undefined;
+
+    get defaultIcon() {
+      return this.args.model.constructor?.icon;
+    }
+    constructor(owner: any, args: any) {
+      super(owner, args);
+      this.loadCardIcon.perform();
+    }
+
+    private loadCardIcon = restartableTask(async () => {
+      if (this.args.model.ref && this.args.model.id) {
+        let card = await loadCard(this.args.model.ref, {
+          loader: myLoader(),
+          relativeTo: new URL(this.args.model.id),
+        });
+        this.icon = card.icon;
+      }
+    });
+
+    <template>
+      <div class='fitted-template'>
+        <div class='thumbnail-section'>
+          {{#if this.loadCardIcon.isRunning}}
+            <LoadingIndicator />
+          {{else if this.icon}}
+            <this.icon width='35' height='35' role='presentation' />
+          {{else}}
+            <this.defaultIcon width='35' height='35' role='presentation' />
+          {{/if}}
+        </div>
+        <div class='info-section'>
+          <h3 class='card-title' data-test-card-title><@fields.title /></h3>
+          <h4 class='card-description' data-test-card-description>
+            <@fields.description />
+          </h4>
+        </div>
+        {{#if @model.specType}}
+          <SpecTag @specType={{@model.specType}} />
+        {{/if}}
+      </div>
+      <style scoped>
+        @layer {
+          .fitted-template {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            gap: var(--boxel-sp-xs);
+            padding: var(--boxel-sp-xs);
+            overflow: hidden;
+            align-items: center;
+          }
+          .thumbnail-section {
+            flex-shrink: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+          }
+          .info-section {
+            width: 100%;
+            overflow: hidden;
+          }
+          .card-title {
+            margin-block: 0;
+            font: 600 var(--boxel-font-sm);
+            letter-spacing: var(--boxel-lsp-sm);
+            line-height: 1.25;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+          }
+          .card-description {
+            margin-top: var(--boxel-sp-4xs);
+            margin-bottom: 0;
+            color: var(--boxel-450);
+            font: 500 var(--boxel-font-xs);
+            letter-spacing: var(--boxel-lsp-xs);
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            overflow: hidden;
+          }
+          :deep(.spec-tag-pill) {
+            height: max-content;
+          }
+          :deep(.spec-tag-pill .icon) {
+            width: 18px;
+          }
+        }
+
+        /* Aspect Ratio <= 1.0 (Vertical) */
+        @container fitted-card (aspect-ratio <= 1.0) {
+          .fitted-template {
+            flex-direction: column;
+          }
+          .thumbnail-section {
+            width: 100%;
+            height: 50cqmin;
+          }
+          .info-section {
+            text-align: center;
+          }
+        }
+
+        @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
+          .thumbnail-section {
+            display: none;
+          }
+        }
+        /* Vertical Tiles*/
+        /* Small Tile (150 x 170) */
+        @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
+          .thumbnail-section {
+            min-height: 70px;
+          }
+          .card-title {
+            -webkit-line-clamp: 3;
+          }
+        }
+        /* CardsGrid Tile (170 x 250) */
+        @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
+          .thumbnail-section {
+            height: auto;
+            aspect-ratio: 1 / 1;
+          }
+          .card-title {
+            -webkit-line-clamp: 2;
+          }
+        }
+        /* Tall Tile (150 x 275) */
+        @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
+          .thumbnail-section {
+            min-height: 85px;
+          }
+          .card-title {
+            font-size: var(--boxel-font-size);
+            -webkit-line-clamp: 4;
+          }
+        }
+        /* Large Tile (250 x 275) */
+        @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
+          .thumbnail-section {
+            min-height: 150px;
+          }
+          .card-title {
+            font-size: var(--boxel-font-size-sm);
+            -webkit-line-clamp: 3;
+          }
+        }
+        /* Vertical Cards */
+        @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
+          .fitted-template {
+            padding: var(--boxel-sp);
+            gap: var(--boxel-sp);
+          }
+          .thumbnail-section {
+            min-height: 236px;
+          }
+          .card-title {
+            font-size: var(--boxel-font-size-med);
+            -webkit-line-clamp: 4;
+          }
+        }
+        /* Expanded Card (400 x 445) */
+
+        /* 1.0 < Aspect Ratio (Horizontal) */
+        @container fitted-card (1.0 < aspect-ratio) {
+          .thumbnail-section {
+            aspect-ratio: 1;
+          }
+        }
+        @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
+          .info-section {
+            align-self: center;
+          }
+        }
+        /* Badges */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
+          .fitted-template {
+            padding: var(--boxel-sp-xxxs);
+          }
+          .thumbnail-section {
+            display: none;
+          }
+        }
+        /* Small Badge (150 x 40) */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
+          .card-title {
+            -webkit-line-clamp: 1;
+            font: 600 var(--boxel-font-xs);
+          }
+          .card-display-name {
+            margin-top: 0;
+          }
+        }
+        /* Medium Badge (150 x 65) */
+
+        /* Large Badge (150 x 105) */
+        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
+          .card-title {
+            -webkit-line-clamp: 3;
+          }
+        }
+
+        /* Strips */
+        /* Single Strip (250 x 40) */
+        @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
+          .fitted-template {
+            padding: var(--boxel-sp-xxxs);
+          }
+        }
+        /* Double Strip (250 x 65) */
+        /* Triple Strip (250 x 105) */
+        /* Double Wide Strip (400 x 65) */
+        /* Triple Wide Strip (400 x 105) */
+
+        /* Horizontal Tiles */
+        /* Regular Tile (250 x 170) */
+        @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
+          .thumbnail-section {
+            height: 40%;
+          }
+          .card-title {
+            -webkit-line-clamp: 4;
+            font-size: var(--boxel-font-size);
+          }
+        }
+
+        /* Horizontal Cards */
+        /* Compact Card (400 x 170) */
+        @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
+          .thumbnail-section {
+            height: 100%;
+          }
+        }
+        /* Full Card (400 x 275) */
+        @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
+          .fitted-template {
+            padding: var(--boxel-sp);
+            gap: var(--boxel-sp);
+          }
+          .thumbnail-section {
+            max-width: 44%;
+          }
+          .card-title {
+            font-size: var(--boxel-font-size-med);
+          }
+        }
+      </style>
+    </template>
+  };
 }
 
 interface SpecTagSignature {

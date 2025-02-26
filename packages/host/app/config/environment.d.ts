@@ -28,8 +28,5 @@ declare const config: {
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
-  featureFlags?: {
-    ENABLE_PLAYGROUND: boolean;
-    AI_ASSISTANT_EXPERIMENTAL_ATTACHING_FILES_ENABLED: boolean;
-  };
+  featureFlags?: {};
 };

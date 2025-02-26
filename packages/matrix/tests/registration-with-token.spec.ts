@@ -45,7 +45,7 @@ test.describe('User Registration w/ Token - isolated realm server', () => {
       template: 'test',
     });
     await smtpStart();
-    realmServer = await startRealmServer();
+    realmServer = await startRealmServer({ includeSeedRealm: true });
   });
 
   test.afterEach(async () => {

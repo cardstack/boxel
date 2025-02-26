@@ -7,7 +7,12 @@ import Serializer from '@simple-dom/serializer';
 
 import voidMap from '@simple-dom/void-map';
 
-import { baseRealm, RealmPaths, type CodeRef } from '@cardstack/runtime-common';
+import {
+  logger,
+  baseRealm,
+  RealmPaths,
+  type CodeRef,
+} from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import { isCardError, CardError } from '@cardstack/runtime-common/error';
 import {
@@ -30,6 +35,8 @@ import { render } from '../lib/isolated-render';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type { SimpleDocument, SimpleElement } from '@simple-dom/interface';
+
+const log = logger('renderer');
 
 const ELEMENT_NODE_TYPE = 1;
 const { environment } = config;
@@ -61,7 +68,10 @@ interface RenderCardParams {
 export type RenderCard = (params: RenderCardParams) => Promise<string>;
 export type Render = (component: ComponentLike) => string;
 
-const maxRenderThreshold = 10000;
+// this means that we'll attempt up to 50 tries to load all the linked fields
+// consumed by a card. Any unloaded linked field in this card or an embedded
+// card exhausts a single attempt
+const maxRenderThreshold = 50;
 export default class RenderService extends Service {
   // @ts-expect-error the types for this invocation of @service() don't work
   @service('-document') document: SimpleDocument;
@@ -90,6 +100,7 @@ export default class RenderService extends Service {
     do {
       notLoaded = undefined;
       try {
+        log.debug(`rendering ${card.id} for indexing attempt #${tries}`);
         render(component, element, this.owner, format);
       } catch (err: any) {
         notLoaded = err.additionalErrors?.find((e: any) =>

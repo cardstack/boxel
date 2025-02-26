@@ -5,9 +5,8 @@ import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { task, timeout } from 'ember-concurrency';
 
-import perform from 'ember-concurrency/helpers/perform';
 import { modifier } from 'ember-modifier';
 
 import { resource, use } from 'ember-resources';
@@ -78,8 +77,19 @@ export default class RoomMessageCommand extends Component<Signature> {
     return JSON.stringify({ name, payload }, null, 2);
   }
 
-  private copyToClipboard = task(async () => {
+  private copyToClipboard = (event: MouseEvent) => {
+    this.copyClipboardTask.perform(event.currentTarget as HTMLElement);
+  };
+
+  private copyClipboardTask = task(async (buttonElement: HTMLElement) => {
     await navigator.clipboard.writeText(this.previewCommandCode);
+    let svg = buttonElement.children[0];
+    buttonElement.replaceChildren(svg, document.createTextNode('Copied'));
+    await timeout(2000);
+    buttonElement.replaceChildren(
+      svg,
+      document.createTextNode('Copy to clipboard'),
+    );
   });
 
   @cached
@@ -188,10 +198,10 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{#if @isDisplayingCode}}
         <div class='preview-code'>
           <Button
-            class='copy-to-clipboard-button'
+            class='code-copy-button'
             @kind='text-only'
             @size='extra-small'
-            {{on 'click' (perform this.copyToClipboard)}}
+            {{on 'click' this.copyToClipboard}}
             data-test-copy-code
           >
             <CopyIcon
@@ -200,7 +210,7 @@ export default class RoomMessageCommand extends Component<Signature> {
               role='presentation'
               aria-hidden='true'
             />
-            Copy to clipboard
+            <span class='copy-text'>Copy to clipboard</span>
           </Button>
           <div
             class='monaco-container'
@@ -274,12 +284,12 @@ export default class RoomMessageCommand extends Component<Signature> {
         --fill-container-spacing: calc(
           -1 * var(--ai-assistant-message-padding)
         );
-        margin: var(--boxel-sp) var(--fill-container-spacing) 0
-          var(--fill-container-spacing);
+        margin: var(--boxel-sp) var(--fill-container-spacing)
+          var(--fill-container-spacing) var(--fill-container-spacing);
         padding: var(--spacing) 0;
         background-color: var(--boxel-dark);
       }
-      .copy-to-clipboard-button {
+      .code-copy-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
         --boxel-button-padding: 0 var(--boxel-sp-xs);
         --icon-color: var(--boxel-highlight);
@@ -290,13 +300,15 @@ export default class RoomMessageCommand extends Component<Signature> {
         grid-template-columns: auto 1fr;
         gap: var(--spacing);
       }
-      .copy-to-clipboard-button:hover:not(:disabled) {
-        --boxel-button-text-color: var(--boxel-highlight);
-        filter: brightness(1.1);
+      .code-copy-button > .copy-text {
+        color: transparent;
+      }
+      .code-copy-button:hover:not(:disabled) > .copy-text {
+        color: var(--boxel-highlight);
       }
       .monaco-container {
         height: var(--monaco-container-height);
-        min-height: 7rem;
+        min-height: 10rem;
         max-height: 30vh;
       }
       .header {
@@ -320,17 +332,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .options-menu :deep(.check-icon) {
         display: none;
-      }
-      /*
-        This filter is a best-effort approximation of a good looking dark theme that is a function of the white theme that
-        we use for code previews in the AI panel. While Monaco editor does support multiple themes, it does not support
-        monaco instances with different themes *on the same page*.  This is why we are using a filter to approximate the
-        dark theme. More details here: https://github.com/Microsoft/monaco-editor/issues/338 (monaco uses global style tags
-        with hardcoded colors; any instance will override the global style tag, making all code editors look the same,
-        effectively disabling multiple themes to be used on the same page)
-      */
-      :global(.preview-code .monaco-editor) {
-        filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
       }
     </style>
   </template>

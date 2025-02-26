@@ -8,6 +8,7 @@ import {
   visit,
 } from '@ember/test-helpers';
 
+import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
@@ -22,6 +23,8 @@ import { Realm } from '@cardstack/runtime-common/realm';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+
+import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   getMonacoContent,
@@ -415,7 +418,7 @@ module('Acceptance | code submode tests', function (_hooks) {
     setupLocalIndexing(hooks);
     setupServerSentEvents(hooks);
     let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
     });
 
     async function openNewFileModal(menuSelection: string) {
@@ -425,7 +428,7 @@ module('Acceptance | code submode tests', function (_hooks) {
     }
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+      matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
       setupUserSubscription(matrixRoomId);
 
       let realmServerService = this.owner.lookup(
@@ -439,7 +442,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await setupAcceptanceTestRealm({
         realmURL: personalRealmURL,
         permissions: {
-          '@testuser:staging': ['read', 'write', 'realm-owner'],
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
           'hello.txt': txtSource,
@@ -453,7 +456,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await setupAcceptanceTestRealm({
         realmURL: additionalRealmURL,
         permissions: {
-          '@testuser:staging': ['read', 'write', 'realm-owner'],
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
           'hello.txt': txtSource,
@@ -525,12 +528,12 @@ module('Acceptance | code submode tests', function (_hooks) {
     setupLocalIndexing(hooks);
     setupServerSentEvents(hooks);
     let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+      loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],
     });
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+      matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
       setupUserSubscription(matrixRoomId);
 
       monacoService = this.owner.lookup(
@@ -1473,7 +1476,7 @@ module('Acceptance | code submode tests', function (_hooks) {
           );
           await click(`[data-test-card-catalog-go-button]`);
         },
-        opts: { timeout: 4500 },
+        opts: { timeout: 5000 },
       });
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
@@ -1605,11 +1608,10 @@ module('Acceptance | code submode tests', function (_hooks) {
           );
         },
       });
-      await waitUntil(
-        () =>
-          document
-            .querySelector('[data-test-code-mode-card-preview-body]')
-            ?.textContent?.includes('FadhlanXXX'),
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-code-mode-card-preview-body]')
+          ?.textContent?.includes('FadhlanXXX'),
       );
       assert
         .dom('[data-test-code-mode-card-preview-body]')
@@ -1877,6 +1879,66 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom(createFileModalOverlay).exists();
       await click(createFileModalOverlay!);
       assert.dom('[data-test-create-file-modal]').doesNotExist();
+    });
+
+    test('remembers open RHS panel via local storage', async function (assert) {
+      let accordionSelections = {
+        [`${testRealmURL}address.gts`]: 'spec-preview',
+        [`${testRealmURL}country.gts`]: null,
+        [`${testRealmURL}person.gts`]: 'schema-editor',
+        [`${testRealmURL}pet-person.gts`]: 'playground',
+      };
+      window.localStorage.setItem(
+        CodeModePanelSelections,
+        JSON.stringify(accordionSelections),
+      );
+
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}pet.gts`,
+      });
+
+      assert
+        .dom('[data-test-selected-accordion-item="schema-editor"]')
+        .exists('defaults to schema-editor view');
+      await click('[data-test-accordion-item="spec-preview"] > button'); // select spec panel
+
+      await click('[data-test-file-browser-toggle]');
+      await click('[data-test-file="address.gts"]');
+      assert.dom('[data-test-selected-accordion-item="spec-preview"]').exists();
+      assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
+
+      await click('[data-test-file="country.gts"]');
+      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert.dom('[data-test-selected-accordion-item]').doesNotExist();
+      await click('[data-test-accordion-item="playground"] > button'); // open playground
+      assert.dom('[data-test-selected-accordion-item="playground"]').exists();
+
+      await click('[data-test-file="person.gts"]');
+      assert
+        .dom('[data-test-selected-accordion-item="schema-editor"]')
+        .exists();
+      await click('[data-test-accordion-item="schema-editor"] > button'); // close schema-editor panel
+      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert.dom('[data-test-selected-accordion-item]').doesNotExist();
+
+      await click('[data-test-file="pet-person.gts"]');
+      assert.dom('[data-test-selected-accordion-item="playground"]').exists();
+
+      let currentSelections = window.localStorage.getItem(
+        CodeModePanelSelections,
+      );
+      assert.strictEqual(
+        currentSelections,
+        JSON.stringify({
+          [`${testRealmURL}address.gts`]: 'spec-preview',
+          [`${testRealmURL}country.gts`]: 'playground',
+          [`${testRealmURL}person.gts`]: null,
+          [`${testRealmURL}pet-person.gts`]: 'playground',
+          [`${testRealmURL}pet.gts`]: 'spec-preview',
+        }),
+      );
     });
   });
 });

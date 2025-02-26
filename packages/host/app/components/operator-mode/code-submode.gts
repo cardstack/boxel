@@ -10,7 +10,7 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -18,6 +18,8 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
 import { provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
+
+import { TrackedObject } from 'tracked-built-ins';
 
 import { Accordion } from '@cardstack/boxel-ui/components';
 
@@ -38,8 +40,6 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
-
-import ENV from '@cardstack/host/config/environment';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -62,7 +62,11 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { type SpecType } from 'https://cardstack.com/base/spec';
 
 import { htmlComponent } from '../../lib/html-component';
-import { CodeModePanelWidths } from '../../utils/local-storage-keys';
+import {
+  CodeModePanelWidths,
+  CodeModePanelHeights,
+  CodeModePanelSelections,
+} from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
 import AttachFileModal from './attach-file-modal';
@@ -81,8 +85,6 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
-
-const isPlaygroundEnabled = ENV.featureFlags?.ENABLE_PLAYGROUND;
 
 interface Signature {
   Args: {
@@ -121,7 +123,6 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: 100 - defaultLeftPanelWidth,
 };
 
-const CodeModePanelHeights = 'code-mode-panel-heights';
 const ApproximateRecentPanelDefaultPercentage =
   ((43 + 40 * 3.5) / (document.documentElement.clientHeight - 140)) * 100; // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
@@ -153,11 +154,10 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
 
-  private hasUnsavedCardChanges = false;
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
   private updateCursorByName: ((name: string) => void) | undefined;
-  #currentCard: CardDef | undefined;
+  private panelSelections: Record<string, SelectedAccordionItem>;
 
   private createFileModal: CreateFileModal | undefined;
   private cardResource = getCard(
@@ -172,7 +172,7 @@ export default class CodeSubmode extends Component<Signature> {
       return url;
     },
     {
-      onCardInstanceChange: () => this.onCardLoaded,
+      isAutoSave: () => true,
     },
   );
   private moduleContentsResource = moduleContentsResource(
@@ -186,6 +186,11 @@ export default class CodeSubmode extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
+
+    let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
+    this.panelSelections = new TrackedObject(
+      panelSelections ? JSON.parse(panelSelections) : {},
+    );
 
     let persistedDefaultPanelWidths = window.localStorage.getItem(
       CodeModePanelWidths,
@@ -225,30 +230,16 @@ export default class CodeSubmode extends Component<Signature> {
         : defaultPanelHeights;
 
     registerDestructor(this, () => {
-      // destructor functons are called synchronously. in order to save,
-      // which is async, we leverage an EC task that is running in a
-      // parent component (EC task lifetimes are bound to their context)
-      // that is not being destroyed.
-      if (this.hasUnsavedCardChanges && this.#currentCard) {
-        // we use this.#currentCard here instead of this.card because in
-        // the destructor we no longer have access to resources bound to
-        // this component since they are destroyed first, so this.#currentCard
-        // is something we copy from the card resource when it changes so that
-        // we have access to it in the destructor
-        this.args.saveCardOnClose(this.#currentCard);
-      }
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
   }
 
   private get card() {
-    if (
-      this.cardResource.card &&
-      this.codePath?.href.replace(/\.json$/, '') === this.cardResource.url
-    ) {
-      return this.cardResource.card;
-    }
-    return undefined;
+    return this.cardResource.card;
+  }
+
+  private get cardError() {
+    return this.cardResource.cardError;
   }
 
   private backgroundURLStyle(backgroundURL: string | null) {
@@ -318,11 +309,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isEmptyFile() {
     return this.readyFile.content.match(/^\s*$/);
-  }
-
-  @cached
-  get cardError() {
-    return this.cardResource.cardError;
   }
 
   @cached
@@ -446,26 +432,6 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
-  private onCardLoaded = (
-    oldCard: CardDef | undefined,
-    newCard: CardDef | undefined,
-  ) => {
-    if (oldCard) {
-      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
-    }
-    if (newCard) {
-      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
-    }
-    this.#currentCard = newCard;
-  };
-
-  private get loadedCard() {
-    if (!this.card) {
-      throw new Error(`bug: card ${this.codePath} is not loaded`);
-    }
-    return this.card;
-  }
-
   private get declarations() {
     return this.moduleContentsResource?.declarations;
   }
@@ -499,9 +465,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get shouldDisplayPlayground() {
-    if (!isPlaygroundEnabled) {
-      return false;
-    }
     return isCardDef(this.selectedCardOrField?.cardOrField);
   }
 
@@ -537,25 +500,6 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private onCardChange = () => {
-    this.initiateAutoSaveTask.perform();
-  };
-
-  private initiateAutoSaveTask = restartableTask(async () => {
-    if (this.card) {
-      this.hasUnsavedCardChanges = true;
-      await timeout(this.environmentService.autoSaveDelayMs);
-      await this.saveCard.perform(this.card);
-      this.hasUnsavedCardChanges = false;
-    }
-  });
-
-  private saveCard = restartableTask(async (card: CardDef) => {
-    // these saves can happen so fast that we'll make sure to wait at
-    // least 500ms for human consumption
-    await all([this.cardService.saveModel(card), timeout(500)]);
-  });
-
   private loadScopedCSS = restartableTask(async () => {
     if (this.cardError?.meta.scopedCssUrls) {
       await Promise.all(
@@ -567,7 +511,9 @@ export default class CodeSubmode extends Component<Signature> {
   });
 
   private get isSaving() {
-    return this.sourceFileIsSaving || this.saveCard.isRunning;
+    return (
+      this.sourceFileIsSaving || !!this.cardResource.autoSaveState?.isSaving
+    );
   }
 
   @action
@@ -760,16 +706,23 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  @tracked private selectedAccordionItem: SelectedAccordionItem =
-    'schema-editor';
+  private get selectedAccordionItem(): SelectedAccordionItem {
+    let selection = this.panelSelections[this.readyFile.url];
+    if (selection === null) {
+      return null;
+    }
+    return selection ?? 'schema-editor';
+  }
 
   @action private selectAccordionItem(item: SelectedAccordionItem) {
-    if (this.selectedAccordionItem === item) {
-      this.selectedAccordionItem = null;
-      return;
-    }
+    let selection = this.selectedAccordionItem === item ? null : item; // null means toggling the accordion item closed
+    this.panelSelections[this.readyFile.url] = selection;
 
-    this.selectedAccordionItem = item;
+    // persist in local storage
+    window.localStorage.setItem(
+      CodeModePanelSelections,
+      JSON.stringify(this.panelSelections),
+    );
   }
 
   get isReadOnly() {
@@ -807,7 +760,7 @@ export default class CodeSubmode extends Component<Signature> {
         data-test-code-mode
         data-test-save-idle={{and
           (not this.sourceFileIsSaving)
-          this.initiateAutoSaveTask.isIdle
+          (not this.cardResource.autoSaveState.isSaving)
         }}
       >
         <div class='code-mode-top-bar'>
@@ -969,7 +922,11 @@ export default class CodeSubmode extends Component<Signature> {
                       {{this.fileIncompatibilityMessage}}
                     </div>
                   {{else if this.selectedCardOrField.cardOrField}}
-                    <Accordion as |A|>
+                    <Accordion
+                      data-test-rhs-panel='card-or-field'
+                      data-test-selected-accordion-item={{this.selectedAccordionItem}}
+                      as |A|
+                    >
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @moduleContentsResource={{this.moduleContentsResource}}
@@ -1068,7 +1025,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </Accordion>
                   {{else if this.card}}
                     <CardPreviewPanel
-                      @card={{this.loadedCard}}
+                      @card={{this.card}}
                       @realmURL={{this.realmURL}}
                       @format={{this.previewFormat}}
                       @setFormat={{this.setPreviewFormat}}

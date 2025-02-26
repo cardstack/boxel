@@ -1,11 +1,14 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -16,12 +19,19 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
+import {
+  Eye,
+  IconCode,
+  IconLink,
+  IconPlusThin,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   cardTypeDisplayName,
   cardTypeIcon,
+  chooseCard,
   type Query,
+  type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
@@ -30,10 +40,13 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
 import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -42,6 +55,7 @@ import PrerenderedCardSearch, {
 } from '../../prerendered-card-search';
 
 import Preview from '../../preview';
+import FittedFormatGallery from '../card-preview-panel/fitted-format-gallery';
 
 import FormatChooser from './format-chooser';
 
@@ -81,6 +95,86 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
     </style>
   </template>;
 
+const BeforeOptions: TemplateOnlyComponent = <template>
+  <div class='before-options'>
+    <span class='title'>
+      Recent
+    </span>
+  </div>
+  <style scoped>
+    .before-options {
+      width: 100%;
+      background-color: var(--boxel-light);
+      padding: var(--boxel-sp-xs) calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs))
+        0 calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs));
+    }
+    .title {
+      font: 600 var(--boxel-font-sm);
+    }
+  </style>
+</template>;
+
+interface AfterOptionsSignature {
+  Args: {
+    chooseCard: () => void;
+    createNew: () => void;
+    createNewIsRunning?: boolean;
+  };
+}
+const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
+  <div class='after-options'>
+    <span class='title'>
+      Action
+    </span>
+    <button class='action' {{on 'click' @createNew}} data-test-create-instance>
+      {{#if @createNewIsRunning}}
+        <LoadingIndicator class='action-running' />
+      {{else}}
+        <IconPlusThin width='16px' height='16px' />
+      {{/if}}
+      New card instance
+    </button>
+    <button
+      class='action'
+      {{on 'click' @chooseCard}}
+      data-test-choose-another-instance
+    >
+      <Folder width='16px' height='16px' />
+      Choose another instance
+    </button>
+  </div>
+  <style scoped>
+    .after-options {
+      display: flex;
+      flex-direction: column;
+      border-top: var(--boxel-border);
+      background-color: var(--boxel-light);
+      padding: var(--boxel-sp-xs);
+      gap: var(--boxel-sp-xxs);
+    }
+    .title {
+      font: 600 var(--boxel-font-sm);
+      padding: 0 var(--boxel-sp-xxs);
+    }
+    .action {
+      display: flex;
+      align-items: center;
+      font: 500 var(--boxel-font-sm);
+      border: none;
+      background-color: transparent;
+      gap: var(--boxel-sp-xs);
+      padding: var(--boxel-sp-xs);
+      border-radius: var(--boxel-border-radius);
+    }
+    .action:hover {
+      background-color: var(--boxel-100);
+    }
+    .action-running {
+      --boxel-loading-indicator-size: 16px;
+    }
+  </style>
+</template>;
+
 interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
@@ -115,6 +209,13 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
               @renderInPlace={{true}}
               @onChange={{this.onSelect}}
               @placeholder='Please Select'
+              @beforeOptionsComponent={{component BeforeOptions}}
+              @afterOptionsComponent={{component
+                AfterOptions
+                chooseCard=(perform this.chooseCard)
+                createNew=(perform this.createNew)
+                createNewIsRunning=this.createNew.isRunning
+              }}
               data-test-instance-chooser
               as |card|
             >
@@ -135,6 +236,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
                   @cardTypeDisplayName={{cardTypeDisplayName this.card}}
                   @cardTypeIcon={{cardTypeIcon this.card}}
                   @realmInfo={{realmInfo}}
+                  @onEdit={{if this.canEdit this.setEditFormat}}
                   @isTopCard={{true}}
                   @moreOptionsMenuItems={{this.contextMenuItems}}
                 />
@@ -165,14 +267,18 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
               tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
               minim veniam, quis nostrud exercitation ullamco laboris nisi ut
               aliquip ex ea commodo consequat.</div>
+          {{else if (eq this.format 'fitted')}}
+            <FittedFormatGallery @card={{this.card}} @isDarkMode={{true}} />
           {{/if}}
         {{/if}}
       </div>
-      <FormatChooser
-        class='format-chooser'
-        @format={{this.format}}
-        @setFormat={{this.setFormat}}
-      />
+      {{#if this.card}}
+        <FormatChooser
+          class='format-chooser'
+          @format={{this.format}}
+          @setFormat={{this.setFormat}}
+        />
+      {{/if}}
     </div>
     <style scoped>
       .playground-panel-content {
@@ -200,8 +306,14 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         height: var(--boxel-form-control-height);
         box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
       }
-      :deep(.instances-dropdown-content > .ember-power-select-options) {
-        max-height: 20rem;
+      :deep(
+        .boxel-select__dropdown .ember-power-select-option[aria-current='true']
+      ),
+      :deep(.instances-dropdown-content .ember-power-select-option) {
+        background-color: var(--boxel-light);
+      }
+      :deep(.ember-power-select-option:hover .card) {
+        background-color: var(--boxel-100);
       }
       .card {
         height: 75px;
@@ -209,6 +321,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         max-width: 100%;
         container-name: fitted-card;
         container-type: size;
+        background-color: var(--boxel-light);
       }
       .preview-area {
         flex-grow: 1;
@@ -261,16 +374,20 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     </style>
   </template>
 
+  @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
-  @tracked private format: Format = 'isolated';
-  private playgroundSelections: Record<string, string>;
+  @tracked newCardJSON: LooseSingleCardDocument | undefined;
+  private playgroundSelections: Record<
+    string, // moduleId
+    { cardId: string; format: Format }
+  >; // TrackedObject
 
   constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
     super(owner, args);
-    let selections = window.localStorage.getItem('playground-selections');
+    let selections = window.localStorage.getItem(PlaygroundSelections);
 
     this.playgroundSelections = new TrackedObject(
       selections?.length ? JSON.parse(selections) : {},
@@ -313,22 +430,29 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     };
   }
 
-  private cardResource = getCard(this, () =>
-    this.playgroundSelections[this.args.moduleId]?.replace(/\.json$/, ''),
+  private cardResource = getCard(
+    this,
+    () =>
+      this.newCardJSON ?? this.playgroundSelections[this.args.moduleId]?.cardId,
+    { isAutoSave: () => true },
   );
 
   private get card(): CardDef | undefined {
     return this.cardResource.card;
   }
 
+  private get format(): Format {
+    return this.playgroundSelections[this.args.moduleId]?.format ?? 'isolated';
+  }
+
   private copyToClipboard = task(async (id: string) => {
     await navigator.clipboard.writeText(id);
   });
 
-  private openInInteractMode = task(async (id: string, format: Format) => {
+  private openInInteractMode = task(async (id: string) => {
     await this.operatorModeStateService.openCardInInteractMode(
       new URL(id),
-      format,
+      this.format === 'edit' ? 'edit' : 'isolated',
     );
   });
 
@@ -348,28 +472,76 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         icon: IconCode,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode.perform(cardId, this.format),
+        action: () => this.openInInteractMode.perform(cardId),
         icon: Eye,
       }),
     ];
     return menuItems;
   }
 
-  private persistSelections = (cardId: string) => {
-    this.playgroundSelections[this.args.moduleId] = cardId;
+  private persistSelections = (cardId: string, format = this.format) => {
+    this.newCardJSON = undefined;
+    this.playgroundSelections[this.args.moduleId] = { cardId, format };
     window.localStorage.setItem(
-      'playground-selections',
+      PlaygroundSelections,
       JSON.stringify(this.playgroundSelections),
     );
   };
 
   @action private onSelect(card: PrerenderedCard) {
-    this.persistSelections(card.url);
+    this.persistSelections(card.url.replace(/\.json$/, ''));
   }
 
   @action
   private setFormat(format: Format) {
-    this.format = format;
+    if (!this.card?.id) {
+      return;
+    }
+    this.persistSelections(this.card.id, format);
+  }
+
+  private chooseCard = task(async () => {
+    let chosenCard: CardDef | undefined = await chooseCard({
+      filter: { type: this.args.codeRef },
+    });
+
+    if (chosenCard) {
+      this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
+      this.persistSelections(chosenCard.id);
+    }
+  });
+
+  // TODO: convert this to @action once we no longer need to await below
+  private createNew = task(async () => {
+    this.newCardJSON = {
+      data: {
+        meta: {
+          adoptsFrom: this.args.codeRef,
+          realmURL: this.operatorModeStateService.realmURL.href,
+        },
+      },
+    };
+    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+    if (this.card) {
+      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
+      this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
+    }
+  });
+
+  private get canEdit() {
+    return (
+      this.format !== 'edit' &&
+      this.card?.id &&
+      this.realm.canWrite(this.card.id)
+    );
+  }
+
+  @action
+  private setEditFormat() {
+    if (!this.card?.id) {
+      return;
+    }
+    this.persistSelections(this.card.id, 'edit');
   }
 }
 

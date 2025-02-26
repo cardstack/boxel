@@ -21,6 +21,7 @@ import {
   Loader,
   type CodeRef,
   type Permissions,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { CardContainer } from '@cardstack/boxel-ui/components';
@@ -33,7 +34,13 @@ import Component from '@glimmer/component';
 
 export interface BoxComponentSignature {
   Element: HTMLElement; // This may not be true for some field components, but it's true more often than not
-  Args: { Named: { format?: Format; displayContainer?: boolean } };
+  Args: {
+    Named: {
+      format?: Format;
+      displayContainer?: boolean;
+      typeConstraint?: ResolvedCodeRef;
+    };
+  };
   Blocks: {};
 }
 
@@ -185,7 +192,11 @@ export function getBoxComponent(
 
   let component: TemplateOnlyComponent<{
     Element: HTMLElement;
-    Args: { format?: Format; displayContainer?: boolean };
+    Args: {
+      format?: Format;
+      displayContainer?: boolean;
+      typeConstraint?: ResolvedCodeRef;
+    };
   }> = <template>
     <CardContextConsumer as |context|>
       <PermissionsConsumer as |permissions|>
@@ -238,6 +249,7 @@ export function getBoxComponent(
                           (not field.computeVia)
                           permissions.canWrite
                         }}
+                        @typeConstraint={{@typeConstraint}}
                       />
                     </CardContainer>
                   </DefaultFormatsProvider>
@@ -306,7 +318,7 @@ export function getBoxComponent(
           works if we use up all the space horizontally and vertically that is available
           to the card since some of our queries are height queries
         */
-        height: 58px;
+        height: 65px;
         container-name: fitted-card;
         container-type: size;
         overflow: hidden;
