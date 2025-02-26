@@ -12,6 +12,7 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -31,9 +32,8 @@ import type {
   CommandResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import { Skill } from '../components/ai-assistant/skill-menu';
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -41,6 +41,8 @@ import {
 import { Message } from '../lib/matrix-classes/message';
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
+
+import type { Skill } from '../components/ai-assistant/skill-menu';
 
 import type Room from '../lib/matrix-classes/room';
 
@@ -57,9 +59,9 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
-  private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _skillEventIdToCardIdCache: TrackedMap<string, string> =
     new TrackedMap();
+  private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
   @tracked private _createEvent: RoomCreateEvent | undefined;
@@ -112,6 +114,8 @@ export class RoomResource extends Resource<Args> {
           case 'm.room.message':
             if (this.isCardFragmentEvent(event)) {
               await this.loadCardFragment(event);
+            } else if (this.isCommandDefinitionsEvent(event)) {
+              break;
             } else {
               await this.loadRoomMessage({
                 roomId,
@@ -224,6 +228,17 @@ export class RoomResource extends Resource<Args> {
     return result;
   }
 
+  get commands() {
+    // Usable commands are all commands on *active* skills
+    let commands = [];
+    for (let skill of this.skills) {
+      if (skill.isActive) {
+        commands.push(...skill.card.commands);
+      }
+    }
+    return commands;
+  }
+
   @cached
   get created() {
     if (this._createEvent) {
@@ -302,6 +317,16 @@ export class RoomResource extends Resource<Args> {
     });
   }
 
+  private isCommandDefinitionsEvent(
+    event:
+      | MessageEvent
+      | CommandEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent,
+  ): event is CommandDefinitionsEvent {
+    return event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
+  }
+
   private isCardFragmentEvent(
     event:
       | MessageEvent
@@ -374,6 +399,7 @@ export class RoomResource extends Resource<Args> {
       index,
       serializedCardFromFragments: this.serializedCardFromFragments,
       events: this.events,
+      skills: this.skills,
     });
 
     if (!message) {
@@ -420,6 +446,7 @@ export class RoomResource extends Resource<Args> {
       index,
       serializedCardFromFragments: this.serializedCardFromFragments,
       events: this.events,
+      skills: this.skills,
       commandResultEvent: event,
     });
     messageBuilder.updateMessageCommandResult(message);
