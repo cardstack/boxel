@@ -353,7 +353,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       if (isResolvedCodeRef(maybeRef)) {
         ref = maybeRef;
       }
-      let doc: LooseSingleCardDocument = {
+      this.newCardJSON = {
         data: {
           attributes: {
             specType,
@@ -365,7 +365,11 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           },
         },
       };
-      this._selectedId = undefined;
+      await this.cardResource.loaded;
+      if (this.card) {
+        this._selectedId = undefined;
+        this.newCardJSON = undefined;
+      }
     },
   );
 
