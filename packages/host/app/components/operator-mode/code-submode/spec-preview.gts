@@ -316,9 +316,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
-  @tracked _selectedId?: string;
+  @tracked private _selectedId?: string;
+  @tracked private newCardJSON: LooseSingleCardDocument | undefined;
   @tracked ids: string[] = [];
-  @tracked newCardJSON: LooseSingleCardDocument | undefined;
 
   // We must do this so cardIds are available in the root for usage with getCard
   @action setCardIds(cards: PrerenderedCard[]) {
