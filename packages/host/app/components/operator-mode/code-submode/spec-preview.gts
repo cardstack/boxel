@@ -22,6 +22,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
@@ -192,13 +193,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   };
 
   <template>
-    <div class='container'>
+    <div class={{cn 'container' spec-intent-message=@showCreateSpecIntent}}>
       {{#if @showCreateSpecIntent}}
-        <div class='spec-intent-message' data-test-create-spec-intent-message>
+        <div data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
         </div>
       {{else if (not @canWrite)}}
-        <div class='spec-intent-message' data-test-cannot-write-intent-message>
+        <div data-test-cannot-write-intent-message>
           Cannot create Boxel Specification inside this realm
         </div>
       {{else}}
@@ -250,10 +251,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
-        height: 100%;
         width: 100%;
-      }
-      .spec-preview {
         padding: var(--boxel-sp-sm);
       }
       .spec-intent-message {
