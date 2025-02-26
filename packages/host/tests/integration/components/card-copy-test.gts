@@ -882,7 +882,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(15);
+    assert.expect(16);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -915,6 +915,8 @@ module('Integration | card-copy', function (hooks) {
       },
       { prepend: true },
     );
+
+    let realmEventTimestampStart = Date.now();
 
     let id: string | undefined;
     this.onSave((url, json) => {
@@ -950,54 +952,58 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.deepEqual(included.meta.realmURL, testRealmURL);
     });
-    await this.expectEvents({
-      assert,
-      realm: realm2,
-      expectedNumberOfEvents: 2,
-      onEvents: ([_, event]) => {
-        if (event.eventName === 'index' && event.indexType === 'incremental') {
-          assert.deepEqual(
-            (event as IncrementalIndexEventContent).invalidations,
-            [`${testRealm2URL}Person/${id}`],
-          );
-        } else {
-          assert.ok(
-            false,
-            `expected 'index' event, but received ${JSON.stringify(event)}`,
-          );
-        }
-      },
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
-        );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
-        await click('[data-test-copy-button]');
-      },
-    });
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+    );
+
+    assert.strictEqual(
+      document.querySelectorAll(
+        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+      ).length,
+      1,
+      '1 card exists in destination realm',
+    );
+    await click('[data-test-copy-button]');
+
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 2,
     );
+
+    let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
+    let realmEventMessages = getRealmEventMessagesSince(
+      realmSessionRoomId,
+      realmEventTimestampStart,
+    );
+
+    let incrementalIndexEvent: IncrementalIndexEventContent | undefined =
+      realmEventMessages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      )?.content;
+
+    assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
+
+    assert.deepEqual(
+      (incrementalIndexEvent as IncrementalIndexEventContent).invalidations,
+      [`${testRealm2URL}Person/${id}`],
+    );
+
     if (!id) {
       assert.ok(false, 'new card identifier was undefined');
     }
@@ -1015,7 +1021,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(15);
+    assert.expect(16);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -1083,47 +1089,53 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.deepEqual(included.meta.realmURL, testRealm2URL);
     });
-    await this.expectEvents({
-      assert,
-      realm: realm2,
-      expectedNumberOfEvents: 2,
-      onEvents: ([_, event]) => {
-        if (event.data.type === 'incremental') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Person/${id}`,
-          ]);
-        } else {
-          assert.ok(
-            false,
-            `expected 'index' event, but received ${JSON.stringify(event)}`,
-          );
-        }
-      },
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Person/sakura"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.actions-item__button`,
-        );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
-        await click('[data-test-copy-button]');
-      },
-    });
+    let realmEventTimestampStart = Date.now();
+
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Person/sakura"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.actions-item__button`,
+    );
+
+    assert.strictEqual(
+      document.querySelectorAll(
+        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+      ).length,
+      1,
+      '1 card exists in destination realm',
+    );
+    await click('[data-test-copy-button]');
+
+    // FIXME can this be extracted?
+    let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
+    let realmEventMessages = getRealmEventMessagesSince(
+      realmSessionRoomId,
+      realmEventTimestampStart,
+    );
+
+    let incrementalIndexEvent: IncrementalIndexEventContent | undefined =
+      realmEventMessages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      )?.content;
+
+    assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
+
+    assert.deepEqual(incrementalIndexEvent?.invalidations, [
+      `${testRealm2URL}Person/${id}`,
+    ]);
+
     await waitUntil(
       () =>
         document.querySelectorAll(
