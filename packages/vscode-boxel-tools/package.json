@@ -178,7 +178,7 @@
       "activitybar": [
         {
           "id": "coding-skills",
-          "title": "Boxel Coding Skills",
+          "title": "Boxel",
           "icon": "resources/sparkle.svg"
         }
       ]
@@ -186,16 +186,16 @@
     "views": {
       "coding-skills": [
         {
-          "id": "codingSkillList",
-          "name": "Cursor Boxel Skills",
-          "icon": "resources/sparkle.svg",
-          "contextualTitle": "Cursor Boxel Skills"
-        },
-        {
           "id": "boxelRealmList",
           "name": "Boxel Workspaces",
           "icon": "resources/sparkle.svg",
           "contextualTitle": "Boxel Workspaces"
+        },
+        {
+          "id": "codingSkillList",
+          "name": "Cursor Boxel Skills",
+          "icon": "resources/sparkle.svg",
+          "contextualTitle": "Cursor Boxel Skills"
         }
       ]
     },

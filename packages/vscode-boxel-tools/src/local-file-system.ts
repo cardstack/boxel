@@ -1166,7 +1166,7 @@ export class LocalFileSystem {
 
           // Process the directory recursively
           await this.processLocalDirectory(
-            realmUrl,
+            realmUrl as string,
             localPath,
             '',
             filesProcessed,
