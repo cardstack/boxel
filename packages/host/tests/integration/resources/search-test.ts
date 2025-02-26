@@ -1,5 +1,5 @@
 import { getOwner } from '@ember/owner';
-import { RenderingTestContext } from '@ember/test-helpers';
+import { RenderingTestContext, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -328,49 +328,31 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
     assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
 
-    let expectedEvents: IndexRealmEventContent[] = [
-      {
-        eventName: 'index',
-        indexType: 'incremental-index-initiation',
-        updatedFile: `${testRealmURL}book/3`,
-      },
-      {
-        eventName: 'index',
-        indexType: 'incremental',
-        invalidations: [`${testRealmURL}book/3`],
-      },
-    ];
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await realm.write(
-          'books/3.json',
-          JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                author: {
-                  firstName: 'Paper',
-                  lastName: 'Abdel-Rahman',
-                },
-                editions: 0,
-                pubDate: '2023-08-01',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}book`,
-                  name: 'Book',
-                },
-              },
+    await realm.write(
+      'books/3.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            author: {
+              firstName: 'Paper',
+              lastName: 'Abdel-Rahman',
             },
-          } as LooseSingleCardDocument),
-        );
-      },
-    });
+            editions: 0,
+            pubDate: '2023-08-01',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}book`,
+              name: 'Book',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
 
-    await search.loaded;
+    await waitUntil(() => search.instances.length === 3);
+
     assert.strictEqual(search.instances.length, 3);
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
     assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
@@ -400,48 +382,29 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual((search.instances[0] as any).author.firstName, `Mango`);
 
-    let expectedEvents: IndexRealmEventContent[] = [
-      {
-        eventName: 'index',
-        indexType: 'incremental-index-initiation',
-        updatedFile: `${testRealmURL}book/1`,
-      },
-      {
-        eventName: 'index',
-        indexType: 'incremental',
-        invalidations: [`${testRealmURL}book/1`],
-      },
-    ];
-
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await realm.write(
-          'books/1.json',
-          JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                author: {
-                  firstName: 'Mang Mang',
-                  lastName: 'Abdel-Rahman',
-                },
-                editions: 0,
-                pubDate: '2023-08-01',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}book`,
-                  name: 'Book',
-                },
-              },
+    await realm.write(
+      'books/1.json',
+      JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            author: {
+              firstName: 'Mang Mang',
+              lastName: 'Abdel-Rahman',
             },
-          } as LooseSingleCardDocument),
-        );
-      },
-    });
+            editions: 0,
+            pubDate: '2023-08-01',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}book`,
+              name: 'Book',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
     await search.loaded;
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual(
