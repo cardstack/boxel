@@ -1,11 +1,4 @@
 import * as vscode from 'vscode';
-import { createClient } from 'matrix-js-sdk';
-
-interface AuthEntry {
-  access_token: string;
-  user_id: string;
-  device_id: string;
-}
 
 export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   static id = 'synapse';
@@ -89,7 +82,7 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   }
 
   public async getSessions(
-    scopes?: string[],
+    _scopes?: string[],
   ): Promise<vscode.AuthenticationSession[]> {
     try {
       console.log('[SynapseAuthProvider] Getting sessions...');
@@ -119,7 +112,9 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
     }
   }
 
-  async createSession(scopes: string[]): Promise<vscode.AuthenticationSession> {
+  async createSession(
+    _scopes: string[],
+  ): Promise<vscode.AuthenticationSession> {
     console.log('[SynapseAuthProvider] Creating new session...');
     try {
       // Make sure we're initialized

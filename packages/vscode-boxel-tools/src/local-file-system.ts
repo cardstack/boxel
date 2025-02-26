@@ -529,7 +529,7 @@ export class LocalFileSystem {
               );
             }
 
-            const success = await this.downloadFile(
+            await this.downloadFile(
               fileUrl,
               localFilePath,
               filesProcessed,
