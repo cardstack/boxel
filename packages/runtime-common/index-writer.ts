@@ -515,69 +515,52 @@ export class Batch {
     let alias = trimExecutableExtension(url).href;
     let visited = new Set<string>();
 
-    // console.log(`staring invalidation txn for ${url.href}`);
-    // await this.#query(['BEGIN']);
-    let invalidations: string[] = [];
-    try {
-      invalidations = [
-        ...new Set([
-          ...(!this.nodeResolvedInvalidations.includes(alias)
-            ? [url.href]
-            : []),
-          ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-        ]),
-      ];
+    let invalidations = [
+      ...new Set([
+        ...(!this.nodeResolvedInvalidations.includes(alias) ? [url.href] : []),
+        ...(alias ? await this.calculateInvalidations(alias, visited) : []),
+      ]),
+    ];
 
-      if (invalidations.length === 0) {
-        // await this.#query(['COMMIT']);
-        // console.log(
-        //   `committing invalidation txn for ${url.href} (0 invalidations nothing to do)`,
-        // );
-        return [];
-      }
-
-      // insert tombstone into next version of the realm index
-      let columns = [
-        'url',
-        'file_alias',
-        'type',
-        'realm_version',
-        'realm_url',
-        'is_deleted',
-      ].map((c) => [c]);
-      let rows = invalidations.map((id) =>
-        [
-          id,
-          trimExecutableExtension(new URL(id)).href,
-          hasExecutableExtension(id) ? 'module' : 'instance',
-          this.realmVersion,
-          this.realmURL.href,
-          true,
-        ].map((v) => [param(v)]),
-      );
-
-      let insertStart = Date.now();
-      await this.#query([
-        ...upsertMultipleRows(
-          'boxel_index_working',
-          'boxel_index_working_pkey',
-          columns,
-          rows,
-        ),
-      ]);
-      // console.log(`committing invalidation txn for ${url.href}`);
-      // await this.#query(['COMMIT']);
-
-      this.#perfLog.debug(
-        `inserted invalidated rows for  ${url.href} in ${
-          Date.now() - insertStart
-        } ms`,
-      );
-    } catch (e) {
-      // console.log(`rollback invalidation txn for ${url.href}`);
-      // await this.#query(['ROLLBACK']);
-      throw e;
+    if (invalidations.length === 0) {
+      return [];
     }
+
+    // insert tombstone into next version of the realm index
+    let columns = [
+      'url',
+      'file_alias',
+      'type',
+      'realm_version',
+      'realm_url',
+      'is_deleted',
+    ].map((c) => [c]);
+    let rows = invalidations.map((id) =>
+      [
+        id,
+        trimExecutableExtension(new URL(id)).href,
+        hasExecutableExtension(id) ? 'module' : 'instance',
+        this.realmVersion,
+        this.realmURL.href,
+        true,
+      ].map((v) => [param(v)]),
+    );
+
+    let insertStart = Date.now();
+    await this.#query([
+      ...upsertMultipleRows(
+        'boxel_index_working',
+        'boxel_index_working_pkey',
+        columns,
+        rows,
+      ),
+    ]);
+
+    this.#perfLog.debug(
+      `inserted invalidated rows for  ${url.href} in ${
+        Date.now() - insertStart
+      } ms`,
+    );
 
     this.#perfLog.debug(
       `completed invalidation of ${url.href} in ${Date.now() - start} ms`,
