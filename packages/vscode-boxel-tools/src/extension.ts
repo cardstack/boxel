@@ -157,7 +157,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         // Reset realm initialization and trigger a search for realms
         realmAuth.realmsInitialized = false;
-        await vscode.commands.executeCommand('boxel-tools.syncFromRemote');
+        await vscode.commands.executeCommand('boxel-tools.pullFromRemote');
       }
     } catch (error) {
       handleLoginError(error);
@@ -219,7 +219,7 @@ export async function activate(context: vscode.ExtensionContext) {
   }
 
   // Register a command to find all realms and create directories for them
-  vscode.commands.registerCommand('boxel-tools.syncFromRemote', async () => {
+  vscode.commands.registerCommand('boxel-tools.pullFromRemote', async () => {
     try {
       // Show progress indicator while finding realms
       await vscode.window.withProgress(
@@ -320,12 +320,12 @@ export async function activate(context: vscode.ExtensionContext) {
           realmProvider.refresh();
 
           vscode.window.showInformationMessage(
-            `Found ${realmUrls.length} realms. Select a realm in the Boxel Realms panel and click the sync button to download files.`,
+            `Found ${realmUrls.length} realms. Select a realm in the Boxel Realms panel and click the pull button to download files.`,
           );
         },
       );
     } catch (error) {
-      console.error('Error in syncFromRemote:', error);
+      console.error('Error in pullFromRemote:', error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       vscode.window.showErrorMessage(`Error finding realms: ${errorMessage}`);
@@ -439,24 +439,36 @@ export async function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  // Register command to sync a specific realm
+  // Register command to pull changes for a specific realm
   vscode.commands.registerCommand(
-    'boxel-tools.syncRealm',
+    'boxel-tools.pullRealm',
     async (item: RealmItem) => {
       if (item && item.localPath) {
-        // We don't need an additional progress bar here because syncRealmFromPath
-        // now implements its own progress reporting via syncFromRemote
-        await localFileSystem.syncRealmFromPath(item.localPath);
+        // We don't need an additional progress bar here because pullChangesFromPath
+        // now implements its own progress reporting via pullFromRemote
+        await localFileSystem.pullChangesFromPath(item.localPath);
         realmProvider.refresh();
       }
     },
   );
 
-  // Register command to attachToBoxelWorkspaces (redirecting to syncFromRemote)
+  // Register command to push changes for a specific realm
+  vscode.commands.registerCommand(
+    'boxel-tools.pushRealm',
+    async (item: RealmItem) => {
+      if (item && item.localPath) {
+        // Push all changes for this realm
+        await localFileSystem.pushChangesFromPath(item.localPath);
+        realmProvider.refresh();
+      }
+    },
+  );
+
+  // Register command to attachToBoxelWorkspaces (redirecting to pullFromRemote)
   vscode.commands.registerCommand(
     'boxel-tools.attachToBoxelWorkspaces',
     async () => {
-      await vscode.commands.executeCommand('boxel-tools.syncFromRemote');
+      await vscode.commands.executeCommand('boxel-tools.pullFromRemote');
     },
   );
 

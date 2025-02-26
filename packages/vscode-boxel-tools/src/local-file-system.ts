@@ -5,6 +5,15 @@ import * as os from 'os';
 import { RealmAuth } from './realm-auth';
 import { SupportedMimeType } from '@cardstack/runtime-common/router';
 
+// Define the metadata structure for realm files
+interface RealmMetadata {
+  realmUrl: string;
+  realmName: string;
+  lastSync: string | null;
+  fileWatchingEnabled: boolean;
+  userId?: string;
+}
+
 export class LocalFileSystem {
   private localStoragePath: string = '';
   private realmUrlToLocalPath: Map<string, string> = new Map();
@@ -274,17 +283,20 @@ export class LocalFileSystem {
     }
   }
 
-  // Sync data from remote to local
-  async syncFromRemote(realmUrl: string, realmName: string): Promise<void> {
+  // Pull changes from remote to local
+  async pullChangesFromRemote(
+    realmUrl: string,
+    realmName: string,
+  ): Promise<void> {
     if (this.syncInProgress) {
-      console.log('Sync already in progress, skipping');
+      console.log('Pull already in progress, skipping');
       return;
     }
 
     this.syncInProgress = true;
 
     try {
-      console.log(`Starting sync from remote for realm: ${realmName}`);
+      console.log(`Starting pull from remote for realm: ${realmName}`);
 
       const localPath = this.getLocalPathForRealm(realmUrl, realmName);
       const filesProcessed: Set<string> = new Set();
@@ -300,13 +312,13 @@ export class LocalFileSystem {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Syncing realm ${realmName}`,
+          title: `Pulling changes for realm ${realmName}`,
           cancellable: false,
         },
         async (progress) => {
           // Initial progress message
           progress.report({
-            message: 'Starting sync...',
+            message: 'Starting pull...',
             increment: 0,
           });
 
@@ -392,7 +404,7 @@ export class LocalFileSystem {
           // Final progress message
           const totalFiles = filesDownloaded + filesSkipped;
           progress.report({
-            message: `Sync complete. ${totalFiles} files processed (${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
+            message: `Pull complete. ${totalFiles} files processed (${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
             increment: 100,
           });
         },
@@ -404,7 +416,7 @@ export class LocalFileSystem {
         );
       } else {
         console.log(
-          `Sync completed for realm: ${realmName}, ${filesProcessed.size} files processed`,
+          `Pull completed for realm: ${realmName}, ${filesProcessed.size} files processed`,
         );
 
         // Update the last sync timestamp
@@ -412,14 +424,14 @@ export class LocalFileSystem {
 
         // Show a notification
         vscode.window.showInformationMessage(
-          `Successfully synced realm "${realmName}" to local storage (${filesProcessed.size} files, ${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
+          `Successfully pulled changes for realm "${realmName}" (${filesProcessed.size} files, ${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
         );
       }
     } catch (error: unknown) {
-      console.error(`Error syncing from remote:`, error);
+      console.error(`Error pulling changes from remote:`, error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`Error syncing realm: ${errorMessage}`);
+      vscode.window.showErrorMessage(`Error pulling changes: ${errorMessage}`);
     } finally {
       this.syncInProgress = false;
     }
@@ -687,9 +699,9 @@ export class LocalFileSystem {
     }
   }
 
-  // Upload a single file from local to remote
-  async uploadFile(localFilePath: string): Promise<void> {
-    console.log(`Uploading file: ${localFilePath}`);
+  // Push a single file from local to remote
+  async pushFile(localFilePath: string): Promise<void> {
+    console.log(`Pushing file: ${localFilePath}`);
 
     // Find which realm this file belongs to
     let realmUrl: string | undefined;
@@ -789,6 +801,22 @@ export class LocalFileSystem {
     }
   }
 
+  // Push a single file to the remote
+  async pushFileToRemote(localFilePath: string): Promise<void> {
+    try {
+      console.log(`Pushing file to remote: ${localFilePath}`);
+      await this.pushFile(localFilePath);
+      vscode.window.showInformationMessage(
+        `File pushed: ${path.basename(localFilePath)}`,
+      );
+    } catch (error) {
+      console.error(`Error pushing file to remote:`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Error pushing file: ${errorMessage}`);
+    }
+  }
+
   // Enable file watching for a realm folder
   enableFileWatching(folderPath: string): void {
     // Update metadata first
@@ -811,7 +839,7 @@ export class LocalFileSystem {
           return; // Skip during sync
         }
         console.log(`File changed: ${uri.fsPath}`);
-        await this.uploadFile(uri.fsPath);
+        await this.pushFile(uri.fsPath);
       });
 
       // Handle file creations
@@ -820,7 +848,7 @@ export class LocalFileSystem {
           return; // Skip during sync
         }
         console.log(`File created: ${uri.fsPath}`);
-        await this.uploadFile(uri.fsPath);
+        await this.pushFile(uri.fsPath);
       });
 
       // Store the watcher
@@ -857,35 +885,48 @@ export class LocalFileSystem {
     }
   }
 
-  // Sync a realm from its local path
-  async syncRealmFromPath(localPath: string): Promise<void> {
-    try {
-      // Read the metadata file to get the realm URL and last sync time
-      const metadata = this.readRealmMetadata(localPath);
-      if (!metadata) {
-        throw new Error(
-          'No metadata found. Please make sure this is a valid Boxel realm folder.',
-        );
+  // Pull changes for a specific local path
+  async pullChangesFromPath(localPath: string): Promise<void> {
+    // Find the realm URL for this local path
+    let realmUrl: string | undefined;
+    let realmName: string | undefined;
+
+    for (const [url, path] of this.realmUrlToLocalPath.entries()) {
+      if (path === localPath) {
+        realmUrl = url;
+        break;
       }
-
-      const realmUrl = metadata.realmUrl;
-      if (!realmUrl) {
-        throw new Error('No realm URL found in metadata.');
-      }
-
-      console.log(`Syncing realm from URL: ${realmUrl}`);
-
-      const realmName =
-        metadata.realmName || this.extractRealmNameFromUrl(realmUrl);
-
-      // Sync data from remote to local
-      await this.syncFromRemote(realmUrl, realmName);
-    } catch (error: unknown) {
-      console.error(`Error syncing realm from path:`, error);
-      const errorMessage =
-        error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`Error syncing realm: ${errorMessage}`);
     }
+
+    if (!realmUrl) {
+      console.log(`No realm URL found for local path: ${localPath}`);
+      vscode.window.showErrorMessage(
+        `Could not find corresponding realm URL for ${localPath}`,
+      );
+      return;
+    }
+
+    // Get the realm name from metadata
+    try {
+      const metadataPath = path.join(localPath, '.boxel-realm.json');
+      if (fs.existsSync(metadataPath)) {
+        const metadata = JSON.parse(
+          fs.readFileSync(metadataPath, 'utf8'),
+        ) as RealmMetadata;
+        realmName = metadata.realmName;
+      }
+    } catch (error) {
+      console.error(`Error reading metadata for realm at ${localPath}:`, error);
+    }
+
+    if (!realmName) {
+      // Fallback to extracting from URL
+      const urlObj = new URL(realmUrl);
+      realmName = urlObj.pathname.split('/').pop() || 'unknown-realm';
+    }
+
+    console.log(`Pulling changes for realm: ${realmName} (${realmUrl})`);
+    await this.pullChangesFromRemote(realmUrl, realmName);
   }
 
   // Extract a realm name from a URL
@@ -1045,6 +1086,159 @@ export class LocalFileSystem {
     } catch (error) {
       console.error(
         '[LocalFileSystem] Error migrating realms to user folder:',
+        error,
+      );
+    }
+  }
+
+  // Push all changed files from a local realm path to remote
+  async pushChangesFromPath(localPath: string): Promise<void> {
+    try {
+      // Find the realm URL for this local path
+      let realmUrl: string | undefined;
+      let realmName: string | undefined;
+
+      for (const [url, path] of this.realmUrlToLocalPath.entries()) {
+        if (path === localPath) {
+          realmUrl = url;
+          break;
+        }
+      }
+
+      if (!realmUrl) {
+        console.log(`No realm URL found for local path: ${localPath}`);
+        vscode.window.showErrorMessage(
+          `Could not find corresponding realm URL for ${localPath}`,
+        );
+        return;
+      }
+
+      // Get the realm name from metadata
+      try {
+        const metadataPath = path.join(localPath, '.boxel-realm.json');
+        if (fs.existsSync(metadataPath)) {
+          const metadata = JSON.parse(
+            fs.readFileSync(metadataPath, 'utf8'),
+          ) as RealmMetadata;
+          realmName = metadata.realmName;
+        }
+      } catch (error) {
+        console.error(
+          `Error reading metadata for realm at ${localPath}:`,
+          error,
+        );
+      }
+
+      if (!realmName) {
+        // Fallback to extracting from URL
+        const urlObj = new URL(realmUrl);
+        realmName = urlObj.pathname.split('/').pop() || 'unknown-realm';
+      }
+
+      console.log(`Pushing changes for realm: ${realmName} (${realmUrl})`);
+
+      // Show progress indication
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: `Pushing changes for realm: ${realmName}`,
+          cancellable: false,
+        },
+        async (progress) => {
+          progress.report({ message: 'Finding files to push...' });
+
+          // Get all files in the realm directory (excluding .boxel-realm.json and subdirectories)
+          const files = this.getFilesInDirectory(localPath);
+
+          if (files.length === 0) {
+            progress.report({ message: 'No files found to push' });
+            vscode.window.showInformationMessage(
+              `No files found to push in realm: ${realmName}`,
+            );
+            return;
+          }
+
+          progress.report({ message: `Found ${files.length} files to push` });
+
+          // Push each file
+          for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            progress.report({
+              message: `Pushing file ${i + 1} of ${
+                files.length
+              }: ${path.basename(file)}`,
+              increment: 100 / files.length,
+            });
+
+            // Push the file
+            await this.pushFile(file);
+          }
+
+          // Update metadata with last sync time
+          this.updateRealmMetadata(localPath, {
+            lastSync: new Date().toISOString(),
+          });
+
+          vscode.window.showInformationMessage(
+            `Successfully pushed ${files.length} files for realm: ${realmName}`,
+          );
+        },
+      );
+    } catch (error) {
+      console.error(`Error pushing changes from path:`, error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      vscode.window.showErrorMessage(`Error pushing changes: ${errorMessage}`);
+    }
+  }
+
+  // Helper method to get all files in a directory (excluding metadata file)
+  private getFilesInDirectory(dirPath: string): string[] {
+    const files: string[] = [];
+
+    // Read all items in the directory
+    const items = fs.readdirSync(dirPath);
+
+    for (const item of items) {
+      const itemPath = path.join(dirPath, item);
+      const stats = fs.statSync(itemPath);
+
+      // Skip the metadata file and subdirectories
+      if (item === '.boxel-realm.json' || stats.isDirectory()) {
+        continue;
+      }
+
+      files.push(itemPath);
+    }
+
+    return files;
+  }
+
+  // Helper to update realm metadata
+  private updateRealmMetadata(
+    localPath: string,
+    updates: Partial<RealmMetadata>,
+  ): void {
+    try {
+      const metadataPath = path.join(localPath, '.boxel-realm.json');
+      if (fs.existsSync(metadataPath)) {
+        const metadata = JSON.parse(
+          fs.readFileSync(metadataPath, 'utf8'),
+        ) as RealmMetadata;
+
+        // Apply updates
+        const updatedMetadata = { ...metadata, ...updates };
+
+        // Write back to file
+        fs.writeFileSync(
+          metadataPath,
+          JSON.stringify(updatedMetadata, null, 2),
+          'utf8',
+        );
+      }
+    } catch (error) {
+      console.error(
+        `Error updating metadata for realm at ${localPath}:`,
         error,
       );
     }
