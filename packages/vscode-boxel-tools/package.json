@@ -179,7 +179,7 @@
         {
           "id": "coding-skills",
           "title": "Boxel",
-          "icon": "resources/sparkle.svg"
+          "icon": "resources/boxel-icon.svg"
         }
       ]
     },
@@ -188,13 +188,13 @@
         {
           "id": "boxelRealmList",
           "name": "Boxel Workspaces",
-          "icon": "resources/sparkle.svg",
+          "icon": "resources/boxel-icon.svg",
           "contextualTitle": "Boxel Workspaces"
         },
         {
           "id": "codingSkillList",
           "name": "Cursor Boxel Skills",
-          "icon": "resources/sparkle.svg",
+          "icon": "resources/boxel-icon.svg",
           "contextualTitle": "Cursor Boxel Skills"
         }
       ]
