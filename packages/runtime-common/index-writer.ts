@@ -515,7 +515,8 @@ export class Batch {
     let alias = trimExecutableExtension(url).href;
     let visited = new Set<string>();
 
-    // await this.#query(['BEGIN']);
+    console.log(`staring invalidation txn for ${url.href}`);
+    await this.#query(['BEGIN']);
     let invalidations: string[] = [];
     try {
       invalidations = [
@@ -528,7 +529,10 @@ export class Batch {
       ];
 
       if (invalidations.length === 0) {
-        // await this.#query(['COMMIT']);
+        await this.#query(['COMMIT']);
+        console.log(
+          `committing invalidation txn for ${url.href} (0 invalidations nothing to do)`,
+        );
         return [];
       }
 
@@ -561,7 +565,8 @@ export class Batch {
           rows,
         ),
       ]);
-      // await this.#query(['COMMIT']);
+      console.log(`committing invalidation txn for ${url.href}`);
+      await this.#query(['COMMIT']);
 
       this.#perfLog.debug(
         `inserted invalidated rows for  ${url.href} in ${
@@ -569,7 +574,8 @@ export class Batch {
         } ms`,
       );
     } catch (e) {
-      // await this.#query(['ROLLBACK']);
+      console.log(`rollback invalidation txn for ${url.href}`);
+      await this.#query(['ROLLBACK']);
       throw e;
     }
 
