@@ -123,6 +123,9 @@
         },
         {
           "command": "boxel-tools.checkMatrixConnection"
+        },
+        {
+          "command": "boxel-tools.reloadSkills"
         }
       ],
       "view/title": [

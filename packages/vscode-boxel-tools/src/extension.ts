@@ -1,10 +1,8 @@
 'use strict';
 
 import * as vscode from 'vscode';
-import { RealmFS } from './file-system-provider';
 import { SynapseAuthProvider } from './synapse-auth-provider';
-import { updateDiagnostics } from './diagnostics';
-import { SkillsProvider } from './skills';
+import { SkillsProvider, Skill } from './skills';
 import { RealmAuth } from './realm-auth';
 import { LocalFileSystem } from './local-file-system';
 import * as fs from 'fs';
@@ -24,10 +22,33 @@ export async function activate(context: vscode.ExtensionContext) {
   const localFileSystem = new LocalFileSystem(context, realmAuth, userId);
 
   // Create and register the skills provider
-  const skillsProvider = new SkillsProvider(realmAuth);
-  vscode.window.createTreeView('codingSkillList', {
+  const skillsProvider = new SkillsProvider(
+    realmAuth,
+    context,
+    localFileSystem,
+  );
+  const treeView = vscode.window.createTreeView('codingSkillList', {
     treeDataProvider: skillsProvider,
   });
+
+  // Register event listener for checkbox state changes
+  treeView.onDidChangeCheckboxState((e) => {
+    // Handle checkbox state changes
+    e.items.forEach((item) => {
+      const treeItem = item[0];
+      if ('instructions' in treeItem && 'id' in treeItem) {
+        // It's a Skill
+        skillsProvider.handleTreeItemCheckboxChange(treeItem as Skill);
+      }
+    });
+  });
+
+  // Register event listener for tree data changes
+  skillsProvider.onDidChangeTreeData(() => {
+    // When the tree data changes, update the .cursorrules file
+    skillsProvider.updateCursorRules();
+  });
+
   vscode.commands.registerCommand('boxel-tools.reloadSkills', () => {
     skillsProvider.refresh();
   });
