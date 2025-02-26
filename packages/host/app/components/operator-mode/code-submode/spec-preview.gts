@@ -318,6 +318,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare cardService: CardService;
   @tracked _selectedId?: string;
   @tracked ids: string[] = [];
+  @tracked newCardJSON: LooseSingleCardDocument | undefined;
 
   // We must do this so cardIds are available in the root for usage with getCard
   @action setCardIds(cards: PrerenderedCard[]) {
@@ -364,17 +365,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           },
         },
       };
-      try {
-        let card = await this.cardService.createFromSerialized(doc.data, doc);
-        if (!card) {
-          throw new Error(
-            `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
-          );
-        }
-        await this.cardService.saveModel(card);
-      } catch (e: any) {
-        console.log('Error saving', e);
-      }
+      this._selectedId = undefined;
     },
   );
 
@@ -479,9 +470,13 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private cardResource = getCard(this, () => this.selectedId, {
-    isAutoSave: () => true,
-  });
+  private cardResource = getCard(
+    this,
+    () => this.newCardJSON ?? this.selectedId,
+    {
+      isAutoSave: () => true,
+    },
+  );
 
   get card() {
     if (!this.cardResource.card) {
