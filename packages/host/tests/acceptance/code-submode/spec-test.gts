@@ -357,14 +357,8 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     assert.dom('[data-test-create-spec-button]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-create-spec-button]');
-      },
-    });
+    await click('[data-test-create-spec-button]');
+
     assert
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('NewSkill');

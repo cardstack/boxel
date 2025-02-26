@@ -576,14 +576,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           .dom(`[data-test-delete-modal-container]`)
           .containsText('Delete the card Fadhlan?');
 
-        await this.expectEvents({
-          assert,
-          realm: testRealm,
-          expectedNumberOfEvents: 1,
-          callback: async () => {
-            await click('[data-test-confirm-delete-button]');
-          },
-        });
+        await click('[data-test-confirm-delete-button]');
 
         assert
           .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)

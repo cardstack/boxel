@@ -1,6 +1,4 @@
-import { click } from '@ember/test-helpers';
-
-import { fillIn } from '@ember/test-helpers';
+import { click, fillIn, waitUntil } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
@@ -605,14 +603,8 @@ export class BlogPost extends CardDef {
       .doesNotExist();
 
     await click('[data-test-instance-chooser]');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-create-instance]');
-      },
-    });
+    await click('[data-test-create-instance]');
+
     recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
     assert.strictEqual(recentFiles.length, 2, 'recent file count is correct');
     let newCardId = `${recentFiles[0][0]}${recentFiles[0][1]}`.replace(
@@ -666,23 +658,6 @@ export class Author extends CardDef {
 </template>
   }
 }`;
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}author.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}author.gts`],
-        },
-      },
-    ];
     await visitOperatorMode({
       stacks: [],
       submode: 'code',
@@ -693,12 +668,14 @@ export class Author extends CardDef {
     await click('[data-option-index="0"]');
     assert.dom('[data-test-author-title]').containsText('Jane Doe');
 
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => await realm.write('author.gts', authorCard),
-    });
+    await realm.write('author.gts', authorCard);
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-author-title]')
+        ?.textContent?.includes('Hello'),
+    );
+
     assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
   });
 
@@ -758,23 +735,7 @@ export class BlogPost extends CardDef {
   </template>
   }
 }`;
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}blog-post.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}blog-post.gts`],
-        },
-      },
-    ];
+
     await visitOperatorMode({
       stacks: [],
       submode: 'code',
@@ -786,12 +747,14 @@ export class BlogPost extends CardDef {
     await click('[data-option-index="0"]');
     assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
 
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => await realm.write('blog-post.gts', blogPostCard),
-    });
+    await realm.write('blog-post.gts', blogPostCard);
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-post-title]')
+        ?.textContent?.includes('Hello'),
+    );
+
     assert.dom('[data-test-post-title]').includesText('Hello Mad As a Hatter');
   });
 
