@@ -21,7 +21,7 @@ Open a new window and in the command palette select "Boxel Tools: Attach to Boxe
 
 You will be prompted for your username and password for production. If you want to use another environment, alter the Matrix Server in VS Code settings.
 
-The realm should then be viewable as a folder in your workspace.
+The workspace should then be viewable as a folder in your workspace.
 
 ## Development
 

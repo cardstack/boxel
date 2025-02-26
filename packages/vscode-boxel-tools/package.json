@@ -1,7 +1,7 @@
 {
   "name": "boxel-tools",
   "displayName": "Boxel Tools",
-  "description": "Access boxel realm data and code from your vscode workspace.",
+  "description": "Access boxel workspace data and code from your vscode workspace.",
   "version": "0.1.1",
   "publisher": "cardstack",
   "private": true,
@@ -42,7 +42,7 @@
       },
       {
         "command": "boxel-tools.syncFromRemote",
-        "title": "Find Realms",
+        "title": "Find Boxel Workspaces",
         "category": "Boxel Tools"
       },
       {
@@ -57,7 +57,7 @@
       },
       {
         "command": "boxel-tools.addRealmsToWorkspace",
-        "title": "Add Realms Folder to Workspace",
+        "title": "Add Boxel Workspaces Folder to Workspace",
         "category": "Boxel Tools",
         "icon": "$(add)"
       },
@@ -74,13 +74,13 @@
         "icon": "$(eye-closed)"
       },
       {
-        "command": "boxel-tools.pullRealm",
+        "command": "boxel-tools.pullBoxelWorkspace",
         "title": "Pull Changes",
         "category": "Boxel Tools",
         "icon": "$(arrow-down)"
       },
       {
-        "command": "boxel-tools.pushRealm",
+        "command": "boxel-tools.pushBoxelWorkspace",
         "title": "Push Changes",
         "category": "Boxel Tools",
         "icon": "$(arrow-up)"
@@ -146,12 +146,12 @@
       ],
       "view/item/context": [
         {
-          "command": "boxel-tools.pullRealm",
+          "command": "boxel-tools.pullBoxelWorkspace",
           "when": "view == boxelRealmList && (viewItem == realm-watched || viewItem == realm-unwatched)",
           "group": "inline"
         },
         {
-          "command": "boxel-tools.pushRealm",
+          "command": "boxel-tools.pushBoxelWorkspace",
           "when": "view == boxelRealmList && (viewItem == realm-watched || viewItem == realm-unwatched)",
           "group": "inline"
         },
@@ -192,20 +192,20 @@
         },
         {
           "id": "boxelRealmList",
-          "name": "Boxel Realms",
+          "name": "Boxel Workspaces",
           "icon": "resources/sparkle.svg",
-          "contextualTitle": "Boxel Realms"
+          "contextualTitle": "Boxel Workspaces"
         }
       ]
     },
     "viewsWelcome": [
       {
         "view": "codingSkillList",
-        "contents": "In [Cursor](https://cursor.com), you can load Skill Cards from your realms to assist in editing. [Load skills now](command:boxel-tools.reloadSkills)"
+        "contents": "In [Cursor](https://cursor.com), you can load Skill Cards from your workspaces to assist in editing. [Load skills now](command:boxel-tools.reloadSkills)"
       },
       {
         "view": "boxelRealmList",
-        "contents": "Connect to your Boxel account to find available realms.\n\n[Log in to Matrix](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)\n[Find Realms](command:boxel-tools.syncFromRemote)"
+        "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Matrix](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)\n[Find Boxel Workspaces](command:boxel-tools.syncFromRemote)"
       }
     ],
     "configuration": [
@@ -214,13 +214,13 @@
         "properties": {
           "boxel-tools.matrixServer": {
             "type": "string",
-            "description": "The matrix server to connect to, leave blank to connect to your boxel.ai realms.",
+            "description": "The matrix server to connect to, leave blank to connect to your boxel.ai workspaces.",
             "default": "https://matrix.boxel.ai/"
           },
           "boxel-tools.localStoragePath": {
             "type": "string",
-            "description": "The local directory where realm data will be stored. Each realm will have its own subdirectory. You can use '~/' for your home directory or '${workspaceFolder}' for the current workspace folder.",
-            "default": "${workspaceFolder}/.boxel-realms"
+            "description": "The local directory where boxel workspace data will be stored. Each workspace will have its own subdirectory. You can use '~/' for your home directory or '${workspaceFolder}' for the current workspace folder.",
+            "default": "${workspaceFolder}/.boxel-workspaces"
           }
         }
       }

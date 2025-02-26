@@ -412,11 +412,11 @@ export class LocalFileSystem {
 
       if (filesProcessed.size === 0) {
         vscode.window.showWarningMessage(
-          `No files were found in realm "${realmName}". This might be an empty realm.`,
+          `No files were found in Boxel workspace "${realmName}". This might be an empty workspace.`,
         );
       } else {
         console.log(
-          `Pull completed for realm: ${realmName}, ${filesProcessed.size} files processed`,
+          `Pull completed for Boxel workspace: ${realmName}, ${filesProcessed.size} files processed`,
         );
 
         // Update the last sync timestamp
@@ -424,7 +424,7 @@ export class LocalFileSystem {
 
         // Show a notification
         vscode.window.showInformationMessage(
-          `Successfully pulled changes for realm "${realmName}" (${filesProcessed.size} files, ${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
+          `Successfully pulled changes for Boxel workspace "${realmName}" (${filesProcessed.size} files, ${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
         );
       }
     } catch (error: unknown) {
@@ -856,7 +856,7 @@ export class LocalFileSystem {
 
       console.log(`File watching enabled for ${folderPath}`);
       vscode.window.showInformationMessage(
-        `File watching enabled for realm folder.`,
+        `File watching enabled for Boxel workspace folder.`,
       );
     } catch (error) {
       console.error('Error enabling file watching:', error);
@@ -880,7 +880,7 @@ export class LocalFileSystem {
       this.fileWatchers.delete(folderPath);
       console.log(`File watching disabled for ${folderPath}`);
       vscode.window.showInformationMessage(
-        `File watching disabled for realm folder.`,
+        `File watching disabled for Boxel workspace folder.`,
       );
     }
   }
@@ -1225,7 +1225,7 @@ export class LocalFileSystem {
           });
 
           vscode.window.showInformationMessage(
-            `Successfully processed ${totalFiles} files for realm: ${realmName} (${filesPushed} pushed, ${filesSkipped} unchanged)`,
+            `Successfully processed ${totalFiles} files for Boxel workspace: ${realmName} (${filesPushed} pushed, ${filesSkipped} unchanged)`,
           );
         },
       );

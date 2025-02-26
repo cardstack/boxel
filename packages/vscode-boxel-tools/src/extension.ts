@@ -116,7 +116,7 @@ export async function activate(context: vscode.ExtensionContext) {
       // Show welcome message for new users
       vscode.window
         .showInformationMessage(
-          'Welcome to Boxel Tools! This extension helps you work with Boxel realms. You will now be prompted to log in to your Matrix account.',
+          'Welcome to Boxel Tools! This extension helps you work with Boxel workspaces. You will now be prompted to log in to your Matrix account.',
           'Continue',
         )
         .then(async (selection) => {
@@ -155,7 +155,7 @@ export async function activate(context: vscode.ExtensionContext) {
         // Update status bar with new user ID
         updateStatusBar();
 
-        // Reset realm initialization and trigger a search for realms
+        // Reset realm initialization and trigger a search for workspaces
         realmAuth.realmsInitialized = false;
         await vscode.commands.executeCommand('boxel-tools.pullFromRemote');
       }
@@ -188,7 +188,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  // Helper function to extract a realm name from a URL
+  // Helper function to extract a workspace name from a URL
   function extractRealmNameFromUrl(url: string): string {
     try {
       const parsedUrl = new URL(url);
@@ -196,11 +196,11 @@ export async function activate(context: vscode.ExtensionContext) {
       // Get all path segments that aren't empty
       const pathSegments = parsedUrl.pathname.split('/').filter((p) => p);
 
-      // For boxel.ai URLs, we need to get the realm name which is typically the last segment
+      // For boxel.ai URLs, we need to get the workspace name which is typically the last segment
       // after the account name
       if (parsedUrl.hostname.includes('boxel.ai') && pathSegments.length >= 1) {
-        // Get the last segment as the realm name
-        return pathSegments[pathSegments.length - 1] || 'unknown-realm';
+        // Get the last segment as the workspace name
+        return pathSegments[pathSegments.length - 1] || 'unknown-workspace';
       }
 
       // For other URLs, use the previous approach as fallback
@@ -218,39 +218,39 @@ export async function activate(context: vscode.ExtensionContext) {
     }
   }
 
-  // Register a command to find all realms and create directories for them
+  // Register a command to find all workspaces and create directories for them
   vscode.commands.registerCommand('boxel-tools.pullFromRemote', async () => {
     try {
-      // Show progress indicator while finding realms
+      // Show progress indicator while finding workspaces
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: 'Finding realms...',
+          title: 'Finding Boxel workspaces...',
           cancellable: false,
         },
         async (progress) => {
-          // Get all available realm URLs
+          // Get all available workspace URLs
           const realmUrls = await realmAuth.getRealmUrls();
-          console.log('Found realm URLs:', realmUrls);
+          console.log('Found workspace URLs:', realmUrls);
 
           if (realmUrls.length === 0) {
             vscode.window.showInformationMessage(
-              'No realms found for your account.',
+              'No Boxel workspaces found for your account.',
             );
             return;
           }
 
-          progress.report({ message: `Found ${realmUrls.length} realms` });
+          progress.report({ message: `Found ${realmUrls.length} workspaces` });
 
-          // Process each realm to create a folder without syncing files
+          // Process each workspace to create a folder without syncing files
           for (let i = 0; i < realmUrls.length; i++) {
             const realmUrl = realmUrls[i];
             progress.report({
-              message: `Processing realm ${i + 1} of ${realmUrls.length}`,
+              message: `Processing workspace ${i + 1} of ${realmUrls.length}`,
               increment: 100 / realmUrls.length,
             });
 
-            // Get realm name - try API endpoints first, then fallback to URL extraction
+            // Get workspace name - try API endpoints first, then fallback to URL extraction
             let realmName: string;
             try {
               // First try the API endpoint
@@ -288,14 +288,14 @@ export async function activate(context: vscode.ExtensionContext) {
                   }
                 } catch (error) {
                   console.error(
-                    'Error fetching realm name from alt endpoint:',
+                    'Error fetching workspace name from alt endpoint:',
                     error,
                   );
                   realmName = extractRealmNameFromUrl(realmUrl);
                 }
               }
             } catch (error) {
-              console.error('Error fetching realm name:', error);
+              console.error('Error fetching workspace name:', error);
               realmName = extractRealmNameFromUrl(realmUrl);
             }
 
@@ -309,18 +309,18 @@ export async function activate(context: vscode.ExtensionContext) {
             createMetadataFile(localPath, realmUrl, realmName);
 
             console.log(
-              `Created folder for realm: ${realmName} at ${localPath}`,
+              `Created folder for workspace: ${realmName} at ${localPath}`,
             );
           }
 
-          // Refresh realm mappings to ensure all new realms are tracked
+          // Refresh realm mappings to ensure all new workspaces are tracked
           localFileSystem.refreshRealmMappings();
 
-          // Refresh the realm list view to show the new realms
+          // Refresh the workspace list view to show the new workspaces
           realmProvider.refresh();
 
           vscode.window.showInformationMessage(
-            `Found ${realmUrls.length} realms. Select a realm in the Boxel Realms panel and click the pull button to download files.`,
+            `Found ${realmUrls.length} Boxel workspaces. Select a workspace in the Boxel Workspaces panel and click the pull button to download files.`,
           );
         },
       );
@@ -328,11 +328,13 @@ export async function activate(context: vscode.ExtensionContext) {
       console.error('Error in pullFromRemote:', error);
       const errorMessage =
         error instanceof Error ? error.message : String(error);
-      vscode.window.showErrorMessage(`Error finding realms: ${errorMessage}`);
+      vscode.window.showErrorMessage(
+        `Error finding workspaces: ${errorMessage}`,
+      );
     }
   });
 
-  // Helper function to create the realm metadata file
+  // Helper function to create the workspace metadata file
   function createMetadataFile(
     localPath: string,
     realmUrl: string,
@@ -350,13 +352,13 @@ export async function activate(context: vscode.ExtensionContext) {
 
     try {
       fs.writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), 'utf8');
-      console.log(`Created realm metadata file at ${metadataPath}`);
+      console.log(`Created workspace metadata file at ${metadataPath}`);
     } catch (error) {
       console.error(`Error creating metadata file: ${error}`);
     }
   }
 
-  // Register command to add realms folder to workspace
+  // Register command to add workspaces folder to workspace
   vscode.commands.registerCommand(
     'boxel-tools.addRealmsToWorkspace',
     async () => {
@@ -366,7 +368,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (!fs.existsSync(rootPath)) {
           vscode.window.showErrorMessage(
-            `Realms folder doesn't exist yet. Please find realms first.`,
+            `Boxel workspaces folder doesn't exist yet. Please find workspaces first.`,
           );
           return;
         }
@@ -382,13 +384,15 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (alreadyExists) {
           vscode.window.showInformationMessage(
-            `Realms folder is already in your workspace.`,
+            `Boxel workspaces folder is already in your workspace.`,
           );
           return;
         }
 
         // Add folder to workspace
-        const folderName = userId ? `Boxel Realms (${userId})` : 'Boxel Realms';
+        const folderName = userId
+          ? `Boxel Workspaces (${userId})`
+          : 'Boxel Workspaces';
         const added = await vscode.workspace.updateWorkspaceFolders(
           existingFolders.length, // Add at the end
           0, // Don't remove any
@@ -397,11 +401,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (added) {
           vscode.window.showInformationMessage(
-            `Added Boxel Realms folder to your workspace.`,
+            `Added Boxel Workspaces folder to your workspace.`,
           );
         } else {
           vscode.window.showErrorMessage(
-            `Failed to add Boxel Realms folder to workspace.`,
+            `Failed to add Boxel Workspaces folder to workspace.`,
           );
         }
       } catch (error) {
@@ -414,7 +418,7 @@ export async function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  // Register command to enable file watching for a realm
+  // Register command to enable file watching for a workspace
   vscode.commands.registerCommand(
     'boxel-tools.enableFileWatching',
     async (item: RealmItem) => {
@@ -428,7 +432,7 @@ export async function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  // Register command to disable file watching for a realm
+  // Register command to disable file watching for a workspace
   vscode.commands.registerCommand(
     'boxel-tools.disableFileWatching',
     async (item: RealmItem) => {
@@ -439,9 +443,9 @@ export async function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  // Register command to pull changes for a specific realm
+  // Register command to pull changes for a specific workspace
   vscode.commands.registerCommand(
-    'boxel-tools.pullRealm',
+    'boxel-tools.pullBoxelWorkspace',
     async (item: RealmItem) => {
       if (item && item.localPath) {
         // We don't need an additional progress bar here because pullChangesFromPath
@@ -452,12 +456,12 @@ export async function activate(context: vscode.ExtensionContext) {
     },
   );
 
-  // Register command to push changes for a specific realm
+  // Register command to push changes for a specific workspace
   vscode.commands.registerCommand(
-    'boxel-tools.pushRealm',
+    'boxel-tools.pushBoxelWorkspace',
     async (item: RealmItem) => {
       if (item && item.localPath) {
-        // Push all changes for this realm
+        // Push all changes for this workspace
         await localFileSystem.pushChangesFromPath(item.localPath);
         realmProvider.refresh();
       }
