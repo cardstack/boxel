@@ -515,7 +515,7 @@ export class Batch {
     let alias = trimExecutableExtension(url).href;
     let visited = new Set<string>();
 
-    await this.#query(['BEGIN']);
+    // await this.#query(['BEGIN']);
     let invalidations: string[] = [];
     try {
       invalidations = [
@@ -528,7 +528,7 @@ export class Batch {
       ];
 
       if (invalidations.length === 0) {
-        await this.#query(['COMMIT']);
+        // await this.#query(['COMMIT']);
         return [];
       }
 
@@ -561,7 +561,7 @@ export class Batch {
           rows,
         ),
       ]);
-      await this.#query(['COMMIT']);
+      // await this.#query(['COMMIT']);
 
       this.#perfLog.debug(
         `inserted invalidated rows for  ${url.href} in ${
@@ -569,7 +569,7 @@ export class Batch {
         } ms`,
       );
     } catch (e) {
-      await this.#query(['ROLLBACK']);
+      // await this.#query(['ROLLBACK']);
       throw e;
     }
 
