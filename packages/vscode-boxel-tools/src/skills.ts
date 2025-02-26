@@ -41,16 +41,22 @@ export class SkillsProvider
   constructor(
     private realmAuth: RealmAuth,
     private context: vscode.ExtensionContext,
-    private localFileSystem: LocalFileSystem
+    private localFileSystem: LocalFileSystem,
   ) {
     // Use the local storage path provided by LocalFileSystem
-    this.dataPath = path.join(this.localFileSystem.getLocalStoragePath(), '.skills');
-    this.cursorRulesPath = path.join(this.localFileSystem.getLocalStoragePath(), '.cursorrules');
+    this.dataPath = path.join(
+      this.localFileSystem.getLocalStoragePath(),
+      '.skills',
+    );
+    this.cursorRulesPath = path.join(
+      this.localFileSystem.getLocalStoragePath(),
+      '.cursorrules',
+    );
     // Create the skills directory if it doesn't exist
     if (!fs.existsSync(this.dataPath)) {
       fs.mkdirSync(this.dataPath, { recursive: true });
     }
-    
+
     // Try to load skills and state from storage
     this.loadSkillState();
     this.loadSkillsFromStorage();
@@ -80,15 +86,15 @@ export class SkillsProvider
     // Get all selected skills and write to .cursorrules file
     const selectedSkills = this.getSelectedSkills();
     let combinedText = '';
-    
+
     for (const skill of selectedSkills) {
       combinedText += `${skill.instructions}\n`;
     }
-    
+
     // Get the workspace folder
-   
+
     console.log('Cursor rules path: ', this.cursorRulesPath);
-    
+
     try {
       fs.writeFileSync(this.cursorRulesPath, combinedText);
       console.log('.cursorrules file updated successfully');
@@ -102,102 +108,113 @@ export class SkillsProvider
   private saveSkillsToStorage(): void {
     try {
       const skillsDataPath = path.join(this.dataPath, 'skills_data.json');
-      
+
       // Convert skill lists to a format suitable for storage, preserving the hierarchy
-      const skillListsData = this.skillLists.map(list => ({
+      const skillListsData = this.skillLists.map((list) => ({
         label: list.label,
         realmUrl: list.realmUrl,
         readOnly: list.readOnly,
-        skills: list.skills.map(skill => ({
+        skills: list.skills.map((skill) => ({
           id: skill.id,
           label: skill.label,
-          instructions: skill.instructions
-        }))
+          instructions: skill.instructions,
+        })),
       }));
-      
+
       const dataToStore: StoredSkillData = {
         skillLists: skillListsData,
-        lastFetched: Date.now()
+        lastFetched: Date.now(),
       };
-      
+
       fs.writeFileSync(skillsDataPath, JSON.stringify(dataToStore, null, 2));
       console.log('Skills saved to storage successfully');
     } catch (error) {
       console.error('Error saving skills to storage:', error);
     }
   }
-  
+
   // Save skill state (enabled/disabled) separately
   private saveSkillState(): void {
     try {
       const stateFilePath = path.join(this.dataPath, 'skill_state.json');
-      
+
       // Get all enabled skill IDs
       const enabledIds = this.skillLists
-        .flatMap(skillList => skillList.skills)
-        .filter(skill => skill.checkboxState === vscode.TreeItemCheckboxState.Checked)
-        .map(skill => skill.id);
-        
+        .flatMap((skillList) => skillList.skills)
+        .filter(
+          (skill) =>
+            skill.checkboxState === vscode.TreeItemCheckboxState.Checked,
+        )
+        .map((skill) => skill.id);
+
       const stateData: SkillStateData = {
         enabledSkillIds: Array.from(enabledIds),
-        lastUpdated: Date.now()
+        lastUpdated: Date.now(),
       };
-      
+
       fs.writeFileSync(stateFilePath, JSON.stringify(stateData, null, 2));
       console.log('Skill state saved successfully');
     } catch (error) {
       console.error('Error saving skill state:', error);
     }
   }
-  
+
   // Load skills from storage
   private loadSkillsFromStorage(): void {
     try {
       const skillsDataPath = path.join(this.dataPath, 'skills_data.json');
-      
+
       if (fs.existsSync(skillsDataPath)) {
-        const storedData = JSON.parse(fs.readFileSync(skillsDataPath, 'utf8')) as StoredSkillData;
-        
+        const storedData = JSON.parse(
+          fs.readFileSync(skillsDataPath, 'utf8'),
+        ) as StoredSkillData;
+
         // Create skill lists with the same structure as when loading remotely
-        this.skillLists = storedData.skillLists.map(listData => {
-          const skillList = new SkillList(listData.label, listData.realmUrl, listData.readOnly);
-          
+        this.skillLists = storedData.skillLists.map((listData) => {
+          const skillList = new SkillList(
+            listData.label,
+            listData.realmUrl,
+            listData.readOnly,
+          );
+
           // Convert stored skills to Skill objects with proper state
-          skillList.skills = listData.skills.map(skillData => {
+          skillList.skills = listData.skills.map((skillData) => {
             const skill = new Skill(
               skillData.label,
               skillData.instructions,
-              skillData.id
+              skillData.id,
             );
-            
+
             // Set the checkbox state based on the stored enabled state
-            skill.checkboxState = this.enabledSkillIds.has(skillData.id) 
-              ? vscode.TreeItemCheckboxState.Checked 
+            skill.checkboxState = this.enabledSkillIds.has(skillData.id)
+              ? vscode.TreeItemCheckboxState.Checked
               : vscode.TreeItemCheckboxState.Unchecked;
-            
+
             return skill;
           });
-          
+
           return skillList;
         });
-        
+
         this._onDidChangeTreeData.fire();
-        
+
         console.log('Loaded skills from storage successfully');
       }
     } catch (error) {
       console.error('Error loading skills from storage:', error);
     }
   }
-  
+
   // Load just the skill state (enabled/disabled)
   private loadSkillState(): void {
     try {
       const stateFilePath = path.join(this.dataPath, 'skill_state.json');
-      
+
       if (fs.existsSync(stateFilePath)) {
-        const stateData = JSON.parse(fs.readFileSync(stateFilePath, 'utf8')) as SkillStateData;
-        
+        const stateData = JSON.parse(
+          fs.readFileSync(stateFilePath, 'utf8'),
+        ) as SkillStateData;
+
         // Load enabled skill IDs into the set
         this.enabledSkillIds = new Set(stateData.enabledSkillIds);
         console.log('Loaded skill state successfully', this.enabledSkillIds);
@@ -238,17 +255,17 @@ export class SkillsProvider
         );
 
         await Promise.all(loadingPromises);
-        
+
         // After loading, restore enabled/disabled state from storage
         this.restoreSkillsState();
-        
+
         // Save new skills data to storage, but don't change enabled state
         this.saveSkillsToStorage();
       },
     );
     this._onDidChangeTreeData.fire();
   }
-  
+
   // Restore skill enabled/disabled state
   private restoreSkillsState(): void {
     for (const skillList of this.skillLists) {
@@ -273,21 +290,21 @@ export class SkillsProvider
       return Promise.resolve(element.getChildren());
     }
   }
-  
+
   // Handle tree item checkbox state change
   public handleTreeItemCheckboxChange(element: Skill): void {
     console.log(`Checkbox state changed for skill: ${element.label}`);
-    
+
     // Update enabled skills set
     if (element.checkboxState === vscode.TreeItemCheckboxState.Checked) {
       this.enabledSkillIds.add(element.id);
     } else {
       this.enabledSkillIds.delete(element.id);
     }
-    
+
     // Save just the state (not the full skill data)
     this.saveSkillState();
-    
+
     // Update .cursorrules file
     this.updateCursorRules();
   }

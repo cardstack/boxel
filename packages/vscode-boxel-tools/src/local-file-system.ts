@@ -15,10 +15,10 @@ interface RealmMetadata {
 }
 
 export class LocalFileSystem {
-  private localStoragePath: string = '';
+  private localStoragePath = '';
   private realmUrlToLocalPath: Map<string, string> = new Map();
   private fileWatchers: Map<string, vscode.FileSystemWatcher> = new Map();
-  private syncInProgress: boolean = false;
+  private syncInProgress = false;
   private userId: string | null = null;
 
   constructor(
