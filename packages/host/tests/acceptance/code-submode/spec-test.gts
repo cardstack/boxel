@@ -334,6 +334,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').exists();
     assert.dom('[data-test-create-spec-intent-message]').exists();
+    await percySnapshot(assert);
   });
   test('view when users cannot write', async function (assert) {
     await visitOperatorMode({
@@ -346,6 +347,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-button]').doesNotExist();
     assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
     assert.dom('[data-test-cannot-write-intent-message]').exists();
+    await percySnapshot(assert);
   });
   test<TestContextWithSSE>('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({

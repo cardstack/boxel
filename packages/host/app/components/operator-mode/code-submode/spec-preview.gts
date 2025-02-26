@@ -22,6 +22,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
@@ -192,13 +193,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   };
 
   <template>
-    <div class='container'>
+    <div class={{cn 'container' spec-intent-message=@showCreateSpecIntent}}>
       {{#if @showCreateSpecIntent}}
-        <div class='spec-intent-message' data-test-create-spec-intent-message>
+        <div data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
         </div>
       {{else if (not @canWrite)}}
-        <div class='spec-intent-message' data-test-cannot-write-intent-message>
+        <div data-test-cannot-write-intent-message>
           Cannot create Boxel Specification inside this realm
         </div>
       {{else}}
@@ -250,10 +251,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
-        height: 100%;
         width: 100%;
-      }
-      .spec-preview {
         padding: var(--boxel-sp-sm);
       }
       .spec-intent-message {
@@ -316,7 +314,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
-  @tracked _selectedId?: string;
+  @tracked private _selectedId?: string;
+  @tracked private newCardJSON: LooseSingleCardDocument | undefined;
   @tracked ids: string[] = [];
 
   // We must do this so cardIds are available in the root for usage with getCard
@@ -352,7 +351,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       if (isResolvedCodeRef(maybeRef)) {
         ref = maybeRef;
       }
-      let doc: LooseSingleCardDocument = {
+      this.newCardJSON = {
         data: {
           attributes: {
             specType,
@@ -364,16 +363,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           },
         },
       };
-      try {
-        let card = await this.cardService.createFromSerialized(doc.data, doc);
-        if (!card) {
-          throw new Error(
-            `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
-          );
-        }
-        await this.cardService.saveModel(card);
-      } catch (e: any) {
-        console.log('Error saving', e);
+      await this.cardResource.loaded;
+      if (this.card) {
+        this._selectedId = undefined;
+        this.newCardJSON = undefined;
       }
     },
   );
@@ -479,9 +472,13 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private cardResource = getCard(this, () => this.selectedId, {
-    isAutoSave: () => true,
-  });
+  private cardResource = getCard(
+    this,
+    () => this.newCardJSON ?? this.selectedId,
+    {
+      isAutoSave: () => true,
+    },
+  );
 
   get card() {
     if (!this.cardResource.card) {
