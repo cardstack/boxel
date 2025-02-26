@@ -1195,7 +1195,8 @@ example.pdf: Unsupported file type: application/pdf. For now, only text files ar
       ),
     );
 
-    const result = getPromptParts(eventList, '@ai-bot:localhost').messages!;
+    const result = (await getPromptParts(eventList, '@ai-bot:localhost'))
+      .messages!;
     assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
@@ -1819,7 +1820,7 @@ test('Tools calls are connected to their results', async () => {
   );
 });
 
-test('Does not respond to first tool call result when two tool calls were made', function () {
+test('Does not respond to first tool call result when two tool calls were made', async function () {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/two-tool-calls-one-result.json'),
@@ -1827,7 +1828,7 @@ test('Does not respond to first tool call result when two tool calls were made',
     ),
   );
 
-  const { shouldRespond } = getPromptParts(eventList, '@aibot:localhost');
+  const { shouldRespond } = await getPromptParts(eventList, '@aibot:localhost');
   assert.strictEqual(
     shouldRespond,
     false,
@@ -1835,7 +1836,7 @@ test('Does not respond to first tool call result when two tool calls were made',
   );
 });
 
-test('Responds to second tool call result when two tool calls were made', function () {
+test('Responds to second tool call result when two tool calls were made', async function () {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/two-tool-calls-two-results.json'),
@@ -1843,7 +1844,7 @@ test('Responds to second tool call result when two tool calls were made', functi
     ),
   );
 
-  const { shouldRespond, messages } = getPromptParts(
+  const { shouldRespond, messages } = await getPromptParts(
     eventList,
     '@aibot:localhost',
   );
