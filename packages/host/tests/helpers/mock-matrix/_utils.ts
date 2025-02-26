@@ -5,6 +5,11 @@ import RealmService from '@cardstack/host/services/realm';
 import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
 
+import type {
+  MatrixEvent,
+  RealmEventEventContent,
+} from '@cardstack/base/matrix-event';
+
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 export class MockUtils {
@@ -22,6 +27,12 @@ export class MockUtils {
       roomId,
       eventType,
       stateKey,
+    );
+  };
+
+  getRealmEventMessages = (roomId: string) => {
+    return this.testState.sdk!.serverState.getRoomEvents(roomId).filter(
+      (e: MatrixEvent) => e.type === 'app.boxel.realm-event', // FIXME import
     );
   };
 
