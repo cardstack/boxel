@@ -1137,6 +1137,11 @@ export class LocalFileSystem {
 
       console.log(`Pushing changes for realm: ${realmName} (${realmUrl})`);
 
+      const filesProcessed: Set<string> = new Set();
+      let filesSkipped = 0;
+      let filesPushed = 0;
+      let currentPath = '';
+
       // Show progress indication
       await vscode.window.withProgress(
         {
@@ -1147,40 +1152,80 @@ export class LocalFileSystem {
         async (progress) => {
           progress.report({ message: 'Finding files to push...' });
 
-          // Get all files in the realm directory (excluding .boxel-realm.json and subdirectories)
-          const files = this.getFilesInDirectory(localPath);
+          // Create a message for the current status
+          const updateProgressMessage = () => {
+            let message = '';
 
-          if (files.length === 0) {
-            progress.report({ message: 'No files found to push' });
-            vscode.window.showInformationMessage(
-              `No files found to push in realm: ${realmName}`,
-            );
-            return;
-          }
+            // Add file counts
+            if (filesPushed > 0 || filesSkipped > 0) {
+              message += `Files: ${filesPushed} pushed, ${filesSkipped} unchanged`;
+            }
 
-          progress.report({ message: `Found ${files.length} files to push` });
+            // Add current path if available
+            if (currentPath) {
+              // Trim very long paths
+              const displayPath =
+                currentPath.length > 30
+                  ? '...' + currentPath.substring(currentPath.length - 30)
+                  : currentPath;
 
-          // Push each file
-          for (let i = 0; i < files.length; i++) {
-            const file = files[i];
-            progress.report({
-              message: `Pushing file ${i + 1} of ${
-                files.length
-              }: ${path.basename(file)}`,
-              increment: 100 / files.length,
-            });
+              message += `\nProcessing: ${displayPath}`;
+            }
 
-            // Push the file
-            await this.pushFile(file);
-          }
+            return message;
+          };
+
+          // Process the directory recursively
+          await this.processLocalDirectory(
+            realmUrl,
+            localPath,
+            '',
+            filesProcessed,
+            {
+              reportFileStatus: (status) => {
+                // Update counts based on file status
+                if (status === 'pushed') {
+                  filesPushed++;
+                } else if (status === 'skipped') {
+                  filesSkipped++;
+                }
+
+                // Report progress
+                progress.report({
+                  message: updateProgressMessage(),
+                });
+              },
+              reportDirectoryStart: (dir) => {
+                // Keep track of current directory
+                currentPath = dir;
+
+                // Report progress
+                progress.report({
+                  message: updateProgressMessage(),
+                });
+              },
+              reportDirectoryEnd: () => {
+                // Report progress
+                progress.report({
+                  message: updateProgressMessage(),
+                });
+              },
+            },
+          );
 
           // Update metadata with last sync time
           this.updateRealmMetadata(localPath, {
             lastSync: new Date().toISOString(),
           });
 
+          // Final progress message
+          const totalFiles = filesPushed + filesSkipped;
+          progress.report({
+            message: `Push complete. ${totalFiles} files processed (${filesPushed} pushed, ${filesSkipped} unchanged)`,
+          });
+
           vscode.window.showInformationMessage(
-            `Successfully pushed ${files.length} files for realm: ${realmName}`,
+            `Successfully processed ${totalFiles} files for realm: ${realmName} (${filesPushed} pushed, ${filesSkipped} unchanged)`,
           );
         },
       );
@@ -1192,26 +1237,221 @@ export class LocalFileSystem {
     }
   }
 
-  // Helper method to get all files in a directory (excluding metadata file)
-  private getFilesInDirectory(dirPath: string): string[] {
-    const files: string[] = [];
+  // Process a local directory recursively for pushing changes
+  private async processLocalDirectory(
+    realmUrl: string,
+    localBasePath: string,
+    relativePath: string,
+    filesProcessed: Set<string> = new Set(),
+    progress?: {
+      reportFileStatus: (status: 'pushed' | 'skipped') => void;
+      reportDirectoryStart: (dir: string) => void;
+      reportDirectoryEnd: () => void;
+    },
+  ): Promise<void> {
+    // Construct the full local directory path
+    const localDirPath = path.join(localBasePath, relativePath);
 
-    // Read all items in the directory
-    const items = fs.readdirSync(dirPath);
-
-    for (const item of items) {
-      const itemPath = path.join(dirPath, item);
-      const stats = fs.statSync(itemPath);
-
-      // Skip the metadata file and subdirectories
-      if (item === '.boxel-realm.json' || stats.isDirectory()) {
-        continue;
-      }
-
-      files.push(itemPath);
+    // Report directory start
+    if (progress) {
+      progress.reportDirectoryStart(relativePath || '/');
     }
 
-    return files;
+    console.log(`Processing local directory: ${localDirPath}`);
+
+    try {
+      // First, fetch the remote directory listing to get file modification times
+      const remoteDirectoryInfo = await this.fetchRemoteDirectoryInfo(
+        realmUrl,
+        relativePath,
+      );
+
+      // Read all items in the local directory
+      const items = fs.readdirSync(localDirPath);
+
+      for (const item of items) {
+        // Skip the metadata file
+        if (item === '.boxel-realm.json') {
+          continue;
+        }
+
+        const localItemPath = path.join(localDirPath, item);
+        const relativeItemPath = path
+          .join(relativePath, item)
+          .replace(/\\/g, '/');
+
+        try {
+          const stats = fs.statSync(localItemPath);
+
+          if (stats.isDirectory()) {
+            // Recursively process subdirectory
+            await this.processLocalDirectory(
+              realmUrl,
+              localBasePath,
+              relativeItemPath,
+              filesProcessed,
+              progress,
+            );
+          } else {
+            // Process file
+            // Check if we should push this file by comparing modification times
+            const shouldPushFile = this.shouldPushFileUsingDirectoryInfo(
+              item,
+              stats.mtime,
+              remoteDirectoryInfo,
+            );
+
+            if (shouldPushFile) {
+              // Push the file
+              console.log(`Pushing file: ${relativeItemPath}`);
+              await this.pushFile(localItemPath);
+              filesProcessed.add(relativeItemPath);
+
+              if (progress) {
+                progress.reportFileStatus('pushed');
+              }
+            } else {
+              console.log(`Skipping file (unchanged): ${relativeItemPath}`);
+              filesProcessed.add(relativeItemPath);
+
+              if (progress) {
+                progress.reportFileStatus('skipped');
+              }
+            }
+          }
+        } catch (itemError) {
+          console.error(`Error processing item ${localItemPath}:`, itemError);
+          // Continue with next item
+        }
+      }
+    } catch (error) {
+      console.error(`Error reading directory ${localDirPath}:`, error);
+    }
+
+    // Report directory end
+    if (progress) {
+      progress.reportDirectoryEnd();
+    }
+  }
+
+  // Fetch remote directory info to get file modification times
+  private async fetchRemoteDirectoryInfo(
+    realmUrl: string,
+    remotePath: string,
+  ): Promise<Map<string, { lastModified?: number; isDirectory: boolean }>> {
+    console.log(`Fetching remote directory info for: ${remotePath}`);
+
+    const result = new Map<
+      string,
+      { lastModified?: number; isDirectory: boolean }
+    >();
+
+    try {
+      // remove leading slash if present
+      const apiPath = remotePath.startsWith('/')
+        ? remotePath.substring(1)
+        : remotePath;
+
+      // Construct the full API URL
+      let apiUrl = new URL(apiPath, realmUrl).href;
+      // Ensure path has trailing slash for directory listings
+      apiUrl = apiUrl.endsWith('/') ? apiUrl : `${apiUrl}/`;
+
+      // Fetch the directory listing
+      const response = await fetch(apiUrl, {
+        headers: {
+          Accept: 'application/vnd.api+json',
+          Authorization: `${await this.realmAuth.getJWT(apiUrl)}`,
+        },
+      });
+
+      if (!response.ok) {
+        console.log(
+          `Directory API returned ${response.status}: ${response.statusText}`,
+        );
+        return result; // Return empty map
+      }
+
+      const data = await response.json();
+
+      // Process directory entries - JSON API format
+      if (data.data && data.data.relationships) {
+        console.log('Processing JSON API format directory listing');
+
+        for (const [name, info] of Object.entries(data.data.relationships)) {
+          const entry = info as {
+            meta: { kind: string; lastModified?: number };
+          };
+          const isDirectory = entry.meta.kind !== 'file';
+
+          // Store file info in the map
+          result.set(name, {
+            lastModified: entry.meta.lastModified,
+            isDirectory,
+          });
+
+          console.log(
+            `Remote file info: ${name}, isDir: ${isDirectory}, lastModified: ${entry.meta.lastModified}`,
+          );
+        }
+      }
+    } catch (error) {
+      console.error(
+        `Error fetching remote directory info for ${remotePath}:`,
+        error,
+      );
+    }
+
+    return result;
+  }
+
+  // Check if a file should be pushed based on directory info
+  private shouldPushFileUsingDirectoryInfo(
+    filename: string,
+    localModTime: Date,
+    remoteDirectoryInfo: Map<
+      string,
+      { lastModified?: number; isDirectory: boolean }
+    >,
+  ): boolean {
+    // If we don't have info about this file, it doesn't exist remotely - push it
+    if (!remoteDirectoryInfo.has(filename)) {
+      console.log(`File doesn't exist remotely: ${filename}`);
+      return true;
+    }
+
+    const fileInfo = remoteDirectoryInfo.get(filename)!;
+
+    // If it's marked as a directory in the remote but is a file locally, something's wrong
+    // Push it to be safe
+    if (fileInfo.isDirectory) {
+      console.log(
+        `Remote path is a directory but local is a file: ${filename}`,
+      );
+      return true;
+    }
+
+    // If we have a lastModified timestamp, compare it with the local file
+    if (fileInfo.lastModified !== undefined) {
+      const remoteModTime = new Date(fileInfo.lastModified * 1000); // Convert from seconds to milliseconds
+
+      console.log(`File: ${filename}`);
+      console.log(
+        `  Local timestamp: ${localModTime.toISOString()} (${localModTime.getTime()})`,
+      );
+      console.log(
+        `  Remote timestamp: ${remoteModTime.toISOString()} (${remoteModTime.getTime()})`,
+      );
+
+      // If local file is newer than remote file, push it
+      return localModTime > remoteModTime;
+    }
+
+    // If we can't determine remote modification time, push to be safe
+    console.log(
+      `No lastModified data for remote file: ${filename}, pushing to be safe`,
+    );
+    return true;
   }
 
   // Helper to update realm metadata

@@ -74,10 +74,16 @@
         "icon": "$(eye-closed)"
       },
       {
-        "command": "boxel-tools.syncRealm",
-        "title": "Sync Realm",
+        "command": "boxel-tools.pullRealm",
+        "title": "Pull Changes",
         "category": "Boxel Tools",
-        "icon": "$(sync)"
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "boxel-tools.pushRealm",
+        "title": "Push Changes",
+        "category": "Boxel Tools",
+        "icon": "$(arrow-up)"
       },
       {
         "command": "boxel-tools.login",
@@ -90,6 +96,11 @@
         "title": "Boxel: Check Matrix Server Connection",
         "category": "Boxel",
         "icon": "$(server)"
+      },
+      {
+        "command": "boxel-tools.pushFile",
+        "title": "Boxel: Push File to Remote",
+        "category": "Boxel"
       }
     ],
     "menus": {
@@ -135,7 +146,12 @@
       ],
       "view/item/context": [
         {
-          "command": "boxel-tools.syncRealm",
+          "command": "boxel-tools.pullRealm",
+          "when": "view == boxelRealmList && (viewItem == realm-watched || viewItem == realm-unwatched)",
+          "group": "inline"
+        },
+        {
+          "command": "boxel-tools.pushRealm",
           "when": "view == boxelRealmList && (viewItem == realm-watched || viewItem == realm-unwatched)",
           "group": "inline"
         },
@@ -148,6 +164,12 @@
           "command": "boxel-tools.disableFileWatching",
           "when": "view == boxelRealmList && viewItem == realm-watched",
           "group": "inline"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "boxel-tools.pushFile",
+          "when": "resourceScheme == file"
         }
       ]
     },
