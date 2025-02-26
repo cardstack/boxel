@@ -767,7 +767,7 @@ module('Integration | card-copy', function (hooks) {
       .exists('copy button with left arrow exists');
   });
 
-  test<TestContextForCopy>('can copy mulitple cards', async function (assert) {
+  test<TestContextForCopy>('can copy multiple cards', async function (assert) {
     assert.expect(7);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -788,70 +788,70 @@ module('Integration | card-copy', function (hooks) {
       }
       savedCards.push(json);
     });
-    await this.expectEvents({
-      assert,
-      realm: realm2,
-      expectedNumberOfEvents: 4,
-      onEvents: (events) => {
-        assert.deepEqual(
-          events.map((e: IndexRealmEventContent) => e.indexType),
-          [
-            'incremental-index-initiation',
-            'incremental',
-            'incremental-index-initiation',
-            'incremental',
-          ],
-          'event types are correct',
-        );
-        assert.deepEqual(
-          flatMap(
-            events.filter(
-              (e: IndexRealmEventContent) => e.indexType === 'incremental',
-            ),
-            (e: IncrementalIndexEventContent) => e.invalidations,
-          ),
-          [savedCards[0].data.id, savedCards[1].data.id],
-          'event invalidations are correct',
-        );
-      },
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.actions-item__button`,
-        );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
-        await click('[data-test-copy-button]');
-      },
-    });
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.actions-item__button`,
+    );
+
+    assert.strictEqual(
+      document.querySelectorAll(
+        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+      ).length,
+      1,
+      '1 card exists in destination realm',
+    );
+    await click('[data-test-copy-button]');
+
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 3,
     );
+
+    let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
+    let realmEventMessages = getRealmEventMessages(realmSessionRoomId)
+      .filter((m) => m.content.eventName === 'index')
+      .map((m) => m.content);
+
+    assert.deepEqual(
+      realmEventMessages.map((e: IndexRealmEventContent) => e.indexType),
+      [
+        'incremental-index-initiation',
+        'incremental',
+        'incremental-index-initiation',
+        'incremental',
+      ],
+      'event types are correct',
+    );
+    assert.deepEqual(
+      flatMap(
+        realmEventMessages.filter(
+          (e: IndexRealmEventContent) => e.indexType === 'incremental',
+        ),
+        (e: IncrementalIndexEventContent) => e.invalidations,
+      ),
+      [savedCards[0].data.id, savedCards[1].data.id],
+      'event invalidations are correct',
+    );
+
     assert.strictEqual(savedCards.length, 2, 'correct number of cards saved');
     let cardIds = savedCards.map((c) => c.data.id.split('/').pop()!);
     assert
