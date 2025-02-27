@@ -32,18 +32,22 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import { CursorPosition } from '@cardstack/host/services/recent-files-service';
+
 import BinaryFileInfo from './binary-file-info';
 
 interface Signature {
   Args: {
     file: FileResource | undefined;
     moduleContentsResource: ModuleContentsResource | undefined;
+    initialCursorPosition: CursorPosition | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     isReadOnly: boolean;
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
     onSetup: (updateCursorByName: (name: string) => void) => void;
+    onCursorPositionChange?: (position: Position) => void;
   };
 }
 
@@ -133,6 +137,12 @@ export default class CodeEditor extends Component<Signature> {
       let { start } = loc;
       return new Position(start.line, start.column);
     }
+    if (this.args.initialCursorPosition) {
+      return new Position(
+        this.args.initialCursorPosition.line,
+        this.args.initialCursorPosition.column,
+      );
+    }
     return undefined;
   }
 
@@ -193,6 +203,12 @@ export default class CodeEditor extends Component<Signature> {
         );
       }
     }
+  }
+
+  @action
+  private onCursorPositionChange(position: Position) {
+    this.selectDeclarationByMonacoCursorPosition(position);
+    this.args.onCursorPositionChange?.(position);
   }
 
   @action
@@ -303,7 +319,7 @@ export default class CodeEditor extends Component<Signature> {
             monacoSDK=this.monacoSDK
             language=this.language
             initialCursorPosition=this.initialMonacoCursorPosition
-            onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
+            onCursorPositionChange=this.onCursorPositionChange
             readOnly=@isReadOnly
             editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
           }}

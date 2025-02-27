@@ -13,11 +13,16 @@ import { LocalPath } from '@cardstack/runtime-common/paths';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 
-type SerialRecentFile = [URL, string];
+type SerialRecentFile = [URL, string, CursorPosition];
 
+export type CursorPosition = {
+  line: number;
+  column: number;
+};
 export interface RecentFile {
   realmURL: URL;
   filePath: LocalPath;
+  cursorPosition?: CursorPosition;
 }
 
 export default class RecentFilesService extends Service {
@@ -54,7 +59,7 @@ export default class RecentFilesService extends Service {
     this.persistRecentFiles();
   }
 
-  addRecentFileUrl(urlString: string) {
+  addRecentFileUrl(urlString: string, cursorPosition?: CursorPosition) {
     if (!urlString) {
       return;
     }
@@ -67,12 +72,12 @@ export default class RecentFilesService extends Service {
       let url = new URL(urlString);
 
       if (realmPaths.inRealm(url)) {
-        this.addRecentFile(realmPaths.local(url));
+        this.addRecentFile(realmPaths.local(url), cursorPosition);
       }
     }
   }
 
-  addRecentFile(file: LocalPath) {
+  addRecentFile(file: LocalPath, cursorPosition?: CursorPosition) {
     // TODO this wont work when visiting files that come from multiple realms in
     // code mode...
     let currentRealmUrl = this.operatorModeStateService.realmURL;
@@ -90,6 +95,7 @@ export default class RecentFilesService extends Service {
     this.recentFiles.unshift({
       realmURL: new URL(currentRealmUrl),
       filePath: file,
+      cursorPosition,
     });
 
     if (this.recentFiles.length > 100) {
@@ -106,6 +112,7 @@ export default class RecentFilesService extends Service {
         this.recentFiles.map((recentFile) => [
           recentFile.realmURL.toString(),
           recentFile.filePath,
+          recentFile.cursorPosition,
         ]),
       ),
     );
@@ -130,11 +137,11 @@ export default class RecentFilesService extends Service {
         this.recentFiles = new TrackedArray(
           JSON.parse(recentFilesString).reduce(function (
             recentFiles: RecentFile[],
-            [realmUrl, filePath]: SerialRecentFile,
+            [realmUrl, filePath, cursorPosition]: SerialRecentFile,
           ) {
             try {
               let url = new URL(realmUrl);
-              recentFiles.push({ realmURL: url, filePath });
+              recentFiles.push({ realmURL: url, filePath, cursorPosition });
             } catch (e) {
               console.log(
                 `Ignoring non-URL recent file from storage: ${realmUrl}`,
