@@ -20,6 +20,7 @@ import { consume } from 'ember-provide-consume-context';
 import {
   type ResolvedCodeRef,
   CardURLContextName,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -37,7 +38,7 @@ function maybeSerializeCodeRef(
   codeRef: ResolvedCodeRef | {} | undefined,
   stack: CardDef[] = [],
 ) {
-  if (codeRef && 'module' in codeRef) {
+  if (codeRef && isResolvedCodeRef(codeRef)) {
     if (moduleIsUrlLike(codeRef.module)) {
       // if a stack is passed in, use the containing card to resolve relative references
       let moduleHref =
@@ -144,7 +145,7 @@ export default class CodeRefField extends FieldDef {
       ...codeRef,
       ...(opts?.maybeRelativeURL &&
       codeRef &&
-      'module' in codeRef &&
+      isResolvedCodeRef(codeRef) &&
       !opts?.useAbsoluteURL &&
       moduleIsUrlLike(codeRef.module)
         ? { module: opts.maybeRelativeURL(codeRef.module) }
