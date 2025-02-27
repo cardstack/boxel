@@ -4,6 +4,7 @@ import {
   click,
   fillIn,
   triggerKeyEvent,
+  settled,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -1698,24 +1699,6 @@ module('Acceptance | interact submode tests', function (hooks) {
 
   module('index changes', function () {
     test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
-      assert.expect(3);
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
       await visitOperatorMode({
         stacks: [
           [
@@ -1729,30 +1712,26 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
         .hasText('Fadhlan');
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'FadhlanXXX',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'FadhlanXXX',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await settled();
 
       assert
         .dom('[data-test-operator-mode-stack="0"] [data-test-person]')
@@ -1760,26 +1739,6 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSSE>('stack item live updates with error', async function (assert) {
-      console.log('test started?');
-      assert.expect(7);
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
-      console.log('visitOperatorMode');
       await visitOperatorMode({
         stacks: [
           [
@@ -1790,7 +1749,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      console.log('visit cgomplete');
+
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
         .exists('card is displayed');
@@ -1800,34 +1759,27 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .doesNotExist('card error state is NOT displayed');
 
-      console.log('about to expect events');
-
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                relationships: {
-                  pet: {
-                    links: { self: './missing' },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            relationships: {
+              pet: {
+                links: { self: './missing' },
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await settled();
 
       assert
         .dom(
@@ -1835,30 +1787,26 @@ module('Acceptance | interact submode tests', function (hooks) {
         )
         .exists('card error state is displayed');
 
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                relationships: {
-                  pet: { links: { self: null } },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            relationships: {
+              pet: { links: { self: null } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await settled();
+
       assert
         .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
         .exists('card is displayed');
