@@ -37,10 +37,7 @@ import {
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import {
-  escapeHtmlOutsideCodeBlocks,
-  escapeHtmlTags,
-} from '@cardstack/runtime-common/helpers/html';
+import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
