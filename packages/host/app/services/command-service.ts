@@ -16,6 +16,7 @@ import {
   CommandContextStamp,
   ResolvedCodeRef,
   isResolvedCodeRef,
+  getClass,
 } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -130,6 +131,19 @@ export default class CommandService extends Service {
 
       // lookup command
       let { command: commandToRun } = this.commands.get(command.name) ?? {};
+      // If we don't find it in the one-offs, start searching for
+      // one in the skills we can construct
+      if (!commandToRun) {
+        // here we can get the coderef from the messagecommand
+        let commandCodeRef = command.codeRef;
+        if (commandCodeRef) {
+          let CommandConstructor = (await getClass(
+            commandCodeRef,
+            this.loaderService.loader,
+          )) as { new (context: CommandContext): Command<any, any> };
+          commandToRun = new CommandConstructor(this.commandContext);
+        }
+      }
 
       if (commandToRun) {
         // Get the input type and validate/construct the payload

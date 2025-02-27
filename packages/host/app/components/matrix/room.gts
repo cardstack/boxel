@@ -367,7 +367,8 @@ export default class Room extends Component<Signature> {
       // If we are permitted to auto-scroll and if there are no unread messages in the
       // room, then scroll to the last message in the room.
       !this.hasUnreadMessages &&
-      index === this.messages.length - 1
+      index === this.messages.length - 1 &&
+      !this.isScrolledToBottom
     ) {
       scrollTo();
     } else if (

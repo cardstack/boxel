@@ -444,7 +444,9 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private loadRoomsTask = restartableTask(async () => {
     await this.matrixService.flushAll;
-    await Promise.all([...this.roomResources.values()].map((r) => r.loading));
+    await Promise.allSettled(
+      [...this.roomResources.values()].map((r) => r.loading),
+    );
     await this.enterRoomInitially();
   });
 
