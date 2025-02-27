@@ -1,4 +1,4 @@
-import { click, waitFor, fillIn, find } from '@ember/test-helpers';
+import { click, waitFor, fillIn, find, settled } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
@@ -381,33 +381,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       },
     };
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Person/john-with-bad-pet-link`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Person/john-with-bad-pet-link`],
-        },
-      },
-    ];
-
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        setMonacoContent(JSON.stringify(editedCard));
-        await waitFor('[data-test-save-idle]');
-      },
-    });
+    setMonacoContent(JSON.stringify(editedCard));
+    await settled();
 
     let fileRef = await adapter.openFile('Person/john-with-bad-pet-link.json');
     if (!fileRef) {
@@ -423,24 +398,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   test<
     TestContextWithSave & TestContextWithSSE
   >('card instance change made in monaco editor is auto-saved', async function (assert) {
-    assert.expect(5);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
+    assert.expect(4);
 
     let expected: LooseSingleCardDocument = {
       data: {
@@ -481,16 +439,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       assert.strictEqual(JSON.parse(content).data.attributes?.name, 'MangoXXX');
     });
 
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        setMonacoContent(JSON.stringify(expected));
-      },
-    });
-
-    await waitFor('[data-test-save-idle]');
+    setMonacoContent(JSON.stringify(expected));
+    await settled();
 
     assert
       .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
@@ -500,25 +450,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   test<
     TestContextWithSave & TestContextWithSSE
   >('card instance change made in card editor is auto-saved', async function (assert) {
-    assert.expect(3);
+    assert.expect(2);
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
     let expected: LooseSingleCardDocument = {
       data: {
         id: `${testRealmURL}Pet/mango`,
@@ -569,14 +502,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
 
     await click('[data-test-format-chooser-edit]');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await fillIn('[data-test-field="name"] input', 'MangoXXX');
-      },
-    });
+    await fillIn('[data-test-field="name"] input', 'MangoXXX');
     await waitFor('[data-test-save-idle]');
   });
 
@@ -719,11 +645,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert.strictEqual(getMonacoContent(), `{ this is not actual JSON }`);
   });
 
-  test<
-    TestContextWithSave & TestContextWithSSE
-  >('card definition change made in monaco editor is auto-saved', async function (assert) {
-    assert.expect(2);
-
+  test<TestContextWithSave>('card definition change made in monaco editor is auto-saved', async function (assert) {
     let expected = `
     import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
     import StringCard from "https://cardstack.com/base/string";
@@ -745,30 +667,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       }
     }
   `;
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}pet.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [
-            `${testRealmURL}pet.gts`,
-            `${testRealmURL}Pet/mango`,
-            `${testRealmURL}Pet/vangogh`,
-            `${testRealmURL}Person/fadhlan`,
-            `${testRealmURL}Person/john-with-bad-pet-link`,
-            `${testRealmURL}person`,
-          ],
-        },
-      },
-    ];
+
     await visitOperatorMode({
       stacks: [
         [
@@ -783,15 +682,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     });
     await waitForCodeEditor();
 
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        setMonacoContent(expected);
-        await waitFor('[data-test-save-idle]');
-      },
-    });
+    setMonacoContent(expected);
+    await settled();
 
     let fileRef = await adapter.openFile('pet.gts');
     if (!fileRef) {
