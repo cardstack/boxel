@@ -19,19 +19,12 @@ import { restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 import {
   type ResolvedCodeRef,
+  isUrlLike,
   CardURLContextName,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import CodeIcon from '@cardstack/boxel-icons/code';
-
-function moduleIsUrlLike(module: string) {
-  return (
-    module.startsWith('http') ||
-    module.startsWith('.') ||
-    module.startsWith('/')
-  );
-}
 
 class BaseView extends Component<typeof CodeRefField> {
   <template>
@@ -122,7 +115,7 @@ export default class CodeRefField extends FieldDef {
       ...codeRef,
       ...(opts?.maybeRelativeURL &&
       !opts?.useAbsoluteURL &&
-      moduleIsUrlLike(codeRef.module)
+      isUrlLike(codeRef.module)
         ? { module: opts.maybeRelativeURL(codeRef.module) }
         : {}),
     };
@@ -153,7 +146,7 @@ function maybeSerializeCodeRef(
   stack: CardDef[] = [],
 ) {
   if (codeRef) {
-    if (moduleIsUrlLike(codeRef.module)) {
+    if (isUrlLike(codeRef.module)) {
       // if a stack is passed in, use the containing card to resolve relative references
       let moduleHref =
         stack.length > 0

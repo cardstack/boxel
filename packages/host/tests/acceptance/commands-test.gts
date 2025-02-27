@@ -191,6 +191,16 @@ module('Acceptance | Commands tests', function (hooks) {
       }
     }
 
+    class BoomCommand extends Command<undefined, undefined> {
+      static displayName = 'BoomCommand';
+      async getInputType() {
+        return undefined;
+      }
+      protected async run(): Promise<undefined> {
+        throw new Error('Boom!');
+      }
+    }
+
     class Person extends CardDef {
       static displayName = 'Person';
       @field firstName = contains(StringField);
@@ -385,6 +395,7 @@ module('Acceptance | Commands tests', function (hooks) {
           pet: mangoPet,
           friends: [mangoPet],
         }),
+        'boom-command.ts': { default: BoomCommand },
         'Skill/useful-commands.json': {
           data: {
             type: 'card',
@@ -410,6 +421,13 @@ module('Acceptance | Commands tests', function (hooks) {
                   codeRef: {
                     name: 'default',
                     module: '@cardstack/boxel-host/commands/switch-submode',
+                  },
+                  executors: [],
+                },
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: `/test/boom-command`,
                   },
                   executors: [],
                 },

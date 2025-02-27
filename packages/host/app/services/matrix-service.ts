@@ -20,14 +20,16 @@ import { TrackedMap } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  type LooseSingleCardDocument,
-  markdownToHtml,
-  splitStringIntoChunks,
-  baseRealm,
-  LooseCardResource,
-  ResolvedCodeRef,
   aiBotUsername,
+  baseRealm,
+  codeRefWithAbsoluteURL,
   getClass,
+  LooseCardResource,
+  markdownToHtml,
+  ResolvedCodeRef,
+  splitStringIntoChunks,
+  type LooseSingleCardDocument,
+  isUrlLike,
 } from '@cardstack/runtime-common';
 
 import {
@@ -65,7 +67,11 @@ import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  relativeTo,
+  BaseDef,
+  CardDef,
+} from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -599,8 +605,12 @@ export default class MatrixService extends Service {
     }[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
     for (let commandDef of commandDefinitions) {
-      const Command = await getClass(
+      let absoluteCodeRef = codeRefWithAbsoluteURL(
         commandDef.codeRef,
+        commandDef[Symbol.for('cardstack-relative-to') as typeof relativeTo],
+      ) as ResolvedCodeRef;
+      const Command = await getClass(
+        absoluteCodeRef,
         this.loaderService.loader,
       );
       const command = new Command(this.commandService.commandContext);
