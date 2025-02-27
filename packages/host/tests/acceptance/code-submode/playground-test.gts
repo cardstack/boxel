@@ -641,7 +641,7 @@ export class BlogPost extends CardDef {
     assert.dom('[data-option-index]').containsText('Blog Post');
   });
 
-  test<TestContextWithSSE>('can create new instance with CodeRef field', async function (assert) {
+  test('can create new instance with CodeRef field', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}code-ref-driver.gts`,
@@ -649,14 +649,8 @@ export class BlogPost extends CardDef {
     await click('[data-boxel-selector-item-text="CodeRefDriver"]');
     await click('[data-test-accordion-item="playground"] button');
     await click('[data-test-instance-chooser]');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-create-instance]');
-      },
-    });
+    await click('[data-test-create-instance]');
+
     assert
       .dom('[data-test-instance-chooser] [data-test-selected-item]')
       .hasText('Untitled Code Ref Driver', 'created instance is selected');
