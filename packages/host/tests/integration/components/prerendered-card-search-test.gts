@@ -57,7 +57,11 @@ module(`Integration | prerendered-card-search`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks);
+  setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
   setupServerSentEvents(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
@@ -452,7 +456,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
   });
 
-  test<TestContextWithSSE>(`refreshes when a queried realm changes`, async function (assert) {
+  test(`refreshes when a queried realm changes`, async function (assert) {
     let query: Query = {
       filter: {
         on: {
@@ -495,16 +499,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     await waitFor('.card-container');
     assert.dom('.card-container').exists({ count: 2 });
 
-    await this.expectEvents({
-      assert,
-      realm: testRealm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        let owner = (getContext() as TestContext).owner;
-        let cardService = owner.lookup('service:card-service') as CardService;
-        await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
-      },
-    });
+    let owner = (getContext() as TestContext).owner;
+    let cardService = owner.lookup('service:card-service') as CardService;
+    await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
+
     await waitUntil(() => {
       return document.querySelectorAll('.card-container').length === 1;
     });
