@@ -47,8 +47,10 @@ export function setupMockMatrix(
 
       if (opts.activeRealms) {
         for (let realmURL of opts.activeRealms) {
-          // FIXME extract for use in mock client, or share somehow
-          let realmSessionRoomId = `test-session-room-realm-${realmURL}-user-${loggedInAs}`;
+          let realmSessionRoomId = mockUtils.getRoomIdForRealmAndUser(
+            realmURL,
+            loggedInAs,
+          );
 
           let { createAndJoinRoom, getRoomIds } = mockUtils;
 

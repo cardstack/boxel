@@ -68,9 +68,11 @@ module('Integration | card-copy', function (hooks) {
   );
   setupServerSentEvents(hooks);
 
-  let { getRoomIds, getRealmEventMessages, getRealmEventMessagesSince } =
+  let loggedInAs = '@testuser:localhost';
+
+  let { getRoomIdForRealmAndUser, getRealmEventMessagesSince } =
     setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
+      loggedInAs,
       activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
       autostart: true,
     });
@@ -697,7 +699,10 @@ module('Integration | card-copy', function (hooks) {
     );
     await click('[data-test-copy-button]');
 
-    let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
+    let realmSessionRoomId = getRoomIdForRealmAndUser(
+      testRealm2URL,
+      loggedInAs,
+    );
 
     await waitUntil(async () => {
       let matrixMessages = await getRealmEventMessagesSince(
@@ -833,7 +838,11 @@ module('Integration | card-copy', function (hooks) {
         ).length === 3,
     );
 
-    let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
+    let realmSessionRoomId = getRoomIdForRealmAndUser(
+      testRealm2URL,
+      loggedInAs,
+    );
+
     let realmEventMessages = getRealmEventMessagesSince(
       realmSessionRoomId,
       realmEventTimestampStart,
@@ -982,7 +991,11 @@ module('Integration | card-copy', function (hooks) {
         ).length === 2,
     );
 
-    let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
+    let realmSessionRoomId = getRoomIdForRealmAndUser(
+      testRealm2URL,
+      loggedInAs,
+    );
+
     let realmEventMessages = getRealmEventMessagesSince(
       realmSessionRoomId,
       realmEventTimestampStart,
@@ -1114,8 +1127,11 @@ module('Integration | card-copy', function (hooks) {
     );
     await click('[data-test-copy-button]');
 
-    // FIXME can this be extracted?
-    let realmSessionRoomId = `session-room-for-${realm2.matrixUsername}`;
+    let realmSessionRoomId = getRoomIdForRealmAndUser(
+      testRealm2URL,
+      loggedInAs,
+    );
+
     let realmEventMessages = getRealmEventMessagesSince(
       realmSessionRoomId,
       realmEventTimestampStart,

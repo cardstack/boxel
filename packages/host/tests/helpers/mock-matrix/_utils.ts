@@ -23,6 +23,11 @@ export class MockUtils {
   getRoomIds = () => {
     return this.testState.sdk!.serverState.rooms.map((r) => r.id);
   };
+
+  getRoomIdForRealmAndUser = (realmURL: string, userId: string) => {
+    return `test-session-room-realm-${realmURL}-user-${userId}`;
+  };
+
   getRoomState = (roomId: string, eventType: string, stateKey?: string) => {
     return this.testState.sdk!.serverState.getRoomState(
       roomId,
