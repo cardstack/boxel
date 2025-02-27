@@ -49,7 +49,6 @@ class SpecTypeField extends StringField {
 export class Spec extends CardDef {
   static displayName = 'Spec';
   static icon = BoxModel;
-  @field name = contains(StringField);
   @field readMe = contains(MarkdownField);
 
   @field ref = contains(CodeRef);
@@ -77,14 +76,7 @@ export class Spec extends CardDef {
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
-  @field title = contains(StringField, {
-    computeVia: function (this: Spec) {
-      if (this.name) {
-        return this.name;
-      }
-      return this.ref.name === 'default' ? undefined : this.ref.name;
-    },
-  });
+  @field title = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof this> {
     icon: CardOrFieldTypeIcon | undefined;
@@ -136,10 +128,16 @@ export class Spec extends CardDef {
             {{/if}}
           </div>
           <div class='header-info-container'>
-            <h1 class='title' id='title' data-test-title><@fields.title /></h1>
-            <p class='description' data-test-description>
-              <@fields.description />
-            </p>
+            <div class='header-info-padding-container'>
+              <h1 class='title' id='title' data-test-title>
+                <@fields.title />
+              </h1>
+            </div>
+            <div class='header-info-padding-container'>
+              <p class='description' data-test-description>
+                <@fields.description />
+              </p>
+            </div>
           </div>
         </header>
         <section class='readme section'>
@@ -224,11 +222,13 @@ export class Spec extends CardDef {
         }
         .title,
         .description {
+          margin: 0;
           display: -webkit-box;
           -webkit-box-orient: vertical;
           -webkit-line-clamp: 2;
           overflow: hidden;
           text-wrap: pretty;
+          word-break: break-word;
         }
         .box {
           border: 1px solid var(--boxel-border-color);
@@ -249,8 +249,16 @@ export class Spec extends CardDef {
           background-color: var(--boxel-100);
         }
         .header-info-container {
+          background-color: var(--boxel-light);
+          border-radius: var(--boxel-border-radius);
           flex: 1;
           align-self: center;
+        }
+        .header-info-container > * + * {
+          border-top: 1px solid var(--boxel-spec-background-color);
+        }
+        .header-info-padding-container {
+          padding: var(--boxel-sp);
         }
         .row-header {
           display: flex;
