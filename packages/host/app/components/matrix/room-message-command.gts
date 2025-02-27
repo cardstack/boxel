@@ -7,7 +7,7 @@ import { cached } from '@glimmer/tracking';
 
 import { task, timeout } from 'ember-concurrency';
 
-import { modifier } from 'ember-modifier';
+// import { modifier } from 'ember-modifier';
 
 import { resource, use } from 'ember-resources';
 
@@ -24,11 +24,14 @@ import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
+import type { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
+
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import monacoModifier from '@cardstack/host/modifiers/monaco';
+import { RoomResource } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -44,17 +47,13 @@ import Preview from '../preview';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
+    roomResource: RoomResource;
     messageCommand: MessageCommand;
-    messageIndex: number | undefined;
     roomId: string;
     runCommand: () => void;
     isError?: boolean;
     isPending?: boolean;
-    isDisplayingCode: boolean;
-    failedCommandState: Error | undefined;
     monacoSDK: MonacoSDK;
-    onToggleViewCode: () => void;
-    currentEditor: number | undefined;
   };
 }
 
@@ -94,7 +93,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @cached
   private get applyButtonState(): ApplyButtonState {
-    if (this.args.failedCommandState) {
+    if (this.failedCommandState) {
       return 'failed';
     }
     return this.args.messageCommand?.status ?? 'ready';
@@ -111,36 +110,48 @@ export default class RoomMessageCommand extends Component<Signature> {
     return state;
   });
 
+  private get isDisplayingCode() {
+    return this.args.roomResource.isDisplayingCode(
+      this.args.messageCommand.commandRequest as CommandRequestContent,
+    );
+  }
+
+  private toggleViewCode = () => {
+    this.args.roomResource.toggleViewCode(
+      this.args.messageCommand.commandRequest as CommandRequestContent,
+    );
+  };
+
   // TODO need to reevalutate this modifier--do we want to hijack the scroll
   // when the user views the code?
-  private scrollBottomIntoView = modifier((element: HTMLElement) => {
-    if (this.args.currentEditor !== this.args.messageIndex) {
-      return;
-    }
+  // private scrollBottomIntoView = modifier((element: HTMLElement) => {
+  //   if (this.args.currentEditor !== this.args.messageIndex) {
+  //     return;
+  //   }
 
-    let height = this.monacoService.getContentHeight();
-    if (!height || height < 0) {
-      return;
-    }
-    element.style.height = `${height}px`;
+  //   let height = this.monacoService.getContentHeight();
+  //   if (!height || height < 0) {
+  //     return;
+  //   }
+  //   element.style.height = `${height}px`;
 
-    let outerContainer = document.getElementById(
-      `message-container-${this.args.messageIndex}`,
-    );
-    if (!outerContainer) {
-      return;
-    }
-    this.scrollIntoView(outerContainer);
-  });
+  //   let outerContainer = document.getElementById(
+  //     `message-container-${this.args.messageIndex}`,
+  //   );
+  //   if (!outerContainer) {
+  //     return;
+  //   }
+  //   this.scrollIntoView(outerContainer);
+  // });
 
-  private scrollIntoView(element: HTMLElement) {
-    let { top, bottom } = element.getBoundingClientRect();
-    let isVerticallyInView = top >= 0 && bottom <= window.innerHeight;
+  // private scrollIntoView(element: HTMLElement) {
+  //   let { top, bottom } = element.getBoundingClientRect();
+  //   let isVerticallyInView = top >= 0 && bottom <= window.innerHeight;
 
-    if (!isVerticallyInView) {
-      element.scrollIntoView({ block: 'end' });
-    }
-  }
+  //   if (!isVerticallyInView) {
+  //     element.scrollIntoView({ block: 'end' });
+  //   }
+  // }
 
   private get headerTitle() {
     if (this.commandResultCard.card) {
@@ -171,8 +182,22 @@ export default class RoomMessageCommand extends Component<Signature> {
     });
   }
 
+  @cached
+  private get failedCommandState() {
+    if (!this.args.messageCommand.commandRequest.id) {
+      return undefined;
+    }
+    return this.matrixService.failedCommandState.get(
+      this.args.messageCommand.commandRequest.id,
+    );
+  }
+
   <template>
-    <div class={{cn is-pending=@isPending is-error=@isError}} ...attributes>
+    <div
+      class={{cn is-pending=@isPending is-error=@isError}}
+      data-test-command-id={{@messageCommand.commandRequest.id}}
+      ...attributes
+    >
       <div
         class='command-button-bar'
         {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
@@ -182,12 +207,12 @@ export default class RoomMessageCommand extends Component<Signature> {
       >
         <Button
           class='view-code-button'
-          {{on 'click' @onToggleViewCode}}
-          @kind={{if @isDisplayingCode 'primary-dark' 'secondary-dark'}}
+          {{on 'click' this.toggleViewCode}}
+          @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
           @size='extra-small'
           data-test-view-code-button
         >
-          {{if @isDisplayingCode 'Hide Code' 'View Code'}}
+          {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
         </Button>
         <ApplyButton
           @state={{this.applyButtonState}}
@@ -195,7 +220,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           data-test-command-apply={{this.applyButtonState}}
         />
       </div>
-      {{#if @isDisplayingCode}}
+      {{#if this.isDisplayingCode}}
         <div class='preview-code'>
           <Button
             class='code-copy-button'
@@ -214,7 +239,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           </Button>
           <div
             class='monaco-container'
-            {{this.scrollBottomIntoView}}
+            {{! this.scrollBottomIntoView }}
             {{monacoModifier
               content=this.previewCommandCode
               contentChanged=undefined

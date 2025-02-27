@@ -4,11 +4,14 @@ import { getOwner, setOwner } from '@ember/owner';
 
 import { inject as service } from '@ember/service';
 
+import { TrackedArray } from 'tracked-built-ins';
+
 import {
   LooseSingleCardDocument,
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -71,7 +74,6 @@ export default class MessageBuilder {
       // These are not guaranteed to exist in the event
       transactionId: this.event.unsigned?.transaction_id || null,
       attachedCardIds: null,
-      command: null,
       status: this.event.status,
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
@@ -137,7 +139,7 @@ export default class MessageBuilder {
       message.clientGeneratedId = this.clientGeneratedId;
       message.attachedCardIds = this.attachedCardIds;
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
-        message.command = this.buildMessageCommand(message);
+        message.commands = this.buildMessageCommands(message);
       }
     } else if (event.content.msgtype === 'm.text') {
       message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
@@ -159,42 +161,66 @@ export default class MessageBuilder {
         : undefined;
     message.updated = new Date();
 
-    let commandRequest = (this.event.content as CardMessageContent)[
-      APP_BOXEL_COMMAND_REQUESTS_KEY
-    ]?.[0]; // TODO: handle multiple commands
-    if (commandRequest) {
-      if (message.command) {
-        message.command.commandRequest = commandRequest;
+    let commandRequests =
+      (this.event.content as CardMessageContent)[
+        APP_BOXEL_COMMAND_REQUESTS_KEY
+      ] ?? [];
+    for (let commandRequest of commandRequests) {
+      let command = message.commands.find(
+        (c) => c.commandRequest.id === commandRequest.id,
+      );
+      if (command) {
+        command.commandRequest = commandRequest;
       } else {
-        message.command = this.buildMessageCommand(message);
-        message.isStreamingFinished = true;
+        message.commands.push(
+          this.buildMessageCommand(message, commandRequest),
+        );
       }
+    }
+    if (commandRequests.length > 0) {
+      message.isStreamingFinished = true;
     }
   }
 
   updateMessageCommandResult(message: Message) {
-    if (!message.command) {
-      message.command = this.buildMessageCommand(message);
+    if (message.commands.length === 0) {
+      message.commands = this.buildMessageCommands(message);
     }
 
     if (this.builderContext.commandResultEvent) {
       let event = this.builderContext.commandResultEvent;
-      message.command!.commandStatus = event.content['m.relates_to']
-        .key as CommandStatus;
-      message.command!.commandResultCardEventId =
-        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-          ? event.content.data.cardEventId
-          : undefined;
+      let messageCommand = message.commands.find(
+        (c) => c.commandRequest.id === event.content.data.commandRequestId,
+      );
+      if (messageCommand) {
+        messageCommand.commandStatus = event.content['m.relates_to']
+          .key as CommandStatus;
+        messageCommand.commandResultCardEventId =
+          event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+            ? event.content.data.cardEventId
+            : undefined;
+      }
     }
   }
 
-  private buildMessageCommand(message: Message) {
+  private buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
     let commandRequests = eventContent[APP_BOXEL_COMMAND_REQUESTS_KEY];
     if (!commandRequests) {
-      return;
+      return new TrackedArray<MessageCommand>();
     }
-    let commandRequest = commandRequests[0]; // TODO: handle multiple commands
+    let commands = new TrackedArray<MessageCommand>();
+    for (let commandRequest of commandRequests) {
+      let command = this.buildMessageCommand(message, commandRequest);
+      commands.push(command);
+    }
+    return commands;
+  }
+
+  private buildMessageCommand(
+    message: Message,
+    commandRequest: Partial<CommandRequestContent>,
+  ) {
     let commandResultEvent =
       this.builderContext.commandResultEvent ??
       (this.builderContext.events.find((e: any) => {

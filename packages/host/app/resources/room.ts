@@ -33,6 +33,7 @@ import type {
 
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
+import { CommandRequestContent } from '../../../runtime-common/helpers/ai';
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -533,14 +534,14 @@ export class RoomResource extends Resource<Args> {
     return cardDoc;
   };
 
-  public isDisplayingCode(message: Message) {
-    return this._isDisplayingViewCodeMap.get(message.eventId) ?? false;
+  public isDisplayingCode(commandRequest: CommandRequestContent) {
+    return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
   }
 
-  public toggleViewCode(message: Message) {
+  public toggleViewCode(commandRequest: CommandRequestContent) {
     this._isDisplayingViewCodeMap.set(
-      message.eventId,
-      !this.isDisplayingCode(message),
+      commandRequest.id,
+      !this.isDisplayingCode(commandRequest),
     );
   }
 }

@@ -385,13 +385,27 @@ module('Acceptance | Commands tests', function (hooks) {
           pet: mangoPet,
           friends: [mangoPet],
         }),
-        'Skill/switcher.json': {
+        'Skill/useful-commands.json': {
           data: {
             type: 'card',
             attributes: {
               instructions:
-                'Use the tool SwitchSubmodeCommand with "code" to go to codemode and "interact" to go to interact mode.',
+                'Here are few commands you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode. * get-boxel-ui-state: find out what mode you are in currently, and what cards are open. * search-cards-by-type-and-title: search for cards by name or description.',
               commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '@cardstack/boxel-host/commands/get-boxel-ui-state',
+                  },
+                  executors: [],
+                },
+                {
+                  codeRef: {
+                    name: 'SearchCardsByTypeAndTitleCommand',
+                    module: '@cardstack/boxel-host/commands/search-cards',
+                  },
+                  executors: [],
+                },
                 {
                   codeRef: {
                     name: 'default',
@@ -400,7 +414,7 @@ module('Acceptance | Commands tests', function (hooks) {
                   executors: [],
                 },
               ],
-              title: 'Switcher',
+              title: 'Useful Commands',
               description: null,
               thumbnailURL: null,
             },
@@ -831,9 +845,9 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
 
-    // add switcher skill
+    // add useful-commands skill, which includes the switch-submode command
     await click(
-      '[data-test-card-catalog-item="http://test-realm/test/Skill/switcher"]',
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
     );
     await click('[data-test-card-catalog-go-button]');
 
@@ -880,6 +894,48 @@ module('Acceptance | Commands tests', function (hooks) {
       JSON.parse(message.content.data).commandRequestId,
       'abc123',
     );
+  });
+
+  test('multiple commands can be requested in a single aibot message', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    // open skill menu
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+
+    await click(
+      '[data-test-card-catalog-item="http://test-realm/test/Skill/useful-commands"]',
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Checking the current UI state and searching for cards',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: 'Checking the current UI state and searching for cards',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          name: 'get-boxel-ui-state_dd88',
+          arguments: {},
+        },
+        {
+          name: 'search-cards-by-type-and-title_dd88',
+          arguments: {
+            attributes: {
+              query: 'test',
+            },
+          },
+        },
+      ],
+    });
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply]')
+      .exists({ count: 2 });
   });
 
   test('a command executed via the AI Assistant shows the result as an embedded card', async function (assert) {

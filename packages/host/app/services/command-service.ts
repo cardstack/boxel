@@ -50,7 +50,7 @@ export default class CommandService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
-  currentlyExecutingCommandEventIds = new TrackedSet<string>();
+  currentlyExecutingCommandRequestIds = new TrackedSet<string>();
 
   private commands: Map<
     string,
@@ -87,7 +87,7 @@ export default class CommandService extends Service {
     if (!command || !autoExecute) {
       return;
     }
-    this.currentlyExecutingCommandEventIds.add(eventId);
+    this.currentlyExecutingCommandRequestIds.add(commandRequest.id);
     try {
       // Get the input type and validate/construct the payload
       let InputType = await command.getInputType();
@@ -111,7 +111,7 @@ export default class CommandService extends Service {
         resultCard,
       );
     } finally {
-      this.currentlyExecutingCommandEventIds.delete(eventId);
+      this.currentlyExecutingCommandRequestIds.delete(commandRequest.id);
     }
   }
 
@@ -126,11 +126,11 @@ export default class CommandService extends Service {
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageCommand) => {
-    let { arguments: payload, eventId, id: toolCallId } = command;
+    let { arguments: payload, eventId, id: commandRequestId } = command;
     let resultCard: CardDef | undefined;
     try {
-      this.matrixService.failedCommandState.delete(eventId);
-      this.currentlyExecutingCommandEventIds.add(eventId);
+      this.matrixService.failedCommandState.delete(commandRequestId!);
+      this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
 
       // lookup command
       let { command: commandToRun } =
@@ -201,7 +201,7 @@ export default class CommandService extends Service {
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
-        toolCallId!,
+        commandRequestId!,
         resultCard,
       );
     } catch (e) {
@@ -213,9 +213,9 @@ export default class CommandService extends Service {
             : new Error('Command failed.');
       console.warn(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
-      this.matrixService.failedCommandState.set(eventId, error);
+      this.matrixService.failedCommandState.set(commandRequestId!, error);
     } finally {
-      this.currentlyExecutingCommandEventIds.delete(eventId);
+      this.currentlyExecutingCommandRequestIds.delete(commandRequestId!);
     }
   });
 }

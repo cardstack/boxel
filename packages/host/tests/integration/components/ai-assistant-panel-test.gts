@@ -444,6 +444,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: 'd60582a6-8792-4505-8d38-656c1167f00d',
           name: 'patchCard',
           arguments: {
             card_id: `${testRealmURL}Person/fadhlan`,
@@ -464,6 +465,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: '444ac6ed-eea2-459b-93f7-56117bf54f50',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -488,6 +490,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: 'cddecff1-8f26-4170-91bf-5a2192fb2459',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -847,6 +850,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: '8c848ebb-3e09-4ba3-b21d-348bdd7bd1ff',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -870,6 +874,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: '773c6c9b-a247-4099-8ec0-44f3ea197938',
           name: 'patchCard',
           arguments: {
             card_id: id,
@@ -884,11 +889,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      body: 'Change first name to Jackie',
-      formatted_body: 'Change first name to Jackie',
+      body: 'Change first name to Jackie and switch to code mode',
+      formatted_body: 'Change first name to Jackie and switch to code mode',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: '127538b2-b0d1-4902-bd09-1fdf55063f07',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -899,6 +905,15 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
+        {
+          id: '6521d80d-a3e4-4687-b0b3-f5f7ddc85f0c',
+          name: 'switch-submode_dd88',
+          arguments: {
+            attributes: {
+              submode: 'code',
+            },
+          },
+        },
       ],
       'm.relates_to': {
         rel_type: 'm.replace',
@@ -906,26 +921,34 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-command-apply="ready"]', { count: 3 });
+    await waitFor('[data-test-command-apply="ready"]', { count: 4 });
 
-    click('[data-test-message-idx="2"] [data-test-command-apply]');
+    click(
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-command-apply]',
+    );
     await waitFor(
-      '[data-test-message-idx="2"] [data-test-apply-state="applying"]',
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applying"]',
     );
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
+      .dom(
+        '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applying"]',
+      )
       .exists();
 
-    await waitFor('[data-test-message-idx="2"] [data-test-command-card-idle]');
     await waitFor(
-      '[data-test-message-idx="2"] [data-test-apply-state="applied"]',
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-command-card-idle]',
+    );
+    await waitFor(
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applied"]',
     );
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .dom(
+        '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applied"]',
+      )
       .exists();
-    assert.dom('[data-test-command-apply="ready"]').exists({ count: 2 });
+    assert.dom('[data-test-command-apply="ready"]').exists({ count: 3 });
     assert.dom('[data-test-person]').hasText('Jackie');
 
     await click('[data-test-message-idx="1"] [data-test-command-apply]');
@@ -934,7 +957,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
       .exists();
-    assert.dom('[data-test-command-apply="ready"]').exists({ count: 1 });
+    assert.dom('[data-test-command-apply="ready"]').exists({ count: 2 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
       .exists();
@@ -1414,6 +1437,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: 'fb8fef81-2142-4861-a902-d5614b0aea52',
           name: 'patchCard',
           arguments: {
             attributes: {
