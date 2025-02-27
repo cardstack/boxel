@@ -778,6 +778,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         assert.strictEqual(json.data.meta.realmURL, testRealmURL);
         deferred.fulfill();
       });
+
       await click('[data-test-create-new-card-button]');
       assert
         .dom('[data-test-card-catalog-item-selected]')
@@ -786,6 +787,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-show-more-cards]')
         .containsText('3 not shown', 'Entries are paginated');
+      assert.dom(`[data-test-select="${testRealmURL}person-entry"]`).exists();
       await click(`[data-test-select="${testRealmURL}person-entry"]`);
       await click('[data-test-card-catalog-go-button]');
 
