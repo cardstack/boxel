@@ -230,6 +230,13 @@ export class Spec extends CardDef {
           text-wrap: pretty;
           word-break: break-word;
         }
+        .title :deep(.boxel-input) {
+          margin: 0;
+          font-size: 18px;
+          font-weight: 600;
+          letter-spacing: var(--boxel-lsp-xs);
+          --boxel-input-height: 0px;
+        }
         .box {
           border: 1px solid var(--boxel-border-color);
           border-radius: var(--boxel-border-radius-lg);
