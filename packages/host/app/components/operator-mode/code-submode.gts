@@ -975,31 +975,30 @@ export default class CodeSubmode extends Component<Signature> {
                         </A.Item>
                       {{/if}}
                       {{#if this.showSpecPreview}}
-                        <SpecPreview
-                          @selectedDeclaration={{this.selectedDeclaration}}
-                          as |SpecPreviewTitle SpecPreviewContent|
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn
+                            this.selectAccordionItem
+                            'spec-preview'
+                          }}
+                          @isOpen={{eq
+                            this.selectedAccordionItem
+                            'spec-preview'
+                          }}
+                          data-test-accordion-item='spec-preview'
                         >
-                          <A.Item
-                            class='accordion-item'
-                            @contentClass='accordion-item-content'
-                            @onClick={{fn
-                              this.selectAccordionItem
-                              'spec-preview'
-                            }}
-                            @isOpen={{eq
-                              this.selectedAccordionItem
-                              'spec-preview'
-                            }}
-                            data-test-accordion-item='spec-preview'
-                          >
-                            <:title>
-                              <SpecPreviewTitle />
-                            </:title>
-                            <:content>
-                              <SpecPreviewContent class='accordion-content' />
-                            </:content>
-                          </A.Item>
-                        </SpecPreview>
+                          <:title>
+                            Boxel Spec
+                          </:title>
+                          <:content>
+                            <div class='accordion-content'>
+                              <SpecPreview
+                                @selectedDeclaration={{this.selectedDeclaration}}
+                              />
+                            </div>
+                          </:content>
+                        </A.Item>
                       {{/if}}
                     </Accordion>
                   {{else if this.moduleContentsResource.moduleError}}

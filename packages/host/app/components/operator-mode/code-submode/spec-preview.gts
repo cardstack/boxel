@@ -3,16 +3,15 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
-
 import { tracked } from '@glimmer/tracking';
 
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import Brain from '@cardstack/boxel-icons/brain';
 import DotIcon from '@cardstack/boxel-icons/dot';
-
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
 import { task } from 'ember-concurrency';
+import { stringify } from 'qs';
 
 import {
   BoxelButton,
@@ -21,7 +20,7 @@ import {
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { cn } from '@cardstack/boxel-ui/helpers';
+import { cn, gt, eq, and, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
@@ -37,26 +36,29 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import PrerenderedCardSearch, {
-  PrerenderedCard,
-} from '@cardstack/host/components/prerendered-card-search';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import {
-  CardOrFieldDeclaration,
+  type CardOrFieldDeclaration,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
-import CardService from '@cardstack/host/services/card-service';
+import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import type { WithBoundArgs } from '@glint/template';
+
+function getRelativePath(baseUrl: string, targetUrl: string) {
+  const basePath = new URL(baseUrl).pathname;
+  const targetPath = new URL(targetUrl).pathname;
+  return targetPath.replace(basePath, '') || '/';
+}
 
 interface Signature {
   Element: HTMLElement;
@@ -64,271 +66,9 @@ interface Signature {
     selectedDeclaration?: ModuleDeclaration;
   };
   Blocks: {
-    default: [
-      WithBoundArgs<
-        typeof SpecPreviewTitle,
-        | 'showCreateSpecIntent'
-        | 'createSpec'
-        | 'isCreateSpecInstanceRunning'
-        | 'specType'
-        | 'numberOfInstances'
-      >,
-      (
-        | WithBoundArgs<
-            typeof SpecPreviewContent,
-            | 'showCreateSpecIntent'
-            | 'canWrite'
-            | 'ids'
-            | 'selectId'
-            | 'selectedId'
-            | 'spec'
-          >
-        | WithBoundArgs<typeof SpecPreviewLoading, never>
-      ),
-    ];
+    default: [];
   };
 }
-
-interface TitleSignature {
-  Args: {
-    numberOfInstances: number;
-    specType: SpecType;
-    showCreateSpecIntent: boolean;
-    createSpec: (event: MouseEvent) => void;
-    isCreateSpecInstanceRunning: boolean;
-  };
-}
-
-class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
-  get moreThanOneInstance() {
-    return this.args.numberOfInstances > 1;
-  }
-
-  <template>
-    Boxel Spec
-
-    <span class='has-spec' data-test-has-spec>
-      {{#if @showCreateSpecIntent}}
-        <BoxelButton
-          @kind='primary'
-          @size='small'
-          @loading={{@isCreateSpecInstanceRunning}}
-          {{on 'click' @createSpec}}
-          data-test-create-spec-button
-        >
-          Create
-        </BoxelButton>
-      {{else if this.moreThanOneInstance}}
-        <div class='number-of-instance'>
-          <DotIcon class='dot-icon' />
-          <div class='number-of-instance-text'>
-            {{@numberOfInstances}}
-            instances
-          </div>
-        </div>
-      {{else}}
-        {{#if @specType}}
-          <SpecTag @specType={{@specType}} />
-        {{/if}}
-      {{/if}}
-    </span>
-
-    <style scoped>
-      .has-spec {
-        margin-left: auto;
-        color: var(--boxel-450);
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xl);
-        text-transform: uppercase;
-      }
-      .number-of-instance {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-      }
-      .number-of-instance-text {
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xl);
-      }
-      .dot-icon {
-        flex-shrink: 0;
-        width: 18px;
-        height: 18px;
-      }
-    </style>
-  </template>
-}
-
-interface ContentSignature {
-  Element: HTMLDivElement;
-  Args: {
-    showCreateSpecIntent: boolean;
-    canWrite: boolean;
-    selectId: (id: string) => void;
-    selectedId: string;
-    ids: string[];
-    spec: Spec | undefined;
-  };
-}
-
-class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
-  @service private declare realm: RealmService;
-
-  get onlyOneInstance() {
-    return this.args.ids.length === 1;
-  }
-
-  getDropdownData = (id: string) => {
-    let realmInfo = this.realm.info(id);
-    let realmURL = this.realm.realmOfURL(new URL(id));
-    if (!realmURL) {
-      throw new Error('bug: no realm URL');
-    }
-    return {
-      id: id,
-      realmInfo,
-      localPath: getRelativePath(realmURL.href, id),
-    };
-  };
-
-  get displayIsolated() {
-    return !this.args.canWrite && this.args.ids.length > 0;
-  }
-
-  get displayCannotWrite() {
-    return !this.args.canWrite && this.args.ids.length === 0;
-  }
-
-  <template>
-    <div
-      class={{cn
-        'container'
-        spec-intent-message=@showCreateSpecIntent
-        cannot-write=this.displayCannotWrite
-      }}
-    >
-      {{#if @showCreateSpecIntent}}
-        <div data-test-create-spec-intent-message>
-          Create a Boxel Specification to be able to create new instances
-        </div>
-      {{else if this.displayCannotWrite}}
-        <div data-test-cannot-write-intent-message>
-          Cannot create new Boxel Specification inside this realm
-        </div>
-
-      {{else}}
-
-        {{#if @spec}}
-          <div class='spec-preview'>
-            <div class='spec-selector' data-test-spec-selector>
-              <BoxelSelect
-                @options={{@ids}}
-                @selected={{@selectedId}}
-                @onChange={{@selectId}}
-                @matchTriggerWidth={{true}}
-                @disabled={{this.onlyOneInstance}}
-                as |id|
-              >
-                {{#if id}}
-                  {{#let (this.getDropdownData id) as |data|}}
-                    {{#if data}}
-                      <div class='spec-selector-item'>
-                        <RealmIcon
-                          @canAnimate={{true}}
-                          class='url-realm-icon'
-                          @realmInfo={{data.realmInfo}}
-                        />
-                        {{data.localPath}}
-                      </div>
-                    {{/if}}
-                  {{/let}}
-                {{/if}}
-              </BoxelSelect>
-            </div>
-
-            {{#let (getComponent @spec) as |CardComponent|}}
-              {{#if this.displayIsolated}}
-
-                <CardComponent @format='isolated' />
-              {{else}}
-                <CardComponent @format='edit' />
-              {{/if}}
-            {{/let}}
-          </div>
-        {{/if}}
-      {{/if}}
-    </div>
-
-    <style scoped>
-      .container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        height: auto;
-        width: 100%;
-      }
-      .spec-preview {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-        width: 100%;
-        padding: var(--boxel-sp-sm);
-      }
-      .spec-intent-message,
-      .cannot-write {
-        background-color: var(--boxel-200);
-        color: var(--boxel-450);
-        font-weight: 500;
-        height: 100%;
-        width: 100%;
-        align-content: center;
-        text-align: center;
-      }
-      .spec-selector {
-        min-width: 40%;
-        align-self: flex-start;
-      }
-      .spec-selector-item {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxxs);
-      }
-    </style>
-  </template>
-}
-
-interface SpecPreviewLoadingSignature {
-  Element: HTMLDivElement;
-}
-
-const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
-  <template>
-    <div class='container'>
-      <div class='loading'>
-        <LoadingIndicator class='loading-icon' />
-        Loading...
-      </div>
-    </div>
-    <style scoped>
-      .container {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        flex-direction: column;
-        height: 100%;
-        width: 100%;
-      }
-      .loading {
-        display: inline-flex;
-      }
-      .loading-icon {
-        display: inline-block;
-        margin-right: var(--boxel-sp-xxxs);
-        vertical-align: middle;
-      }
-    </style>
-  </template>;
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -339,10 +79,61 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @tracked private _selectedId?: string;
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
   @tracked ids: string[] = [];
+  @tracked isLoading = true;
 
-  // We must do this so cardIds are available in the root for usage with getCard
-  @action setCardIds(cards: PrerenderedCard[]) {
-    this.ids = cards.map((card) => card.url);
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner, args);
+    this.loadSpecs.perform();
+  }
+
+  // Use a task instead of PrerenderedCardSearch to fetch specs
+  loadSpecs = task(async () => {
+    this.isLoading = true;
+    try {
+      // Direct call to search API
+      const query = this.specQuery;
+      const specIds = await this.fetchSpecIds(query);
+      this.ids = specIds;
+
+      // If we have results and no selected ID, select the first one
+      if (this.ids.length > 0 && !this._selectedId) {
+        this._selectedId = this.ids[0];
+      }
+    } catch (error) {
+      console.error('Error loading specs:', error);
+    } finally {
+      this.isLoading = false;
+    }
+  });
+
+  // Directly fetch spec IDs from the server using the same approach as PrerenderedCardSearch
+  async fetchSpecIds(query: Query): Promise<string[]> {
+    const results: string[] = [];
+
+    for (const realmURL of this.realms) {
+      try {
+        // Use stringify from 'qs' with the same options as PrerenderedCardSearch
+        const response = await this.cardService.fetchJSON(
+          `${realmURL}_search?${stringify(query, {
+            strictNullHandling: true,
+          })}`,
+        );
+
+        if (response && response.data) {
+          const ids = response.data.map((item: any) => item.id);
+          results.push(...ids);
+        }
+      } catch (error) {
+        console.error(`Failed to search realm ${realmURL}:`, error);
+      }
+    }
+
+    return results;
+  }
+
+  @action
+  selectId(id: string) {
+    this._selectedId = id;
   }
 
   get selectedId() {
@@ -402,7 +193,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       filter: {
         on: specRef,
         eq: {
-          ref: this.getSelectedDeclarationAsCodeRef, //ref is primitive
+          ref: this.getSelectedDeclarationAsCodeRef,
         },
       },
       sort: [
@@ -414,15 +205,23 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     };
   }
 
-  private get showCreateSpecIntent() {
+  get showCreateSpecIntent() {
     return this.ids.length === 0 && this.canWrite;
   }
 
+  get onlyOneInstance() {
+    return this.ids.length <= 1;
+  }
+
+  get displayIsolated() {
+    return !this.canWrite && this.ids.length > 0;
+  }
+
+  get displayCannotWrite() {
+    return !this.canWrite && this.ids.length === 0;
+  }
+
   //TODO: Improve identification of isApp and isSkill
-  // isApp and isSkill are far from perfect functions
-  //We have good primitives to identify card and field but not for app and skill
-  //Here we are trying our best based upon schema analyses what is an app and a skill
-  //We don't try to capture deep ancestry of app and skill
   isApp(selectedDeclaration: CardOrFieldDeclaration) {
     if (selectedDeclaration.exportName === 'AppCard') {
       return true;
@@ -486,10 +285,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  @action selectId(id: string): void {
-    this._selectedId = id;
-  }
-
   get canWrite() {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
@@ -513,49 +308,196 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.card?.specType as SpecType;
   }
 
+  @action
+  getDropdownData(url: string) {
+    let realmInfo = this.realm.info(url);
+    let realmURL = this.realm.realmOfURL(new URL(url));
+    if (!realmURL) {
+      throw new Error('bug: no realm URL');
+    }
+    return {
+      id: url,
+      realmInfo,
+      localPath: getRelativePath(realmURL.href, url),
+    };
+  }
+
   <template>
-    <PrerenderedCardSearch
-      @query={{this.specQuery}}
-      @format='fitted'
-      @realms={{this.realms}}
-    >
-      <:response as |cards|>
-        {{this.setCardIds cards}}
-        {{yield
-          (component
-            SpecPreviewTitle
-            showCreateSpecIntent=this.showCreateSpecIntent
-            createSpec=this.createSpec
-            isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-            specType=this.specType
-            numberOfInstances=this.ids.length
-          )
-          (component
-            SpecPreviewContent
-            showCreateSpecIntent=this.showCreateSpecIntent
-            canWrite=this.canWrite
-            selectId=this.selectId
-            selectedId=this.selectedId
-            ids=this.ids
-            spec=this.card
-            isLoading=false
-          )
-        }}
-      </:response>
-      <:loading>
-        {{yield
-          (component
-            SpecPreviewTitle
-            showCreateSpecIntent=false
-            createSpec=this.createSpec
-            isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-            specType=this.specType
-            numberOfInstances=this.ids.length
-          )
-          (component SpecPreviewLoading)
-        }}
-      </:loading>
-    </PrerenderedCardSearch>
+    <div class='spec-preview-container'>
+      <div class='spec-preview-title'>
+        Boxel Spec
+
+        <span class='has-spec' data-test-has-spec>
+          {{#if this.showCreateSpecIntent}}
+            <BoxelButton
+              @kind='primary'
+              @size='small'
+              @loading={{this.createSpecInstance.isRunning}}
+              {{on 'click' this.createSpec}}
+              data-test-create-spec-button
+            >
+              Create
+            </BoxelButton>
+          {{else if (gt this.ids.length 1)}}
+            <div class='number-of-instance'>
+              <DotIcon class='dot-icon' />
+              <div class='number-of-instance-text'>
+                {{this.ids.length}}
+                instances
+              </div>
+            </div>
+          {{else}}
+            {{#if this.specType}}
+              <SpecTag @specType={{this.specType}} />
+            {{/if}}
+          {{/if}}
+        </span>
+      </div>
+
+      <div class='spec-preview-content'>
+        {{#if this.isLoading}}
+          <div class='container'>
+            <div class='loading'>
+              <LoadingIndicator class='loading-icon' />
+              Loading...
+            </div>
+          </div>
+        {{else}}
+          <div
+            class={{cn
+              'container'
+              spec-intent-message=this.showCreateSpecIntent
+              cannot-write=this.displayCannotWrite
+            }}
+          >
+            {{#if this.showCreateSpecIntent}}
+              <div data-test-create-spec-intent-message>
+                Create a Boxel Specification to be able to create new instances
+              </div>
+            {{else if this.displayCannotWrite}}
+              <div data-test-cannot-write-intent-message>
+                Cannot create new Boxel Specification inside this realm
+              </div>
+            {{else if this.card}}
+              <div class='spec-preview'>
+                <div class='spec-selector' data-test-spec-selector>
+                  <BoxelSelect
+                    @options={{this.ids}}
+                    @selected={{this.selectedId}}
+                    @onChange={{this.selectId}}
+                    @matchTriggerWidth={{true}}
+                    @disabled={{this.onlyOneInstance}}
+                    as |id|
+                  >
+                    {{#if id}}
+                      {{#let (this.getDropdownData id) as |data|}}
+                        {{#if data}}
+                          <div class='spec-selector-item'>
+                            <RealmIcon
+                              @canAnimate={{true}}
+                              class='url-realm-icon'
+                              @realmInfo={{data.realmInfo}}
+                            />
+                            {{data.localPath}}
+                          </div>
+                        {{/if}}
+                      {{/let}}
+                    {{/if}}
+                  </BoxelSelect>
+                </div>
+
+                {{#let (getComponent this.card) as |CardComponent|}}
+                  {{#if this.displayIsolated}}
+                    <CardComponent @format='isolated' />
+                  {{else}}
+                    <CardComponent @format='edit' />
+                  {{/if}}
+                {{/let}}
+              </div>
+            {{/if}}
+          </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <style scoped>
+      .spec-preview-container {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+      }
+      .spec-preview-title {
+        display: flex;
+        align-items: center;
+        font-weight: 500;
+      }
+      .spec-preview-content {
+        margin-top: var(--boxel-sp-sm);
+      }
+      .has-spec {
+        margin-left: auto;
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xl);
+        text-transform: uppercase;
+      }
+      .number-of-instance {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+      }
+      .number-of-instance-text {
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xl);
+      }
+      .dot-icon {
+        flex-shrink: 0;
+        width: 18px;
+        height: 18px;
+      }
+      .container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        height: 100%;
+        width: 100%;
+      }
+      .loading {
+        display: inline-flex;
+      }
+      .loading-icon {
+        display: inline-block;
+        margin-right: var(--boxel-sp-xxxs);
+        vertical-align: middle;
+      }
+      .spec-preview {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+        width: 100%;
+        padding: var(--boxel-sp-sm);
+      }
+      .spec-intent-message,
+      .cannot-write {
+        background-color: var(--boxel-200);
+        color: var(--boxel-450);
+        font-weight: 500;
+        height: 100%;
+        width: 100%;
+        align-content: center;
+        text-align: center;
+      }
+      .spec-selector {
+        min-width: 40%;
+        align-self: flex-start;
+      }
+      .spec-selector-item {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxxs);
+      }
+    </style>
   </template>
 }
 
@@ -607,12 +549,6 @@ function getIcon(specType: SpecType) {
     case 'skill':
       return Brain;
     default:
-      return;
+      return null;
   }
-}
-
-function getRelativePath(baseUrl: string, targetUrl: string) {
-  const basePath = new URL(baseUrl).pathname;
-  const targetPath = new URL(targetUrl).pathname;
-  return targetPath.replace(basePath, '') || '/';
 }
