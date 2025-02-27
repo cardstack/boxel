@@ -24,7 +24,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupServerSentEvents,
-  type TestContextWithSSE,
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
@@ -725,7 +724,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 400, '400 server error');
   });
 
-  test<TestContextWithSSE>('realm can serve patch card requests', async function (assert) {
+  test('realm can serve patch card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -2430,7 +2429,7 @@ module('Integration | realm', function (hooks) {
     );
   });
 
-  test<TestContextWithSSE>('realm can serve delete card requests', async function (assert) {
+  test('realm can serve delete card requests', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -2571,7 +2570,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 404, '404 HTTP status');
   });
 
-  test<TestContextWithSSE>('realm can serve card source post request', async function (assert) {
+  test('realm can serve card source post request', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {},
@@ -2628,7 +2627,7 @@ module('Integration | realm', function (hooks) {
     }
   });
 
-  test<TestContextWithSSE>('realm can serve card source delete request', async function (assert) {
+  test('realm can serve card source delete request', async function (assert) {
     let { field, contains, CardDef } = await loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );

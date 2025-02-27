@@ -26,7 +26,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupServerSentEvents,
-  type TestContextWithSSE,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -308,7 +307,7 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[0].constructor.name, 'Book');
   });
 
-  test<TestContextWithSSE>(`can perform a live search for cards`, async function (assert) {
+  test(`can perform a live search for cards`, async function (assert) {
     let query: Query = {
       filter: {
         on: {
@@ -363,7 +362,7 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[2].id, `${testRealmURL}books/3`);
   });
 
-  test<TestContextWithSSE>(`cards in search results live update`, async function (assert) {
+  test(`cards in search results live update`, async function (assert) {
     let query: Query = {
       filter: {
         on: {

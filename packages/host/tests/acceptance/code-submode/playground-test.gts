@@ -18,7 +18,6 @@ import {
   setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
-  type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -588,7 +587,7 @@ export class BlogPost extends CardDef {
     ]);
   });
 
-  test<TestContextWithSSE>('can create new instance', async function (assert) {
+  test('can create new instance', async function (assert) {
     window.localStorage.removeItem('recent-files');
     await visitOperatorMode({
       submode: 'code',
@@ -627,7 +626,7 @@ export class BlogPost extends CardDef {
     assert.dom('[data-option-index]').containsText('Blog Post');
   });
 
-  test<TestContextWithSSE>('playground preview for card with contained fields can live update when module changes', async function (assert) {
+  test('playground preview for card with contained fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -679,7 +678,7 @@ export class Author extends CardDef {
     assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
   });
 
-  test<TestContextWithSSE>('playground preview for card with linked fields can live update when module changes', async function (assert) {
+  test('playground preview for card with linked fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
 import DatetimeField from 'https://cardstack.com/base/datetime';

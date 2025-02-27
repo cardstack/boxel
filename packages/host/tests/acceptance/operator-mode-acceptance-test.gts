@@ -43,7 +43,6 @@ import {
   testRealmSecretSeed,
   setupUserSubscription,
   setupRealmServerEndpoints,
-  TestContextWithSSE,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -556,7 +555,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
       });
 
-      test<TestContextWithSSE>('can delete a card', async function (assert) {
+      test('can delete a card', async function (assert) {
         await visit('/');
         await click('[data-test-workspace="Test Workspace B"]');
         await click('[data-test-boxel-filter-list-button="All Cards"]');

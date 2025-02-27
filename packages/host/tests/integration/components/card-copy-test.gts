@@ -34,7 +34,6 @@ import {
   setupOnSave,
   setupServerSentEvents,
   type TestContextWithSave,
-  type TestContextWithSSE,
   setupIntegrationTestRealm,
   lookupLoaderService,
   lookupNetworkService,
@@ -50,7 +49,7 @@ let setCardInOperatorModeState: (
   rightCards?: string[],
 ) => Promise<void>;
 
-type TestContextForCopy = TestContextWithSave & TestContextWithSSE;
+type TestContextForCopy = TestContextWithSave;
 
 module('Integration | card-copy', function (hooks) {
   let realm1: Realm;

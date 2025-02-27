@@ -22,7 +22,6 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
-  type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -525,7 +524,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-current-module-name]').hasText('card-api.gts');
   });
 
-  test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
+  test('adding a field from schema editor - whole flow test', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
@@ -634,7 +633,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.ok(getMonacoContent().includes('birthdate = contains(DateField)'));
   });
 
-  test<TestContextWithSSE>('adding a field from schema editor - cardinality test', async function (assert) {
+  test('adding a field from schema editor - cardinality test', async function (assert) {
     let waitForOpts = { timeout: 2000 }; // Helps mitigating flaky tests since Writing to a file + reflecting that in the UI can be a bit slow
     await visitOperatorMode({
       submode: 'code',

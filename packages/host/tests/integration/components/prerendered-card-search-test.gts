@@ -26,7 +26,6 @@ import LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   CardDocFiles,
-  TestContextWithSSE,
   lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,

@@ -40,7 +40,6 @@ import {
   setupOnSave,
   type TestContextWithSave,
   lookupLoaderService,
-  TestContextWithSSE,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -2981,7 +2980,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-boxel-filter-list-button="CardDef"]`).doesNotExist();
   });
 
-  test<TestContextWithSSE>('updates filter list when there is indexing event', async function (assert) {
+  test('updates filter list when there is indexing event', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(

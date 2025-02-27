@@ -183,19 +183,6 @@ export interface TestContextWithSave extends TestContext {
   unregisterOnSave: () => void;
 }
 
-export interface TestContextWithSSE extends TestContext {
-  expectEvents: (args: {
-    assert: Assert;
-    realm: Realm;
-    expectedEvents?: RealmEventEventContent[];
-    expectedNumberOfEvents?: number;
-    onEvents?: (events: RealmEventEventContent[]) => void;
-    callback: () => Promise<any>;
-    opts?: { timeout?: number };
-  }) => Promise<any>;
-  subscribers: ((e: { type: string; data: string }) => void)[];
-}
-
 async function makeRenderer() {
   // This emulates the application.hbs
   await renderComponent(
@@ -289,8 +276,9 @@ export function setupOnSave(hooks: NestedHooks) {
   });
 }
 
+// FIXME this is gone ya?
 export function setupServerSentEvents(hooks: NestedHooks) {
-  hooks.beforeEach<TestContextWithSSE>(function () {
+  hooks.beforeEach(function () {
     this.subscribers = [];
 
     let messageService = this.owner.lookup(

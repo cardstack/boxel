@@ -36,7 +36,6 @@ import {
   setupServerSentEvents,
   visitOperatorMode,
   waitForCodeEditor,
-  type TestContextWithSSE,
   setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -1281,7 +1280,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .hasText(`${elementName} card`);
     });
 
-    test<TestContextWithSSE>('the monaco cursor position is maintained during an auto-save', async function (assert) {
+    test('the monaco cursor position is maintained during an auto-save', async function (assert) {
       assert.expect(2);
       // we only want to change this for this particular test so we emulate what the non-test env sees
       monacoService.serverEchoDebounceMs = 5000;
@@ -1399,7 +1398,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test<TestContextWithSSE>('updates values in preview panel must be represented in editor panel', async function (assert) {
+    test('updates values in preview panel must be represented in editor panel', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -1445,7 +1444,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.ok(content.includes(`${testRealmURL}Country/united-states`));
     });
 
-    test<TestContextWithSSE>('monaco editor live updates when index changes', async function (assert) {
+    test('monaco editor live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1486,7 +1485,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
+    test('card preview live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1529,7 +1528,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .includesText('FadhlanXXX');
     });
 
-    test<TestContextWithSSE>('card preview live updates when there is a change in module', async function (assert) {
+    test('card preview live updates when there is a change in module', async function (assert) {
       const personGts = `
         import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
@@ -1609,7 +1608,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test<TestContextWithSSE>('card preview live updates with error', async function (assert) {
+    test('card preview live updates with error', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,

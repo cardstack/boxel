@@ -27,7 +27,6 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
-  type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
@@ -339,9 +338,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     // await percySnapshot(assert);
   });
 
-  test<
-    TestContextWithSave & TestContextWithSSE
-  >('allows fixing broken cards', async function (assert) {
+  test<TestContextWithSave>('allows fixing broken cards', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -395,9 +392,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     );
   });
 
-  test<
-    TestContextWithSave & TestContextWithSSE
-  >('card instance change made in monaco editor is auto-saved', async function (assert) {
+  test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
     assert.expect(4);
 
     let expected: LooseSingleCardDocument = {
@@ -447,9 +442,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .containsText('MangoXXX');
   });
 
-  test<
-    TestContextWithSave & TestContextWithSSE
-  >('card instance change made in card editor is auto-saved', async function (assert) {
+  test<TestContextWithSave>('card instance change made in card editor is auto-saved', async function (assert) {
     assert.expect(2);
 
     let expected: LooseSingleCardDocument = {

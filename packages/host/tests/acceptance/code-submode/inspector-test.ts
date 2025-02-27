@@ -36,7 +36,6 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
-  type TestContextWithSSE,
   type TestContextWithSave,
   setMonacoContent,
 } from '../../helpers';

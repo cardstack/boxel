@@ -12,7 +12,6 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
-  type TestContextWithSSE,
   type TestContextWithSave,
   setupOnSave,
 } from '../../helpers';
@@ -387,7 +386,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
     await percySnapshot(assert);
   });
-  test<TestContextWithSSE>('have ability to create new spec instances', async function (assert) {
+  test('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,

@@ -33,7 +33,6 @@ import {
   setupServerSentEvents,
   setupOnSave,
   testRealmURL,
-  type TestContextWithSSE,
   type TestContextWithSave,
   setupAcceptanceTestRealm,
   visitOperatorMode,
@@ -1698,7 +1697,7 @@ module('Acceptance | interact submode tests', function (hooks) {
   });
 
   module('index changes', function () {
-    test<TestContextWithSSE>('stack item live updates when index changes', async function (assert) {
+    test('stack item live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1738,7 +1737,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .hasText('FadhlanXXX');
     });
 
-    test<TestContextWithSSE>('stack item live updates with error', async function (assert) {
+    test('stack item live updates with error', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
