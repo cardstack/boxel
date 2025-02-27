@@ -114,6 +114,11 @@ export function codeRefWithAbsoluteURL(
   return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
 }
 
+export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
+  let module = await loader.import<Record<string, any>>(ref.module);
+  return module[ref.name];
+}
+
 export async function loadCard(
   ref: CodeRef,
   opts: { loader: Loader; relativeTo?: URL },

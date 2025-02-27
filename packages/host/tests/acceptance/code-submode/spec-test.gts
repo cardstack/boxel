@@ -284,9 +284,30 @@ module('Acceptance | Spec preview', function (hooks) {
       realmURL: testRealm2URL,
       contents: {
         'new-skill.gts': newSkillCardSource,
+        'person.gts': personCardSource,
+        'person-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Person',
+              description: 'Spec',
+              specType: 'card',
+              ref: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
       },
     });
-    setActiveRealms([testRealmURL]);
+    setActiveRealms([testRealmURL, testRealm2URL]);
     setRealmPermissions({
       [testRealmURL]: ['read', 'write'],
       [testRealm2URL]: ['read'],
@@ -336,7 +357,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
   });
-  test('view when users cannot write', async function (assert) {
+  test('view when users cannot write but has NO spec instance', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealm2URL}new-skill.gts`,
@@ -347,6 +368,20 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-button]').doesNotExist();
     assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
     assert.dom('[data-test-cannot-write-intent-message]').exists();
+    await percySnapshot(assert);
+  });
+
+  test('view when users cannot write but there exists spec instance', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealm2URL}person.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    assert.dom('[data-test-create-spec-button]').doesNotExist();
+    assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
+    assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
     await percySnapshot(assert);
   });
   test<TestContextWithSSE>('have ability to create new spec instances', async function (assert) {
