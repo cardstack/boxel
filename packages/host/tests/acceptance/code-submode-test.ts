@@ -6,6 +6,7 @@ import {
   waitUntil,
   scrollTo,
   visit,
+  settled,
 } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
@@ -1434,6 +1435,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
+      await settled();
 
       let content = getMonacoContent();
       assert.ok(content.includes('Ridhwanallah'));
