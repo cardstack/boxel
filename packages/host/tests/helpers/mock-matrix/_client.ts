@@ -91,7 +91,7 @@ export class MockClient implements ExtendedClient {
       exp: expires,
       user: this.loggedInAs,
       realm: realmURL.href,
-      sessionRoom: `test-session-room-for-${this.loggedInAs}`,
+      sessionRoom: `test-session-room-realm-${realmURL.href}-user-${this.loggedInAs}`,
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,

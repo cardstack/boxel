@@ -190,6 +190,7 @@ export class NodeAdapter implements RealmAdapter {
     event: RealmEventEventContent,
     matrixClient: MatrixClient,
   ): Promise<void> {
+    // FIXME this can be shared in a realm, the function to send an individual event in a realm should be in the adapter
     console.log('broadcasting realm event', event);
 
     if (!matrixClient.isLoggedIn()) {

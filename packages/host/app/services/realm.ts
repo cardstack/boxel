@@ -508,17 +508,10 @@ export default class RealmService extends Service {
     return undefined;
   }
 
-  realmOfMatrixUsername(username: string) {
-    console.log(
-      'all realm usernames ',
-      Array.from(this.realms.values()).map((r) => r.info?.realmUserId),
+  realmForSessionRoomId(sessionRoomId: string) {
+    return Array.from(this.realms.values()).find(
+      (r) => r.claims?.sessionRoom === sessionRoomId,
     );
-    let realm = Array.from(this.realms.values()).find(
-      (r) => r.info?.realmUserId === username,
-    );
-    console.log('realm', realm);
-    console.log('username looked for: ', username);
-    return realm;
   }
 
   @cached

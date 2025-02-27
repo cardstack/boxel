@@ -1436,12 +1436,14 @@ export default class MatrixService extends Service {
       // FIXME provenance should be checked
       console.log('received sse event', event);
 
-      let realmInfoForSender = this.realm.realmOfMatrixUsername(event.sender);
-      if (!realmInfoForSender) {
+      let realmResourceForEvent = this.realm.realmForSessionRoomId(
+        event.room_id!,
+      );
+      if (!realmResourceForEvent) {
         console.log('ignoring sse event because no realm found', event);
       } else {
         this.messageService.relayMatrixSSE(
-          realmInfoForSender.url,
+          realmResourceForEvent.url,
           event.content as RealmEventEventContent,
         );
       }

@@ -124,7 +124,7 @@ export class TestRealmAdapter implements RealmAdapter {
     console.log('room ids', getRoomIds());
 
     for (let roomId of getRoomIds()) {
-      if (roomId.startsWith('session-room-for-')) {
+      if (roomId.startsWith('test-session-room-realm-')) {
         simulateRemoteMessage(roomId, realmMatrixUsername, event, {
           type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
         });

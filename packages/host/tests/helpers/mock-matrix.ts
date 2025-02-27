@@ -44,7 +44,25 @@ export function setupMockMatrix(
           user_id: loggedInAs,
         }),
       );
+
+      if (opts.activeRealms) {
+        for (let realmURL of opts.activeRealms) {
+          let realmSessionRoomId = `test-session-room-realm-${realmURL}-user-${loggedInAs}`;
+
+          let { createAndJoinRoom, getRoomIds } = mockUtils;
+
+          if (!getRoomIds().includes(realmSessionRoomId)) {
+            createAndJoinRoom({
+              sender: loggedInAs,
+              name: realmSessionRoomId,
+              id: realmSessionRoomId,
+            });
+          }
+        }
+      }
     }
+
+    // FIXME are these still needed?
     this.owner.register(
       'service:matrixSdkLoader',
       {

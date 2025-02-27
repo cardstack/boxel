@@ -608,21 +608,6 @@ async function setupTestRealm({
     queue,
   });
 
-  let mockLoader = owner.lookup('service:matrix-mock-utils') as any;
-  let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
-
-  let realmSessionRoomId = `session-room-for-${realm.matrixUsername}`;
-
-  let { createAndJoinRoom, getRoomIds } = mockMatrixUtils;
-
-  if (!getRoomIds().includes(realmSessionRoomId)) {
-    createAndJoinRoom({
-      sender: realm.matrixUsername,
-      name: realmSessionRoomId,
-      id: realmSessionRoomId,
-    });
-  }
-
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
   await adapter.ready;
