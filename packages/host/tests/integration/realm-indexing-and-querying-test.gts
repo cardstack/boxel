@@ -648,7 +648,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           title: 'Person Card',
           description: 'Spec for Person card',
           moduleHref: `${testRealmURL}person`,
-          name: null,
           readMe: null,
           specType: 'card',
           isCard: true,
