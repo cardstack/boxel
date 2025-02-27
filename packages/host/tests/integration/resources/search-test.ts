@@ -1,5 +1,5 @@
 import { getOwner } from '@ember/owner';
-import { RenderingTestContext, waitUntil } from '@ember/test-helpers';
+import { settled, RenderingTestContext, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -409,6 +409,8 @@ module(`Integration | search resource`, function (hooks) {
     );
 
     await search.loaded;
+    await settled();
+
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual(
       (search.instances[0] as any).author.firstName,
