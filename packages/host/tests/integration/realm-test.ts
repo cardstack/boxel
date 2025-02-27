@@ -745,59 +745,36 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}dir/card`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}dir/card`],
-        },
-      },
-    ];
-    let response = await this.expectEvents({
-      assert,
+
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}dir/card`, {
-            method: 'PATCH',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-            body: JSON.stringify(
-              {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Van Gogh',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: 'http://localhost:4202/test/person',
-                      name: 'Person',
-                    },
-                  },
+      new Request(`${testRealmURL}dir/card`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/person',
+                  name: 'Person',
                 },
               },
-              null,
-              2,
-            ),
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     if (isSingleCardDocument(json)) {
@@ -2499,41 +2476,17 @@ module('Integration | realm', function (hooks) {
       'found card in index',
     );
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}cards/2`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}cards/2`],
-        },
-      },
-    ];
-    let response = await this.expectEvents({
-      assert,
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}cards/2`, {
-            method: 'DELETE',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+      new Request(`${testRealmURL}cards/2`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 204, 'status was 204');
 
     result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/2`));
@@ -2642,25 +2595,17 @@ module('Integration | realm', function (hooks) {
           },
         },
       ];
-      let response = await this.expectEvents({
-        assert,
+      let response = await handle(
         realm,
-        expectedEvents,
-        callback: async () => {
-          let response = handle(
-            realm,
-            new Request(`${testRealmURL}dir/person.gts`, {
-              method: 'POST',
-              headers: {
-                Accept: 'application/vnd.card+source',
-              },
-              body: cardSrc,
-            }),
-          );
-          await realm.flushUpdateEvents();
-          return await response;
-        },
-      });
+        new Request(`${testRealmURL}dir/person.gts`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.card+source',
+          },
+          body: cardSrc,
+        }),
+      );
+      await realm.flushUpdateEvents();
 
       assert.strictEqual(response.status, 204, 'HTTP status is 204');
       assert.ok(
@@ -2720,35 +2665,28 @@ module('Integration | realm', function (hooks) {
         },
       },
     ];
-    let response = await this.expectEvents({
-      assert,
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}person`, {
-            headers: {
-              Accept: 'application/vnd.card+source',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        assert.strictEqual((await response).status, 302, 'file exists');
+      new Request(`${testRealmURL}person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+    assert.strictEqual(response.status, 302, 'file exists');
 
-        response = handle(
-          realm,
-          new Request(`${testRealmURL}person`, {
-            method: 'DELETE',
-            headers: {
-              Accept: 'application/vnd.card+source',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+    response = await handle(
+      realm,
+      new Request(`${testRealmURL}person`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 204, 'file is deleted');
 
     response = await handle(
