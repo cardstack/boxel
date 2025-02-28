@@ -58,6 +58,7 @@ export class WriteTextFileInput extends CardDef {
 }
 
 export class CreateInstanceInput extends CardDef {
+  @field parent = contains(JsonField);
   @field module = contains(CodeRefField);
   @field realm = contains(StringField);
 }
