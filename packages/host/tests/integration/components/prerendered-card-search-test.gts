@@ -29,7 +29,6 @@ import {
   lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   testRealmURL,
 } from '../../helpers';
 import {
@@ -61,7 +60,6 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
-  setupServerSentEvents(hooks);
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class PersonField extends FieldDef {

@@ -16,7 +16,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupServerSentEvents,
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
@@ -210,7 +209,6 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupServerSentEvents(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

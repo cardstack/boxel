@@ -20,7 +20,6 @@ import {
   testRealmURL,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  setupServerSentEvents,
   lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -33,7 +32,6 @@ const baseRealmCardCount = 2;
 module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],

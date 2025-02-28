@@ -4,7 +4,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
-  setupServerSentEvents,
   setupAcceptanceTestRealm,
   testRealmURL,
   lookupLoaderService,
@@ -17,7 +16,6 @@ let matrixRoomId: string;
 module('Acceptance | permissioned realm tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   let { createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],

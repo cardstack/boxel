@@ -13,7 +13,6 @@ import {
   percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
@@ -28,7 +27,6 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
   let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
     setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',

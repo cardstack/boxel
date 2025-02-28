@@ -34,7 +34,6 @@ import {
   setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
-  setupServerSentEvents,
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
@@ -416,7 +415,6 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
-    setupServerSentEvents(hooks);
     let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
     });
@@ -529,7 +527,6 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
-    setupServerSentEvents(hooks);
     let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],

@@ -8,7 +8,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupServerSentEvents,
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
@@ -117,7 +116,6 @@ module('Acceptance | Spec preview', function (hooks) {
   let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
 
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =

@@ -23,7 +23,6 @@ import {
   testRealmInfo,
   setupCardLogs,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
@@ -52,7 +51,6 @@ module('Integration | realm', function (hooks) {
 
   // FIXME maybe this needs to happen in every test now? And setupServerSentEvents is obsolete
   setupMockMatrix(hooks);
-  setupServerSentEvents(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,

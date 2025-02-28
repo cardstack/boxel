@@ -36,7 +36,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import {
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -64,7 +63,6 @@ let matrixRoomId = '';
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
   let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =
     setupMockMatrix(hooks, {

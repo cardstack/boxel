@@ -18,7 +18,6 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   testRealmURL,
   getMonacoContent,
@@ -41,7 +40,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

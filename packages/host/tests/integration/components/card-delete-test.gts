@@ -27,7 +27,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupOnSave,
-  setupServerSentEvents,
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../../helpers';
@@ -76,7 +75,6 @@ module('Integration | card-delete', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
   let { getRealmEventMessagesSince } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],

@@ -32,7 +32,6 @@ import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys
 import {
   percySnapshot,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -52,7 +51,6 @@ module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
   let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
     setupMockMatrix(hooks, {

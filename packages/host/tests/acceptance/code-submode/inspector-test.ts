@@ -31,7 +31,6 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupServerSentEvents,
   setupOnSave,
   visitOperatorMode,
   waitForCodeEditor,
@@ -400,7 +399,6 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
   let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

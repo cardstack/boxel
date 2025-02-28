@@ -14,7 +14,6 @@ import {
 
 import {
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
@@ -124,7 +123,6 @@ let matrixRoomId: string;
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
   let { createAndJoinRoom, getRoomState } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

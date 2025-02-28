@@ -32,7 +32,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupOnSave,
-  setupServerSentEvents,
   type TestContextWithSave,
   setupIntegrationTestRealm,
   lookupLoaderService,
@@ -66,7 +65,6 @@ module('Integration | card-copy', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
 
   let loggedInAs = '@testuser:localhost';
 

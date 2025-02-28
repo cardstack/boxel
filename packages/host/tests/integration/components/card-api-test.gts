@@ -21,7 +21,6 @@ import {
   lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   testRealmURL,
 } from '../../helpers';
 import {
@@ -89,7 +88,6 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
 
   setupLocalIndexing(hooks);
   setupMockMatrix(hooks);
-  setupServerSentEvents(hooks);
   setupBaseRealm(hooks);
 
   module('getCards', function (hooks) {

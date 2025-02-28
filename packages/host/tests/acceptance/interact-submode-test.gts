@@ -30,7 +30,6 @@ import type RecentCardsService from '@cardstack/host/services/recent-cards-servi
 import {
   percySnapshot,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   testRealmURL,
   type TestContextWithSave,
@@ -52,7 +51,6 @@ module('Acceptance | interact submode tests', function (hooks) {
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
 
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =

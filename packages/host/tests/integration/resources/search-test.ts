@@ -25,7 +25,6 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
-  setupServerSentEvents,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -52,7 +51,6 @@ module(`Integration | search resource`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
