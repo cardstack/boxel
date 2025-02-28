@@ -58,6 +58,8 @@ import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import type { WithBoundArgs } from '@glint/template';
 
+import Preview from '@cardstack/host/components/preview';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -267,14 +269,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 {{/if}}
               </BoxelSelect>
             </div>
-
-            {{#let (getComponent @spec) as |CardComponent|}}
-              {{#if this.displayIsolated}}
-                <CardComponent @format='isolated' />
-              {{else}}
-                <CardComponent @format='edit' />
-              {{/if}}
-            {{/let}}
+            {{#if this.displayIsolated}}
+              <Preview @card={{@spec}} @format='isolated' />
+            {{else}}
+              <Preview @card={{@spec}} @format='edit' />
+            {{/if}}
           </div>
         {{/if}}
       {{/if}}
@@ -569,10 +568,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       </:loading>
     </PrerenderedCardSearch>
   </template>
-}
-
-function getComponent(cardOrField: Spec) {
-  return cardOrField.constructor.getComponent(cardOrField);
 }
 
 interface SpecTagSignature {
