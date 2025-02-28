@@ -19,7 +19,6 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
-import { debounce } from 'lodash';
 import { Position } from 'monaco-editor';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -745,7 +744,9 @@ export default class CodeSubmode extends Component<Signature> {
       : this.itemToDelete.id;
   }
 
-  onCursorPositionChange = debounce((cursorPosition: Position) => {
+  onCursorPositionChange = restartableTask(async (cursorPosition: Position) => {
+    // Debounce saving the last cursor position to prevent excessive updates
+    await timeout(500);
     if (!this.codePath) {
       return;
     }
@@ -755,7 +756,7 @@ export default class CodeSubmode extends Component<Signature> {
         ? { line: cursorPosition.lineNumber, column: cursorPosition.column }
         : undefined,
     );
-  }, 500);
+  });
 
   get initialCursorPosition() {
     let index = this.recentFilesService.recentFiles.findIndex(
@@ -884,7 +885,9 @@ export default class CodeSubmode extends Component<Signature> {
                     @onFileSave={{this.onSourceFileSave}}
                     @onSetup={{this.setupCodeEditor}}
                     @isReadOnly={{this.isReadOnly}}
-                    @onCursorPositionChange={{this.onCursorPositionChange}}
+                    @onCursorPositionChange={{perform
+                      this.onCursorPositionChange
+                    }}
                     @initialCursorPosition={{this.initialCursorPosition}}
                   />
 
