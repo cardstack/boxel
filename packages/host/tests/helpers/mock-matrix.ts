@@ -3,6 +3,7 @@ import Owner from '@ember/owner';
 import window from 'ember-window-mock';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import MessageService from '@cardstack/host/services/message-service';
 
 import { MockSDK } from './mock-matrix/_sdk';
 import { MockUtils } from './mock-matrix/_utils';

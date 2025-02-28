@@ -14,7 +14,7 @@ import {
 import { Search } from '@cardstack/host/resources/search';
 
 import LoaderService from '@cardstack/host/services/loader-service';
-import MessageService from '@cardstack/host/services/message-service';
+
 import RealmService from '@cardstack/host/services/realm';
 
 import {
