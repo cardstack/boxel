@@ -34,7 +34,7 @@ let localIdentities = new WeakMap<
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
 
-export function isResolvedCodeRef(ref?: CodeRef): ref is ResolvedCodeRef {
+export function isResolvedCodeRef(ref?: CodeRef | {}): ref is ResolvedCodeRef {
   if (ref && 'module' in ref && 'name' in ref) {
     return true;
   } else {
@@ -112,6 +112,11 @@ export function codeRefWithAbsoluteURL(
     return { ...ref, module: moduleURL.href };
   }
   return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
+}
+
+export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
+  let module = await loader.import<Record<string, any>>(ref.module);
+  return module[ref.name];
 }
 
 export async function loadCard(
