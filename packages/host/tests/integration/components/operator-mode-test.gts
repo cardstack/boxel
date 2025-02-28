@@ -468,7 +468,7 @@ module('Integration | operator-mode', function (hooks) {
           } as LooseSingleCardDocument,
           'grid.json': new CardsGrid(),
           'Spec/publishing-packet.json': new Spec({
-            name: 'Publishing Packet',
+            title: 'Publishing Packet',
             description: 'Spec for PublishingPacket',
             specType: 'card',
             ref: {
@@ -477,7 +477,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
           'Spec/pet-room.json': new Spec({
-            name: 'General Pet Room',
+            title: 'General Pet Room',
             description: 'Spec for Pet Room Card',
             specType: 'card',
             ref: {
@@ -486,7 +486,7 @@ module('Integration | operator-mode', function (hooks) {
             },
           }),
           'Spec/pet-card.json': new Spec({
-            name: 'Pet',
+            title: 'Pet',
             description: 'Spec for Pet',
             specType: 'card',
             ref: {

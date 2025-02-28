@@ -114,7 +114,7 @@ module('Integration | card-catalog', function (hooks) {
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         'index.json': new CardsGrid(),
         'Spec/publishing-packet.json': new Spec({
-          name: 'Publishing Packet',
+          title: 'Publishing Packet',
           description: 'Spec for PublishingPacket',
           specType: 'card',
           ref: {
@@ -123,7 +123,7 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/author.json': new Spec({
-          name: 'Author',
+          title: 'Author',
           description: 'Spec for Author',
           specType: 'card',
           ref: {
@@ -132,7 +132,7 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/person.json': new Spec({
-          name: 'Person',
+          title: 'Person',
           description: 'Spec for Person',
           specType: 'card',
           ref: {
@@ -141,7 +141,7 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/pet.json': new Spec({
-          name: 'Pet',
+          title: 'Pet',
           description: 'Spec for Pet',
           specType: 'card',
           ref: {
@@ -150,7 +150,7 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/tree.json': new Spec({
-          name: 'Tree',
+          title: 'Tree',
           description: 'Spec for Tree',
           specType: 'card',
           ref: {
@@ -159,7 +159,7 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/blog-post.json': new Spec({
-          name: 'BlogPost',
+          title: 'BlogPost',
           description: 'Spec for BlogPost',
           specType: 'card',
           ref: {
@@ -168,7 +168,7 @@ module('Integration | card-catalog', function (hooks) {
           },
         }),
         'Spec/address.json': new Spec({
-          name: 'Address',
+          title: 'Address',
           description: 'Spec for Address field',
           specType: 'field',
           ref: {

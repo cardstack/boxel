@@ -282,7 +282,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
         'person-entry.json': new Spec({
-          name: 'Person Card',
+          title: 'Person Card',
           description: 'Spec for Person Card',
           specType: 'card',
           ref: {
@@ -291,7 +291,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           },
         }),
         'pet-entry.json': new Spec({
-          name: 'Pet Card',
+          title: 'Pet Card',
           description: 'Spec for Pet Card',
           specType: 'card',
           ref: {
@@ -301,7 +301,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         }),
         ...catalogEntries,
         'puppy-entry.json': new Spec({
-          name: 'Puppy Card',
+          title: 'Puppy Card',
           description: 'Spec for Puppy Card',
           specType: 'card',
           ref: {
@@ -780,6 +780,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         assert.strictEqual(json.data.meta.realmURL, testRealmURL);
         deferred.fulfill();
       });
+
       await click('[data-test-create-new-card-button]');
       assert
         .dom('[data-test-card-catalog-item-selected]')

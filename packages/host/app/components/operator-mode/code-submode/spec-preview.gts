@@ -378,6 +378,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           attributes: {
             specType,
             ref,
+            title: ref.name,
           },
           meta: {
             adoptsFrom: specRef,

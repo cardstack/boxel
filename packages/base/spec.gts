@@ -49,7 +49,6 @@ class SpecTypeField extends StringField {
 export class Spec extends CardDef {
   static displayName = 'Spec';
   static icon = BoxModel;
-  @field name = contains(StringField);
   @field readMe = contains(MarkdownField);
 
   @field ref = contains(CodeRef);
@@ -77,14 +76,7 @@ export class Spec extends CardDef {
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
-  @field title = contains(StringField, {
-    computeVia: function (this: Spec) {
-      if (this.name) {
-        return this.name;
-      }
-      return this.ref.name === 'default' ? undefined : this.ref.name;
-    },
-  });
+  @field title = contains(StringField);
 
   static isolated = class Isolated extends Component<typeof this> {
     icon: CardOrFieldTypeIcon | undefined;
@@ -136,7 +128,9 @@ export class Spec extends CardDef {
             {{/if}}
           </div>
           <div class='header-info-container'>
-            <h1 class='title' id='title' data-test-title><@fields.title /></h1>
+            <h1 class='title' id='title' data-test-title>
+              <@fields.title />
+            </h1>
             <p class='description' data-test-description>
               <@fields.description />
             </p>
@@ -229,6 +223,7 @@ export class Spec extends CardDef {
           -webkit-line-clamp: 2;
           overflow: hidden;
           text-wrap: pretty;
+          word-break: break-word;
         }
         .box {
           border: 1px solid var(--boxel-border-color);
