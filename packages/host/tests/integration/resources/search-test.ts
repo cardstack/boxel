@@ -14,7 +14,7 @@ import {
 import { Search } from '@cardstack/host/resources/search';
 
 import LoaderService from '@cardstack/host/services/loader-service';
-
+import MessageService from '@cardstack/host/services/message-service';
 import RealmService from '@cardstack/host/services/realm';
 
 import {
@@ -46,6 +46,11 @@ module(`Integration | search resource`, function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
     loaderService = lookupLoaderService();
     loader = loaderService.loader;
+
+    // Needed for the search resource to subscribe to realm events
+    (
+      getOwner(this)!.lookup('service:message-service') as MessageService
+    ).register();
   });
 
   setupLocalIndexing(hooks);
