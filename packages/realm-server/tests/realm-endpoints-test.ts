@@ -927,12 +927,12 @@ module(basename(__filename), function () {
             messages,
             'index',
             'incremental',
-          ) as IncrementalIndexEventContent;
+          )?.content as IncrementalIndexEventContent;
 
-          id = incrementalEvent!.content.invalidations[0].split('/').pop()!;
+          id = incrementalEvent.invalidations[0].split('/').pop()!;
           assert.true(uuidValidate(id!), 'card identifier is a UUID');
           assert.strictEqual(
-            incrementalEvent.content.invalidations[0],
+            incrementalEvent.invalidations[0],
             `${testRealmURL}CardDef/${id}`,
           );
 
@@ -4090,7 +4090,7 @@ function findRealmEvent(
       m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
       m.content.eventName === eventName &&
       (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
-  );
+  ) as RealmEventEvent | undefined;
 }
 
 function realmEventIsIndex(
