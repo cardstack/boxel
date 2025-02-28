@@ -46,6 +46,8 @@ import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
 
 module('Integration | operator-mode', function (hooks) {
   setupRenderingTest(hooks);
@@ -83,9 +85,11 @@ module('Integration | operator-mode', function (hooks) {
     let textArea: typeof import('https://cardstack.com/base/text-area');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
     let spec: typeof import('https://cardstack.com/base/spec');
+    let number: typeof import('https://cardstack.com/base/number');
 
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
+    number = await loader.import(`${baseRealm.url}number`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
     spec = await loader.import(`${baseRealm.url}spec`);
@@ -102,6 +106,7 @@ module('Integration | operator-mode', function (hooks) {
     } = cardApi;
     let { default: StringField } = string;
     let { default: TextAreaField } = textArea;
+    let { default: NumberField } = number;
     let { CardsGrid } = cardsGrid;
     let { Spec } = spec;
 
@@ -127,6 +132,66 @@ module('Integration | operator-mode', function (hooks) {
         };
       }
     `;
+
+    class Embedded extends Component<typeof Pet1> {
+      @tracked counter = 0;
+
+      incrementCounter = () => {
+        this.counter++;
+        if (
+          this.args.model.number === null ||
+          this.args.model.number === undefined
+        ) {
+          this.args.model.number = 0;
+        } else {
+          this.args.model.number = this.args.model.number + 1;
+        }
+      };
+      <template>
+        {{this.args.model.name}}
+        <button {{on 'click' this.incrementCounter}}>Increment</button>
+        <div data-test-counter>
+          <div>
+            Number in field:
+            {{this.args.model.number}}
+          </div>
+          <div>
+            Number in template:
+            {{this.counter}}
+          </div>
+        </div>
+      </template>
+    }
+    class Pet1 extends CardDef {
+      @field number = contains(NumberField);
+      @field name = contains(StringField);
+      static embedded = Embedded;
+      static fitted = Embedded;
+    }
+
+    class Person1 extends CardDef {
+      @field pets = linksToMany(Pet1);
+      @field name = contains(StringField);
+      static isolated = class Embedded extends Component<typeof this> {
+        reorder = () => {
+          if (
+            this.args.model.pets &&
+            this.args.model.pets[0] &&
+            this.args.model.pets[1]
+          ) {
+            // this.args.set();
+            let o = [this.args.model.pets[1], this.args.model.pets[0]];
+            this.args.model.pets = [...o];
+            // this.args.model.pets = [];
+          }
+        };
+        <template>
+          <button {{on 'click' this.reorder}}>Reorder</button>
+          <@fields.name @format='edit' />
+          <@fields.pets />
+        </template>
+      };
+    }
 
     class Pet extends CardDef {
       static displayName = 'Pet';
@@ -374,6 +439,9 @@ module('Integration | operator-mode', function (hooks) {
       );
     }
 
+    let pet1 = new Pet1({ name: 'jersey' });
+    let pet2 = new Pet1({ name: 'boboy' });
+
     ({ adapter: testRealmAdapter, realm: testRealm } =
       await setupIntegrationTestRealm({
         loader,
@@ -394,6 +462,14 @@ module('Integration | operator-mode', function (hooks) {
           'BoomPet/paper.json': new BoomPet({ name: 'Paper' }),
           'Pet/jackie.json': petJackie,
           'Pet/woody.json': petWoody,
+          'pet1.gts': { Pet1 },
+          'pet1.json': pet1,
+          'pet2.json': pet2,
+          'person1.gts': { Person1 },
+          'Person1/person1.json': new Person1({
+            name: 'Person1',
+            pets: [pet1, pet2],
+          }),
           'Pet/buzz.json': petBuzz,
           'Person/fadhlan.json': new Person({
             firstName: 'Fadhlan',
@@ -766,6 +842,27 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor('[data-test-person="EditedName"]');
     assert.dom('[data-test-person]').hasText('EditedName');
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
+  });
+
+  test<TestContextWithSave>('test reordering of linksToMany field. Templates shud be up-to-date', async function (assert) {
+    await setCardInOperatorModeState(
+      `${testRealmURL}Person1/person1.json`,
+      'isolated',
+    );
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    assert.ok(true);
+    // this.onSave((subscriber) => {
+    //   debugger;
+    // });
+    // await this.pauseTest();
   });
 
   test<TestContextWithSave>('it does not auto save when exiting edit mode when there are no changes made', async function (assert) {
