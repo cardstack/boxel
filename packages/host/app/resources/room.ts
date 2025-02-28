@@ -30,6 +30,7 @@ import type {
   MessageEvent,
   CommandDefinitionsEvent,
   CommandResultEvent,
+  RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -322,7 +323,8 @@ export class RoomResource extends Resource<Args> {
       | MessageEvent
       | CommandEvent
       | CardMessageEvent
-      | CommandDefinitionsEvent,
+      | CommandDefinitionsEvent
+      | RealmServerEvent,
   ): event is CommandDefinitionsEvent {
     return event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
   }
@@ -332,7 +334,8 @@ export class RoomResource extends Resource<Args> {
       | MessageEvent
       | CommandEvent
       | CardMessageEvent
-      | CommandDefinitionsEvent,
+      | CommandDefinitionsEvent
+      | RealmServerEvent,
   ): event is CardMessageEvent & {
     content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
   } {

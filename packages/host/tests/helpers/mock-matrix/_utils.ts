@@ -7,12 +7,11 @@ import RealmService from '@cardstack/host/services/realm';
 import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
 
-import type {
-  MatrixEvent,
-  RealmEventEvent,
-} from '@cardstack/base/matrix-event';
+import type { RealmEventEvent } from '@cardstack/base/matrix-event';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
+
+type IEvent = MatrixSDK.IEvent;
 
 export class MockUtils {
   constructor(
@@ -41,9 +40,7 @@ export class MockUtils {
     return this.testState
       .sdk!.serverState.getRoomEvents(roomId)
       .filter(
-        (e: MatrixEvent) =>
-          e.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
-          e.origin_server_ts > since,
+        (e: IEvent) => isRealmEventEvent(e) && e.origin_server_ts > since,
       ) as RealmEventEvent[];
   };
 
@@ -107,4 +104,8 @@ export class MockUtils {
     );
     return roomId;
   };
+}
+
+function isRealmEventEvent(e: IEvent): e is RealmEventEvent {
+  return e.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE;
 }
