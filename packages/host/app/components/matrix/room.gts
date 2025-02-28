@@ -94,7 +94,7 @@ export default class Room extends Component<Signature> {
               @registerScroller={{this.registerMessageScroller}}
               @isPending={{this.isPendingMessage message}}
               @monacoSDK={{@monacoSDK}}
-              @isStreaming={{this.isMessageStreaming message i}}
+              @isStreaming={{this.isMessageStreaming message}}
               @isDisplayingCode={{this.isDisplayingCode message}}
               @onToggleViewCode={{fn this.toggleViewCode message}}
               @currentEditor={{this.currentMonacoContainer}}
@@ -499,16 +499,8 @@ export default class Room extends Component<Signature> {
     return undefined;
   };
 
-  private isMessageStreaming = (message: Message, messageIndex: number) => {
-    return (
-      !message.isStreamingFinished &&
-      this.isLastMessage(messageIndex) &&
-      // Older events do not come with isStreamingFinished property so we have
-      // no other way to determine if the message is done streaming other than
-      // checking if they are old messages (older than 60 seconds as an arbitrary
-      // threshold)
-      unixTime(new Date().getTime() - message.created.getTime()) < 60
-    );
+  private isMessageStreaming = (message: Message) => {
+    return !message.isStreamingFinished;
   };
 
   private isDisplayingCode = (message: Message) => {
