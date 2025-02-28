@@ -1,5 +1,7 @@
 import Owner from '@ember/owner';
 
+import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+
 import RealmService from '@cardstack/host/services/realm';
 
 import type { MockSDK } from './_sdk';
@@ -36,10 +38,13 @@ export class MockUtils {
   };
 
   getRealmEventMessagesSince = (roomId: string, since: number) => {
-    return this.testState.sdk!.serverState.getRoomEvents(roomId).filter(
-      (e: MatrixEvent) =>
-        e.type === 'app.boxel.realm-event' && e.origin_server_ts > since, // FIXME import
-    ) as RealmEventEvent[];
+    return this.testState
+      .sdk!.serverState.getRoomEvents(roomId)
+      .filter(
+        (e: MatrixEvent) =>
+          e.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+          e.origin_server_ts > since,
+      ) as RealmEventEvent[];
   };
 
   setRealmPermissions = (permissions: Record<string, string[]>) => {
