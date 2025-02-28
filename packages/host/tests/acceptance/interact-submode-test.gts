@@ -280,7 +280,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         'shipping-info.gts': { ShippingInfo },
         'README.txt': `Hello World`,
         'person-entry.json': new Spec({
-          name: 'Person Card',
+          title: 'Person Card',
           description: 'Spec for Person Card',
           specType: 'card',
           ref: {
@@ -289,7 +289,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           },
         }),
         'pet-entry.json': new Spec({
-          name: 'Pet Card',
+          title: 'Pet Card',
           description: 'Spec for Pet Card',
           specType: 'card',
           ref: {
@@ -299,7 +299,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         }),
         ...catalogEntries,
         'puppy-entry.json': new Spec({
-          name: 'Puppy Card',
+          title: 'Puppy Card',
           description: 'Spec for Puppy Card',
           specType: 'card',
           ref: {
@@ -787,7 +787,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-show-more-cards]')
         .containsText('3 not shown', 'Entries are paginated');
-      assert.dom(`[data-test-select="${testRealmURL}person-entry"]`).exists();
       await click(`[data-test-select="${testRealmURL}person-entry"]`);
       await click('[data-test-card-catalog-go-button]');
 
