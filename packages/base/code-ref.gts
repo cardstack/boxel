@@ -111,6 +111,9 @@ class EditView extends Component<typeof CodeRefField> {
 
       let name = parts.pop()!;
       let module = parts.join('/');
+      if (moduleIsUrlLike(module) && this.cardURL) {
+        module = new URL(module, new URL(this.cardURL)).href;
+      }
       try {
         let code = (await import(module))[name];
         if (code) {
