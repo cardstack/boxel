@@ -31,7 +31,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
-import { unixTime } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
