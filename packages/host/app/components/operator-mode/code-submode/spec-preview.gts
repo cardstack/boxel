@@ -1,6 +1,7 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 
@@ -40,6 +41,7 @@ import {
 import PrerenderedCardSearch, {
   PrerenderedCard,
 } from '@cardstack/host/components/prerendered-card-search';
+import Preview from '@cardstack/host/components/preview';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import {
@@ -57,8 +59,6 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import type { WithBoundArgs } from '@glint/template';
-
-import Preview from '@cardstack/host/components/preview';
 
 interface Signature {
   Element: HTMLElement;
@@ -81,6 +81,7 @@ interface Signature {
             | 'showCreateSpecIntent'
             | 'canWrite'
             | 'selectCard'
+            | 'selectedId'
             | 'spec'
             | 'isLoading'
             | 'cards'
@@ -177,7 +178,7 @@ interface ContentSignature {
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
 
-  constructor(owner: any, args: any) {
+  constructor(owner: Owner, args: ContentSignature['Args']) {
     super(owner, args);
     this.initializeCardSelection();
   }
@@ -247,7 +248,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             <div class='spec-selector' data-test-spec-selector>
               <BoxelSelect
                 @options={{this.cardIds}}
-                @selected={{@spec.id}}
+                @selected={{@selectedId}}
                 @onChange={{@selectCard}}
                 @matchTriggerWidth={{true}}
                 @disabled={{this.onlyOneInstance}}
@@ -546,6 +547,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
               showCreateSpecIntent=showCreateSpecIntent
               canWrite=this.canWrite
               selectCard=this.onSelectCard
+              selectedId=this._selectedCard.url
               spec=this.card
               isLoading=false
               cards=cards
