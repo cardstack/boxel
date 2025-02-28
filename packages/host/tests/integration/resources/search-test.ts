@@ -46,11 +46,6 @@ module(`Integration | search resource`, function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
     loaderService = lookupLoaderService();
     loader = loaderService.loader;
-
-    // Needed for the search resource to subscribe to realm events
-    (
-      getOwner(this)!.lookup('service:message-service') as MessageService
-    ).register();
   });
 
   setupLocalIndexing(hooks);

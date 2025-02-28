@@ -34,6 +34,10 @@ export function setupMockMatrix(
     testState.opts = { ...opts };
     let sdk = new MockSDK(testState.opts);
     testState.sdk = sdk;
+
+    // Needed for realm event subscriptions to receive events
+    (this.owner.lookup('service:message-service') as MessageService).register();
+
     const { loggedInAs } = opts;
     if (loggedInAs) {
       window.localStorage.setItem(
