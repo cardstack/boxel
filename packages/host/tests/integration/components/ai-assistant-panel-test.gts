@@ -1038,6 +1038,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       data: JSON.stringify({
         attachedCardsEventIds: [event1Id],
       }),
+      isStreamingFinished: true,
     });
 
     await waitFor('[data-test-card-error]');
@@ -2807,6 +2808,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         formatted_body: 'this is another message',
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
       },
       {
         origin_server_ts: new Date(2024, 0, 3, 13, 30).getTime(),
