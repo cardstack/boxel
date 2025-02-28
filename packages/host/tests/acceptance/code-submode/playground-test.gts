@@ -236,7 +236,7 @@ export class BlogPost extends CardDef {
           },
         },
       },
-    }));
+    });
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
