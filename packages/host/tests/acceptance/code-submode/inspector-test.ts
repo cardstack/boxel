@@ -421,7 +421,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       contents: realmAFiles,
       realmURL: testRealmURL2,
     });
-    ({ realm, adapter } = await setupAcceptanceTestRealm({
+    ({ adapter } = await setupAcceptanceTestRealm({
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,

@@ -8,7 +8,6 @@ import {
 import { findAll, waitUntil, waitFor, click } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { IEvent } from 'matrix-js-sdk';
 import ms from 'ms';
 
 import {
@@ -16,7 +15,6 @@ import {
   LooseSingleCardDocument,
   baseRealm,
   RealmPermissions,
-  Deferred,
   Worker,
   RunnerOptionsManager,
   type RealmInfo,
@@ -36,10 +34,6 @@ import {
 } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import {
-  APP_BOXEL_REALM_EVENT_EVENT_TYPE,
-  APP_BOXEL_TEST_SENTINEL,
-} from '@cardstack/runtime-common/matrix-constants';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -50,7 +44,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
-import type MessageService from '@cardstack/host/services/message-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
@@ -64,10 +57,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
-import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import { TestRealmAdapter } from './adapter';
-import { MockUtils } from './mock-matrix/_utils';
 import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';

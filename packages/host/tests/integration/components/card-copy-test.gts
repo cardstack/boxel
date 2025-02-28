@@ -1145,7 +1145,7 @@ module('Integration | card-copy', function (hooks) {
           m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
           m.content.eventName === 'index' &&
           m.content.indexType === 'incremental',
-      )?.content;
+      )?.content as IncrementalIndexEventContent;
 
     assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
 

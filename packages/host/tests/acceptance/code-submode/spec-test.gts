@@ -132,7 +132,7 @@ module('Acceptance | Spec preview', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    ({ realm } = await setupAcceptanceTestRealm({
+    await setupAcceptanceTestRealm({
       realmURL: testRealmURL,
       contents: {
         'person.gts': personCardSource,
@@ -278,7 +278,7 @@ module('Acceptance | Spec preview', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    }));
+    });
     await setupAcceptanceTestRealm({
       realmURL: testRealm2URL,
       contents: {

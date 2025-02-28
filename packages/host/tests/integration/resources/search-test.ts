@@ -17,8 +17,6 @@ import LoaderService from '@cardstack/host/services/loader-service';
 
 import RealmService from '@cardstack/host/services/realm';
 
-import { IndexRealmEventContent } from 'https://cardstack.com/base/matrix-event';
-
 import {
   CardDocFiles,
   lookupLoaderService,

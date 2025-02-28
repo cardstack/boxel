@@ -2575,23 +2575,6 @@ module('Integration | realm', function (hooks) {
     });
 
     {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}dir/person.gts`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}dir/person.gts`],
-          },
-        },
-      ];
       let response = await handle(
         realm,
         new Request(`${testRealmURL}dir/person.gts`, {
@@ -2645,23 +2628,6 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}person.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}person.gts`],
-        },
-      },
-    ];
     let response = await handle(
       realm,
       new Request(`${testRealmURL}person`, {
