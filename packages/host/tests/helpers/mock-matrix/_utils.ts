@@ -4,10 +4,10 @@ import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matr
 
 import RealmService from '@cardstack/host/services/realm';
 
+import type { RealmEventEvent } from 'https://cardstack.com/base/matrix-event';
+
 import type { MockSDK } from './_sdk';
 import type { Config } from '../mock-matrix';
-
-import type { RealmEventEvent } from '@cardstack/base/matrix-event';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
