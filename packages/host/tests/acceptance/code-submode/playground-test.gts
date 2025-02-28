@@ -3,6 +3,8 @@ import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
+import type { Realm } from '@cardstack/runtime-common';
+
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
@@ -22,6 +24,7 @@ import { setupApplicationTest } from '../../helpers/setup';
 
 let matrixRoomId: string;
 module('Acceptance | code-submode | playground panel', function (hooks) {
+  let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
@@ -131,7 +134,7 @@ export class BlogPost extends CardDef {
     });
     setupUserSubscription(matrixRoomId);
 
-    await setupAcceptanceTestRealm({
+    ({ realm } = await setupAcceptanceTestRealm({
       realmURL: testRealmURL,
       contents: {
         'author.gts': authorCard,
@@ -236,7 +239,7 @@ export class BlogPost extends CardDef {
           },
         },
       },
-    });
+    }));
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
