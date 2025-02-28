@@ -2,7 +2,7 @@ import { click, waitFor, fillIn } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Realm, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
@@ -113,7 +113,6 @@ const newSkillCardSource = `
 
 let matrixRoomId: string;
 module('Acceptance | Spec preview', function (hooks) {
-  let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);

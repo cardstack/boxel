@@ -3,7 +3,6 @@ import { waitUntil, waitFor, click, triggerEvent } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
-import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
@@ -52,7 +51,6 @@ type TestContextForCopy = TestContextWithSave;
 
 module('Integration | card-copy', function (hooks) {
   let realm1: Realm;
-  let realm2: Realm;
   let noop = () => {};
 
   setupRenderingTest(hooks);
@@ -217,7 +215,7 @@ module('Integration | card-copy', function (hooks) {
       },
     }));
 
-    ({ realm: realm2 } = await setupIntegrationTestRealm({
+    await setupIntegrationTestRealm({
       loader,
       realmURL: testRealm2URL,
       contents: {
@@ -253,7 +251,7 @@ module('Integration | card-copy', function (hooks) {
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
         },
       },
-    }));
+    });
 
     // write in the new record last because it's link didn't exist until realm2 was created
     await realm1.write(
@@ -727,7 +725,7 @@ module('Integration | card-copy', function (hooks) {
           m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
           m.content.eventName === 'index' &&
           m.content.indexType === 'incremental',
-      )?.content;
+      )?.content as IncrementalIndexEventContent;
 
     assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
 
@@ -841,15 +839,15 @@ module('Integration | card-copy', function (hooks) {
       loggedInAs,
     );
 
-    let realmEventMessages = getRealmEventMessagesSince(
+    let realmIndexEventMessages = getRealmEventMessagesSince(
       realmSessionRoomId,
       realmEventTimestampStart,
     )
       .filter((m) => m.content.eventName === 'index')
-      .map((m) => m.content);
+      .map((m) => m.content) as IndexRealmEventContent[];
 
     assert.deepEqual(
-      realmEventMessages.map((e: IndexRealmEventContent) => e.indexType),
+      realmIndexEventMessages.map((e: IndexRealmEventContent) => e.indexType),
       [
         'incremental-index-initiation',
         'incremental',
@@ -858,13 +856,19 @@ module('Integration | card-copy', function (hooks) {
       ],
       'event types are correct',
     );
+
+    let invalidationIds = realmIndexEventMessages.reduce(
+      (invalidationIds: string[], e: IndexRealmEventContent) => {
+        if (e.indexType === 'incremental') {
+          return invalidationIds.concat(e.invalidations);
+        }
+        return invalidationIds;
+      },
+      [],
+    ) as string[];
+
     assert.deepEqual(
-      flatMap(
-        realmEventMessages.filter(
-          (e: IndexRealmEventContent) => e.indexType === 'incremental',
-        ),
-        (e: IncrementalIndexEventContent) => e.invalidations,
-      ),
+      invalidationIds,
       [savedCards[0].data.id, savedCards[1].data.id],
       'event invalidations are correct',
     );
@@ -1005,7 +1009,7 @@ module('Integration | card-copy', function (hooks) {
           m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
           m.content.eventName === 'index' &&
           m.content.indexType === 'incremental',
-      )?.content;
+      )?.content as IncrementalIndexEventContent;
 
     assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
 

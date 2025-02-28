@@ -8,7 +8,6 @@ import type { Config } from '../mock-matrix';
 import type {
   MatrixEvent,
   RealmEventEvent,
-  RealmEventEventContent,
 } from '@cardstack/base/matrix-event';
 
 import type * as MatrixSDK from 'matrix-js-sdk';

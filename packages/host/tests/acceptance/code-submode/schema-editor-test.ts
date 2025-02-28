@@ -10,8 +10,6 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
-import { Realm } from '@cardstack/runtime-common/realm';
-
 import {
   setupLocalIndexing,
   testRealmURL,

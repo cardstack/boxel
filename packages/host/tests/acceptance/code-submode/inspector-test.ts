@@ -17,8 +17,6 @@ import stringify from 'safe-stable-stringify';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
-import { Realm } from '@cardstack/runtime-common/realm';
-
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -392,7 +390,6 @@ const localInheritSource = `
 `;
 
 module('Acceptance | code submode | inspector tests', function (hooks) {
-  let realm: Realm;
   let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
   let matrixRoomId: string;

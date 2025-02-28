@@ -64,10 +64,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 
-import type {
-  RealmEventEvent,
-  RealmEventEventContent,
-} from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import { TestRealmAdapter } from './adapter';
 import { MockUtils } from './mock-matrix/_utils';

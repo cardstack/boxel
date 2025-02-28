@@ -10,7 +10,6 @@ import {
   Deferred,
   baseRealm,
 } from '@cardstack/runtime-common';
-import { Realm } from '@cardstack/runtime-common/realm';
 
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
@@ -34,7 +33,6 @@ import { setupApplicationTest } from '../../helpers/setup';
 
 let matrixRoomId: string;
 module('Acceptance | code submode | editor tests', function (hooks) {
-  let realm: Realm;
   let monacoService: MonacoService;
   let adapter: TestRealmAdapter;
 
