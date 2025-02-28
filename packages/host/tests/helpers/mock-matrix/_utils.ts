@@ -35,12 +35,6 @@ export class MockUtils {
     );
   };
 
-  getRealmEventMessages = (roomId: string) => {
-    return this.testState.sdk!.serverState.getRoomEvents(roomId).filter(
-      (e: MatrixEvent) => e.type === 'app.boxel.realm-event', // FIXME import
-    ) as RealmEventEvent[];
-  };
-
   getRealmEventMessagesSince = (roomId: string, since: number) => {
     return this.testState.sdk!.serverState.getRoomEvents(roomId).filter(
       (e: MatrixEvent) =>
