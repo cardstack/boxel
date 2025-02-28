@@ -28,10 +28,12 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
+  identifyCard,
   isCardDef,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
+  isResolvedCodeRef,
   type ResolvedCodeRef,
   PermissionsContextName,
 } from '@cardstack/runtime-common';
@@ -464,15 +466,20 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  private get shouldDisplayPlayground() {
-    return isCardDef(this.selectedCardOrField?.cardOrField);
+  private get selectedCardRef(): ResolvedCodeRef | undefined {
+    let baseDefType = this.selectedCardOrField?.cardOrField;
+    if (!isCardDef(baseDefType)) {
+      return;
+    }
+    let codeRef = identifyCard(baseDefType);
+    if (!isResolvedCodeRef(codeRef)) {
+      return;
+    }
+    return codeRef;
   }
 
   get showSpecPreview() {
-    return (
-      !this.moduleContentsResource.isLoading &&
-      this.selectedDeclaration?.exportName
-    );
+    return this.selectedCardOrField?.exportName;
   }
 
   private get itemToDeleteAsCard() {
@@ -957,7 +964,7 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.shouldDisplayPlayground}}
+                      {{#if this.selectedCardRef}}
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
@@ -968,8 +975,8 @@ export default class CodeSubmode extends Component<Signature> {
                           <:title>Playground</:title>
                           <:content>
                             <PlaygroundPanel
-                              @moduleContentsResource={{this.moduleContentsResource}}
-                              @cardType={{this.selectedCardOrField.cardType}}
+                              @codeRef={{this.selectedCardRef}}
+                              @isLoading={{this.moduleContentsResource.isLoading}}
                             />
                           </:content>
                         </A.Item>

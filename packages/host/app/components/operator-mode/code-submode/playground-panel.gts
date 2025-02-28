@@ -30,15 +30,13 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   chooseCard,
+  internalKeyFor,
   type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { getCard } from '@cardstack/host/resources/card-resource';
-
-import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
-import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -59,15 +57,11 @@ import FittedFormatGallery from '../card-preview-panel/fitted-format-gallery';
 
 import FormatChooser from './format-chooser';
 
-const getItemTitle = (item: CardDef, displayName?: string) => {
+const getItemTitle = (item: CardDef) => {
   if (!item) {
     return;
   }
-  if (item.title) {
-    return item.title;
-  }
-  let fallbackName = displayName ?? item.constructor.displayName ?? 'Card';
-  return `Untitled ${fallbackName}`;
+  return item.title ?? `Untitled ${cardTypeDisplayName(item)}`;
 };
 
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
@@ -179,7 +173,6 @@ interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
     moduleId: string;
-    displayName?: string;
   };
 }
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
@@ -202,9 +195,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
               @selected={{this.card}}
               @selectedItemComponent={{if
                 this.card
-                (component
-                  SelectedItem title=(getItemTitle this.card @displayName)
-                )
+                (component SelectedItem title=(getItemTitle this.card))
               }}
               @renderInPlace={{true}}
               @onChange={{this.onSelect}}
@@ -480,8 +471,14 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private persistSelections = (cardId: string, format = this.format) => {
-    this.newCardJSON = undefined;
+    if (this.newCardJSON) {
+      this.newCardJSON = undefined;
+    }
+    if (this.card?.id === cardId && this.format === format) {
+      return;
+    }
     this.playgroundSelections[this.args.moduleId] = { cardId, format };
+
     window.localStorage.setItem(
       PlaygroundSelections,
       JSON.stringify(this.playgroundSelections),
@@ -547,34 +544,21 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
 interface Signature {
   Args: {
-    moduleContentsResource: ModuleContentsResource;
-    cardType?: CardType;
+    codeRef: ResolvedCodeRef;
+    isLoading?: boolean;
   };
   Element: HTMLElement;
 }
 export default class PlaygroundPanel extends Component<Signature> {
   <template>
     <section class='playground-panel' data-test-playground-panel>
-      {{#if this.isLoading}}
+      {{#if @isLoading}}
         <LoadingIndicator @color='var(--boxel-light)' />
-      {{else if @cardType.type}}
-        {{#let (getCodeRef @cardType.type) as |codeRef|}}
-          {{#if codeRef}}
-            <PlaygroundPanelContent
-              @codeRef={{codeRef}}
-              @moduleId={{@cardType.type.id}}
-              @displayName={{@cardType.type.displayName}}
-            />
-          {{else}}
-            <p class='error'>
-              Error: Selected module is not for an exported card, or its code
-              ref could not be loaded.
-            </p>
-          {{/if}}
-        {{/let}}
       {{else}}
-        {{! TODO: error state }}
-        <p class='error'>Error: Playground could not be loaded.</p>
+        <PlaygroundPanelContent
+          @codeRef={{@codeRef}}
+          @moduleId={{internalKeyFor @codeRef undefined}}
+        />
       {{/if}}
     </section>
     <style scoped>
@@ -598,11 +582,4 @@ export default class PlaygroundPanel extends Component<Signature> {
       }
     </style>
   </template>
-
-  get isLoading() {
-    return (
-      this.args.moduleContentsResource.isLoadingNewModule ||
-      this.args.cardType?.isLoading
-    );
-  }
 }
