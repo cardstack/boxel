@@ -1,6 +1,4 @@
-import { click } from '@ember/test-helpers';
-
-import { fillIn } from '@ember/test-helpers';
+import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
@@ -664,6 +662,35 @@ export class BlogPost extends CardDef {
         '[data-test-playground-panel] [data-test-card] [data-test-field="ref"] input',
       )
       .hasNoValue('code ref field is empty');
+  });
+
+  test('can set relative CodeRef field', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}code-ref-driver.gts`,
+    });
+    await click('[data-boxel-selector-item-text="CodeRefDriver"]');
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-test-create-instance]');
+
+    assert
+      .dom(
+        '[data-test-playground-panel] [data-test-card] [data-test-ref] [data-test-boxel-input-validation-state="valid"]',
+      )
+      .doesNotExist('code ref validity is not set');
+    await fillIn(
+      '[data-test-playground-panel] [data-test-card] [data-test-field="ref"] input',
+      `../blog-post/BlogPost`,
+    );
+    await waitFor(
+      '[data-test-playground-panel] [data-test-card] [data-test-hasValidated]',
+    );
+    assert
+      .dom(
+        '[data-test-playground-panel] [data-test-card] [data-test-field="ref"] [data-test-boxel-input-validation-state="valid"]',
+      )
+      .exists('code ref is valid');
   });
 
   test<TestContextWithSSE>('playground preview for card with contained fields can live update when module changes', async function (assert) {
