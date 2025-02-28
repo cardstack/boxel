@@ -20,6 +20,7 @@ import {
   LoadingIndicator,
   Pill,
   RealmIcon,
+  BoxelInput,
 } from '@cardstack/boxel-ui/components';
 import {
   codeRefWithAbsoluteURL,
@@ -44,6 +45,73 @@ export type SpecType = 'card' | 'field' | 'app' | 'skill';
 
 class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
+}
+
+class SpecTitleField extends StringField {
+  static displayName = 'Spec Title';
+
+  static edit = class Edit extends Component<typeof this> {
+    get placeholder() {
+      const hasFieldName = Boolean(this.args.fieldName);
+
+      if (hasFieldName) {
+        return 'Enter ' + this.args.fieldName;
+      }
+      return undefined;
+    }
+
+    <template>
+      <BoxelInput
+        @value={{@model}}
+        @onInput={{@set}}
+        @placeholder={{this.placeholder}}
+        class='spec-title-input'
+      />
+      <style scoped>
+        .spec-title-input {
+          font-size: 18px;
+          font-weight: 600;
+          letter-spacing: var(--boxel-lsp-xs);
+          padding: var(--boxel-sp-4xs) 0 var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        }
+        .spec-title-input::placeholder {
+          color: var(--boxel-400);
+        }
+      </style>
+    </template>
+  };
+}
+
+class SpecDescriptionField extends StringField {
+  static displayName = 'Spec Description';
+
+  static edit = class Edit extends Component<typeof this> {
+    get placeholder() {
+      const hasFieldName = Boolean(this.args.fieldName);
+
+      if (hasFieldName) {
+        return 'Enter ' + this.args.fieldName;
+      }
+      return undefined;
+    }
+
+    <template>
+      <BoxelInput
+        @value={{@model}}
+        @onInput={{@set}}
+        @placeholder={{this.placeholder}}
+        class='spec-description-input'
+      />
+      <style scoped>
+        .spec-description-input {
+          padding: var(--boxel-sp-4xs) 0 var(--boxel-sp-4xs) var(--boxel-sp-xs);
+        }
+        .spec-description-input::placeholder {
+          color: var(--boxel-400);
+        }
+      </style>
+    </template>
+  };
 }
 
 export class Spec extends CardDef {
@@ -76,7 +144,8 @@ export class Spec extends CardDef {
   });
   @field linkedExamples = linksToMany(CardDef);
   @field containedExamples = containsMany(FieldDef, { isUsed: true });
-  @field title = contains(StringField);
+  @field title = contains(SpecTitleField);
+  @field description = contains(SpecDescriptionField);
 
   static isolated = class Isolated extends Component<typeof this> {
     icon: CardOrFieldTypeIcon | undefined;
@@ -356,8 +425,6 @@ export class Spec extends CardDef {
     </template>
   };
 
-  static edit = Spec.isolated;
-
   static fitted = class Fitted extends Component<typeof this> {
     icon: CardOrFieldTypeIcon | undefined;
 
@@ -606,6 +673,220 @@ export class Spec extends CardDef {
           .card-title {
             font-size: var(--boxel-font-size-med);
           }
+        }
+      </style>
+    </template>
+  };
+
+  static edit = class Edit extends Component<typeof this> {
+    icon: CardOrFieldTypeIcon | undefined;
+
+    get defaultIcon() {
+      return this.args.model.constructor?.icon;
+    }
+    constructor(owner: any, args: any) {
+      super(owner, args);
+      this.loadCardIcon.perform();
+    }
+
+    private loadCardIcon = restartableTask(async () => {
+      if (this.args.model.ref && this.args.model.id) {
+        let card = await loadCard(this.args.model.ref, {
+          loader: myLoader(),
+          relativeTo: new URL(this.args.model.id),
+        });
+        this.icon = card.icon;
+      }
+    });
+
+    get absoluteRef() {
+      if (!this.args.model.ref || !this.args.model.id) {
+        return undefined;
+      }
+      let url = new URL(this.args.model.id);
+      let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+      if (!isResolvedCodeRef(ref)) {
+        throw new Error('ref is not a resolved code ref');
+      }
+      return ref;
+    }
+
+    private get realmInfo() {
+      return getCardMeta(this.args.model as CardDef, 'realmInfo');
+    }
+
+    <template>
+      <article class='container'>
+        <header class='header' aria-labelledby='title'>
+          <div class='box header-icon-container'>
+            {{#if this.loadCardIcon.isRunning}}
+              <LoadingIndicator />
+            {{else if this.icon}}
+              <this.icon width='35' height='35' role='presentation' />
+            {{else}}
+              <this.defaultIcon width='35' height='35' role='presentation' />
+            {{/if}}
+          </div>
+          <div class='header-info-container'>
+            <div class='header-title-container' data-test-title>
+              <@fields.title />
+            </div>
+            <div class='header-description-container' data-test-description>
+              <@fields.description />
+            </div>
+          </div>
+        </header>
+        <section class='readme section'>
+          <header class='row-header' aria-labelledby='readme'>
+            <BookOpenText width='20' height='20' role='presentation' />
+            <h2 id='readme'>Read Me</h2>
+          </header>
+          <div data-test-readme>
+            <@fields.readMe />
+          </div>
+        </section>
+        <section class='examples section'>
+          <header class='row-header' aria-labelledby='examples'>
+            <LayersSubtract width='20' height='20' role='presentation' />
+            <h2 id='examples'>Examples</h2>
+          </header>
+          {{#if (eq @model.specType 'field')}}
+            <@fields.containedExamples />
+          {{else}}
+            <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
+          {{/if}}
+        </section>
+        <section class='module section'>
+          <header class='row-header' aria-labelledby='module'>
+            <GitBranch width='20' height='20' role='presentation' />
+            <h2 id='module'>Module</h2>
+          </header>
+          <div class='code-ref-container'>
+            <FieldContainer @label='URL' @vertical={{true}}>
+              <div class='code-ref-row'>
+                <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+                <span class='code-ref-value' data-test-module-href>
+                  {{@model.moduleHref}}
+                </span>
+              </div>
+            </FieldContainer>
+            <FieldContainer @label='Module Name' @vertical={{true}}>
+              <div class='code-ref-row'>
+                <ExportArrow class='exported-arrow' width='10' height='10' />
+                <div class='code-ref-value' data-test-exported-name>
+                  {{@model.ref.name}}
+                </div>
+                <div class='exported-type' data-test-exported-type>
+                  {{@model.specType}}
+                </div>
+              </div>
+            </FieldContainer>
+          </div>
+        </section>
+      </article>
+      <style scoped>
+        .container {
+          --boxel-spec-background-color: #ebeaed;
+          --boxel-spec-code-ref-background-color: #e2e2e2;
+          --boxel-spec-code-ref-text-color: #646464;
+
+          height: 100%;
+          min-height: max-content;
+          padding: var(--boxel-sp);
+          background-color: var(--boxel-spec-background-color);
+        }
+        .section {
+          margin-top: var(--boxel-sp);
+          padding-top: var(--boxel-sp);
+          border-top: 1px solid var(--boxel-400);
+        }
+        h2 {
+          margin: 0;
+          font: 600 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        .box {
+          border: 1px solid var(--boxel-border-color);
+          border-radius: var(--boxel-border-radius-lg);
+          background-color: var(--boxel-light);
+        }
+        .header {
+          display: flex;
+          gap: var(--boxel-sp-sm);
+        }
+        .header-icon-container {
+          flex-shrink: 0;
+          height: var(--boxel-icon-xxl);
+          width: var(--boxel-icon-xxl);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background-color: var(--boxel-100);
+        }
+        .header-info-container {
+          background-color: var(--boxel-light);
+          border-radius: var(--boxel-border-radius);
+          flex: 1;
+          align-self: center;
+        }
+        .header-info-container > div + div {
+          border-top: 1px solid var(--boxel-spec-background-color);
+        }
+        .header-title-container,
+        .header-description-container {
+          padding: var(--boxel-sp-xs);
+        }
+
+        .row-header {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          padding-bottom: var(--boxel-sp-lg);
+        }
+        .row-content {
+          margin-top: var(--boxel-sp-sm);
+        }
+
+        /* code ref container styles */
+        .code-ref-container {
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp-xs);
+        }
+        .code-ref-row {
+          display: flex;
+          align-items: center;
+          gap: var(--boxel-sp-xs);
+          min-height: var(--boxel-form-control-height);
+          padding: var(--boxel-sp-xs);
+          background-color: var(
+            --boxel-spec-code-ref-background-color,
+            var(--boxel-100)
+          );
+          border: var(--boxel-border);
+          border-radius: var(--boxel-border-radius);
+          color: var(--boxel-spec-code-ref-text-color, var(--boxel-450));
+        }
+        .code-ref-value {
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+        .exported-type {
+          margin-left: auto;
+          color: var(--boxel-450);
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp);
+          text-transform: uppercase;
+        }
+        .exported-arrow {
+          min-width: 8px;
+          min-height: 8px;
+        }
+        .realm-icon {
+          width: 18px;
+          height: 18px;
+          border: 1px solid var(--boxel-dark);
         }
       </style>
     </template>
