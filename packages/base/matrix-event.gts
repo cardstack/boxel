@@ -15,6 +15,7 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALM_EVENT_EVENT_TYPE,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -297,6 +298,16 @@ export interface CommandResultWithNoOutputContent {
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
 }
 
+export interface RealmServerEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: RealmServerEventContent;
+}
+
+export interface RealmServerEventContent {
+  msgtype: typeof APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
+  body: string;
+}
+
 export interface RealmEventEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_REALM_EVENT_EVENT_TYPE;
   content: RealmEventEventContent;
@@ -365,6 +376,7 @@ export type MatrixEvent =
   | CommandResultEvent
   | CommandDefinitionsEvent
   | CardMessageEvent
+  | RealmServerEvent
   | RealmEventEvent
   | RoomNameEvent
   | RoomTopicEvent
