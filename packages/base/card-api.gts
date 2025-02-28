@@ -3145,7 +3145,6 @@ export class Box<T> {
         });
       }
     });
-    this.prevChildren = newChildren;
     return newChildren;
   }
 }
