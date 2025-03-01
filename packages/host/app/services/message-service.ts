@@ -35,6 +35,10 @@ export default class MessageService extends Service {
     }
     this.listenerCallbacks.get(realmURL)?.push(cb);
 
+    if (isTesting()) {
+      return () => {};
+    }
+
     let maybeEventSource = this.subscriptions.get(realmURL);
 
     if (!maybeEventSource) {
