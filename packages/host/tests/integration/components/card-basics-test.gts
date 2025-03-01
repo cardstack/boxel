@@ -73,6 +73,8 @@ import {
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
 
 let loader: Loader;
 const testModuleRealm = 'http://localhost:4202/test/';
@@ -2046,6 +2048,114 @@ module('Integration | card-basics', function (hooks) {
       assert.dom(root.children[0]).containsText('Arthur');
       child.firstName = 'Quint';
       await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Quint');
+    });
+
+    test('ensure linksToMany component is stable during re-renders', async function (assert) {
+      class Embedded extends Component<typeof Pet> {
+        @tracked counter = 0;
+
+        incrementCounter = () => {
+          this.counter++;
+        };
+        <template>
+          <button {{on 'click' this.incrementCounter}}>Increment</button>
+          <div data-test-counter>
+            {{this.counter}}
+          </div>
+        </template>
+      }
+      class Pet extends CardDef {
+        static embedded = Embedded;
+      }
+      class Person extends CardDef {
+        @field pets = linksToMany(Pet);
+        @field name = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            {{@model.name}}
+            <@fields.name @format='edit' />
+            <@fields.pets @format='embedded' />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Pet, Person });
+
+      let pet1 = new Pet();
+      let pet2 = new Pet();
+      // let pet3 = new Pet();
+      await saveCard(pet1, `${testRealmURL}Pet/pet1`, loader);
+      await saveCard(pet2, `${testRealmURL}Pet/pet2`, loader);
+      let person = new Person({ pets: [pet1, pet2] });
+
+      await renderCard(loader, person, 'embedded');
+      await this.pauseTest();
+
+      assert.ok(true);
+    });
+
+    test('reorder thingy', async function (assert) {
+      class Embedded extends Component<typeof Pet1> {
+        @tracked counter = this.args.model.number ?? 0;
+
+        incrementCounter = () => {
+          this.counter++;
+          this.args.model.number = this.counter;
+        };
+        <template>
+          {{this.args.model.name}}
+          <button {{on 'click' this.incrementCounter}}>Increment</button>
+          <div data-test-counter>
+            {{this.args.model.number}}
+          </div>
+        </template>
+      }
+      class Pet1 extends CardDef {
+        @field number = contains(NumberField);
+        @field name = contains(StringField);
+        static embedded = Embedded;
+        static fitted = Embedded;
+      }
+
+      class Person1 extends CardDef {
+        @field pets = linksToMany(Pet1);
+        @field name = contains(StringField);
+        static isolated = class Embedded extends Component<typeof this> {
+          reorder = () => {
+            if (
+              this.args.model.pets &&
+              this.args.model.pets[0] &&
+              this.args.model.pets[1]
+            ) {
+              // this.args.set();
+              this.args.model.pets = [
+                this.args.model.pets[1],
+                this.args.model.pets[0],
+              ];
+              // this.args.model.pets = [];
+            }
+          };
+          <template>
+            <button {{on 'click' this.reorder}}>Reorder</button>
+            <@fields.name @format='edit' />
+            <@fields.pets />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, { Pet1, Person1 });
+
+      let pet1 = new Pet1({ name: 'jersey' });
+      let pet2 = new Pet1({ name: 'boboy' });
+      await saveCard(pet1, `${testRealmURL}Pet/pet1`, loader);
+      await saveCard(pet2, `${testRealmURL}Pet/pet2`, loader);
+      let person = new Person1({
+        name: 'Mango',
+        pets: [pet1, pet2],
+      });
+      await renderCard(loader, person, 'isolated');
+      await this.pauseTest();
+      assert.ok(true);
     });
 
     test('rerender when a containsMany field is fully replaced', async function (assert) {

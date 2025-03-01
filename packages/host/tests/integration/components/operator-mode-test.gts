@@ -179,10 +179,10 @@ module('Integration | operator-mode', function (hooks) {
             this.args.model.pets[0] &&
             this.args.model.pets[1]
           ) {
-            // this.args.set();
-            let o = [this.args.model.pets[1], this.args.model.pets[0]];
-            this.args.model.pets = [...o];
-            // this.args.model.pets = [];
+            this.args.model.pets = [
+              this.args.model.pets[1],
+              this.args.model.pets[0],
+            ];
           }
         };
         <template>
@@ -858,11 +858,10 @@ module('Integration | operator-mode', function (hooks) {
         </template>
       },
     );
-    assert.ok(true);
     // this.onSave((subscriber) => {
     //   debugger;
     // });
-    // await this.pauseTest();
+    await this.pauseTest();
   });
 
   test<TestContextWithSave>('it does not auto save when exiting edit mode when there are no changes made', async function (assert) {

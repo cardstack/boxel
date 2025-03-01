@@ -225,12 +225,12 @@ export function getBoxComponent(
                       @displayBoundaries={{displayContainer}}
                       class='field-component-card
                         {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
-                      {{context.cardComponentModifier
+                      {{!-- {{context.cardComponentModifier
                         card=card
                         format=effectiveFormats.cardDef
                         fieldType=field.fieldType
                         fieldName=field.name
-                      }}
+                      }} --}}
                       data-test-card={{card.id}}
                       data-test-card-format={{effectiveFormats.cardDef}}
                       data-test-field-component-card
@@ -386,6 +386,10 @@ function fieldsComponentsFor<T extends BaseDef>(
   target: object,
   model: Box<T>,
 ): FieldsTypeFor<T> {
+  // // This is a cache of the fields we've already created components for
+  // // so that they do not get recreated
+  // let stableComponents = new Map<string, BoxComponent>();
+
   return new Proxy(target, {
     get(target, property, received) {
       if (
@@ -396,6 +400,11 @@ function fieldsComponentsFor<T extends BaseDef>(
         // don't handle symbols or nulls
         return Reflect.get(target, property, received);
       }
+
+      // let stable = stableComponents.get(property);
+      // if (stable) {
+      //   return stable;
+      // }
 
       let modelValue = model.value as T; // TS is not picking up the fact we already filtered out nulls and undefined above
       let maybeField: Field<BaseDefConstructor> | undefined = getField(
@@ -409,6 +418,8 @@ function fieldsComponentsFor<T extends BaseDef>(
       let field = maybeField;
 
       let result = field.component(model as unknown as Box<BaseDef>);
+      // stableComponents.set(property, result);
+
       return result;
     },
     getPrototypeOf() {
