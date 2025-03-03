@@ -2,7 +2,7 @@
   "name": "boxel-tools",
   "displayName": "Boxel Tools",
   "description": "Access boxel workspace data and code from your vscode workspace.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": "cardstack",
   "private": true,
   "license": "MIT",
@@ -55,8 +55,8 @@
       },
       {
         "command": "boxel-tools.addRealmsToWorkspace",
-        "title": "Add Boxel Workspaces Folder to Workspace",
-        "category": "Boxel Tools",
+        "title": "Boxel: Add Workspaces Root to VS Code",
+        "category": "Boxel",
         "icon": "$(add)"
       },
       {
@@ -107,6 +107,10 @@
           "command": "boxel-tools.logout"
         },
         {
+          "command": "boxel-tools.addRealmsToWorkspace",
+          "when": "boxelRealmList != empty"
+        },
+        {
           "command": "boxel-tools.attachToBoxelWorkspaces"
         },
         {
@@ -114,9 +118,6 @@
         },
         {
           "command": "boxel-tools.openSettings"
-        },
-        {
-          "command": "boxel-tools.addRealmsToWorkspace"
         },
         {
           "command": "boxel-tools.login"
@@ -141,8 +142,10 @@
         },
         {
           "command": "boxel-tools.addRealmsToWorkspace",
-          "when": "view == boxelRealmList",
-          "group": "navigation"
+          "when": "view == boxelRealmList && boxelRealmList != empty",
+          "group": "1_boxel@1",
+          "icon": "$(folder-opened)",
+          "title": "Add to VS Code"
         }
       ],
       "view/item/context": [
@@ -192,6 +195,12 @@
           "contextualTitle": "Boxel Workspaces"
         },
         {
+          "id": "boxelHelpers",
+          "name": "Boxel Helpers",
+          "icon": "resources/boxel-icon.svg",
+          "contextualTitle": "Boxel Helpers"
+        },
+        {
           "id": "codingSkillList",
           "name": "Cursor Boxel Skills",
           "icon": "resources/boxel-icon.svg",
@@ -203,6 +212,11 @@
       {
         "view": "boxelRealmList",
         "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Boxel](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)"
+      },
+      {
+        "view": "boxelHelpers",
+        "when": "boxelRealmList != empty",
+        "contents": "Your Boxel workspaces are ready to be added to VS Code.\n\n[Add Workspaces to VS Code](command:boxel-tools.addRealmsToWorkspace)\n\n---\n\nSelect a workspace in the list below and click the pull button to download files."
       },
       {
         "view": "codingSkillList",
