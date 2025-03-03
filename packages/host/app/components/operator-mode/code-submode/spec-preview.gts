@@ -263,7 +263,9 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                           class='url-realm-icon'
                           @realmInfo={{data.realmInfo}}
                         />
-                        {{data.localPath}}
+                        <span data-test-spec-selector-item-path>
+                          {{data.localPath}}
+                        </span>
                       </div>
                     {{/if}}
                   {{/let}}
