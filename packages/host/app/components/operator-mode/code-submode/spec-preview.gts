@@ -189,7 +189,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   get shouldSelectFirstCard() {
     return (
-      this.args.cards.length > 0 && !this.args.spec && this.args.selectCard
+      this.args.cards.length > 0 && !this.args.spec && !!this.args.selectCard
     );
   }
 
@@ -199,7 +199,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   @action initializeCardSelection() {
     if (this.shouldSelectFirstCard) {
-      this.args.selectCard(this.args.cards[0]);
+      this.args.selectCard(this.cardIds[0]);
     }
   }
 
@@ -357,7 +357,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
-  @tracked private _selectedCard?: PrerenderedCard;
+  @tracked private _selectedCardId?: string;
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
@@ -399,7 +399,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       };
       await this.cardResource.loaded;
       if (this.card) {
-        this._selectedCard = undefined;
+        this._selectedCardId = undefined;
         this.newCardJSON = undefined;
       }
     },
@@ -494,8 +494,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  @action onSelectCard(card: PrerenderedCard): void {
-    this._selectedCard = card;
+  @action onSelectCard(cardId: string): void {
+    this._selectedCardId = cardId;
   }
 
   get canWrite() {
@@ -504,7 +504,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   private cardResource = getCard(
     this,
-    () => this.newCardJSON ?? this._selectedCard?.url,
+    () => this.newCardJSON ?? this._selectedCardId,
     {
       isAutoSave: () => true,
     },
@@ -547,7 +547,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
               showCreateSpecIntent=showCreateSpecIntent
               canWrite=this.canWrite
               selectCard=this.onSelectCard
-              selectedId=this._selectedCard.url
+              selectedId=this._selectedCardId
               spec=this.card
               isLoading=false
               cards=cards
