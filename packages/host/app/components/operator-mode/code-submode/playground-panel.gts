@@ -259,6 +259,7 @@ interface PlaygroundPreviewSignature {
     realmInfo?: EnhancedRealmInfo;
     contextMenuItems?: MenuItem[];
     onEdit?: () => void;
+    onFinishEditing?: () => void;
   };
 }
 const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
@@ -271,6 +272,7 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
           @cardTypeIcon={{cardTypeIcon @card}}
           @realmInfo={{@realmInfo}}
           @onEdit={{@onEdit}}
+          @onFinishEditing={{@onFinishEditing}}
           @isTopCard={{true}}
           @moreOptionsMenuItems={{@contextMenuItems}}
         />
@@ -306,9 +308,11 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
         grid-auto-rows: max-content 1fr;
       }
       .preview-header {
-        background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
         z-index: 1;
+      }
+      .preview-header:not(.is-editing) {
+        background-color: var(--boxel-100);
       }
       .preview {
         box-shadow: none;
@@ -361,6 +365,10 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
             @realmInfo={{this.realmInfo}}
             @contextMenuItems={{this.contextMenuItems}}
             @onEdit={{if this.canEdit (fn this.setFormat 'edit')}}
+            @onFinishEditing={{if
+              (eq this.format 'edit')
+              (fn this.setFormat 'isolated')
+            }}
           />
         </div>
         <FormatChooser
