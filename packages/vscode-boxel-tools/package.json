@@ -211,7 +211,7 @@
     "viewsWelcome": [
       {
         "view": "boxelRealmList",
-        "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Boxel](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)\n\nOnce you've found your workspaces, you can add them to VS Code:\n[Add Workspaces Root to VS Code](command:boxel-tools.addRealmsToWorkspace)"
+        "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Boxel](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)"
       },
       {
         "view": "boxelHelpers",
