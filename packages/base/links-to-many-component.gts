@@ -404,6 +404,11 @@ export function getLinksToManyComponent({
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
 }): BoxComponent {
+  let cardOrField = cardTypeFor(field, arrayField.children[0]);
+  let stable = componentCache.get(arrayField);
+  if (stable?.cardOrField === cardOrField) {
+    return stable.component;
+  }
   let getComponents = () =>
     arrayField.children.map((child) =>
       getBoxComponent(cardTypeFor(field, child), child, field),
