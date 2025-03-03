@@ -110,11 +110,7 @@ export default class RecentFilesService extends Service {
   }
 
   findRecentFileByURL(urlString: string) {
-    let localPath = this.getLocalPathFromURL(urlString);
-    if (!localPath) {
-      return undefined;
-    }
-    const existingIndex = this.findRecentFileIndex(localPath);
+    const existingIndex = this.findRecentFileIndexByURL(urlString);
     return existingIndex > -1 ? this.recentFiles[existingIndex] : undefined;
   }
 
@@ -122,29 +118,11 @@ export default class RecentFilesService extends Service {
     urlString: string,
     cursorPosition?: CursorPosition,
   ) {
-    let localPath = this.getLocalPathFromURL(urlString);
-    if (!localPath) {
-      return;
-    }
-    const existingIndex = this.findRecentFileIndex(localPath);
+    const existingIndex = this.findRecentFileIndexByURL(urlString);
     if (existingIndex > -1) {
       this.recentFiles[existingIndex].cursorPosition = cursorPosition;
       this.persistRecentFiles();
     }
-  }
-
-  private getLocalPathFromURL(urlString: string) {
-    // TODO: This is a side effect of the recent-file service making assumptions about
-    // what realm we are in. we should refactor that so that callers have to tell
-    // it the realm of the file in question
-    let realmURL = this.operatorModeStateService.realmURL;
-
-    if (!realmURL) {
-      return undefined;
-    }
-    let url = new URL(urlString);
-    let realmPaths = new RealmPaths(realmURL);
-    return realmPaths.local(url);
   }
 
   private persistRecentFiles() {
@@ -168,6 +146,12 @@ export default class RecentFilesService extends Service {
     return this.recentFiles.findIndex(
       ({ realmURL, filePath }) =>
         realmURL.href === currentRealmUrl.href && filePath === path,
+    );
+  }
+
+  private findRecentFileIndexByURL(urlString: string) {
+    return this.recentFiles.findIndex(
+      ({ realmURL, filePath }) => `${realmURL}${filePath}` === urlString,
     );
   }
 

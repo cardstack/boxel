@@ -19,7 +19,6 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
-import { Position } from 'monaco-editor';
 import { TrackedObject } from 'tracked-built-ins';
 
 import { Accordion } from '@cardstack/boxel-ui/components';
@@ -759,48 +758,6 @@ export default class CodeSubmode extends Component<Signature> {
       : this.itemToDelete.id;
   }
 
-  @action
-  private onCursorPositionChange(position: Position) {
-    if (!this.codePath) {
-      return;
-    }
-    this.recentFilesService.updateCursorPositionByURL(
-      this.codePath.toString(),
-      {
-        line: position.lineNumber,
-        column: position.column,
-      },
-    );
-  }
-
-  private get initialCursorPosition() {
-    if (this.codePath) {
-      let recentFile = this.recentFilesService.findRecentFileByURL(
-        this.codePath.toString(),
-      );
-      if (recentFile?.cursorPosition) {
-        return new Position(
-          recentFile.cursorPosition.line,
-          recentFile.cursorPosition.column,
-        );
-      }
-    }
-
-    let loc =
-      this.selectedDeclaration?.path?.node &&
-      'body' in this.selectedDeclaration.path.node &&
-      'loc' in this.selectedDeclaration.path.node.body &&
-      this.selectedDeclaration.path.node.body.loc
-        ? this.selectedDeclaration?.path?.node.body.loc
-        : undefined;
-    if (loc) {
-      let { start } = loc;
-      return new Position(start.line, start.column);
-    }
-
-    return undefined;
-  }
-
   <template>
     <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
@@ -921,8 +878,6 @@ export default class CodeSubmode extends Component<Signature> {
                     @onFileSave={{this.onSourceFileSave}}
                     @onSetup={{this.setupCodeEditor}}
                     @isReadOnly={{this.isReadOnly}}
-                    @onCursorPositionChange={{this.onCursorPositionChange}}
-                    @initialCursorPosition={{this.initialCursorPosition}}
                   />
 
                   <CodeSubmodeEditorIndicator

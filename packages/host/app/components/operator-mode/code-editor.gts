@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
 
@@ -33,19 +33,18 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import BinaryFileInfo from './binary-file-info';
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 interface Signature {
   Args: {
     file: FileResource | undefined;
     moduleContentsResource: ModuleContentsResource | undefined;
-    initialCursorPosition: Position | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     isReadOnly: boolean;
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
     onSetup: (updateCursorByName: (name: string) => void) => void;
-    onCursorPositionChange?: (position: Position) => void;
   };
 }
 
@@ -56,6 +55,7 @@ export default class CodeEditor extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare recentFilesService: RecentFilesService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
@@ -122,6 +122,34 @@ export default class CodeEditor extends Component<Signature> {
     );
   }
 
+  @cached
+  private get initialMonacoCursorPosition() {
+    if (this.codePath) {
+      let recentFile = this.recentFilesService.findRecentFileByURL(
+        this.codePath.toString(),
+      );
+      if (recentFile?.cursorPosition) {
+        return new Position(
+          recentFile.cursorPosition.line,
+          recentFile.cursorPosition.column,
+        );
+      }
+    }
+
+    let loc =
+      this.args.selectedDeclaration?.path?.node &&
+      'body' in this.args.selectedDeclaration.path.node &&
+      'loc' in this.args.selectedDeclaration.path.node.body &&
+      this.args.selectedDeclaration.path.node.body.loc
+        ? this.args.selectedDeclaration?.path?.node.body.loc
+        : undefined;
+    if (loc) {
+      let { start } = loc;
+      return new Position(start.line, start.column);
+    }
+    return undefined;
+  }
+
   @action
   private updateMonacoCursorPositionByName(name: string) {
     let declaration = findDeclarationByName(name, this.declarations);
@@ -184,7 +212,17 @@ export default class CodeEditor extends Component<Signature> {
   @action
   private onCursorPositionChange(position: Position) {
     this.selectDeclarationByMonacoCursorPosition(position);
-    this.args.onCursorPositionChange?.(position);
+
+    if (!this.codePath) {
+      return;
+    }
+    this.recentFilesService.updateCursorPositionByURL(
+      this.codePath.toString(),
+      {
+        line: position.lineNumber,
+        column: position.column,
+      },
+    );
   }
 
   @action
@@ -294,7 +332,7 @@ export default class CodeEditor extends Component<Signature> {
             contentChanged=(perform this.contentChangedTask)
             monacoSDK=this.monacoSDK
             language=this.language
-            initialCursorPosition=@initialCursorPosition
+            initialCursorPosition=this.initialMonacoCursorPosition
             onCursorPositionChange=this.onCursorPositionChange
             readOnly=@isReadOnly
             editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
