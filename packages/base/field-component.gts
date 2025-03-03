@@ -225,12 +225,12 @@ export function getBoxComponent(
                       @displayBoundaries={{displayContainer}}
                       class='field-component-card
                         {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
-                      {{!-- {{context.cardComponentModifier
+                      {{context.cardComponentModifier
                         card=card
                         format=effectiveFormats.cardDef
                         fieldType=field.fieldType
                         fieldName=field.name
-                      }} --}}
+                      }}
                       data-test-card={{card.id}}
                       data-test-card-format={{effectiveFormats.cardDef}}
                       data-test-field-component-card
