@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { task, restartableTask, timeout, all } from 'ember-concurrency';
 
@@ -32,15 +32,13 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { CursorPosition } from '@cardstack/host/services/recent-files-service';
-
 import BinaryFileInfo from './binary-file-info';
 
 interface Signature {
   Args: {
     file: FileResource | undefined;
     moduleContentsResource: ModuleContentsResource | undefined;
-    initialCursorPosition: CursorPosition | undefined;
+    initialCursorPosition: Position | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     isReadOnly: boolean;
     saveSourceOnClose: (url: URL, content: string) => void;
@@ -122,28 +120,6 @@ export default class CodeEditor extends Component<Signature> {
     throw new Error(
       `cannot access file contents ${this.codePath} before file is open`,
     );
-  }
-
-  @cached
-  private get initialMonacoCursorPosition() {
-    let loc =
-      this.args.selectedDeclaration?.path?.node &&
-      'body' in this.args.selectedDeclaration.path.node &&
-      'loc' in this.args.selectedDeclaration.path.node.body &&
-      this.args.selectedDeclaration.path.node.body.loc
-        ? this.args.selectedDeclaration?.path?.node.body.loc
-        : undefined;
-    if (loc) {
-      let { start } = loc;
-      return new Position(start.line, start.column);
-    }
-    if (this.args.initialCursorPosition) {
-      return new Position(
-        this.args.initialCursorPosition.line,
-        this.args.initialCursorPosition.column,
-      );
-    }
-    return undefined;
   }
 
   @action
@@ -318,7 +294,7 @@ export default class CodeEditor extends Component<Signature> {
             contentChanged=(perform this.contentChangedTask)
             monacoSDK=this.monacoSDK
             language=this.language
-            initialCursorPosition=this.initialMonacoCursorPosition
+            initialCursorPosition=@initialCursorPosition
             onCursorPositionChange=this.onCursorPositionChange
             readOnly=@isReadOnly
             editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)

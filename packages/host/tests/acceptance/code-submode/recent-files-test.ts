@@ -374,10 +374,10 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
-        [testRealmURL, 'index.json'],
-        [testRealmURL, 'français.json'],
-        [testRealmURL, 'Person/1.json'],
-        ['http://localhost:4202/test/', 'français.json'],
+        [testRealmURL, 'index.json', null],
+        [testRealmURL, 'français.json', null],
+        [testRealmURL, 'Person/1.json', null],
+        ['http://localhost:4202/test/', 'français.json', null],
       ],
     );
   });
@@ -557,11 +557,45 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
-        ['https://cardstack.com/base/', 'field-component.gts'],
-        ['https://cardstack.com/base/', 'date.gts'],
-        ['https://cardstack.com/base/', 'code-ref.gts'],
-        ['https://cardstack.com/base/', 'spec.gts'],
+        [
+          'https://cardstack.com/base/',
+          'field-component.gts',
+          {
+            column: 81,
+            line: 62,
+          },
+        ],
+        [
+          'https://cardstack.com/base/',
+          'date.gts',
+          {
+            column: 48,
+            line: 39,
+          },
+        ],
+        ['https://cardstack.com/base/', 'code-ref.gts', null],
+        ['https://cardstack.com/base/', 'spec.gts', null],
       ],
     );
+  });
+
+  test('set cursor based on the position in recent file', async function (_assert) {
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        [testRealmURL, 'index.json'],
+        [testRealmURL, 'friend.gts', { line: 14, column: 1 }],
+      ]),
+    );
+
+    await visitOperatorMode({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}friend.gts`,
+      fileView: 'browser',
+      openDirs: {},
+    });
+
+    await this.pauseTest();
   });
 });

@@ -154,6 +154,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
+  @tracked private codeSelection: string | undefined;
 
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
@@ -438,9 +439,10 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get _selectedDeclaration() {
-    let codeSelection = this.operatorModeStateService.state.codeSelection;
-    if (codeSelection === undefined) return undefined;
-    return findDeclarationByName(codeSelection, this.declarations);
+    if (!this.codeSelection) {
+      return undefined;
+    }
+    return findDeclarationByName(this.codeSelection, this.declarations);
   }
 
   private get selectedDeclaration() {
@@ -494,11 +496,11 @@ export default class CodeSubmode extends Component<Signature> {
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
-    this.operatorModeStateService.updateCodePathWithCodeSelection(
-      codeRef,
-      localName,
-      this.updateCursorByName,
-    );
+    let name = codeRef ? codeRef.name : localName;
+    if (name) {
+      this.codeSelection = name;
+      this.updateCursorByName?.(name);
+    }
   }
 
   private loadScopedCSS = restartableTask(async () => {
@@ -759,10 +761,34 @@ export default class CodeSubmode extends Component<Signature> {
   });
 
   get initialCursorPosition() {
-    let index = this.recentFilesService.recentFiles.findIndex(
-      (r) => r.filePath === this.codePath?.toString(),
-    );
-    return this.recentFilesService.recentFiles[index]?.cursorPosition;
+    if (
+      !this.isModule ||
+      this.moduleContentsResource.moduleError ||
+      !this._selectedDeclaration
+    ) {
+      let index = this.recentFilesService.recentFiles.findIndex(
+        (r) => `${r.realmURL}${r.filePath}` === this.codePath?.toString(),
+      );
+      let cursorPosition =
+        this.recentFilesService.recentFiles[index]?.cursorPosition;
+      if (cursorPosition) {
+        return new Position(cursorPosition.line, cursorPosition.column);
+      }
+    }
+
+    let loc =
+      this.selectedDeclaration?.path?.node &&
+      'body' in this.selectedDeclaration.path.node &&
+      'loc' in this.selectedDeclaration.path.node.body &&
+      this.selectedDeclaration.path.node.body.loc
+        ? this.selectedDeclaration?.path?.node.body.loc
+        : undefined;
+    if (loc) {
+      let { start } = loc;
+      return new Position(start.line, start.column);
+    }
+
+    return undefined;
   }
 
   <template>

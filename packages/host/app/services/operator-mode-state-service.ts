@@ -15,8 +15,6 @@ import {
   mergeRelationships,
   type PatchData,
   RealmPaths,
-  type ResolvedCodeRef,
-  type LocalPath,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -55,7 +53,6 @@ export interface OperatorModeState {
   codePath: URL | null;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
-  codeSelection?: string;
 }
 
 interface CardItem {
@@ -74,7 +71,6 @@ export type SerializedState = {
   codePath?: string;
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
-  codeSelection?: string;
 };
 
 interface OpenFileSubscriber {
@@ -322,24 +318,6 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  updateCodePathWithCodeSelection(
-    codeRef: ResolvedCodeRef | undefined,
-    localName: string | undefined,
-    onLocalSelection?: (name: string) => void,
-  ) {
-    //moving from one definition to another
-    if (codeRef) {
-      //(possibly) in a different module
-      this.state.codeSelection = codeRef.name;
-      this.updateCodePath(new URL(codeRef.module));
-    } else if (localName && onLocalSelection) {
-      //in the same module
-      this.state.codeSelection = localName;
-      this.schedulePersist();
-      onLocalSelection(localName);
-    }
-  }
-
   get codePathRelativeToRealm() {
     if (this.state.codePath && this.realmURL) {
       let realmPath = new RealmPaths(this.realmURL);
@@ -464,7 +442,6 @@ export default class OperatorModeStateService extends Service {
       codePath: this.state.codePath?.toString(),
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
-      codeSelection: this.state.codeSelection,
     };
 
     for (let stack of this.state.stacks) {
@@ -509,6 +486,7 @@ export default class OperatorModeStateService extends Service {
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
   async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
+    debugger;
     let openDirs = new TrackedMap<string, string[]>(
       Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
         realmURL,
@@ -522,7 +500,6 @@ export default class OperatorModeStateService extends Service {
       codePath: rawState.codePath ? new URL(rawState.codePath) : null,
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
-      codeSelection: rawState.codeSelection,
     });
 
     let stackIndex = 0;

@@ -89,6 +89,9 @@ export default class RecentFilesService extends Service {
     const existingIndex = this.findRecentFileIndex(file);
 
     if (existingIndex > -1) {
+      if (!cursorPosition) {
+        cursorPosition = this.recentFiles[existingIndex].cursorPosition;
+      }
       this.recentFiles.splice(existingIndex, 1);
     }
 
