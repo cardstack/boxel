@@ -5,6 +5,7 @@ import {
   contains,
   StringField,
   FieldDef,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
 
@@ -60,20 +61,39 @@ export class SubTestField extends TestField {
     </template>
   };
 }
+
+export class CardWithSpecialFields extends CardDef {
+  static displayName = 'CardWithSpecialFields';
+  @field specialField = contains(TestField);
+
+  static fitted = class Fitted extends Component<typeof this> {
+    setSubclass = () => {
+      this.args.model.specialField = new SubTestField({});
+    };
+    <template>
+      <div data-test-card-with-special-fields>
+        <@fields.specialField />
+        <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+          Subclass From Inside</button>
+      </div>
+    </template>
+  };
+}
+
 export class PolymorphicFieldExample extends CardDef {
   static displayName = 'PolymorphicFieldExample';
   @field specialField = contains(TestField);
+  @field cardsWithSpecialFields = linksToMany(() => CardWithSpecialFields);
 
   static isolated = class Isolated extends Component<typeof this> {
     setSubclass = () => {
-      this.args.model.specialField = new SubTestField({
-        firstName: 'New Name',
-      });
+      this.args.model.specialField = new SubTestField({});
     };
     <template>
       <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
         Subclass From Outside</button>
       <@fields.specialField />
+      <@fields.cardsWithSpecialFields />
     </template>
   };
 }
