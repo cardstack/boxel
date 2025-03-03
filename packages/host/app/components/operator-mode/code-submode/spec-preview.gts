@@ -21,7 +21,6 @@ import {
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -192,50 +191,71 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     };
   };
 
+  get displayIsolated() {
+    return !this.args.canWrite && this.args.ids.length > 0;
+  }
+
+  get displayCannotWrite() {
+    return !this.args.canWrite && this.args.ids.length === 0;
+  }
+
   <template>
-    <div class={{cn 'container' spec-intent-message=@showCreateSpecIntent}}>
+    <div
+      class={{cn
+        'container'
+        spec-intent-message=@showCreateSpecIntent
+        cannot-write=this.displayCannotWrite
+      }}
+    >
       {{#if @showCreateSpecIntent}}
         <div data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
         </div>
-      {{else if (not @canWrite)}}
+      {{else if this.displayCannotWrite}}
         <div data-test-cannot-write-intent-message>
-          Cannot create Boxel Specification inside this realm
+          Cannot create new Boxel Specification inside this realm
         </div>
-      {{else}}
-        <div class='spec-preview'>
-          <div class='spec-selector' data-test-spec-selector>
-            <BoxelSelect
-              @options={{@ids}}
-              @selected={{@selectedId}}
-              @onChange={{@selectId}}
-              @matchTriggerWidth={{true}}
-              @disabled={{this.onlyOneInstance}}
-              as |id|
-            >
-              {{#if id}}
-                {{#let (this.getDropdownData id) as |data|}}
-                  {{#if data}}
-                    <div class='spec-selector-item'>
-                      <RealmIcon
-                        @canAnimate={{true}}
-                        class='url-realm-icon'
-                        @realmInfo={{data.realmInfo}}
-                      />
-                      {{data.localPath}}
-                    </div>
-                  {{/if}}
-                {{/let}}
-              {{/if}}
-            </BoxelSelect>
-          </div>
 
-          {{#if @spec}}
+      {{else}}
+
+        {{#if @spec}}
+          <div class='spec-preview'>
+            <div class='spec-selector' data-test-spec-selector>
+              <BoxelSelect
+                @options={{@ids}}
+                @selected={{@selectedId}}
+                @onChange={{@selectId}}
+                @matchTriggerWidth={{true}}
+                @disabled={{this.onlyOneInstance}}
+                as |id|
+              >
+                {{#if id}}
+                  {{#let (this.getDropdownData id) as |data|}}
+                    {{#if data}}
+                      <div class='spec-selector-item'>
+                        <RealmIcon
+                          @canAnimate={{true}}
+                          class='url-realm-icon'
+                          @realmInfo={{data.realmInfo}}
+                        />
+                        {{data.localPath}}
+                      </div>
+                    {{/if}}
+                  {{/let}}
+                {{/if}}
+              </BoxelSelect>
+            </div>
+
             {{#let (getComponent @spec) as |CardComponent|}}
-              <CardComponent @format='edit' />
+              {{#if this.displayIsolated}}
+
+                <CardComponent @format='isolated' />
+              {{else}}
+                <CardComponent @format='edit' />
+              {{/if}}
             {{/let}}
-          {{/if}}
-        </div>
+          </div>
+        {{/if}}
       {{/if}}
     </div>
 
@@ -255,7 +275,8 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         width: 100%;
         padding: var(--boxel-sp-sm);
       }
-      .spec-intent-message {
+      .spec-intent-message,
+      .cannot-write {
         background-color: var(--boxel-200);
         color: var(--boxel-450);
         font-weight: 500;
@@ -357,6 +378,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           attributes: {
             specType,
             ref,
+            title: ref.name,
           },
           meta: {
             adoptsFrom: specRef,
