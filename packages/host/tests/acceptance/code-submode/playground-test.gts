@@ -357,6 +357,7 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="author.gts"]');
+    await click('[data-test-accordion-item="playground"] button');
     assert.dom('[data-test-instance-chooser]').hasText('Please Select');
     await click('[data-test-instance-chooser]');
     assert.dom('li.ember-power-select-option').exists({ count: 1 });

@@ -31,6 +31,7 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   chooseCard,
+  internalKeyFor,
   type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
@@ -332,13 +333,13 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
     </style>
   </template>;
 
-interface Signature {
+interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
     moduleId: string;
   };
 }
-export default class PlaygroundPanel extends Component<Signature> {
+class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   <template>
     <div class='playground-panel-content'>
       <div class='instance-chooser-container'>
@@ -416,7 +417,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     { cardId: string; format: Format }
   >; // TrackedObject
 
-  constructor(owner: Owner, args: Signature['Args']) {
+  constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
     super(owner, args);
     let selections = window.localStorage.getItem(PlaygroundSelections);
 
@@ -578,5 +579,47 @@ export default class PlaygroundPanel extends Component<Signature> {
         this.card?.id &&
         this.realm.canWrite(this.card.id),
     );
+  }
+}
+
+interface Signature {
+  Args: {
+    codeRef: ResolvedCodeRef;
+    isLoadingNewModule?: boolean;
+  };
+  Element: HTMLElement;
+}
+export default class PlaygroundPanel extends Component<Signature> {
+  <template>
+    <section class='playground-panel' data-test-playground-panel>
+      {{#if @isLoadingNewModule}}
+        <LoadingIndicator @color='var(--boxel-light)' />
+      {{else}}
+        <PlaygroundPanelContent
+          @codeRef={{@codeRef}}
+          @moduleId={{this.moduleId}}
+        />
+      {{/if}}
+    </section>
+    <style scoped>
+      .playground-panel {
+        position: relative;
+        background-image: url('./playground-background.png');
+        background-position: left top;
+        background-repeat: repeat;
+        background-size: 22.5px;
+        height: 100%;
+        width: 100%;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-dark);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        overflow: auto;
+      }
+    </style>
+  </template>
+
+  get moduleId() {
+    return internalKeyFor(this.args.codeRef, undefined);
   }
 }

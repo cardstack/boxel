@@ -29,7 +29,6 @@ import { File } from '@cardstack/boxel-ui/icons';
 
 import {
   identifyCard,
-  internalKeyFor,
   isCardDef,
   isCardDocumentString,
   hasExecutableExtension,
@@ -975,18 +974,10 @@ export default class CodeSubmode extends Component<Signature> {
                         >
                           <:title>Playground</:title>
                           <:content>
-                            <section
-                              class='playground-panel'
-                              data-test-playground-panel
-                            >
-                              <PlaygroundPanel
-                                @codeRef={{this.selectedCardRef}}
-                                @moduleId={{internalKeyFor
-                                  this.selectedCardRef
-                                  undefined
-                                }}
-                              />
-                            </section>
+                            <PlaygroundPanel
+                              @codeRef={{this.selectedCardRef}}
+                              @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
+                            />
                           </:content>
                         </A.Item>
                       {{/if}}
@@ -1203,21 +1194,6 @@ export default class CodeSubmode extends Component<Signature> {
         padding: var(--boxel-sp-xs);
         background-color: var(--code-mode-panel-background-color);
         min-height: 100%;
-      }
-
-      .playground-panel {
-        position: relative;
-        background-image: url('./code-submode/playground-background.png');
-        background-position: left top;
-        background-repeat: repeat;
-        background-size: 22.5px;
-        height: 100%;
-        width: 100%;
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-dark);
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        overflow: auto;
       }
 
       .preview-error-container {
