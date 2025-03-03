@@ -861,7 +861,6 @@ module('Integration | operator-mode', function (hooks) {
     // this.onSave((subscriber) => {
     //   debugger;
     // });
-    await this.pauseTest();
   });
 
   test<TestContextWithSave>('it does not auto save when exiting edit mode when there are no changes made', async function (assert) {

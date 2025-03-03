@@ -2089,7 +2089,6 @@ module('Integration | card-basics', function (hooks) {
       let person = new Person({ pets: [pet1, pet2] });
 
       await renderCard(loader, person, 'embedded');
-      await this.pauseTest();
 
       assert.ok(true);
     });
@@ -2154,7 +2153,6 @@ module('Integration | card-basics', function (hooks) {
         pets: [pet1, pet2],
       });
       await renderCard(loader, person, 'isolated');
-      await this.pauseTest();
       assert.ok(true);
     });
 
