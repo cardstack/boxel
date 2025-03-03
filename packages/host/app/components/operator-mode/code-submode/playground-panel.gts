@@ -30,7 +30,6 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   chooseCard,
-  internalKeyFor,
   type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
@@ -169,13 +168,13 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
   </style>
 </template>;
 
-interface PlaygroundContentSignature {
+interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
     moduleId: string;
   };
 }
-class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
+export default class PlaygroundPanel extends Component<Signature> {
   <template>
     <div class='playground-panel-content'>
       <PrerenderedCardSearch
@@ -376,7 +375,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     { cardId: string; format: Format }
   >; // TrackedObject
 
-  constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     let selections = window.localStorage.getItem(PlaygroundSelections);
 
@@ -540,37 +539,4 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
     this.persistSelections(this.card.id, 'edit');
   }
-}
-
-interface Signature {
-  Args: {
-    codeRef: ResolvedCodeRef;
-  };
-  Element: HTMLElement;
-}
-export default class PlaygroundPanel extends Component<Signature> {
-  <template>
-    <section class='playground-panel' data-test-playground-panel>
-      <PlaygroundPanelContent
-        @codeRef={{@codeRef}}
-        @moduleId={{internalKeyFor @codeRef undefined}}
-      />
-    </section>
-    <style scoped>
-      .playground-panel {
-        position: relative;
-        background-image: url('./playground-background.png');
-        background-position: left top;
-        background-repeat: repeat;
-        background-size: 22.5px;
-        height: 100%;
-        width: 100%;
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-dark);
-        font: var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp-xs);
-        overflow: auto;
-      }
-    </style>
-  </template>
 }
