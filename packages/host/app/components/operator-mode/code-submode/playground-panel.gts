@@ -545,21 +545,16 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
-    isLoading?: boolean;
   };
   Element: HTMLElement;
 }
 export default class PlaygroundPanel extends Component<Signature> {
   <template>
     <section class='playground-panel' data-test-playground-panel>
-      {{#if @isLoading}}
-        <LoadingIndicator @color='var(--boxel-light)' />
-      {{else}}
-        <PlaygroundPanelContent
-          @codeRef={{@codeRef}}
-          @moduleId={{internalKeyFor @codeRef undefined}}
-        />
-      {{/if}}
+      <PlaygroundPanelContent
+        @codeRef={{@codeRef}}
+        @moduleId={{internalKeyFor @codeRef undefined}}
+      />
     </section>
     <style scoped>
       .playground-panel {
@@ -575,10 +570,6 @@ export default class PlaygroundPanel extends Component<Signature> {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         overflow: auto;
-      }
-      .error {
-        margin: 0;
-        color: var(--boxel-light);
       }
     </style>
   </template>

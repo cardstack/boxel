@@ -976,7 +976,6 @@ export default class CodeSubmode extends Component<Signature> {
                           <:content>
                             <PlaygroundPanel
                               @codeRef={{this.selectedCardRef}}
-                              @isLoading={{this.moduleContentsResource.isLoading}}
                             />
                           </:content>
                         </A.Item>
