@@ -85,13 +85,13 @@
       },
       {
         "command": "boxel-tools.login",
-        "title": "Boxel: Log in to Matrix",
+        "title": "Boxel: Log in",
         "category": "Boxel",
         "icon": "$(sign-in)"
       },
       {
         "command": "boxel-tools.checkMatrixConnection",
-        "title": "Boxel: Check Matrix Server Connection",
+        "title": "Boxel: Check Server Connection",
         "category": "Boxel",
         "icon": "$(server)"
       },
@@ -202,7 +202,7 @@
     "viewsWelcome": [
       {
         "view": "boxelRealmList",
-        "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Matrix](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)"
+        "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Boxel](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)"
       },
       {
         "view": "codingSkillList",
@@ -211,11 +211,11 @@
     ],
     "configuration": [
       {
-        "title": "Matrix Server",
+        "title": "Boxel Server",
         "properties": {
           "boxel-tools.matrixServer": {
             "type": "string",
-            "description": "The matrix server to connect to, leave blank to connect to your boxel.ai workspaces.",
+            "description": "The server to connect to, leave blank to connect to your boxel.ai workspaces.",
             "default": "https://matrix.boxel.ai/"
           },
           "boxel-tools.localStoragePath": {

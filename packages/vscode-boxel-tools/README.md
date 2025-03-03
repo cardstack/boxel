@@ -14,9 +14,9 @@ You can also build it [locally](#development).
 
 1. Install the extension from the VS Code Marketplace or [build it locally](#development).
 2. Open a new window and in the command palette (F1 or Ctrl+Shift+P), select "Boxel Tools: Attach to Boxel Workspaces".
-3. You will be prompted to log in with your Matrix credentials:
+3. You will be prompted to log in to your Boxel account:
    - Enter your username and password
-   - If you want to use a different Matrix server, change the server URL in VS Code settings
+   - If you want to use a different server, change the server URL in VS Code settings
 
 ### Connecting to Boxel Workspaces
 
@@ -34,7 +34,7 @@ Once you've downloaded workspace files:
 
 1. Navigate to the files in your Explorer view
 2. Edit files as you normally would in VS Code
-3. If file watching is enabled, changes will automatically sync to the remote workspace
+3. If file watching is enabled, local changes will automatically sync to the remote workspace. Changes remotely will *not* automatically sync back.
 4. Otherwise, manually push changes using the upload icon in the Boxel Workspaces view
 
 ### Managing Coding Skills
@@ -55,8 +55,8 @@ Skills are stored in two locations:
 Access these commands through the command palette (F1 or Ctrl+Shift+P):
 
 - **Boxel Tools: Attach to Boxel Workspaces**: Discovers and lists all your workspaces
-- **Boxel Tools: Log in to Matrix**: Manually trigger the login process
-- **Boxel Tools: Check Matrix Server Connection**: Verify your connection to the Matrix server
+- **Boxel Tools: Log in**: Manually trigger the login process
+- **Boxel Tools: Check Server Connection**: Verify your connection to the server
 - **Boxel Tools: Add Workspaces Folder to Workspace**: Add the Boxel workspace folder to your VS Code workspace
 - **Boxel Tools: Reload Skills**: Refresh the list of available coding skills
 
@@ -64,8 +64,8 @@ Access these commands through the command palette (F1 or Ctrl+Shift+P):
 
 If you encounter issues:
 
-- **Connection problems**: Use "Check Matrix Server Connection" command to test your connection
-- **Authentication errors**: Check your username and password; be aware of rate limits on the Matrix server
+- **Connection problems**: Use "Check Server Connection" command to test your connection
+- **Authentication errors**: Check your username and password; be aware of rate limits on the server
 - **Sync issues**: Ensure you have proper permissions for the workspace you're trying to access
 - **Skills not working**: Try reloading skills or check if the `.cursorrules` file exists in your user folder
 
@@ -103,4 +103,4 @@ When developing in VS Code you can hit F5 and the extension will be run in a VS 
 
 ## Troubleshooting
 
-If you are seeing errors, a common one is a mistake with the username or password, and then hitting the tight rate limits on the Matrix server.
+If you are seeing errors, a common one is a mistake with the username or password, and then hitting the tight rate limits on the server.

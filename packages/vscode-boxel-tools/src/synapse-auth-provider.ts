@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 
 export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   static id = 'synapse';
-  public label = 'Synapse Matrix';
+  public label = 'Boxel';
   private _sessions: vscode.AuthenticationSession[] = [];
   private _initialized = false;
   private _onDidChangeSessions =
@@ -127,13 +127,13 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
         .get('matrixServer') as string;
 
       if (!serverUrl) {
-        console.error('[SynapseAuthProvider] No Matrix server URL configured');
+        console.error('[SynapseAuthProvider] No server URL configured');
         throw new Error(
-          'No Matrix server URL configured. Please check your settings.',
+          'No server URL configured. Please check your settings.',
         );
       }
 
-      console.log(`[SynapseAuthProvider] Using Matrix server: ${serverUrl}`);
+      console.log(`[SynapseAuthProvider] Using server: ${serverUrl}`);
 
       // Test the server connection
       try {
@@ -151,7 +151,7 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
             `[SynapseAuthProvider] Server connection test failed: ${response.status} ${response.statusText}`,
           );
           throw new Error(
-            `Cannot connect to Matrix server: ${response.status} ${response.statusText}`,
+            `Cannot connect to server: ${response.status} ${response.statusText}`,
           );
         }
 
@@ -166,7 +166,7 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
           connectionError,
         );
         throw new Error(
-          `Failed to connect to Matrix server: ${
+          `Failed to connect to server: ${
             connectionError instanceof Error
               ? connectionError.message
               : String(connectionError)
@@ -181,9 +181,9 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
 
       const result = await vscode.window.showInputBox({
         ignoreFocusOut: true,
-        placeHolder: 'Matrix Username',
-        prompt: 'Enter your Matrix username',
-        title: 'Matrix Authentication',
+        placeHolder: 'Username',
+        prompt: 'Enter your username',
+        title: 'Boxel Authentication',
       });
 
       if (!result) {
@@ -199,9 +199,9 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
       const password = await vscode.window.showInputBox({
         ignoreFocusOut: true,
         password: true,
-        placeHolder: 'Matrix Password',
-        prompt: 'Enter your Matrix password',
-        title: 'Matrix Authentication',
+        placeHolder: 'Password',
+        prompt: 'Enter your password',
+        title: 'Boxel Authentication',
       });
 
       if (!password) {

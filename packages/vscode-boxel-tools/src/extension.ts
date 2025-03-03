@@ -112,7 +112,7 @@ export async function activate(context: vscode.ExtensionContext) {
     realmAuth.realmsInitialized = false;
     realmAuth.realmClients.clear();
 
-    vscode.window.showInformationMessage('Logged out of Matrix');
+    vscode.window.showInformationMessage('Logged out of Boxel');
 
     // Refresh views
     realmProvider.refresh();
@@ -126,13 +126,13 @@ export async function activate(context: vscode.ExtensionContext) {
     );
   });
 
-  // Register command to manually log in to Matrix
+  // Register command to manually log in to Boxel
   vscode.commands.registerCommand('boxel-tools.login', async () => {
     try {
       // Show welcome message for new users
       vscode.window
         .showInformationMessage(
-          'Welcome to Boxel Tools! This extension helps you work with Boxel workspaces. You will now be prompted to log in to your Matrix account.',
+          'Welcome to Boxel Tools! This extension helps you work with Boxel workspaces. You will now be prompted to log in to your Boxel account.',
           'Continue',
         )
         .then(async (selection) => {
@@ -148,7 +148,7 @@ export async function activate(context: vscode.ExtensionContext) {
   // Helper function to perform login
   async function doLogin() {
     try {
-      vscode.window.showInformationMessage('Logging in to Matrix...');
+      vscode.window.showInformationMessage('Logging in to Boxel...');
       const session = await vscode.authentication.getSession('synapse', [], {
         createIfNone: true,
         silent: false,
@@ -157,7 +157,7 @@ export async function activate(context: vscode.ExtensionContext) {
       if (session) {
         const authData = JSON.parse(session.accessToken);
         userId = authData.user_id;
-        console.log(`Authenticated as Matrix user: ${userId}`);
+        console.log(`Authenticated as Boxel user: ${userId}`);
         vscode.window.showInformationMessage(`Logged in as ${userId}`);
 
         // Store the user ID in global state for persistence
@@ -183,9 +183,9 @@ export async function activate(context: vscode.ExtensionContext) {
   // Helper function to handle login errors
   function handleLoginError(error: unknown) {
     if (error instanceof Error && error.name === 'Canceled') {
-      console.log('Matrix authentication was canceled by the user');
+      console.log('Authentication was canceled by the user');
       vscode.window.showInformationMessage(
-        'Authentication canceled. You can try again later using the "Boxel: Log in to Matrix" command.',
+        'Authentication canceled. You can try again later using the "Boxel: Log in" command.',
       );
     } else {
       console.error('Login error:', error);
@@ -193,7 +193,7 @@ export async function activate(context: vscode.ExtensionContext) {
         .showErrorMessage(
           `Error logging in: ${
             error instanceof Error ? error.message : String(error)
-          }. Try using the "Check Matrix Server Connection" command to troubleshoot.`,
+          }. Try using the "Check Server Connection" command to troubleshoot.`,
           'Check Connection',
         )
         .then((selection) => {
@@ -498,7 +498,7 @@ export async function activate(context: vscode.ExtensionContext) {
     async () => {
       try {
         vscode.window.showInformationMessage(
-          'Checking Matrix server connection...',
+          'Checking Boxel server connection...',
         );
 
         // Get server URL from configuration
@@ -547,7 +547,7 @@ export async function activate(context: vscode.ExtensionContext) {
           const data = await response.json();
           vscode.window
             .showInformationMessage(
-              `Connected to Matrix server (${
+              `Connected to Boxel auth server (${
                 data.versions?.length || 0
               } versions supported)`,
               'Try Login',
@@ -561,7 +561,7 @@ export async function activate(context: vscode.ExtensionContext) {
           console.error('Matrix server connection test failed:', error);
           vscode.window
             .showErrorMessage(
-              `Failed to connect to Matrix server: ${
+              `Failed to connect to Boxel auth server: ${
                 error instanceof Error ? error.message : String(error)
               }`,
               'Check Settings',
@@ -575,7 +575,7 @@ export async function activate(context: vscode.ExtensionContext) {
       } catch (error) {
         console.error('Error checking Matrix server:', error);
         vscode.window.showErrorMessage(
-          `Error checking Matrix server: ${
+          `Error checking Boxel auth server: ${
             error instanceof Error ? error.message : String(error)
           }`,
         );
