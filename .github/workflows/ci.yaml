@@ -284,7 +284,7 @@ jobs:
         working-directory: packages/matrix
       # TODO: remove with CS-XXXX
       - name: Install watchexec
-        run: cargo install --locked watchexec-cli
+        run: sudo apt-get install watchexec-cli
       - name: realm server test suite
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server
