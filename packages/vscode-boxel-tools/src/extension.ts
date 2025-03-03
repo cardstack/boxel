@@ -55,7 +55,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Create and register the realm provider
   const realmProvider = new RealmProvider(realmAuth, localFileSystem, userId);
-  vscode.window.createTreeView('boxelRealmList', {
+  const realmTreeView = vscode.window.createTreeView('boxelRealmList', {
     treeDataProvider: realmProvider,
   });
 
@@ -335,9 +335,18 @@ export async function activate(context: vscode.ExtensionContext) {
           // Refresh the workspace list view to show the new workspaces
           realmProvider.refresh();
 
-          vscode.window.showInformationMessage(
-            `Found ${realmUrls.length} Boxel workspaces. Select a workspace in the Boxel Workspaces panel and click the pull button to download files.`,
-          );
+          vscode.window
+            .showInformationMessage(
+              `Found ${realmUrls.length} Boxel workspaces. Select a workspace in the Boxel Workspaces panel and click the pull button to download files.`,
+              'Add Workspaces to VS Code',
+            )
+            .then((selection) => {
+              if (selection === 'Add Workspaces to VS Code') {
+                vscode.commands.executeCommand(
+                  'boxel-tools.addRealmsToWorkspace',
+                );
+              }
+            });
         },
       );
     } catch (error) {
@@ -384,7 +393,16 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (!fs.existsSync(rootPath)) {
           vscode.window.showErrorMessage(
-            `Boxel workspaces folder doesn't exist yet. Please find workspaces first.`,
+            'No Boxel workspaces found. Please use "Boxel: Find Boxel Workspaces" first to discover your workspaces.',
+          );
+          return;
+        }
+
+        // Check if there are any workspace folders
+        const workspaceFolders = fs.readdirSync(rootPath);
+        if (workspaceFolders.length === 0) {
+          vscode.window.showErrorMessage(
+            'No Boxel workspaces found. Please use "Boxel: Find Boxel Workspaces" first to discover your workspaces.',
           );
           return;
         }
@@ -400,7 +418,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (alreadyExists) {
           vscode.window.showInformationMessage(
-            `Boxel workspaces folder is already in your workspace.`,
+            'Boxel workspaces are already added to your VS Code workspace.',
           );
           return;
         }
@@ -417,18 +435,18 @@ export async function activate(context: vscode.ExtensionContext) {
 
         if (added) {
           vscode.window.showInformationMessage(
-            `Added Boxel Workspaces folder to your workspace.`,
+            'Added Boxel workspaces to your VS Code workspace. You can now access your workspaces in the Explorer.',
           );
         } else {
           vscode.window.showErrorMessage(
-            `Failed to add Boxel Workspaces folder to workspace.`,
+            'Failed to add Boxel workspaces to your VS Code workspace. Please try again.',
           );
         }
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : String(error);
         vscode.window.showErrorMessage(
-          `Error adding to workspace: ${errorMessage}`,
+          `Error adding workspaces to VS Code: ${errorMessage}`,
         );
       }
     },
