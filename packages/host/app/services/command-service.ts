@@ -110,6 +110,14 @@ export default class CommandService extends Service {
         commandRequest.id,
         resultCard,
       );
+    } catch (e) {
+      console.error(e);
+      this.matrixService.failedCommandState.set(
+        commandRequest.id,
+        e instanceof Error
+          ? e
+          : new Error('Command failed. ' + (e as any).toString?.()),
+      );
     } finally {
       this.currentlyExecutingCommandRequestIds.delete(commandRequest.id);
     }

@@ -185,9 +185,6 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private get errorMessage() {
-    // if (this.failedCommandState) {
-    //   return `Failed to apply changes. ${this.failedCommandState.message}`;
-    // }
     if (this.message.errorMessage) {
       return this.message.errorMessage;
     }

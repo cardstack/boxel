@@ -60,8 +60,11 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
+import { pauseTest } from '@ember/test-helpers';
 
 let matrixRoomId = '';
+let maybeBoomShouldBoom = true;
+
 module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -191,13 +194,16 @@ module('Acceptance | Commands tests', function (hooks) {
       }
     }
 
-    class BoomCommand extends Command<undefined, undefined> {
-      static displayName = 'BoomCommand';
+    class MaybeBoomCommand extends Command<undefined, undefined> {
+      static displayName = 'MaybeBoomCommand';
       async getInputType() {
         return undefined;
       }
       protected async run(): Promise<undefined> {
-        throw new Error('Boom!');
+        if (maybeBoomShouldBoom) {
+          throw new Error('Boom!');
+        }
+        return undefined;
       }
     }
 
@@ -317,6 +323,29 @@ module('Acceptance | Commands tests', function (hooks) {
           });
         };
 
+        runMaybeBoomCommandViaAiAssistant = async () => {
+          let commandContext = this.args.context?.commandContext;
+          if (!commandContext) {
+            console.error('No command context found');
+            return;
+          }
+          let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
+            commandContext,
+          );
+          let { roomId } = await createAIAssistantRoomCommand.execute({
+            name: 'AI Assistant Room',
+          });
+          let maybeBoomCommand = new MaybeBoomCommand(commandContext);
+          let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
+            commandContext,
+          );
+          await sendAiAssistantMessageCommand.execute({
+            prompt: "Let's find out if it will boom",
+            roomId,
+            commands: [{ command: maybeBoomCommand, autoExecute: true }],
+          });
+        };
+
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -358,6 +387,10 @@ module('Acceptance | Commands tests', function (hooks) {
             {{on 'click' this.runOpenAiAssistantRoomCommand}}
             data-test-open-ai-assistant-room-button
           >Open AI Assistant Room</button>
+          <button
+            {{on 'click' this.runMaybeBoomCommandViaAiAssistant}}
+            data-test-maybe-boom-via-ai-assistant
+          >Maybe Boom</button>
         </template>
       };
     }
@@ -395,7 +428,7 @@ module('Acceptance | Commands tests', function (hooks) {
           pet: mangoPet,
           friends: [mangoPet],
         }),
-        'boom-command.ts': { default: BoomCommand },
+        'maybe-boom-command.ts': { default: MaybeBoomCommand },
         'Skill/useful-commands.json': {
           data: {
             type: 'card',
@@ -427,7 +460,7 @@ module('Acceptance | Commands tests', function (hooks) {
                 {
                   codeRef: {
                     name: 'default',
-                    module: `/test/boom-command`,
+                    module: `/test/maybe-boom-command`,
                   },
                   executors: [],
                 },
@@ -937,10 +970,12 @@ module('Acceptance | Commands tests', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: 'a4237eca-b73e-4256-bf3a-45849fa07d02',
           name: 'get-boxel-ui-state_dd88',
           arguments: {},
         },
         {
+          id: '2b48526b-d599-4789-a47b-dff349948c37',
           name: 'search-cards-by-type-and-title_dd88',
           arguments: {
             attributes: {
@@ -951,6 +986,7 @@ module('Acceptance | Commands tests', function (hooks) {
       ],
     });
     await waitFor('[data-test-message-idx="0"]');
+    await this.pauseTest();
     assert
       .dom('[data-test-message-idx="0"] [data-test-command-apply]')
       .exists({ count: 2 });
@@ -1100,6 +1136,52 @@ module('Acceptance | Commands tests', function (hooks) {
       commandResultEvents.length,
       1,
       'command result event is dispatched',
+    );
+  });
+
+  test('a command that errors when executing allows retry', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Person/hassan`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-maybe-boom-via-ai-assistant]');
+    await waitUntil(() => getRoomIds().length > 0);
+
+    await click('[data-test-open-ai-assistant-room-button]');
+    let roomId = getRoomIds().pop()!;
+    let message = getRoomEvents(roomId).pop()!;
+    let boxelMessageData = JSON.parse(message.content.data);
+    let toolName = boxelMessageData.context.tools[0].function.name;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Will it boom?',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: 'Will it boom?',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '8406a6eb-a3d5-494f-a7f3-ae9880115756',
+          name: toolName,
+          arguments: {},
+        },
+      ],
+    });
+
+    await settled();
+    let commandResultEvents = await getRoomEvents(roomId).filter(
+      (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+    );
+    assert.equal(
+      commandResultEvents.length,
+      0,
+      'No command result event dispatched',
     );
   });
 });

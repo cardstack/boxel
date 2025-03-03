@@ -19,7 +19,7 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 
-import { MenuItem, cn } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, bool, cn } from '@cardstack/boxel-ui/helpers';
 import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
@@ -184,17 +184,21 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @cached
   private get failedCommandState() {
-    if (!this.args.messageCommand.commandRequest.id) {
+    let commandRequest = this.args.messageCommand
+      .commandRequest as CommandRequestContent;
+    if (!commandRequest.id) {
       return undefined;
     }
-    return this.matrixService.failedCommandState.get(
-      this.args.messageCommand.commandRequest.id,
-    );
+    return this.matrixService.failedCommandState.get(commandRequest.id);
   }
 
   <template>
     <div
-      class={{cn is-pending=@isPending is-error=@isError}}
+      class={{cn
+        is-pending=@isPending
+        is-error=@isError
+        is-failed=(bool this.failedCommandState)
+      }}
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes
     >
@@ -253,6 +257,22 @@ export default class RoomMessageCommand extends Component<Signature> {
           />
         </div>
       {{/if}}
+      {{#if this.failedCommandState}}
+        <div class='failed-command-result'>
+          <span class='failed-command-text'>
+            {{this.failedCommandState.message}}
+          </span>
+          <Button
+            {{on 'click' @runCommand}}
+            class='retry-button'
+            @size='small'
+            @kind='secondary-dark'
+            data-test-ai-bot-retry-button
+          >
+            Retry
+          </Button>
+        </div>
+      {{/if}}
       {{#if this.commandResultCard.card}}
         <CardContainer
           @displayBoundaries={{false}}
@@ -284,11 +304,18 @@ export default class RoomMessageCommand extends Component<Signature> {
         background: var(--boxel-200);
         color: var(--boxel-500);
       }
+      .is-failed {
+        border: 1px solid var(--boxel-danger);
+        border-radius: var(--boxel-border-radius);
+      }
       .command-button-bar {
         display: flex;
         justify-content: flex-end;
         gap: var(--boxel-sp-xs);
         margin-top: var(--boxel-sp);
+      }
+      .is-failed .command-button-bar {
+        padding-right: var(--boxel-sp-xs);
       }
       .view-code-button {
         --boxel-button-font: 600 var(--boxel-font-xs);
@@ -357,6 +384,26 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .options-menu :deep(.check-icon) {
         display: none;
+      }
+      .retry-button {
+        --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+        --boxel-button-min-height: max-content;
+        --boxel-button-min-width: max-content;
+        border-color: var(--boxel-light);
+      }
+      .failed-command-result {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        background-color: var(--boxel-danger);
+        padding: var(--boxel-sp-xs);
+        border-bottom-left-radius: var(--boxel-border-radius);
+        border-bottom-right-radius: var(--boxel-border-radius);
+        margin-top: var(--boxel-sp-xs);
+      }
+      .failed-command-text {
+        color: var(--boxel-light);
       }
     </style>
   </template>
