@@ -32,8 +32,9 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import BinaryFileInfo from './binary-file-info';
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
+
+import BinaryFileInfo from './binary-file-info';
 
 interface Signature {
   Args: {
