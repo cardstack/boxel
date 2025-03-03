@@ -55,7 +55,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   // Create and register the realm provider
   const realmProvider = new RealmProvider(realmAuth, localFileSystem, userId);
-  const realmTreeView = vscode.window.createTreeView('boxelRealmList', {
+  vscode.window.createTreeView('boxelRealmList', {
     treeDataProvider: realmProvider,
   });
 
