@@ -167,7 +167,7 @@ interface ContentSignature {
   Args: {
     showCreateSpecIntent: boolean;
     canWrite: boolean;
-    selectCard: (card: PrerenderedCard) => void;
+    selectCard: (cardId: string) => void;
     selectedId: string;
     cards: PrerenderedCard[];
     spec: Spec | undefined;
@@ -399,7 +399,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       };
       await this.cardResource.loaded;
       if (this.card) {
-        this._selectedCardId = undefined;
+        this._selectedCardId = this.card.id;
         this.newCardJSON = undefined;
       }
     },
