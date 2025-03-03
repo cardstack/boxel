@@ -55,7 +55,7 @@ export default class MessageCommand {
   }
 
   get status() {
-    if (this.commandService.currentlyExecutingCommandRequestIds.has(this.id)) {
+    if (this.commandService.currentlyExecutingCommandRequestIds.has(this.id!)) {
       return 'applying';
     }
 

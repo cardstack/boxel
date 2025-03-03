@@ -21,6 +21,7 @@ import {
   type ResolvedCodeRef,
   isUrlLike,
   CardURLContextName,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
@@ -84,6 +85,9 @@ class EditView extends Component<typeof CodeRefField> {
 
       let name = parts.pop()!;
       let module = parts.join('/');
+      if (isUrlLike(module) && this.cardURL) {
+        module = new URL(module, new URL(this.cardURL)).href;
+      }
       try {
         let code = (await import(module))[name];
         if (code) {
@@ -106,7 +110,7 @@ export default class CodeRefField extends FieldDef {
   static [primitive]: ResolvedCodeRef;
 
   static [serialize](
-    codeRef: ResolvedCodeRef,
+    codeRef: ResolvedCodeRef | {},
     _doc: JSONAPISingleResourceDocument,
     _visited?: Set<string>,
     opts?: SerializeOpts,
@@ -114,6 +118,8 @@ export default class CodeRefField extends FieldDef {
     return {
       ...codeRef,
       ...(opts?.maybeRelativeURL &&
+      codeRef &&
+      isResolvedCodeRef(codeRef) &&
       !opts?.useAbsoluteURL &&
       isUrlLike(codeRef.module)
         ? { module: opts.maybeRelativeURL(codeRef.module) }
@@ -122,17 +128,19 @@ export default class CodeRefField extends FieldDef {
   }
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
-    codeRef: ResolvedCodeRef,
+    codeRef: ResolvedCodeRef | {},
   ): Promise<BaseInstanceType<T>> {
     return { ...codeRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
   }
+
   static [queryableValue](
-    codeRef: ResolvedCodeRef | undefined,
+    codeRef: ResolvedCodeRef | {} | undefined,
     stack: CardDef[] = [],
   ) {
     return maybeSerializeCodeRef(codeRef, stack);
   }
-  static [formatQuery](codeRef: ResolvedCodeRef) {
+
+  static [formatQuery](codeRef: ResolvedCodeRef | {}) {
     return maybeSerializeCodeRef(codeRef);
   }
 
@@ -142,10 +150,10 @@ export default class CodeRefField extends FieldDef {
 }
 
 function maybeSerializeCodeRef(
-  codeRef: ResolvedCodeRef | undefined,
+  codeRef: ResolvedCodeRef | {} | undefined,
   stack: CardDef[] = [],
 ) {
-  if (codeRef) {
+  if (codeRef && isResolvedCodeRef(codeRef)) {
     if (isUrlLike(codeRef.module)) {
       // if a stack is passed in, use the containing card to resolve relative references
       let moduleHref =

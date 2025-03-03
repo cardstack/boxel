@@ -78,7 +78,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
         'index.gts': { Index },
         'person.gts': { Person },
         'person-entry.json': new Spec({
-          name: 'Person',
+          title: 'Person',
           description: 'Spec',
           specType: 'card',
           ref: {

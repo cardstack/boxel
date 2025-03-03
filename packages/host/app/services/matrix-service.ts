@@ -29,7 +29,6 @@ import {
   ResolvedCodeRef,
   splitStringIntoChunks,
   type LooseSingleCardDocument,
-  isUrlLike,
 } from '@cardstack/runtime-common';
 
 import {
@@ -39,6 +38,7 @@ import {
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -731,7 +731,8 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = markdownToHtml(body);
+    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
+
     let tools: Tool[] = [getSearchTool()];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;

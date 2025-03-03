@@ -30,7 +30,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
-import { unixTime } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
@@ -93,7 +92,7 @@ export default class Room extends Component<Signature> {
               @registerScroller={{this.registerMessageScroller}}
               @isPending={{this.isPendingMessage message}}
               @monacoSDK={{@monacoSDK}}
-              @isStreaming={{this.isMessageStreaming message i}}
+              @isStreaming={{this.isMessageStreaming message}}
               @retryAction={{this.maybeRetryAction i message}}
               data-test-message-idx={{i}}
             />
@@ -361,7 +360,8 @@ export default class Room extends Component<Signature> {
       // If we are permitted to auto-scroll and if there are no unread messages in the
       // room, then scroll to the last message in the room.
       !this.hasUnreadMessages &&
-      index === this.messages.length - 1
+      index === this.messages.length - 1 &&
+      !this.isScrolledToBottom
     ) {
       scrollTo();
     } else if (
@@ -492,16 +492,8 @@ export default class Room extends Component<Signature> {
     return undefined;
   };
 
-  private isMessageStreaming = (message: Message, messageIndex: number) => {
-    return (
-      !message.isStreamingFinished &&
-      this.isLastMessage(messageIndex) &&
-      // Older events do not come with isStreamingFinished property so we have
-      // no other way to determine if the message is done streaming other than
-      // checking if they are old messages (older than 60 seconds as an arbitrary
-      // threshold)
-      unixTime(new Date().getTime() - message.created.getTime()) < 60
-    );
+  private isMessageStreaming = (message: Message) => {
+    return !message.isStreamingFinished;
   };
 
   private doMatrixEventFlush = restartableTask(async () => {
