@@ -62,6 +62,7 @@ class SpecTitleField extends StringField {
 
     <template>
       <BoxelInput
+        @id='spec-title'
         @value={{@model}}
         @onInput={{@set}}
         @placeholder={{this.placeholder}}
@@ -97,6 +98,7 @@ class SpecDescriptionField extends StringField {
 
     <template>
       <BoxelInput
+        @id='spec-description'
         @value={{@model}}
         @onInput={{@set}}
         @placeholder={{this.placeholder}}
@@ -729,9 +731,14 @@ export class Spec extends CardDef {
           </div>
           <div class='header-info-container'>
             <div class='header-title-container' data-test-title>
+              <label for='spec-title' class='boxel-sr-only'>Title</label>
               <@fields.title />
             </div>
             <div class='header-description-container' data-test-description>
+              <label
+                for='spec-description'
+                class='boxel-sr-only'
+              >Description</label>
               <@fields.description />
             </div>
           </div>
