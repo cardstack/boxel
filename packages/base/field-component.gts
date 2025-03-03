@@ -394,10 +394,6 @@ function fieldsComponentsFor<T extends BaseDef>(
   target: object,
   model: Box<T>,
 ): FieldsTypeFor<T> {
-  // This is a cache of the fields we've already created components for
-  // so that they do not get recreated
-  let stableComponents = new Map<string, BoxComponent>();
-
   return new Proxy(target, {
     get(target, property, received) {
       if (
@@ -419,20 +415,7 @@ function fieldsComponentsFor<T extends BaseDef>(
         return Reflect.get(target, property, received);
       }
       let field = maybeField;
-
-      let result = field.component(model as unknown as Box<BaseDef>);
-      if (
-        field.fieldType === 'linksToMany' ||
-        field.fieldType === 'containsMany'
-      ) {
-        let stable = stableComponents.get(property);
-        if (stable) {
-          return stable;
-        } else {
-          stableComponents.set(property, result);
-        }
-      }
-      return result;
+      return field.component(model as unknown as Box<BaseDef>);
     },
     getPrototypeOf() {
       // This is necessary for Ember to be able to locate the template associated

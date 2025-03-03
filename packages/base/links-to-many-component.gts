@@ -43,6 +43,7 @@ import {
 } from '@cardstack/boxel-ui/modifiers';
 
 import { action } from '@ember/object';
+import { initSharedState } from './shared-state';
 
 interface Signature {
   Element: HTMLElement;
@@ -151,7 +152,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 
   @action
   setItems(items: any) {
-    (this.args.model.value as any)[this.args.field.name] = items;
+    this.args.arrayField.set(items);
   }
 
   <template>
@@ -380,6 +381,14 @@ function shouldRenderEditor(
 ) {
   return (format ?? defaultFormat) === 'edit' && !isComputed;
 }
+const componentCache = initSharedState(
+  'linksToManyComponentCache',
+  () =>
+    new WeakMap<
+      Box<BaseDef[]>,
+      { component: BoxComponent; cardOrField: typeof BaseDef }
+    >(),
+);
 
 export function getLinksToManyComponent({
   model,
@@ -465,7 +474,7 @@ export function getLinksToManyComponent({
       </style>
     </template>
   };
-  return new Proxy(linksToManyComponent, {
+  let proxy = new Proxy(linksToManyComponent, {
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
@@ -490,6 +499,13 @@ export function getLinksToManyComponent({
       return linksToManyComponent;
     },
   });
+  stable = {
+    component: proxy as unknown as BoxComponent,
+    cardOrField: cardOrField,
+  };
+
+  componentCache.set(arrayField, stable);
+  return stable.component;
 }
 
 function myLoader(): Loader {
