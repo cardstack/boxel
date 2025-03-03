@@ -381,7 +381,6 @@ function shouldRenderEditor(
 ) {
   return (format ?? defaultFormat) === 'edit' && !isComputed;
 }
-
 const componentCache = initSharedState(
   'linksToManyComponentCache',
   () =>
