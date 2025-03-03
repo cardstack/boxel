@@ -282,6 +282,9 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
+      # TODO: remove with CS-XXXX
+      - name: Install watchexec
+        run: apt install watchexec
       - name: realm server test suite
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server

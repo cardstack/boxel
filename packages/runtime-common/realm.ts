@@ -159,7 +159,12 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
-  subscribe(cb: (message: UpdateEventData) => void): Promise<void>;
+  subscribe(
+    cb: (message: UpdateEventData) => void,
+    options?: {
+      watcher?: string;
+    },
+  ): Promise<void>;
 
   unsubscribe(): void;
 
@@ -1956,6 +1961,17 @@ export class Realm {
       },
     );
 
+    // To remove as part of CS-XXXX, a workaround for a file watcher irregularity in tests
+    let subscribeOptions: { watcher?: string } = {};
+
+    if (new URL(request.url).searchParams.has('testFileWatcher')) {
+      subscribeOptions.watcher = new URL(request.url).searchParams.get(
+        'testFileWatcher',
+      )!;
+    }
+
+    console.log('subscribeOptions', subscribeOptions);
+
     if (this.listeningClients.length === 0) {
       await this.#adapter.subscribe((data) => {
         let tracked = this.getTrackedWrite(data);
@@ -1977,7 +1993,7 @@ export class Realm {
           url: tracked.url,
         });
         this.drainUpdates();
-      });
+      }, subscribeOptions);
     }
 
     // FIXME listeningClients should go away

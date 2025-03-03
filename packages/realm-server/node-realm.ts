@@ -62,11 +62,18 @@ export class NodeAdapter implements RealmAdapter {
 
   private watcher: Watcher | undefined = undefined;
 
-  async subscribe(cb: (message: UpdateEventData) => void): Promise<void> {
+  async subscribe(
+    cb: (message: UpdateEventData) => void,
+    options: { watcher?: string },
+  ): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
-    this.watcher = sane(join(this.realmDir, '/'));
+
+    let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
+    console.log('watcherOptions', watcherOptions);
+
+    this.watcher = sane(join(this.realmDir, '/'), watcherOptions);
     this.watcher.on('change', (path, _root, stat) => {
       if (stat.isFile()) {
         cb({ updated: path });
@@ -82,7 +89,10 @@ export class NodeAdapter implements RealmAdapter {
       throw new Error(`watcher error: ${err}`);
     });
     await new Promise<void>((resolve) => {
-      this.watcher!.on('ready', resolve);
+      this.watcher!.on('ready', () => {
+        console.log('watcher ready');
+        resolve();
+      });
     });
   }
 

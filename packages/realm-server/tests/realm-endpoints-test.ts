@@ -3197,14 +3197,17 @@ module(basename(__filename), function () {
           copySync(join(__dirname, 'cards'), testRealmDir);
           await startRealmServer(dbAdapter2, publisher, runner);
 
-          // FIXME how to remove this?
-          testRealmEventSource = new eventSource(`${testRealmHref}_message`);
+          // To remove as part of CS-XXXX
+          testRealmEventSource = new eventSource(
+            `${testRealmHref}_message?testFileWatcher=watchexec`,
+          );
         },
         afterEach: async () => {
           if (seedRealm) {
             virtualNetwork.unmount(seedRealm.handle);
           }
           await closeServer(testRealmHttpServer2);
+
           // FIXME see above
           testRealmEventSource.close();
         },
