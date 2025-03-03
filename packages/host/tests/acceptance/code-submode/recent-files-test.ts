@@ -9,9 +9,12 @@ import {
 import { waitUntil } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+
+import MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   percySnapshot,
@@ -181,6 +184,7 @@ const friendCardSource = `
 `;
 
 let matrixRoomId: string;
+let monacoService: MonacoService;
 module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -192,6 +196,9 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
     setupUserSubscription(matrixRoomId);
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
@@ -579,11 +586,11 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
   });
 
-  test('set cursor based on the position in recent file', async function (_assert) {
+  test('set cursor based on the position in recent file', async function (assert) {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
-        [testRealmURL, 'index.json'],
+        [testRealmURL, 'index.json', null],
         [testRealmURL, 'friend.gts', { line: 14, column: 1 }],
       ]),
     );
@@ -596,6 +603,17 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       openDirs: {},
     });
 
-    await this.pauseTest();
+    let cursorPosition = monacoService.getCursorPosition();
+    assert.strictEqual(cursorPosition?.lineNumber, 14);
+    assert.strictEqual(cursorPosition?.column, 1);
+
+    monacoService.updateCursorPosition(new MonacoSDK.Position(22, 3));
+    assert.deepEqual(
+      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
+      [
+        [testRealmURL, 'friend.gts', { column: 3, line: 22 }],
+        [testRealmURL, 'index.json', null],
+      ],
+    );
   });
 });

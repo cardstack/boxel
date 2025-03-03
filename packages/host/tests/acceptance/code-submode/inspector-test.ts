@@ -1502,9 +1502,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} card`);
 
     //click linksTo many card
-    await visitOperatorMode(operatorModeState);
-    await waitForCodeEditor();
-
+    await click('[data-boxel-selector-item-text="ChildCard1"]');
     elementName = 'AncestorCard2';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,

@@ -59,7 +59,7 @@ export default class RecentFilesService extends Service {
     this.persistRecentFiles();
   }
 
-  addRecentFileUrl(urlString: string, cursorPosition?: CursorPosition) {
+  addRecentFileUrl(urlString: string) {
     if (!urlString) {
       return;
     }
@@ -72,12 +72,12 @@ export default class RecentFilesService extends Service {
       let url = new URL(urlString);
 
       if (realmPaths.inRealm(url)) {
-        this.addRecentFile(realmPaths.local(url), cursorPosition);
+        this.addRecentFile(realmPaths.local(url));
       }
     }
   }
 
-  addRecentFile(file: LocalPath, cursorPosition?: CursorPosition) {
+  addRecentFile(file: LocalPath) {
     // TODO this wont work when visiting files that come from multiple realms in
     // code mode...
     let currentRealmUrl = this.operatorModeStateService.realmURL;
@@ -88,6 +88,7 @@ export default class RecentFilesService extends Service {
 
     const existingIndex = this.findRecentFileIndex(file);
 
+    let cursorPosition;
     if (existingIndex > -1) {
       if (!cursorPosition) {
         cursorPosition = this.recentFiles[existingIndex].cursorPosition;
@@ -106,6 +107,44 @@ export default class RecentFilesService extends Service {
     }
 
     this.persistRecentFiles();
+  }
+
+  findRecentFileByURL(urlString: string) {
+    let localPath = this.getLocalPathFromURL(urlString);
+    if (!localPath) {
+      return undefined;
+    }
+    const existingIndex = this.findRecentFileIndex(localPath);
+    return existingIndex > -1 ? this.recentFiles[existingIndex] : undefined;
+  }
+
+  updateCursorPositionByURL(
+    urlString: string,
+    cursorPosition?: CursorPosition,
+  ) {
+    let localPath = this.getLocalPathFromURL(urlString);
+    if (!localPath) {
+      return;
+    }
+    const existingIndex = this.findRecentFileIndex(localPath);
+    if (existingIndex > -1) {
+      this.recentFiles[existingIndex].cursorPosition = cursorPosition;
+      this.persistRecentFiles();
+    }
+  }
+
+  private getLocalPathFromURL(urlString: string) {
+    // TODO: This is a side effect of the recent-file service making assumptions about
+    // what realm we are in. we should refactor that so that callers have to tell
+    // it the realm of the file in question
+    let realmURL = this.operatorModeStateService.realmURL;
+
+    if (!realmURL) {
+      return undefined;
+    }
+    let url = new URL(urlString);
+    let realmPaths = new RealmPaths(realmURL);
+    return realmPaths.local(url);
   }
 
   private persistRecentFiles() {

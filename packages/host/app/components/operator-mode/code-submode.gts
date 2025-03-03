@@ -154,7 +154,6 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
-  @tracked private codeSelection: string | undefined;
 
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
@@ -439,10 +438,9 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get _selectedDeclaration() {
-    if (!this.codeSelection) {
-      return undefined;
-    }
-    return findDeclarationByName(this.codeSelection, this.declarations);
+    let codeSelection = this.operatorModeStateService.state.codeSelection;
+    if (codeSelection === undefined) return undefined;
+    return findDeclarationByName(codeSelection, this.declarations);
   }
 
   private get selectedDeclaration() {
@@ -492,15 +490,30 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  goToDefinition(
+  private goToDefinitionAndResetCursorPosition(
     codeRef: ResolvedCodeRef | undefined,
     localName: string | undefined,
   ) {
-    let name = codeRef ? codeRef.name : localName;
-    if (name) {
-      this.codeSelection = name;
-      this.updateCursorByName?.(name);
+    this.goToDefinition(codeRef, localName);
+    if (this.codePath) {
+      let urlString = this.codePath.toString();
+      this.recentFilesService.updateCursorPositionByURL(
+        urlString.endsWith('gts') ? urlString : `${urlString}.gts`,
+        undefined,
+      );
     }
+  }
+
+  @action
+  private goToDefinition(
+    codeRef: ResolvedCodeRef | undefined,
+    localName: string | undefined,
+  ) {
+    this.operatorModeStateService.updateCodePathWithCodeSelection(
+      codeRef,
+      localName,
+      this.updateCursorByName,
+    );
   }
 
   private loadScopedCSS = restartableTask(async () => {
@@ -746,33 +759,30 @@ export default class CodeSubmode extends Component<Signature> {
       : this.itemToDelete.id;
   }
 
-  onCursorPositionChange = restartableTask(async (cursorPosition: Position) => {
-    // Debounce saving the last cursor position to prevent excessive updates
-    await timeout(500);
+  @action
+  private onCursorPositionChange(position: Position) {
     if (!this.codePath) {
       return;
     }
-    this.recentFilesService.addRecentFileUrl(
+    this.recentFilesService.updateCursorPositionByURL(
       this.codePath.toString(),
-      cursorPosition
-        ? { line: cursorPosition.lineNumber, column: cursorPosition.column }
-        : undefined,
+      {
+        line: position.lineNumber,
+        column: position.column,
+      },
     );
-  });
+  }
 
-  get initialCursorPosition() {
-    if (
-      !this.isModule ||
-      this.moduleContentsResource.moduleError ||
-      !this._selectedDeclaration
-    ) {
-      let index = this.recentFilesService.recentFiles.findIndex(
-        (r) => `${r.realmURL}${r.filePath}` === this.codePath?.toString(),
+  private get initialCursorPosition() {
+    if (this.codePath) {
+      let recentFile = this.recentFilesService.findRecentFileByURL(
+        this.codePath.toString(),
       );
-      let cursorPosition =
-        this.recentFilesService.recentFiles[index]?.cursorPosition;
-      if (cursorPosition) {
-        return new Position(cursorPosition.line, cursorPosition.column);
+      if (recentFile?.cursorPosition) {
+        return new Position(
+          recentFile.cursorPosition.line,
+          recentFile.cursorPosition.column,
+        );
       }
     }
 
@@ -856,7 +866,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{this.setItemToDelete}}
-                          @goToDefinition={{this.goToDefinition}}
+                          @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
                           @createFile={{perform this.createFile}}
                           @openSearch={{search.openSearchToResults}}
                         />
@@ -911,9 +921,7 @@ export default class CodeSubmode extends Component<Signature> {
                     @onFileSave={{this.onSourceFileSave}}
                     @onSetup={{this.setupCodeEditor}}
                     @isReadOnly={{this.isReadOnly}}
-                    @onCursorPositionChange={{perform
-                      this.onCursorPositionChange
-                    }}
+                    @onCursorPositionChange={{this.onCursorPositionChange}}
                     @initialCursorPosition={{this.initialCursorPosition}}
                   />
 
@@ -984,7 +992,7 @@ export default class CodeSubmode extends Component<Signature> {
                         @moduleContentsResource={{this.moduleContentsResource}}
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @goToDefinition={{this.goToDefinition}}
+                        @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
                         @isReadOnly={{this.isReadOnly}}
                         as |SchemaEditorTitle SchemaEditorPanel|
                       >
