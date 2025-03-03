@@ -1,8 +1,8 @@
 {
   "name": "boxel-tools",
   "displayName": "Boxel Tools",
-  "description": "Access boxel realm data and code from your vscode workspace.",
-  "version": "0.1.1",
+  "description": "Access boxel workspace data and code from your vscode workspace.",
+  "version": "0.2.0",
   "publisher": "cardstack",
   "private": true,
   "license": "MIT",
@@ -17,7 +17,12 @@
     "Other"
   ],
   "activationEvents": [
-    "onAuthenticationRequest:synapse"
+    "onView:codingSkillList",
+    "onView:boxelRealmList",
+    "onCommand:boxel-tools.syncFromRemote",
+    "onCommand:boxel-tools.attachToBoxelWorkspaces",
+    "onCommand:boxel-tools.login",
+    "onCommand:boxel-tools.checkMatrixConnection"
   ],
   "icon": "images/boxel-icon.png",
   "main": "./dist/extension.js",
@@ -34,9 +39,66 @@
         "category": "Boxel Tools"
       },
       {
+        "command": "boxel-tools.syncFromRemote",
+        "title": "Find Boxel Workspaces",
+        "category": "Boxel Tools"
+      },
+      {
+        "command": "boxel-tools.openSettings",
+        "title": "Open Extension Settings",
+        "category": "Boxel Tools"
+      },
+      {
         "command": "boxel-tools.reloadSkills",
         "title": "Reload Skills",
         "category": "Boxel Tools"
+      },
+      {
+        "command": "boxel-tools.addRealmsToWorkspace",
+        "title": "Add Boxel Workspaces Folder to Workspace",
+        "category": "Boxel Tools",
+        "icon": "$(add)"
+      },
+      {
+        "command": "boxel-tools.enableFileWatching",
+        "title": "Enable File Watching",
+        "category": "Boxel Tools",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "boxel-tools.disableFileWatching",
+        "title": "Disable File Watching",
+        "category": "Boxel Tools",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "boxel-tools.pullBoxelWorkspace",
+        "title": "Pull Changes",
+        "category": "Boxel Tools",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "boxel-tools.pushBoxelWorkspace",
+        "title": "Push Changes",
+        "category": "Boxel Tools",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "boxel-tools.login",
+        "title": "Boxel: Log in",
+        "category": "Boxel",
+        "icon": "$(sign-in)"
+      },
+      {
+        "command": "boxel-tools.checkMatrixConnection",
+        "title": "Boxel: Check Server Connection",
+        "category": "Boxel",
+        "icon": "$(server)"
+      },
+      {
+        "command": "boxel-tools.pushFile",
+        "title": "Boxel: Push File to Remote",
+        "category": "Boxel"
       }
     ],
     "menus": {
@@ -46,6 +108,24 @@
         },
         {
           "command": "boxel-tools.attachToBoxelWorkspaces"
+        },
+        {
+          "command": "boxel-tools.syncFromRemote"
+        },
+        {
+          "command": "boxel-tools.openSettings"
+        },
+        {
+          "command": "boxel-tools.addRealmsToWorkspace"
+        },
+        {
+          "command": "boxel-tools.login"
+        },
+        {
+          "command": "boxel-tools.checkMatrixConnection"
+        },
+        {
+          "command": "boxel-tools.reloadSkills"
         }
       ],
       "view/title": [
@@ -53,6 +133,44 @@
           "command": "boxel-tools.reloadSkills",
           "when": "view == codingSkillList",
           "group": "navigation"
+        },
+        {
+          "command": "boxel-tools.syncFromRemote",
+          "when": "view == boxelRealmList",
+          "group": "navigation"
+        },
+        {
+          "command": "boxel-tools.addRealmsToWorkspace",
+          "when": "view == boxelRealmList",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "boxel-tools.pullBoxelWorkspace",
+          "when": "view == boxelRealmList && (viewItem == realm-watched || viewItem == realm-unwatched)",
+          "group": "inline"
+        },
+        {
+          "command": "boxel-tools.pushBoxelWorkspace",
+          "when": "view == boxelRealmList && (viewItem == realm-watched || viewItem == realm-unwatched)",
+          "group": "inline"
+        },
+        {
+          "command": "boxel-tools.enableFileWatching",
+          "when": "view == boxelRealmList && viewItem == realm-unwatched",
+          "group": "inline"
+        },
+        {
+          "command": "boxel-tools.disableFileWatching",
+          "when": "view == boxelRealmList && viewItem == realm-watched",
+          "group": "inline"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "boxel-tools.pushFile",
+          "when": "resourceScheme == file"
         }
       ]
     },
@@ -60,35 +178,50 @@
       "activitybar": [
         {
           "id": "coding-skills",
-          "title": "Boxel Coding Skills",
-          "icon": "resources/sparkle.svg"
+          "title": "Boxel",
+          "icon": "resources/boxel-icon.svg"
         }
       ]
     },
     "views": {
       "coding-skills": [
         {
+          "id": "boxelRealmList",
+          "name": "Boxel Workspaces",
+          "icon": "resources/boxel-icon.svg",
+          "contextualTitle": "Boxel Workspaces"
+        },
+        {
           "id": "codingSkillList",
           "name": "Cursor Boxel Skills",
-          "icon": "resources/sparkle.svg",
+          "icon": "resources/boxel-icon.svg",
           "contextualTitle": "Cursor Boxel Skills"
         }
       ]
     },
     "viewsWelcome": [
       {
+        "view": "boxelRealmList",
+        "contents": "Connect to your Boxel account to find available workspaces.\n\n[Log in to Boxel](command:boxel-tools.login)\n[Check Server Connection](command:boxel-tools.checkMatrixConnection)"
+      },
+      {
         "view": "codingSkillList",
-        "contents": "In [Cursor](https://cursor.com), you can load Skill Cards from your realms to assist in editing. [Load skills now](command:boxel-tools.reloadSkills)"
+        "contents": "In [Cursor](https://cursor.com), you can load Skill Cards from your workspaces to assist in editing. [Load skills now](command:boxel-tools.reloadSkills)"
       }
     ],
     "configuration": [
       {
-        "title": "Matrix Server",
+        "title": "Boxel Server",
         "properties": {
           "boxel-tools.matrixServer": {
             "type": "string",
-            "description": "The matrix server to connect to, leave blank to connect to your boxel.ai realms.",
+            "description": "The server to connect to, leave blank to connect to your boxel.ai workspaces.",
             "default": "https://matrix.boxel.ai/"
+          },
+          "boxel-tools.localStoragePath": {
+            "type": "string",
+            "description": "The local directory where boxel workspace data will be stored. Each workspace will have its own subdirectory. You can use '~/' for your home directory. Leave empty to use the VS Code extension storage path.",
+            "default": ""
           }
         }
       }
