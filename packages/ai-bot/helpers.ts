@@ -193,7 +193,7 @@ export function constructHistory(
       continue;
     }
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let { attachedCardsEventIds } = event.content.data;
+      let { attachedCardsEventIds } = event.content.data ?? {};
       if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
         event.content.data.attachedCards = attachedCardsEventIds.map(
           (id: string) => serializedCardFromFragments(id, cardFragments),
