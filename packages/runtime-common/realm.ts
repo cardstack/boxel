@@ -186,6 +186,7 @@ interface UpdateItem {
   url: URL;
 }
 
+// TODO remove in CS-8096
 export type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
 
 interface UpdateEvent {
