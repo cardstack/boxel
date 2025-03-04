@@ -365,5 +365,25 @@
       "enabledEventIds": ["$xeRDlqqepS-6ZcRCLRL1rH1doelguAxvxWLwKe8uFmc"],
       "disabledEventIds": []
     }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!vORvGxbYIvLeiYUfNx:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "Please make me a doggy day care CRM app",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>Please make me a doggy day care CRM app</p>\n",
+      "clientGeneratedId": "6e4b5c72-fd16-43e9-a73d-730c501b0680",
+      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[]}}"
+    },
+    "origin_server_ts": 1733664873921,
+    "unsigned": {
+      "age": 15532
+    },
+    "event_id": "$AbcEFPV1BPzZUEUr3FeHCb0kt2cH31ErNpIJZD2VdEc",
+    "user_id": "@admin:localhost",
+    "age": 15532
   }
 ]

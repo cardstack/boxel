@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { Credentials, putEvent, registerUser } from '../docker/synapse';
 import {
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '../helpers/matrix-constants';
 
@@ -164,12 +164,13 @@ test.describe('Commands', () => {
     let room1 = await getRoomId(page);
     let cardId = `${appURL}/hassan`;
     let content = {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1',
           name: 'patchCard',
           arguments: {
             description: 'Patching card',
@@ -183,7 +184,7 @@ test.describe('Commands', () => {
             },
           },
         },
-      }),
+      ],
     };
 
     await showAllCards(page);
@@ -212,16 +213,17 @@ test.describe('Commands', () => {
     let room1 = await getRoomId(page);
     let card_id = `${appURL}/hassan`;
     let content = {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1',
           name: 'searchCardsByTypeAndTitle',
           arguments: {
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               type: {
                 module: `${appURL}person`,
                 name: 'Person',
@@ -229,8 +231,7 @@ test.describe('Commands', () => {
             },
           },
         },
-        eventId: 'search1',
-      }),
+      ],
     };
 
     await showAllCards(page);

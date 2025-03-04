@@ -8,7 +8,7 @@ import {
 import { Loader } from './loader';
 import { isField } from './constants';
 import { CardError } from './error';
-import { trimExecutableExtension } from './index';
+import { isUrlLike, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
   module: string;
@@ -105,11 +105,15 @@ export function codeRefWithAbsoluteURL(
   opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {
-    let moduleURL = new URL(ref.module, relativeTo);
-    if (opts?.trimExecutableExtension) {
-      moduleURL = trimExecutableExtension(moduleURL);
+    if (isUrlLike(ref.module)) {
+      let moduleURL = new URL(ref.module, relativeTo);
+      if (opts?.trimExecutableExtension) {
+        moduleURL = trimExecutableExtension(moduleURL);
+      }
+      return { ...ref, module: moduleURL.href };
+    } else {
+      return { ...ref };
     }
-    return { ...ref, module: moduleURL.href };
   }
   return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
 }

@@ -2,8 +2,11 @@ import { IContent } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
-import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
-import { APP_BOXEL_COMMAND_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
@@ -29,84 +32,66 @@ export async function sendMatrixEvent(
   roomId: string,
   eventType: string,
   content: IContent,
-  eventToUpdate: string | undefined,
+  eventIdToReplace: string | undefined,
 ) {
   if (content.data) {
     content.data = JSON.stringify(content.data);
   }
-  if (eventToUpdate) {
+  if (eventIdToReplace) {
     content['m.relates_to'] = {
       rel_type: 'm.replace',
-      event_id: eventToUpdate,
+      event_id: eventIdToReplace,
     };
   }
   log.debug('sending event', content);
   return await client.sendEvent(roomId, eventType, content);
 }
 
+// TODO we might want to think about how to handle patches that are larger than
+// 65KB (the maximum matrix event size), such that we split them into fragments
+// like we split cards into fragments
 export async function sendMessageEvent(
   client: MatrixClient,
   roomId: string,
   body: string,
-  eventToUpdate: string | undefined,
+  eventIdToReplace: string | undefined,
   data: any = {},
+  commandRequests: Partial<CommandRequest>[] = [],
 ) {
   log.debug('sending message', body);
-  let messageObject: IContent = {
+  let contentObject: IContent = {
     ...{
       body,
-      msgtype: 'm.text',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: body,
       format: 'org.matrix.custom.html',
-      'm.new_content': {
-        body,
-        msgtype: 'm.text',
-        formatted_body: body,
-        format: 'org.matrix.custom.html',
-      },
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
     },
     ...data,
   };
+  if (eventIdToReplace) {
+    contentObject['m.new_content'] = {
+      body,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: body,
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+    };
+  }
   return await sendMatrixEvent(
     client,
     roomId,
     'm.room.message',
-    messageObject,
-    eventToUpdate,
+    contentObject,
+    eventIdToReplace,
   );
-}
-
-// TODO we might want to think about how to handle patches that are larger than
-// 65KB (the maximum matrix event size), such that we split them into fragments
-// like we split cards into fragments
-export async function sendCommandEvent(
-  client: MatrixClient,
-  roomId: string,
-  functionCall: FunctionToolCall,
-  eventToUpdate: string | undefined,
-) {
-  let messageObject = toMatrixMessageCommandContent(
-    functionCall,
-    eventToUpdate,
-  );
-
-  if (messageObject !== undefined) {
-    return await sendMatrixEvent(
-      client,
-      roomId,
-      'm.room.message',
-      messageObject,
-      eventToUpdate,
-    );
-  }
-  return;
 }
 
 export async function sendErrorEvent(
   client: MatrixClient,
   roomId: string,
   error: any,
-  eventToUpdate: string | undefined,
+  eventIdToReplace: string | undefined,
 ) {
   try {
     let errorMessage = getErrorMessage(error);
@@ -115,7 +100,7 @@ export async function sendErrorEvent(
       client,
       roomId,
       'There was an error processing your request, please try again later',
-      eventToUpdate,
+      eventIdToReplace,
       {
         isStreamingFinished: true,
         errorMessage,
@@ -128,25 +113,6 @@ export async function sendErrorEvent(
     Sentry.captureException(e);
   }
 }
-
-export const toMatrixMessageCommandContent = (
-  functionCall: FunctionToolCall,
-  eventToUpdate: string | undefined,
-): IContent | undefined => {
-  let { arguments: payload } = functionCall;
-  const body = payload['description'] || 'Issuing command';
-  let messageObject: IContent = {
-    body: body,
-    msgtype: APP_BOXEL_COMMAND_MSGTYPE,
-    formatted_body: body,
-    format: 'org.matrix.custom.html',
-    data: {
-      eventId: eventToUpdate,
-      toolCall: functionCall,
-    },
-  };
-  return messageObject;
-};
 
 function getErrorMessage(error: any): string {
   if (error instanceof OpenAIError) {

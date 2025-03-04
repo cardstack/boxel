@@ -99,7 +99,11 @@ export const isNode =
   '[object process]';
 
 export { SupportedMimeType } from './router';
-export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
+export {
+  isUrlLike,
+  VirtualNetwork,
+  type ResponseWithNodeStream,
+} from './virtual-network';
 export { RealmAuthDataSource } from './realm-auth-data-source';
 
 export type {

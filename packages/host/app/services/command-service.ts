@@ -19,6 +19,8 @@ import {
   getClass,
 } from '@cardstack/runtime-common';
 
+import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
+
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type Realm from '@cardstack/host/services/realm';
@@ -48,7 +50,7 @@ export default class CommandService extends Service {
   @service declare private loaderService: LoaderService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
-  currentlyExecutingCommandEventIds = new TrackedSet<string>();
+  currentlyExecutingCommandRequestIds = new TrackedSet<string>();
 
   private commands: Map<
     string,
@@ -64,7 +66,7 @@ export default class CommandService extends Service {
     return name;
   }
 
-  public async executeCommandEventIfNeeded(event: Partial<IEvent>) {
+  public async executeCommandEventsIfNeeded(event: Partial<IEvent>) {
     let eventId = event.event_id;
     if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content?.['m.relates_to']!.event_id;
@@ -75,17 +77,17 @@ export default class CommandService extends Service {
       );
     }
     // examine the tool_call and see if it's a command that we know how to run
-    let toolCall = event?.content?.data?.toolCall;
-    if (!toolCall) {
+    let commandRequest = event?.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.[0];
+    if (!commandRequest) {
       return;
     }
-    // TODO: check whether this toolCall was already executed and exit if so
-    let { name } = toolCall;
+    // TODO: check whether this commandRequest  was already executed and exit if so
+    let { name } = commandRequest;
     let { command, autoExecute } = this.commands.get(name) ?? {};
     if (!command || !autoExecute) {
       return;
     }
-    this.currentlyExecutingCommandEventIds.add(eventId);
+    this.currentlyExecutingCommandRequestIds.add(commandRequest.id);
     try {
       // Get the input type and validate/construct the payload
       let InputType = await command.getInputType();
@@ -95,8 +97,8 @@ export default class CommandService extends Service {
       let typedInput;
       if (InputType) {
         typedInput = new InputType({
-          ...toolCall.arguments.attributes,
-          ...toolCall.arguments.relationships,
+          ...commandRequest.arguments.attributes,
+          ...commandRequest.arguments.relationships,
         });
       } else {
         typedInput = undefined;
@@ -105,10 +107,19 @@ export default class CommandService extends Service {
       await this.matrixService.sendCommandResultEvent(
         event.room_id!,
         eventId,
+        commandRequest.id,
         resultCard,
       );
+    } catch (e) {
+      console.error(e);
+      this.matrixService.failedCommandState.set(
+        commandRequest.id,
+        e instanceof Error
+          ? e
+          : new Error('Command failed. ' + (e as any).toString?.()),
+      );
     } finally {
-      this.currentlyExecutingCommandEventIds.delete(eventId);
+      this.currentlyExecutingCommandRequestIds.delete(commandRequest.id);
     }
   }
 
@@ -123,18 +134,19 @@ export default class CommandService extends Service {
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageCommand) => {
-    let { payload, eventId } = command;
+    let { arguments: payload, eventId, id: commandRequestId } = command;
     let resultCard: CardDef | undefined;
     try {
-      this.matrixService.failedCommandState.delete(eventId);
-      this.currentlyExecutingCommandEventIds.add(eventId);
+      this.matrixService.failedCommandState.delete(commandRequestId!);
+      this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
 
       // lookup command
-      let { command: commandToRun } = this.commands.get(command.name) ?? {};
+      let { command: commandToRun } =
+        this.commands.get(command.commandRequest.name ?? '') ?? {};
+
       // If we don't find it in the one-offs, start searching for
       // one in the skills we can construct
       if (!commandToRun) {
-        // here we can get the coderef from the messagecommand
         let commandCodeRef = command.codeRef;
         if (commandCodeRef) {
           let CommandConstructor = (await getClass(
@@ -153,8 +165,8 @@ export default class CommandService extends Service {
         let typedInput;
         if (InputType) {
           typedInput = new InputType({
-            ...payload.attributes,
-            ...payload.relationships,
+            ...payload!.attributes,
+            ...payload!.relationships,
           });
         } else {
           typedInput = undefined;
@@ -197,6 +209,7 @@ export default class CommandService extends Service {
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
+        commandRequestId!,
         resultCard,
       );
     } catch (e) {
@@ -208,9 +221,9 @@ export default class CommandService extends Service {
             : new Error('Command failed.');
       console.warn(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
-      this.matrixService.failedCommandState.set(eventId, error);
+      this.matrixService.failedCommandState.set(commandRequestId!, error);
     } finally {
-      this.currentlyExecutingCommandEventIds.delete(eventId);
+      this.currentlyExecutingCommandRequestIds.delete(commandRequestId!);
     }
   });
 }

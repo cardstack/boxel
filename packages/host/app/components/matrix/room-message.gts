@@ -1,7 +1,8 @@
+import { fn } from '@ember/helper';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -14,6 +15,7 @@ import { bool } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
+import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -39,12 +41,8 @@ interface Signature {
     index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
-    currentEditor: number | undefined;
-    setCurrentEditor: (editor: number | undefined) => void;
     retryAction?: () => void;
     isPending?: boolean;
-    isDisplayingCode: boolean;
-    onToggleViewCode: () => void;
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
@@ -89,11 +87,8 @@ export default class RoomMessage extends Component<Signature> {
     return this.message.author.userId === aiBotUserId;
   }
 
-  private run = task(async () => {
-    if (!this.message.command) {
-      throw new Error('No command to run');
-    }
-    return this.commandService.run.unlinked().perform(this.message.command);
+  private run = task(async (command: MessageCommand) => {
+    return this.commandService.run.unlinked().perform(command);
   });
 
   <template>
@@ -124,27 +119,23 @@ export default class RoomMessage extends Component<Signature> {
         @resources={{this.resources}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
-        @retryAction={{if this.message.command (perform this.run) @retryAction}}
+        @retryAction={{@retryAction}}
         @isPending={{@isPending}}
         data-test-boxel-message-from={{this.message.author.name}}
         data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
-        {{#if this.message.command}}
+        {{#each this.message.commands as |command|}}
           <RoomMessageCommand
-            @messageCommand={{this.message.command}}
-            @messageIndex={{this.message.index}}
-            @runCommand={{perform this.run}}
+            @messageCommand={{command}}
+            @roomResource={{@roomResource}}
+            @runCommand={{fn (perform this.run) command}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
-            @isDisplayingCode={{@isDisplayingCode}}
-            @onToggleViewCode={{@onToggleViewCode}}
             @monacoSDK={{@monacoSDK}}
-            @currentEditor={{@currentEditor}}
-            @failedCommandState={{this.failedCommandState}}
             @isError={{bool this.errorMessage}}
           />
-        {{/if}}
+        {{/each}}
       </AiAssistantMessage>
     {{/if}}
 
@@ -193,20 +184,7 @@ export default class RoomMessage extends Component<Signature> {
     return this.loadMessageResources.value;
   }
 
-  @cached
-  private get failedCommandState() {
-    if (!this.message.command?.eventId) {
-      return undefined;
-    }
-    return this.matrixService.failedCommandState.get(
-      this.message.command.eventId,
-    );
-  }
-
   private get errorMessage() {
-    if (this.failedCommandState) {
-      return `Failed to apply changes. ${this.failedCommandState.message}`;
-    }
     if (this.message.errorMessage) {
       return this.message.errorMessage;
     }

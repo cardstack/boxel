@@ -8,12 +8,18 @@ import {
   type OpenAIPromptMessage,
   isCommandResultStatusApplied,
   attachedCardsToMessage,
-  isCommandEvent,
   getRelevantCards,
 } from '../helpers';
 import { MatrixClient } from './matrix';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  MatrixEvent as DiscreteMatrixEvent,
+  CommandResultEvent,
+  CommandResultWithOutputContent,
+  CommandResultWithNoOutputContent,
+} from 'https://cardstack.com/base/matrix-event';
 import { ChatCompletionMessageParam } from 'openai/resources';
+import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
 Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
@@ -26,7 +32,7 @@ export async function setTitle(
   roomId: string,
   history: DiscreteMatrixEvent[],
   userId: string,
-  event?: MatrixEvent,
+  event?: CommandResultEvent,
 ) {
   let startOfConversation: OpenAIPromptMessage[] = [
     {
@@ -94,40 +100,44 @@ export function getStartOfConversation(
 export const getLatestCommandApplyMessage = (
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-  event?: MatrixEvent,
+  event?: CommandResultEvent,
 ): OpenAIPromptMessage[] => {
-  if (event) {
-    let content = event.getContent();
-    let messageRelation: IEventRelation | undefined = content['m.relates_to'];
-    let eventId = messageRelation?.event_id;
-    let commandEvent = history.find((e) => e.event_id === eventId);
-    if (commandEvent === undefined) {
-      return [];
-    }
-    let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
-      history,
-      aiBotUserId,
-    );
-    if (isCommandEvent(commandEvent)) {
-      let args = JSON.stringify(commandEvent.content.data.toolCall);
-      let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(
-        mostRecentlyAttachedCard,
-        attachedCards,
-      )}`;
-      return [
-        {
-          role: 'user',
-          content,
-        },
-      ];
-    }
+  if (!event) {
+    return [];
   }
-  return [];
+  let eventContent = event.getContent() as
+    | CommandResultWithOutputContent
+    | CommandResultWithNoOutputContent;
+  let messageRelation: IEventRelation | undefined =
+    eventContent['m.relates_to'];
+  let eventId = messageRelation?.event_id;
+  let commandSourceEvent = history.find((e) => e.event_id === eventId);
+  if (commandSourceEvent === undefined) {
+    return [];
+  }
+  let { mostRecentlyAttachedCard, attachedCards } = getRelevantCards(
+    history,
+    aiBotUserId,
+  );
+  let commandRequest = commandSourceEvent.content[
+    APP_BOXEL_COMMAND_REQUESTS_KEY
+  ].find((cr: CommandRequest) => cr.id === eventContent.data.commandRequestId);
+  let args = JSON.stringify(commandRequest.content.data.toolCall);
+  let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(
+    mostRecentlyAttachedCard,
+    attachedCards,
+  )}`;
+  return [
+    {
+      role: 'user',
+      content,
+    },
+  ];
 };
 
 export const roomTitleAlreadySet = (rawEventLog: IRoomEvent[]) => {
   return (
-    rawEventLog.filter((event) => event.type === 'm.room.name').length > 1 ??
+    rawEventLog.filter((event) => event.type === 'm.room.name').length > 1 ||
     false
   );
 };
