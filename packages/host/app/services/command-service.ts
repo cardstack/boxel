@@ -66,7 +66,7 @@ export default class CommandService extends Service {
     return name;
   }
 
-  public async executeCommandEventIfNeeded(event: Partial<IEvent>) {
+  public async executeCommandEventsIfNeeded(event: Partial<IEvent>) {
     let eventId = event.event_id;
     if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content?.['m.relates_to']!.event_id;
@@ -81,7 +81,7 @@ export default class CommandService extends Service {
     if (!commandRequest) {
       return;
     }
-    // TODO: check whether this toolCall was already executed and exit if so
+    // TODO: check whether this commandRequest  was already executed and exit if so
     let { name } = commandRequest;
     let { command, autoExecute } = this.commands.get(name) ?? {};
     if (!command || !autoExecute) {
