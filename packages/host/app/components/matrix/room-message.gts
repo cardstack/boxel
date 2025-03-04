@@ -134,6 +134,7 @@ export default class RoomMessage extends Component<Signature> {
             @isPending={{@isPending}}
             @monacoSDK={{@monacoSDK}}
             @isError={{bool this.errorMessage}}
+            @isStreaming={{@isStreaming}}
           />
         {{/each}}
       </AiAssistantMessage>

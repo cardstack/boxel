@@ -177,9 +177,6 @@ export default class MessageBuilder {
         );
       }
     }
-    if (commandRequests.length > 0) {
-      message.isStreamingFinished = true;
-    }
   }
 
   updateMessageCommandResult(message: Message) {
