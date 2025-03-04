@@ -13,7 +13,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   FileRef,
@@ -126,7 +126,7 @@ export class TestRealmAdapter implements RealmAdapter {
     for (let roomId of getRoomIds()) {
       if (roomId.startsWith('test-session-room-realm-')) {
         simulateRemoteMessage(roomId, realmMatrixUsername, event, {
-          type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+          type: APP_BOXEL_REALM_EVENT_TYPE,
         });
       }
     }

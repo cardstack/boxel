@@ -1,6 +1,6 @@
 import Owner from '@ember/owner';
 
-import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import RealmService from '@cardstack/host/services/realm';
 
@@ -107,5 +107,5 @@ export class MockUtils {
 }
 
 function isRealmEvent(e: IEvent): e is RealmEvent {
-  return e.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE;
+  return e.type === APP_BOXEL_REALM_EVENT_TYPE;
 }

@@ -31,7 +31,7 @@ import type {
 } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
-import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -233,11 +233,7 @@ export class NodeAdapter implements RealmAdapter {
     for (let userId of Object.keys(dmRooms)) {
       let roomId = dmRooms[userId];
       try {
-        await matrixClient.sendEvent(
-          roomId,
-          APP_BOXEL_REALM_EVENT_EVENT_TYPE,
-          event,
-        );
+        await matrixClient.sendEvent(roomId, APP_BOXEL_REALM_EVENT_TYPE, event);
       } catch (e) {
         console.log(
           `Unable to send event in room ${roomId} for user ${userId}`,

@@ -16,7 +16,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
-  APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+  APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { type SerializedFile } from './file-api';
@@ -309,7 +309,7 @@ export interface RealmServerEventContent {
 }
 
 export interface RealmEvent extends BaseMatrixEvent {
-  type: typeof APP_BOXEL_REALM_EVENT_EVENT_TYPE;
+  type: typeof APP_BOXEL_REALM_EVENT_TYPE;
   content: RealmEventContent;
 }
 

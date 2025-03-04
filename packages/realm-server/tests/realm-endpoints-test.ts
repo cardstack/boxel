@@ -68,7 +68,7 @@ import {
   insertSubscription,
 } from '@cardstack/billing/billing-queries';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
-import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   IncrementalIndexEventContent,
   MatrixEvent,
@@ -1968,7 +1968,7 @@ module(basename(__filename), function () {
 
           let expected = [
             {
-              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              type: APP_BOXEL_REALM_EVENT_TYPE,
               content: {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
@@ -1976,7 +1976,7 @@ module(basename(__filename), function () {
               },
             },
             {
-              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              type: APP_BOXEL_REALM_EVENT_TYPE,
               content: {
                 eventName: 'index',
                 indexType: 'incremental',
@@ -1987,7 +1987,7 @@ module(basename(__filename), function () {
               },
             },
             {
-              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              type: APP_BOXEL_REALM_EVENT_TYPE,
               content: {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
@@ -1995,7 +1995,7 @@ module(basename(__filename), function () {
               },
             },
             {
-              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              type: APP_BOXEL_REALM_EVENT_TYPE,
               content: {
                 eventName: 'index',
                 indexType: 'incremental',
@@ -2006,7 +2006,7 @@ module(basename(__filename), function () {
               },
             },
             {
-              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              type: APP_BOXEL_REALM_EVENT_TYPE,
               content: {
                 eventName: 'index',
                 indexType: 'incremental-index-initiation',
@@ -2014,7 +2014,7 @@ module(basename(__filename), function () {
               },
             },
             {
-              type: APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+              type: APP_BOXEL_REALM_EVENT_TYPE,
               content: {
                 eventName: 'index',
                 indexType: 'incremental',
@@ -4078,7 +4078,7 @@ async function waitForIncrementalIndexEvent(
     console.log(matrixMessages);
     return matrixMessages.some(
       (m) =>
-        m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
         m.content.eventName === 'index' &&
         m.content.indexType === 'incremental',
     );
@@ -4092,7 +4092,7 @@ function findRealmEvent(
 ): RealmEvent | undefined {
   return events.find(
     (m) =>
-      m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
+      m.type === APP_BOXEL_REALM_EVENT_TYPE &&
       m.content.eventName === eventName &&
       (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
   ) as RealmEvent | undefined;
