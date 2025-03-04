@@ -116,11 +116,6 @@ export class PermissionsConsumer extends Component<PermissionsConsumerSignature>
   </template>
 }
 
-const componentCache = initSharedState(
-  'componentCache',
-  () => new WeakMap<Box<BaseDef>, BoxComponent>(),
-);
-
 export function getBoxComponent(
   cardOrField: typeof BaseDef,
   model: Box<BaseDef>,
@@ -129,10 +124,6 @@ export function getBoxComponent(
 ): BoxComponent {
   // the componentCodeRef is only set on the server during card prerendering,
   // it should have no effect on component stability
-  let stable = componentCache.get(model);
-  if (stable) {
-    return stable;
-  }
   function determineFormats(
     userFormat: Format | undefined,
     defaultFormats: FieldFormats,
@@ -225,12 +216,12 @@ export function getBoxComponent(
                       @displayBoundaries={{displayContainer}}
                       class='field-component-card
                         {{effectiveFormats.cardDef}}-format display-container-{{displayContainer}}'
-                      {{context.cardComponentModifier
+                      {{!-- {{context.cardComponentModifier
                         card=card
                         format=effectiveFormats.cardDef
                         fieldType=field.fieldType
                         fieldName=field.name
-                      }}
+                      }} --}}
                       data-test-card={{card.id}}
                       data-test-card-format={{effectiveFormats.cardDef}}
                       data-test-field-component-card
@@ -364,8 +355,7 @@ export function getBoxComponent(
   let externalFields = fieldsComponentsFor(component, model);
 
   // This cast is safe because we're returning a proxy that wraps component.
-  stable = externalFields as unknown as typeof component;
-  componentCache.set(model, stable);
+  let stable = externalFields as unknown as typeof component;
   return stable;
 }
 
