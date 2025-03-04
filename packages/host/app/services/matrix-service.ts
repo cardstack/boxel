@@ -1438,7 +1438,6 @@ export default class MatrixService extends Service {
       event.sender &&
       event.content
     ) {
-      // FIXME provenance should be checked
       realmEventsLogger.debug('Received realm event', event);
 
       let realmResourceForEvent = this.realm.realmForSessionRoomId(
@@ -1447,6 +1446,11 @@ export default class MatrixService extends Service {
       if (!realmResourceForEvent) {
         realmEventsLogger.debug(
           'Ignoring realm event because no realm found',
+          event,
+        );
+      } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
+        realmEventsLogger.debug(
+          'Ignoring realm event because sender is not the realm user',
           event,
         );
       } else {
