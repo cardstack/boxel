@@ -119,7 +119,7 @@ const BeforeOptions: TemplateOnlyComponent = <template>
 interface AfterOptionsSignature {
   Args: {
     chooseCard: () => void;
-    createNew: () => void;
+    createNew?: () => void;
     createNewIsRunning?: boolean;
   };
 }
@@ -128,14 +128,20 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
     <span class='title'>
       Action
     </span>
-    <button class='action' {{on 'click' @createNew}} data-test-create-instance>
-      {{#if @createNewIsRunning}}
-        <LoadingIndicator class='action-running' />
-      {{else}}
-        <IconPlusThin width='16px' height='16px' />
-      {{/if}}
-      New card instance
-    </button>
+    {{#if @createNew}}
+      <button
+        class='action'
+        {{on 'click' @createNew}}
+        data-test-create-instance
+      >
+        {{#if @createNewIsRunning}}
+          <LoadingIndicator class='action-running' />
+        {{else}}
+          <IconPlusThin width='16px' height='16px' />
+        {{/if}}
+        New card instance
+      </button>
+    {{/if}}
     <button
       class='action'
       {{on 'click' @chooseCard}}
@@ -382,7 +388,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           @card={{this.card}}
           @onSelect={{this.onSelect}}
           @chooseCard={{perform this.chooseCard}}
-          @createNew={{perform this.createNew}}
+          @createNew={{if this.canWriteRealm (perform this.createNew)}}
           @createNewIsRunning={{this.createNew.isRunning}}
         />
       </div>
@@ -394,7 +400,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
               @format={{this.format}}
               @realmInfo={{this.realmInfo}}
               @contextMenuItems={{this.contextMenuItems}}
-              @onEdit={{if this.canEdit (fn this.setFormat 'edit')}}
+              @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
               @onFinishEditing={{if
                 (eq this.format 'edit')
                 (fn this.setFormat this.defaultFormat)
@@ -638,12 +644,16 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     return this.realm.info(this.card.id);
   }
 
-  private get canEdit() {
+  private get canEditCard() {
     return Boolean(
       this.format !== 'edit' &&
         this.card?.id &&
         this.realm.canWrite(this.card.id),
     );
+  }
+
+  private get canWriteRealm() {
+    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 }
 
