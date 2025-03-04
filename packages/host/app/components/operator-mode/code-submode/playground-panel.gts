@@ -276,9 +276,10 @@ interface PlaygroundPreviewSignature {
   };
 }
 const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
+  // For fields, the innermost CardContainer represents a card that's embedding this field in available field formats
   <template>
     {{#if @isFieldDef}}
-      <CardContainer class='preview-container'>
+      <CardContainer class='preview-container full-height-preview'>
         <CardHeader
           class='preview-header'
           @cardTypeDisplayName={{cardTypeDisplayName @card}}
@@ -288,9 +289,9 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
           @onFinishEditing={{@onFinishEditing}}
           @isTopCard={{true}}
         />
-        <div class='field-preview-card'>
+        <CardContainer class='field-preview-card'>
           <Preview @card={{@card}} @format={{@format}} />
-        </div>
+        </CardContainer>
       </CardContainer>
     {{else}}
       {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
@@ -345,8 +346,7 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
         background-color: var(--boxel-100);
       }
       .field-preview-card {
-        min-height: 11rem;
-        padding: var(--boxel-sp-lg) var(--boxel-sp);
+        padding: var(--boxel-sp);
       }
       .preview {
         box-shadow: none;
@@ -488,6 +488,24 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   get query(): Query {
+    if (this.args.isFieldDef) {
+      // For fields, we're querying the Boxel Spec instances in recent realms, regardless of recent cards...
+      return {
+        filter: {
+          on: specRef,
+          eq: {
+            ref: this.args.codeRef,
+          },
+        },
+        sort: [
+          {
+            by: 'createdAt',
+            direction: 'desc',
+          },
+        ],
+      };
+    }
+
     return {
       filter: {
         every: [
