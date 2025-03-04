@@ -994,19 +994,15 @@ export default class CodeSubmode extends Component<Signature> {
                         >
                           <:title>Playground</:title>
                           <:content>
-                            <PlaygroundPanel
-                              @codeRef={{this.selectedCardRef}}
-                              @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
-                              @isFieldDef={{isFieldDef
-                                this.selectedCardOrField.cardOrField
-                              }}
-                              @fieldDef={{if
-                                (isFieldDef
+                            {{#if (eq this.selectedAccordionItem 'playground')}}
+                              <PlaygroundPanel
+                                @codeRef={{this.selectedCardRef}}
+                                @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
+                                @isFieldDef={{isFieldDef
                                   this.selectedCardOrField.cardOrField
-                                )
-                                this.selectedCardOrField.cardOrField
-                              }}
-                            />
+                                }}
+                              />
+                            {{/if}}
                           </:content>
                         </A.Item>
                       {{/if}}

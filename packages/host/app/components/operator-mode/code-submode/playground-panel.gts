@@ -379,7 +379,6 @@ interface PlaygroundContentSignature {
     codeRef: ResolvedCodeRef;
     moduleId: string;
     isFieldDef?: boolean;
-    fieldDef?: typeof FieldDef;
   };
 }
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
@@ -564,19 +563,18 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (!this.args.isFieldDef) {
       return undefined;
     }
-    let instances = (this.card as Spec)?.containedExamples;
-    if (!instances?.length) {
-      // TODO: handle UI for the case when there's a spec but has no instances
-      // maybe create new instance?
+    let fieldInstances = (this.card as Spec)?.containedExamples;
+    if (!fieldInstances) {
       return undefined;
     }
     let index = this.fieldIndex ?? 0;
-    if (index > instances.length) {
-      // TODO: handle case when selected instance is the last item and it was deleted
+    if (index >= fieldInstances.length) {
+      // TODO: handle case when spec has no instances, or when instance index
+      // do not match any item in array as a result of deletion
+      // maybe create new? // this.createNew.perform();
       return undefined;
     }
-    let instance = (this.card as Spec)?.containedExamples?.[index];
-    return instance;
+    return fieldInstances?.[index];
   }
 
   private copyToClipboard = task(async (id: string) => {
@@ -621,7 +619,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (this.newCardJSON) {
       this.newCardJSON = undefined;
     }
-    if (this.card?.id === cardId && this.format === format && this.fieldIndex === fieldIndex) {
+    let persistedId = this.playgroundSelections[this.args.moduleId]?.cardId;
+    if (persistedId && persistedId === cardId && this.format === format && this.fieldIndex === fieldIndex) {
       return;
     }
     this.playgroundSelections[this.args.moduleId] = {
@@ -741,7 +740,6 @@ interface Signature {
     codeRef: ResolvedCodeRef;
     isLoadingNewModule?: boolean;
     isFieldDef?: boolean;
-    fieldDef?: typeof FieldDef;
   };
   Element: HTMLElement;
 }
@@ -755,7 +753,6 @@ export default class PlaygroundPanel extends Component<Signature> {
           @codeRef={{@codeRef}}
           @moduleId={{this.moduleId}}
           @isFieldDef={{@isFieldDef}}
-          @fieldDef={{@fieldDef}}
         />
       {{/if}}
     </section>
