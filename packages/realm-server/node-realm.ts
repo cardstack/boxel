@@ -3,6 +3,7 @@ import {
   Kind,
   FileRef,
   createResponse,
+  logger,
   unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
@@ -32,6 +33,8 @@ import type {
 import jwt from 'jsonwebtoken';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+
+const realmEventsLog = logger('realm:events');
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -70,8 +73,8 @@ export class NodeAdapter implements RealmAdapter {
       throw new Error(`tried to subscribe to watcher twice`);
     }
 
+    // FIXME remove with CS-XXXX
     let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
-    console.log('watcherOptions', watcherOptions);
 
     this.watcher = sane(join(this.realmDir, '/'), watcherOptions);
     this.watcher.on('change', (path, _root, stat) => {
@@ -89,10 +92,7 @@ export class NodeAdapter implements RealmAdapter {
       throw new Error(`watcher error: ${err}`);
     });
     await new Promise<void>((resolve) => {
-      this.watcher!.on('ready', () => {
-        console.log('watcher ready');
-        resolve();
-      });
+      this.watcher!.on('ready', resolve);
     });
   }
 
@@ -201,11 +201,11 @@ export class NodeAdapter implements RealmAdapter {
     matrixClient: MatrixClient,
   ): Promise<void> {
     // FIXME this can be shared in a realm, the function to send an individual event in a realm should be in the adapter
-    console.log('broadcasting realm event', event);
+    realmEventsLog.debug('Broadcasting realm event', event);
 
     if (!matrixClient.isLoggedIn()) {
-      console.log(
-        `not logged in (${matrixClient.username}, skipping server event`,
+      realmEventsLog.debug(
+        `Not logged in (${matrixClient.username}, skipping server event`,
       );
       return;
     }
@@ -218,24 +218,18 @@ export class NodeAdapter implements RealmAdapter {
           'boxel.session-rooms',
         )) ?? {};
     } catch (e) {
-      // FIXME this is happening in CI, Matrix has been shut down presumably
-      console.log('error getting account data', e);
+      realmEventsLog.error('Error getting account data', e);
       return;
     }
 
-    console.log(
-      'raw dmrooms for username ' +
-        matrixClient.username +
-        JSON.stringify(dmRooms, null, 2),
-    );
-    console.log('sending to dm rooms', Object.values(dmRooms));
+    realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 
     for (let userId of Object.keys(dmRooms)) {
       let roomId = dmRooms[userId];
       try {
         await matrixClient.sendEvent(roomId, APP_BOXEL_REALM_EVENT_TYPE, event);
       } catch (e) {
-        console.log(
+        realmEventsLog.error(
           `Unable to send event in room ${roomId} for user ${userId}`,
           event,
           e,

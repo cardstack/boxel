@@ -21,6 +21,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   type LooseSingleCardDocument,
+  logger,
   markdownToHtml,
   splitStringIntoChunks,
   baseRealm,
@@ -109,6 +110,8 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
+
+const realmEventsLogger = logger('realm:events');
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -1436,13 +1439,16 @@ export default class MatrixService extends Service {
       event.content
     ) {
       // FIXME provenance should be checked
-      console.log('received sse event', event);
+      realmEventsLogger.debug('Received sse event', event);
 
       let realmResourceForEvent = this.realm.realmForSessionRoomId(
         event.room_id!,
       );
       if (!realmResourceForEvent) {
-        console.log('ignoring sse event because no realm found', event);
+        realmEventsLogger.debug(
+          'Ignoring sse event because no realm found',
+          event,
+        );
       } else {
         this.messageService.relayMatrixSSE(
           realmResourceForEvent.url,

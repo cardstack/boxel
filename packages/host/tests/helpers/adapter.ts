@@ -101,17 +101,13 @@ export class TestRealmAdapter implements RealmAdapter {
     event: RealmEventContent,
     matrixClient: MatrixClient,
   ) {
-    console.log('broadcastRealmEventViaMatrix', event);
-
     if (!this.owner) {
-      console.log('owner not set, skipping');
       return;
     }
 
     let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
 
     if (!mockLoader) {
-      console.log('mockLoader not found, skipping');
       return;
     }
 
@@ -120,8 +116,6 @@ export class TestRealmAdapter implements RealmAdapter {
     let { getRoomIds, simulateRemoteMessage } = mockMatrixUtils;
 
     let realmMatrixUsername = matrixClient.username;
-
-    console.log('room ids', getRoomIds());
 
     for (let roomId of getRoomIds()) {
       if (roomId.startsWith('test-session-room-realm-')) {

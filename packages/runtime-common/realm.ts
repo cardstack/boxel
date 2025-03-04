@@ -1200,7 +1200,6 @@ export class Realm {
     requestContext: RequestContext,
   ): Promise<Response> {
     let body = await request.text();
-    console.log('in createCard, body', body);
     let json;
     try {
       json = JSON.parse(body);
@@ -1238,7 +1237,6 @@ export class Realm {
         fileURL,
       );
     } catch (err: any) {
-      console.log('error in post', err);
       if (err.message.startsWith('field validation error')) {
         return badRequest(err.message, requestContext);
       } else {
@@ -1846,8 +1844,6 @@ export class Realm {
     let fileURL = this.paths.fileURL(`.realm.json`);
     let localPath: LocalPath = this.paths.local(fileURL);
     let realmConfig = await this.readFileAsText(localPath, undefined);
-    console.log('parse realm info realmUserId', this.#matrixClient.getUserId());
-    console.log(`OR ${this.#matrixClient.username}`);
     let realmInfo = {
       name: 'Unnamed Workspace',
       backgroundURL: null,
@@ -1932,7 +1928,6 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    console.log('subscribe starting');
     let headers = {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
@@ -1965,8 +1960,6 @@ export class Realm {
       )!;
     }
 
-    console.log('subscribeOptions', subscribeOptions);
-
     if (this.listeningClients.length === 0) {
       await this.#adapter.subscribe((data) => {
         let tracked = this.getTrackedWrite(data);
@@ -1994,15 +1987,9 @@ export class Realm {
     // FIXME listeningClients should go away
     this.listeningClients.push(writable);
 
-    console.log('subscribe about to sendServerEvent');
-
-    console.log('subscribe sentServerEvent done, waitForClose');
-
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
     waitForClose(writable);
-
-    console.log('subscribe waitForClose done');
 
     return response;
   }

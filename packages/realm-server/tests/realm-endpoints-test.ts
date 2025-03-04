@@ -128,7 +128,6 @@ module(basename(__filename), function () {
 
           let virtualNetwork = createVirtualNetwork();
 
-          console.log('running runTestRealmServer');
           ({
             testRealm,
             testRealmHttpServer,
@@ -191,18 +190,11 @@ module(basename(__filename), function () {
           .set('Accept', 'application/json')
           .set('Content-Type', 'application/json');
 
-        console.log(
-          'setting account data for username ' + matrixClient.username,
-        );
-
         testAuthRoomId = json.room;
 
         await matrixClient.setAccountData('boxel.session-rooms', {
           [userId]: json.room,
         });
-
-        console.log('account data set for username ' + matrixClient.username);
-        console.log(await matrixClient.getAccountData('boxel.session-rooms'));
 
         // FIXME maybe use timestamp instead?
         await matrixClient.sendEvent(json.room, 'm.room.message', {
@@ -1963,8 +1955,6 @@ module(basename(__filename), function () {
           }
 
           let messages = await getMessagesSinceTestStarted();
-
-          console.log('all messages', JSON.stringify(messages, null, 2));
 
           let expected = [
             {
@@ -4075,7 +4065,7 @@ async function waitForIncrementalIndexEvent(
 ) {
   await waitUntil(async () => {
     let matrixMessages = await getMessagesSinceTestStarted();
-    console.log(matrixMessages);
+
     return matrixMessages.some(
       (m) =>
         m.type === APP_BOXEL_REALM_EVENT_TYPE &&

@@ -60,7 +60,6 @@ export default class MessageService extends Service {
   }
 
   relayMatrixSSE(realmURL: string, event: RealmEventContent) {
-    console.log('relaying matrix sse event', realmURL, event);
     this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
       cb(event);
     });
