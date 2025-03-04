@@ -1254,7 +1254,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      createAndJoinRoom({ sender: '@testuser:localhost', name: 'test room 0' });
+      createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'test room 0',
+      });
       let room1Id = createAndJoinRoom({
         sender: '@testuser:localhost',
         name: 'test room 1',
@@ -1264,7 +1267,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
         name: 'test room 2',
       });
       await settled();
-
       await openAiAssistant();
       await waitFor(`[data-room-settled]`);
 
@@ -2153,7 +2155,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await createAndJoinRoom({
+    let anotherRoomId = createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'Another Room',
     });
