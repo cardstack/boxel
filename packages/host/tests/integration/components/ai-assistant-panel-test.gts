@@ -2459,6 +2459,197 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasValue('This is 1st sentence \n\nThis is 2nd sentence');
   });
 
+  test('when a command is being prepared, apply button is shown in preparing state', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:staging',
+      name: 'test room 1',
+    });
+    let initialEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing',
+      formatted_body: 'Changing',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+        },
+      ],
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists();
+  });
+
+  test('after command is issued, a reaction event will be dispatched', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    let initialEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing',
+      formatted_body: 'Changing',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first names',
+      formatted_body: 'Changing first names',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+        },
+      ],
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 1 });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first names',
+      formatted_body: 'Changing first names',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+        {
+          id: 'f2da5504-b92f-480a-986a-56ec606d240e',
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/hassan`,
+              patch: { attributes: { firstName: 'Ivana' } },
+            },
+          },
+        },
+      ],
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+    await settled();
+
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 2 });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first names',
+      formatted_body: 'Changing first names',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+        {
+          id: 'f2da5504-b92f-480a-986a-56ec606d240e',
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/hassan`,
+              patch: { attributes: { firstName: 'Ivana' } },
+            },
+          },
+        },
+      ],
+      isStreamingFinished: true,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+    await settled();
+
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 0 });
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
+      .exists({ count: 2 });
+  });
+
   test('after command is issued, a reaction event will be dispatched', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
