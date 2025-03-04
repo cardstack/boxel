@@ -1439,14 +1439,14 @@ export default class MatrixService extends Service {
       event.content
     ) {
       // FIXME provenance should be checked
-      realmEventsLogger.debug('Received sse event', event);
+      realmEventsLogger.debug('Received realm event', event);
 
       let realmResourceForEvent = this.realm.realmForSessionRoomId(
         event.room_id!,
       );
       if (!realmResourceForEvent) {
         realmEventsLogger.debug(
-          'Ignoring sse event because no realm found',
+          'Ignoring realm event because no realm found',
           event,
         );
       } else {
