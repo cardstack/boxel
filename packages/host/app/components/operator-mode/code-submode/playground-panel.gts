@@ -139,7 +139,7 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
         {{else}}
           <IconPlusThin width='16px' height='16px' />
         {{/if}}
-        New card instance
+        Create new instance
       </button>
     {{/if}}
     <button
@@ -376,6 +376,7 @@ interface PlaygroundContentSignature {
     codeRef: ResolvedCodeRef;
     moduleId: string;
     isFieldDef?: boolean;
+    fieldDef?: typeof FieldDef;
   };
 }
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
@@ -548,13 +549,30 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     );
   }
 
+  private get fieldIndex(): number | undefined {
+    if (this.playgroundSelections[this.args.moduleId]?.fieldIndex) {
+      return this.playgroundSelections[this.args.moduleId].fieldIndex;
+    }
+    return this.args.isFieldDef ? 0 : undefined;
+  }
+
   private get field(): FieldDef | undefined {
     if (!this.args.isFieldDef) {
       return undefined;
     }
-    let index = this.playgroundSelections[this.args.moduleId]?.fieldIndex ?? 0;
+    let instances = (this.card as Spec)?.containedExamples;
+    if (!instances?.length) {
+      // TODO: handle UI for the case when there's a spec but has no instances
+      // maybe create new instance?
+      return undefined;
+    }
+    let index = this.fieldIndex ?? 0;
+    if (index > instances.length) {
+      // TODO: handle case when selected instance is the last item and it was deleted
+      return undefined;
+    }
     let instance = (this.card as Spec)?.containedExamples?.[index];
-    return instance; // TODO: handle UI for the case when there's a spec but has no instances
+    return instance;
   }
 
   private copyToClipboard = task(async (id: string) => {
@@ -594,12 +612,12 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   private persistSelections = (
     cardId: string,
     format = this.format,
-    fieldIndex = this.args.isFieldDef ? 0 : undefined,
+    fieldIndex = this.fieldIndex,
   ) => {
     if (this.newCardJSON) {
       this.newCardJSON = undefined;
     }
-    if (this.card?.id === cardId && this.format === format) {
+    if (this.card?.id === cardId && this.format === format && this.fieldIndex === fieldIndex) {
       return;
     }
     this.playgroundSelections[this.args.moduleId] = {
@@ -640,18 +658,51 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   // TODO: convert this to @action once we no longer need to await below
   private createNew = task(async () => {
-    this.newCardJSON = {
-      data: {
-        meta: {
-          adoptsFrom: this.args.codeRef,
-          realmURL: this.operatorModeStateService.realmURL.href,
+    if (this.args.isFieldDef) {
+      if (!this.args.fieldDef) {
+        throw new Error('Can not create a new field instance without the field definition');
+      }
+      let newFieldInstance = new this.args.fieldDef();
+      if (this.card) {
+
+        // TODO: need a way to get the subtype that is intended to be used. but if the examples are allowed to be polymorphic,
+        // then we can't rely on the field type returned and should use fieldDef we got from code-submode
+        // let field = getField((this.card as Spec).constructor, 'containedExamples');
+        (this.card as Spec).containedExamples.push(newFieldInstance);
+        this.persistSelections(this.card.id, 'edit', (this.card as Spec).containedExamples.length - 1);
+        // TODO: close dropdown window
+        return;
+      } else {
+        // create Boxel Spec card
+        this.newCardJSON = {
+          data: {
+            attributes: {
+              specType: 'field',
+              ref: this.args.codeRef,
+              containedExamples: [newFieldInstance], // TODO: currently this serializes incorrectly as `{}`
+            },
+            meta: {
+              adoptsFrom: specRef,
+              realmURL: this.operatorModeStateService.realmURL.href,
+            },
+          },
+        };
+      }
+    } else {
+      this.newCardJSON = {
+        data: {
+          meta: {
+            adoptsFrom: this.args.codeRef,
+            realmURL: this.operatorModeStateService.realmURL.href,
+          },
         },
-      },
-    };
+      };
+    }
+
     await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
     if (this.card) {
       this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
-      this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
+      this.persistSelections(this.card.id, 'edit', this.args.isFieldDef ? 0 : undefined); // open new instance in playground in edit format
     }
   });
 
@@ -680,6 +731,7 @@ interface Signature {
     codeRef: ResolvedCodeRef;
     isLoadingNewModule?: boolean;
     isFieldDef?: boolean;
+    fieldDef?: typeof FieldDef;
   };
   Element: HTMLElement;
 }
@@ -693,6 +745,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           @codeRef={{@codeRef}}
           @moduleId={{this.moduleId}}
           @isFieldDef={{@isFieldDef}}
+          @fieldDef={{@fieldDef}}
         />
       {{/if}}
     </section>

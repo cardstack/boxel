@@ -1000,6 +1000,12 @@ export default class CodeSubmode extends Component<Signature> {
                               @isFieldDef={{isFieldDef
                                 this.selectedCardOrField.cardOrField
                               }}
+                              @fieldDef={{if
+                                (isFieldDef
+                                  this.selectedCardOrField.cardOrField
+                                )
+                                this.selectedCardOrField.cardOrField
+                              }}
                             />
                           </:content>
                         </A.Item>
