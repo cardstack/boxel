@@ -1448,11 +1448,12 @@ export default class MatrixService extends Service {
           'Ignoring realm event because no realm found',
           event,
         );
-      } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
-        realmEventsLogger.debug(
-          'Ignoring realm event because sender is not the realm user',
-          event,
-        );
+        // TODO CS-8097
+        // } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
+        //   realmEventsLogger.debug(
+        //     `Ignoring realm event because sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
+        //     event,
+        //   );
       } else {
         this.messageService.relayMatrixSSE(
           realmResourceForEvent.url,
