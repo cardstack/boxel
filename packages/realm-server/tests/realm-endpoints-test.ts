@@ -144,7 +144,6 @@ module(basename(__filename), function () {
             publisher,
             matrixURL,
             fileSystem,
-            loginMatrix: true,
           }));
 
           request = supertest(testRealmHttpServer);
