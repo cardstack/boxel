@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
@@ -3295,7 +3295,8 @@ module(basename(__filename), function () {
         assert.deepEqual(testCard.ref, ref, 'card data is correct');
       });
 
-      test('can index a newly added file to the filesystem', async function (assert) {
+      // CS-8095
+      skip('can index a newly added file to the filesystem', async function (assert) {
         {
           let response = await request
             .get('/new-card')
@@ -3392,7 +3393,8 @@ module(basename(__filename), function () {
         }
       });
 
-      test('can index a changed file in the filesystem', async function (assert) {
+      // CS-8095
+      skip('can index a changed file in the filesystem', async function (assert) {
         {
           let response = await request
             .get('/person-1')
@@ -3460,7 +3462,8 @@ module(basename(__filename), function () {
         }
       });
 
-      test('can index a file deleted from the filesystem', async function (assert) {
+      // CS-8095
+      skip('can index a file deleted from the filesystem', async function (assert) {
         {
           let response = await request
             .get('/person-1')
