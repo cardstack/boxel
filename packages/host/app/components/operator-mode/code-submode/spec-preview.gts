@@ -446,14 +446,11 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   isSkill(selectedDeclaration: CardOrFieldDeclaration) {
-    if (selectedDeclaration.exportName === 'SkillCard') {
-      return true;
-    }
     if (
-      selectedDeclaration.super &&
-      selectedDeclaration.super.type === 'external' &&
-      selectedDeclaration.super.name === 'SkillCard' &&
-      selectedDeclaration.super.module ===
+      selectedDeclaration.cardType.type &&
+      isResolvedCodeRef(selectedDeclaration.cardType.type.codeRef) &&
+      selectedDeclaration.cardType.type.codeRef.name === 'SkillCard' &&
+      selectedDeclaration.cardType.type.codeRef.module ===
         'https://cardstack.com/base/skill-card'
     ) {
       return true;

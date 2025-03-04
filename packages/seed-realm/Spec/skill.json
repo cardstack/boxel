@@ -8,7 +8,7 @@
         "module": "https://cardstack.com/base/skill-card",
         "name": "SkillCard"
       },
-      "specType": "card"
+      "specType": "skill"
     },
     "meta": {
       "adoptsFrom": {
