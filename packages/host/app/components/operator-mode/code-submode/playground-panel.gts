@@ -1,4 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -30,6 +31,7 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   chooseCard,
+  internalKeyFor,
   type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
@@ -37,12 +39,10 @@ import {
 
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import { getCodeRef, type CardType } from '@cardstack/host/resources/card-type';
-import { ModuleContentsResource } from '@cardstack/host/resources/module-contents';
-
 import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
@@ -59,15 +59,11 @@ import FittedFormatGallery from '../card-preview-panel/fitted-format-gallery';
 
 import FormatChooser from './format-chooser';
 
-const getItemTitle = (item: CardDef, displayName?: string) => {
+const getItemTitle = (item: CardDef) => {
   if (!item) {
     return;
   }
-  if (item.title) {
-    return item.title;
-  }
-  let fallbackName = displayName ?? item.constructor.displayName ?? 'Card';
-  return `Untitled ${fallbackName}`;
+  return item.title ?? `Untitled ${cardTypeDisplayName(item)}`;
 };
 
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
@@ -175,130 +171,60 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
   </style>
 </template>;
 
-interface PlaygroundContentSignature {
+interface DropdownSignature {
   Args: {
-    codeRef: ResolvedCodeRef;
-    moduleId: string;
-    displayName?: string;
+    query: Query;
+    realms: string[];
+    card: CardDef | undefined;
+    onSelect: (card: PrerenderedCard) => void;
+    chooseCard: () => void;
+    createNew: () => void;
+    createNewIsRunning?: boolean;
   };
 }
-class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
+const InstanceSelectDropdown: TemplateOnlyComponent<DropdownSignature> =
   <template>
-    <div class='playground-panel-content'>
-      <PrerenderedCardSearch
-        @query={{this.query}}
-        @format='fitted'
-        @realms={{this.recentRealms}}
-      >
-        <:loading>
-          <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
-        </:loading>
-        <:response as |cards|>
-          <div class='instance-chooser-container'>
-            <BoxelSelect
-              class='instance-chooser'
-              @dropdownClass='instances-dropdown-content'
-              @options={{cards}}
-              @selected={{this.card}}
-              @selectedItemComponent={{if
-                this.card
-                (component
-                  SelectedItem title=(getItemTitle this.card @displayName)
-                )
-              }}
-              @renderInPlace={{true}}
-              @onChange={{this.onSelect}}
-              @placeholder='Please Select'
-              @beforeOptionsComponent={{component BeforeOptions}}
-              @afterOptionsComponent={{component
-                AfterOptions
-                chooseCard=(perform this.chooseCard)
-                createNew=(perform this.createNew)
-                createNewIsRunning=this.createNew.isRunning
-              }}
-              data-test-instance-chooser
-              as |card|
-            >
-              <CardContainer class='card' @displayBoundaries={{true}}>
-                <card.component />
-              </CardContainer>
-            </BoxelSelect>
-          </div>
-        </:response>
-      </PrerenderedCardSearch>
-      <div class='preview-area'>
-        {{#if this.card}}
-          {{#if (or (eq this.format 'isolated') (eq this.format 'edit'))}}
-            <CardContainer class='preview-container full-height-preview'>
-              {{#let (this.realm.info this.card.id) as |realmInfo|}}
-                <CardHeader
-                  class='preview-header'
-                  @cardTypeDisplayName={{cardTypeDisplayName this.card}}
-                  @cardTypeIcon={{cardTypeIcon this.card}}
-                  @realmInfo={{realmInfo}}
-                  @onEdit={{if this.canEdit this.setEditFormat}}
-                  @isTopCard={{true}}
-                  @moreOptionsMenuItems={{this.contextMenuItems}}
-                />
-              {{/let}}
-              <Preview
-                class='preview'
-                @card={{this.card}}
-                @format={{this.format}}
-              />
-            </CardContainer>
-          {{else if (eq this.format 'embedded')}}
-            <CardContainer class='preview-container'>
-              <Preview
-                class='preview'
-                @card={{this.card}}
-                @format={{this.format}}
-              />
-            </CardContainer>
-          {{else if (eq this.format 'atom')}}
-            <div class='atom-preview-container' data-test-atom-preview>Lorem
-              ipsum dolor sit amet, consectetur adipiscing elit, sed do
-              <Preview
-                class='atom-preview'
-                @card={{this.card}}
-                @format={{this.format}}
-                @displayContainer={{false}}
-              />
-              tempor incididunt ut labore et dolore magna aliqua. Ut enim ad
-              minim veniam, quis nostrud exercitation ullamco laboris nisi ut
-              aliquip ex ea commodo consequat.</div>
-          {{else if (eq this.format 'fitted')}}
-            <FittedFormatGallery @card={{this.card}} @isDarkMode={{true}} />
-          {{/if}}
-        {{/if}}
-      </div>
-      {{#if this.card}}
-        <FormatChooser
-          class='format-chooser'
-          @format={{this.format}}
-          @setFormat={{this.setFormat}}
-        />
-      {{/if}}
-    </div>
+    <PrerenderedCardSearch
+      @query={{@query}}
+      @format='fitted'
+      @realms={{@realms}}
+    >
+      <:loading>
+        <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
+      </:loading>
+      <:response as |cards|>
+        <BoxelSelect
+          class='instance-chooser'
+          @dropdownClass='instances-dropdown-content'
+          @options={{cards}}
+          @selected={{@card}}
+          @selectedItemComponent={{if
+            @card
+            (component SelectedItem title=(getItemTitle @card))
+          }}
+          @renderInPlace={{true}}
+          @onChange={{@onSelect}}
+          @placeholder='Please Select'
+          @beforeOptionsComponent={{component BeforeOptions}}
+          @afterOptionsComponent={{component
+            AfterOptions
+            chooseCard=@chooseCard
+            createNew=@createNew
+            createNewIsRunning=@createNewIsRunning
+          }}
+          data-test-instance-chooser
+          as |card|
+        >
+          <CardContainer class='card' @displayBoundaries={{true}}>
+            <card.component />
+          </CardContainer>
+        </BoxelSelect>
+      </:response>
+    </PrerenderedCardSearch>
+
     <style scoped>
-      .playground-panel-content {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-        min-height: 100%;
-      }
       .loading-icon {
         height: var(--boxel-form-control-height);
-      }
-      .instance-chooser-container {
-        position: sticky;
-        z-index: 1;
-        top: 0;
-        display: flex;
-        justify-content: center;
-      }
-      .instance-chooser-container > :deep(.ember-basic-dropdown) {
-        max-width: 100%;
       }
       .instance-chooser {
         width: 405px;
@@ -323,12 +249,56 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         container-type: size;
         background-color: var(--boxel-light);
       }
-      .preview-area {
-        flex-grow: 1;
-        z-index: 0;
-        display: flex;
-        flex-direction: column;
-      }
+    </style>
+  </template>;
+
+interface PlaygroundPreviewSignature {
+  Args: {
+    format: Format;
+    card: CardDef;
+    realmInfo?: EnhancedRealmInfo;
+    contextMenuItems?: MenuItem[];
+    onEdit?: () => void;
+    onFinishEditing?: () => void;
+  };
+}
+const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
+  <template>
+    {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
+      <CardContainer class='preview-container full-height-preview'>
+        <CardHeader
+          class='preview-header'
+          @cardTypeDisplayName={{cardTypeDisplayName @card}}
+          @cardTypeIcon={{cardTypeIcon @card}}
+          @realmInfo={{@realmInfo}}
+          @onEdit={{@onEdit}}
+          @onFinishEditing={{@onFinishEditing}}
+          @isTopCard={{true}}
+          @moreOptionsMenuItems={{@contextMenuItems}}
+        />
+        <Preview class='preview' @card={{@card}} @format={{@format}} />
+      </CardContainer>
+    {{else if (eq @format 'embedded')}}
+      <CardContainer class='preview-container'>
+        <Preview class='preview' @card={{@card}} @format={{@format}} />
+      </CardContainer>
+    {{else if (eq @format 'atom')}}
+      <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum
+        dolor sit amet, consectetur adipiscing elit, sed do
+        <Preview
+          class='atom-preview'
+          @card={{@card}}
+          @format={{@format}}
+          @displayContainer={{false}}
+        />
+        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+        veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat.</div>
+    {{else if (eq @format 'fitted')}}
+      <FittedFormatGallery @card={{@card}} @isDarkMode={{true}} />
+    {{/if}}
+
+    <style scoped>
       .preview-container {
         height: auto;
       }
@@ -338,22 +308,15 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         grid-auto-rows: max-content 1fr;
       }
       .preview-header {
-        background-color: var(--boxel-100);
         box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
         z-index: 1;
+      }
+      .preview-header:not(.is-editing) {
+        background-color: var(--boxel-100);
       }
       .preview {
         box-shadow: none;
         border-radius: 0;
-      }
-      .format-chooser {
-        position: sticky;
-        bottom: 0;
-        margin-top: auto;
-
-        --boxel-format-chooser-button-bg-color: var(--boxel-light);
-        --boxel-format-chooser-button-width: 80px;
-        --boxel-format-chooser-button-min-width: 80px;
       }
       .atom-preview-container {
         color: #c7c7c7;
@@ -370,6 +333,83 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         font: 600 var(--boxel-font-xs);
         line-height: 1.27;
         letter-spacing: 0.17px;
+      }
+    </style>
+  </template>;
+
+interface PlaygroundContentSignature {
+  Args: {
+    codeRef: ResolvedCodeRef;
+    moduleId: string;
+  };
+}
+class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
+  <template>
+    <div class='playground-panel-content'>
+      <div class='instance-chooser-container'>
+        <InstanceSelectDropdown
+          @query={{this.query}}
+          @realms={{this.recentRealms}}
+          @card={{this.card}}
+          @onSelect={{this.onSelect}}
+          @chooseCard={{perform this.chooseCard}}
+          @createNew={{perform this.createNew}}
+          @createNewIsRunning={{this.createNew.isRunning}}
+        />
+      </div>
+      {{#if this.card}}
+        <div class='preview-area'>
+          <PlaygroundPreview
+            @card={{this.card}}
+            @format={{this.format}}
+            @realmInfo={{this.realmInfo}}
+            @contextMenuItems={{this.contextMenuItems}}
+            @onEdit={{if this.canEdit (fn this.setFormat 'edit')}}
+            @onFinishEditing={{if
+              (eq this.format 'edit')
+              (fn this.setFormat 'isolated')
+            }}
+          />
+        </div>
+        <FormatChooser
+          class='format-chooser'
+          @format={{this.format}}
+          @setFormat={{this.setFormat}}
+        />
+      {{/if}}
+    </div>
+
+    <style scoped>
+      .playground-panel-content {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+        min-height: 100%;
+      }
+      .instance-chooser-container {
+        position: sticky;
+        z-index: 1;
+        top: 0;
+        display: flex;
+        justify-content: center;
+      }
+      .instance-chooser-container > :deep(.ember-basic-dropdown) {
+        max-width: 100%;
+      }
+      .preview-area {
+        flex-grow: 1;
+        z-index: 0;
+        display: flex;
+        flex-direction: column;
+      }
+      .format-chooser {
+        position: sticky;
+        bottom: 0;
+        margin-top: auto;
+
+        --boxel-format-chooser-button-bg-color: var(--boxel-light);
+        --boxel-format-chooser-button-width: 80px;
+        --boxel-format-chooser-button-min-width: 80px;
       }
     </style>
   </template>
@@ -480,8 +520,14 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private persistSelections = (cardId: string, format = this.format) => {
-    this.newCardJSON = undefined;
+    if (this.newCardJSON) {
+      this.newCardJSON = undefined;
+    }
+    if (this.card?.id === cardId && this.format === format) {
+      return;
+    }
     this.playgroundSelections[this.args.moduleId] = { cardId, format };
+
     window.localStorage.setItem(
       PlaygroundSelections,
       JSON.stringify(this.playgroundSelections),
@@ -528,53 +574,39 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
   });
 
-  private get canEdit() {
-    return (
-      this.format !== 'edit' &&
-      this.card?.id &&
-      this.realm.canWrite(this.card.id)
-    );
+  private get realmInfo() {
+    if (!this.card?.id) {
+      return undefined;
+    }
+    return this.realm.info(this.card.id);
   }
 
-  @action
-  private setEditFormat() {
-    if (!this.card?.id) {
-      return;
-    }
-    this.persistSelections(this.card.id, 'edit');
+  private get canEdit() {
+    return Boolean(
+      this.format !== 'edit' &&
+        this.card?.id &&
+        this.realm.canWrite(this.card.id),
+    );
   }
 }
 
 interface Signature {
   Args: {
-    moduleContentsResource: ModuleContentsResource;
-    cardType?: CardType;
+    codeRef: ResolvedCodeRef;
+    isLoadingNewModule?: boolean;
   };
   Element: HTMLElement;
 }
 export default class PlaygroundPanel extends Component<Signature> {
   <template>
     <section class='playground-panel' data-test-playground-panel>
-      {{#if this.isLoading}}
+      {{#if @isLoadingNewModule}}
         <LoadingIndicator @color='var(--boxel-light)' />
-      {{else if @cardType.type}}
-        {{#let (getCodeRef @cardType.type) as |codeRef|}}
-          {{#if codeRef}}
-            <PlaygroundPanelContent
-              @codeRef={{codeRef}}
-              @moduleId={{@cardType.type.id}}
-              @displayName={{@cardType.type.displayName}}
-            />
-          {{else}}
-            <p class='error'>
-              Error: Selected module is not for an exported card, or its code
-              ref could not be loaded.
-            </p>
-          {{/if}}
-        {{/let}}
       {{else}}
-        {{! TODO: error state }}
-        <p class='error'>Error: Playground could not be loaded.</p>
+        <PlaygroundPanelContent
+          @codeRef={{@codeRef}}
+          @moduleId={{this.moduleId}}
+        />
       {{/if}}
     </section>
     <style scoped>
@@ -592,17 +624,10 @@ export default class PlaygroundPanel extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
         overflow: auto;
       }
-      .error {
-        margin: 0;
-        color: var(--boxel-light);
-      }
     </style>
   </template>
 
-  get isLoading() {
-    return (
-      this.args.moduleContentsResource.isLoadingNewModule ||
-      this.args.cardType?.isLoading
-    );
+  get moduleId() {
+    return internalKeyFor(this.args.codeRef, undefined);
   }
 }

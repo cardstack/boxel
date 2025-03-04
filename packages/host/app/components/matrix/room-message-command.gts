@@ -69,6 +69,7 @@ export default class RoomMessageCommand extends Component<Signature> {
     scrollbar: {
       alwaysConsumeMouseWheel: false,
     },
+    lineNumbers: 'off',
   };
 
   private get previewCommandCode() {
