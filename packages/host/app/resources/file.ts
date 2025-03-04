@@ -15,7 +15,7 @@ import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
@@ -93,7 +93,7 @@ class _FileResource extends Resource<Args> {
 
   private setSubscription(
     realmURL: string,
-    callback: (ev: RealmEventEventContent) => void,
+    callback: (ev: RealmEventContent) => void,
   ) {
     if (this.subscription && this.subscription.url !== realmURL) {
       this.subscription.unsubscribe();
@@ -199,7 +199,7 @@ class _FileResource extends Resource<Args> {
       },
     });
 
-    this.setSubscription(realmURL, (event: RealmEventEventContent) => {
+    this.setSubscription(realmURL, (event: RealmEventContent) => {
       if (
         event.eventName !== 'index' ||
         // we wait specifically for the index complete event ("incremental") so

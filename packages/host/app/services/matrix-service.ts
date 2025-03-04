@@ -77,7 +77,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
-  RealmEventEventContent,
+  RealmEventContent,
   CommandDefinitionsContent,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -1446,7 +1446,7 @@ export default class MatrixService extends Service {
       } else {
         this.messageService.relayMatrixSSE(
           realmResourceForEvent.url,
-          event.content as RealmEventEventContent,
+          event.content as RealmEventContent,
         );
       }
     }

@@ -30,7 +30,7 @@ import type {
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
-import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 export class NodeAdapter implements RealmAdapter {
@@ -197,7 +197,7 @@ export class NodeAdapter implements RealmAdapter {
   }
 
   async broadcastRealmEvent(
-    event: RealmEventEventContent,
+    event: RealmEventContent,
     matrixClient: MatrixClient,
   ): Promise<void> {
     // FIXME this can be shared in a realm, the function to send an individual event in a realm should be in the adapter

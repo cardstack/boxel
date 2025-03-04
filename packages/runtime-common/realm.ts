@@ -81,7 +81,7 @@ import {
   Utils,
 } from './matrix-backend-authentication';
 
-import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -171,7 +171,7 @@ export interface RealmAdapter {
   setLoader?(loader: Loader): void;
 
   broadcastRealmEvent(
-    event: RealmEventEventContent,
+    event: RealmEventContent,
     matrixClient: MatrixClient,
   ): Promise<void>;
 }
@@ -2041,9 +2041,7 @@ export class Realm {
     });
   }
 
-  private async broadcastRealmEvent(
-    event: RealmEventEventContent,
-  ): Promise<void> {
+  private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
     this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
   }
 

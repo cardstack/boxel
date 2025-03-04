@@ -72,8 +72,8 @@ import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matr
 import type {
   IncrementalIndexEventContent,
   MatrixEvent,
-  RealmEventEvent,
-  RealmEventEventContent,
+  RealmEvent,
+  RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import isEqual from 'lodash/isEqual';
 
@@ -4089,17 +4089,17 @@ function findRealmEvent(
   events: MatrixEvent[],
   eventName: string,
   indexType: string,
-): RealmEventEvent | undefined {
+): RealmEvent | undefined {
   return events.find(
     (m) =>
       m.type === APP_BOXEL_REALM_EVENT_EVENT_TYPE &&
       m.content.eventName === eventName &&
       (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
-  ) as RealmEventEvent | undefined;
+  ) as RealmEvent | undefined;
 }
 
 function realmEventIsIndex(
-  event: RealmEventEventContent,
+  event: RealmEventContent,
 ): event is IncrementalIndexEventContent {
   return event.eventName === 'index';
 }

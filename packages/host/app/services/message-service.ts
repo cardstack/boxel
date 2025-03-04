@@ -8,7 +8,7 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
-import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
@@ -16,20 +16,15 @@ import type NetworkService from './network';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
-  @tracked listenerCallbacks: Map<
-    string,
-    ((ev: RealmEventEventContent) => void)[]
-  > = new Map();
+  @tracked listenerCallbacks: Map<string, ((ev: RealmEventContent) => void)[]> =
+    new Map();
   @service declare private network: NetworkService;
 
   register() {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
   }
 
-  subscribe(
-    realmURL: string,
-    cb: (ev: RealmEventEventContent) => void,
-  ): () => void {
+  subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void {
     if (!this.listenerCallbacks.has(realmURL)) {
       this.listenerCallbacks.set(realmURL, []);
     }
@@ -64,7 +59,7 @@ export default class MessageService extends Service {
     return () => {};
   }
 
-  relayMatrixSSE(realmURL: string, event: RealmEventEventContent) {
+  relayMatrixSSE(realmURL: string, event: RealmEventContent) {
     console.log('relaying matrix sse event', realmURL, event);
     this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
       cb(event);

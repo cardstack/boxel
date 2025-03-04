@@ -21,7 +21,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import EnvironmentService from './environment-service';
 
@@ -229,7 +229,7 @@ export default class StoreService extends Service {
     return { url, card, error };
   }
 
-  private handleInvalidations = (event: RealmEventEventContent) => {
+  private handleInvalidations = (event: RealmEventContent) => {
     if (event.eventName !== 'index') {
       return;
     }

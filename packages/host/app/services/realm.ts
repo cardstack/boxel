@@ -35,7 +35,7 @@ import { assertNever } from '@cardstack/host/utils/assert-never';
 
 import type {
   IndexRealmEventContent,
-  RealmEventEventContent,
+  RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
@@ -155,7 +155,7 @@ class RealmResource {
     this.subscription = {
       unsubscribe: this.messageService.subscribe(
         this.realmURL,
-        (event: RealmEventEventContent) => {
+        (event: RealmEventContent) => {
           if (!this.info) {
             console.warn(
               `No realm info exists for ${this.realmURL} when trying to set indexing status`,

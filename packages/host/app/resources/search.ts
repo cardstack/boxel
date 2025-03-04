@@ -21,7 +21,7 @@ import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { RealmEventEventContent } from 'https://cardstack.com/base/matrix-event';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import { asURL } from '../services/store';
 
@@ -66,25 +66,22 @@ export class Search extends Resource<Args> {
     if (isLive) {
       this.subscriptions = this.realmsToSearch.map((realm) => ({
         url: `${realm}_message`,
-        unsubscribe: subscribeToRealm(
-          realm,
-          (event: RealmEventEventContent) => {
-            if (query === undefined) {
-              return;
-            }
-            // we are only interested in incremental index events
-            if (
-              event.eventName !== 'index' ||
-              event.indexType !== 'incremental'
-            ) {
-              return;
-            }
-            this.search.perform(query);
-            if (doWhileRefreshing) {
-              this.doWhileRefreshing.perform(doWhileRefreshing);
-            }
-          },
-        ),
+        unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
+          if (query === undefined) {
+            return;
+          }
+          // we are only interested in incremental index events
+          if (
+            event.eventName !== 'index' ||
+            event.indexType !== 'incremental'
+          ) {
+            return;
+          }
+          this.search.perform(query);
+          if (doWhileRefreshing) {
+            this.doWhileRefreshing.perform(doWhileRefreshing);
+          }
+        }),
       }));
 
       registerDestructor(this, () => {

@@ -308,12 +308,12 @@ export interface RealmServerEventContent {
   body: string;
 }
 
-export interface RealmEventEvent extends BaseMatrixEvent {
+export interface RealmEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_REALM_EVENT_EVENT_TYPE;
-  content: RealmEventEventContent;
+  content: RealmEventContent;
 }
 
-export type RealmEventEventContent =
+export type RealmEventContent =
   | IndexRealmEventContent
   | UpdateRealmEventContent;
 
@@ -377,7 +377,7 @@ export type MatrixEvent =
   | CommandDefinitionsEvent
   | CardMessageEvent
   | RealmServerEvent
-  | RealmEventEvent
+  | RealmEvent
   | RoomNameEvent
   | RoomTopicEvent
   | InviteEvent
