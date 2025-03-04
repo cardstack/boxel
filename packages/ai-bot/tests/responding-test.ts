@@ -362,6 +362,30 @@ module('Responding', (hooks) => {
       thinkingMessage,
       'Thinking message should be sent first',
     );
+    assert.notOk(
+      sentEvents[0].content['m.relates_to'],
+      'The tool call event should not replace any message',
+    );
+    assert.equal(
+      sentEvents[1].content.body,
+      'some content',
+      'Content message should be sent next',
+    );
+    assert.strictEqual(
+      sentEvents[1].content['m.relates_to']?.event_id,
+      sentEvents[0].eventId,
+      'The content event should replace the initial message',
+    );
+    assert.equal(
+      sentEvents[2].content.body,
+      'some content',
+      'Content message plus function description should be sent next',
+    );
+    assert.strictEqual(
+      sentEvents[2].content['m.relates_to']?.event_id,
+      sentEvents[0].eventId,
+      'The command event should replace the initial message',
+    );
     assert.deepEqual(
       sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
       [
@@ -531,6 +555,42 @@ module('Responding', (hooks) => {
         event_id: '0',
       },
       'The replacement event with the tool calls should replace the original message',
+    );
+  });
+
+  test('Updates message type to command when tool call is in progress', async () => {
+    await responder.initialize();
+    await responder.onChunk(
+      {} as any,
+      snapshotWithToolCall({
+        name: 'patchCard',
+        arguments: {},
+      }),
+    );
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(
+      sentEvents.length,
+      2,
+      'Thinking message and event updating message type should be sent',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      thinkingMessage,
+      'Thinking message should be sent first',
+    );
+    assert.deepEqual(
+      sentEvents[1].content[APP_BOXEL_COMMAND_REQUESTS_KEY].length,
+      1,
+      'The message type should reflect that the model is preparing a tool call',
+    );
+    assert.deepEqual(
+      sentEvents[1].content['m.relates_to'],
+      {
+        rel_type: 'm.replace',
+        event_id: '0',
+      },
+      'The tool call event should replace the thinking message',
     );
   });
 });
