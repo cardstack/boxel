@@ -32,6 +32,8 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
+
 import BinaryFileInfo from './binary-file-info';
 
 interface Signature {
@@ -54,6 +56,7 @@ export default class CodeEditor extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare recentFilesService: RecentFilesService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
@@ -122,6 +125,18 @@ export default class CodeEditor extends Component<Signature> {
 
   @cached
   private get initialMonacoCursorPosition() {
+    if (this.codePath) {
+      let recentFile = this.recentFilesService.findRecentFileByURL(
+        this.codePath.toString(),
+      );
+      if (recentFile?.cursorPosition) {
+        return new Position(
+          recentFile.cursorPosition.line,
+          recentFile.cursorPosition.column,
+        );
+      }
+    }
+
     let loc =
       this.args.selectedDeclaration?.path?.node &&
       'body' in this.args.selectedDeclaration.path.node &&
@@ -193,6 +208,22 @@ export default class CodeEditor extends Component<Signature> {
         );
       }
     }
+  }
+
+  @action
+  private onCursorPositionChange(position: Position) {
+    this.selectDeclarationByMonacoCursorPosition(position);
+
+    if (!this.codePath) {
+      return;
+    }
+    this.recentFilesService.updateCursorPositionByURL(
+      this.codePath.toString(),
+      {
+        line: position.lineNumber,
+        column: position.column,
+      },
+    );
   }
 
   @action
@@ -303,7 +334,7 @@ export default class CodeEditor extends Component<Signature> {
             monacoSDK=this.monacoSDK
             language=this.language
             initialCursorPosition=this.initialMonacoCursorPosition
-            onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
+            onCursorPositionChange=this.onCursorPositionChange
             readOnly=@isReadOnly
             editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
           }}

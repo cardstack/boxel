@@ -967,7 +967,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([[testRealmURL, 'Pet/vangogh.json']]),
+      JSON.stringify([[testRealmURL, 'Pet/vangogh.json', null]]),
     );
     await visitOperatorMode({
       stacks: [
@@ -993,7 +993,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
-      JSON.stringify([[testRealmURL, 'Pet/vangogh.json']]),
+      JSON.stringify([[testRealmURL, 'Pet/vangogh.json', null]]),
     );
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
 
@@ -1069,8 +1069,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([
-        [testRealmURL, 'Pet/vangogh.json'],
-        [testRealmURL, 'Pet/mango.json'],
+        [testRealmURL, 'Pet/vangogh.json', null],
+        [testRealmURL, 'Pet/mango.json', null],
       ]),
     );
 
@@ -1107,7 +1107,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .doesNotExist('stack item removed');
     assert.deepEqual(
       window.localStorage.getItem('recent-files'),
-      JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
+      JSON.stringify([[testRealmURL, 'Pet/mango.json', null]]),
       'the deleted card has been removed from recent files',
     );
   });
@@ -1116,8 +1116,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
-        [testRealmURL, 'pet.gts'],
-        [testRealmURL, 'Pet/mango.json'],
+        [testRealmURL, 'pet.gts', null],
+        [testRealmURL, 'Pet/mango.json', null],
       ]),
     );
     await visitOperatorMode({
@@ -1128,8 +1128,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
       JSON.stringify([
-        [testRealmURL, 'pet.gts'],
-        [testRealmURL, 'Pet/mango.json'],
+        [testRealmURL, 'pet.gts', { line: 5, column: 35 }],
+        [testRealmURL, 'Pet/mango.json', null],
       ]),
     );
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
@@ -1147,7 +1147,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     assert.deepEqual(
       window.localStorage.getItem('recent-files'),
-      JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
+      JSON.stringify([[testRealmURL, 'Pet/mango.json', null]]),
       'the deleted card has been removed from recent files',
     );
 
@@ -1164,12 +1164,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     });
     window.localStorage.setItem(
       'recent-files',
-      JSON.stringify([[testRealmURL, 'pet.gts']]),
+      JSON.stringify([[testRealmURL, 'pet.gts', null]]),
     );
     await waitForCodeEditor();
     assert.strictEqual(
       window.localStorage.getItem('recent-files'),
-      JSON.stringify([[testRealmURL, 'pet.gts']]),
+      JSON.stringify([[testRealmURL, 'pet.gts', null]]),
     );
 
     await waitFor(`[data-test-delete-module-button]`);
@@ -1398,9 +1398,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasText(`${elementName} card`);
 
     //click linksTo many card
-    await visitOperatorMode(operatorModeState);
-    await waitForCodeEditor();
-
+    await click('[data-boxel-selector-item-text="ChildCard1"]');
     elementName = 'AncestorCard2';
     await waitFor(
       `[data-test-card-schema="ChildCard1"] [data-test-field-name="field4"] [data-test-card-display-name="${elementName}"]`,

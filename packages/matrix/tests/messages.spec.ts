@@ -130,7 +130,9 @@ test.describe('Room messages', () => {
     );
   });
 
-  test(`it can send a markdown message`, async ({ page }) => {
+  test(`it can send a markdown message, and escape html tags`, async ({
+    page,
+  }) => {
     await login(page, 'user1', 'pass', { url: appURL });
     let room1 = await getRoomId(page);
     await sendMessage(page, room1, 'message with _style_');
@@ -143,6 +145,15 @@ test.describe('Room messages', () => {
     await expect(
       page.locator(`[data-test-message-idx="0"] .content em`),
     ).toContainText('style');
+
+    await sendMessage(page, room1, '<h1>Hello</h1> <template>Hello</template>');
+    // this is to assert that the html tags are escaped
+    let innerHTML = await page
+      .locator('[data-test-message-idx="1"] .content')
+      .evaluate((el) => el.innerHTML);
+    expect(innerHTML).toContain(
+      '&lt;h1&gt;Hello&lt;/h1&gt; &lt;template&gt;Hello&lt;/template&gt;',
+    );
   });
 
   test(`it can create a room specific pending message`, async ({ page }) => {
