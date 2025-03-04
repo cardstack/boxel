@@ -61,6 +61,7 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 import { pauseTest } from '@ember/test-helpers';
+import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
 let matrixRoomId = '';
 let maybeBoomShouldBoom = true;
@@ -1139,49 +1140,64 @@ module('Acceptance | Commands tests', function (hooks) {
     );
   });
 
-  test('a command that errors when executing allows retry', async function (assert) {
-    await visitOperatorMode({
-      stacks: [
-        [
+  module('suspending global error hook', (hooks) => {
+    suspendGlobalErrorHook(hooks);
+
+    test('a command that errors when executing allows retry', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/hassan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await click('[data-test-maybe-boom-via-ai-assistant]');
+      await waitUntil(() => getRoomIds().length > 0);
+
+      await click('[data-test-open-ai-assistant-room-button]');
+      let roomId = getRoomIds().pop()!;
+      let message = getRoomEvents(roomId).pop()!;
+      let boxelMessageData = JSON.parse(message.content.data);
+      let toolName = boxelMessageData.context.tools[0].function.name;
+      maybeBoomShouldBoom = true;
+      simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'Will it boom?',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        formatted_body: 'Will it boom?',
+        format: 'org.matrix.custom.html',
+        [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
           {
-            id: `${testRealmURL}Person/hassan`,
-            format: 'isolated',
+            id: '8406a6eb-a3d5-494f-a7f3-ae9880115756',
+            name: toolName,
+            arguments: {},
           },
         ],
-      ],
+      });
+
+      await settled();
+      let commandResultEvents = await getRoomEvents(roomId).filter(
+        (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      );
+      assert.equal(
+        commandResultEvents.length,
+        0,
+        'No command result event dispatched',
+      );
+      maybeBoomShouldBoom = false;
+      await click('[data-test-retry-command-button]');
+      commandResultEvents = await getRoomEvents(roomId).filter(
+        (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+      );
+      assert.equal(
+        commandResultEvents.length,
+        1,
+        'No command result event dispatched',
+      );
+      assert.dom('[data-test-apply-state="applied"]').exists();
     });
-
-    await click('[data-test-maybe-boom-via-ai-assistant]');
-    await waitUntil(() => getRoomIds().length > 0);
-
-    await click('[data-test-open-ai-assistant-room-button]');
-    let roomId = getRoomIds().pop()!;
-    let message = getRoomEvents(roomId).pop()!;
-    let boxelMessageData = JSON.parse(message.content.data);
-    let toolName = boxelMessageData.context.tools[0].function.name;
-
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Will it boom?',
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Will it boom?',
-      format: 'org.matrix.custom.html',
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
-        {
-          id: '8406a6eb-a3d5-494f-a7f3-ae9880115756',
-          name: toolName,
-          arguments: {},
-        },
-      ],
-    });
-
-    await settled();
-    let commandResultEvents = await getRoomEvents(roomId).filter(
-      (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-    );
-    assert.equal(
-      commandResultEvents.length,
-      0,
-      'No command result event dispatched',
-    );
   });
 });

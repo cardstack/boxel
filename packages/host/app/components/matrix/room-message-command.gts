@@ -267,7 +267,7 @@ export default class RoomMessageCommand extends Component<Signature> {
             class='retry-button'
             @size='small'
             @kind='secondary-dark'
-            data-test-ai-bot-retry-button
+            data-test-retry-command-button
           >
             Retry
           </Button>

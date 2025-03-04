@@ -58,6 +58,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { suspendGlobalErrorHook } from '../../helpers/uncaught-exceptions';
 
 module('Integration | ai-assistant-panel', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -1192,18 +1193,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   module('suspending global error hook', (hooks) => {
-    let tmp: any;
-    let uncaughtException: any;
-    hooks.before(() => {
-      tmp = QUnit.onUncaughtException;
-      QUnit.onUncaughtException = (err) => {
-        uncaughtException = err;
-      };
-    });
+    let { capturedExceptions } = suspendGlobalErrorHook(hooks);
 
-    hooks.after(() => {
-      QUnit.onUncaughtException = tmp;
-    });
     test('it can handle an error during room creation', async function (assert) {
       await setCardInOperatorModeState();
       await renderComponent(
@@ -1227,7 +1218,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       assert.dom('[data-test-room-error]').exists();
       assert.dom('[data-test-room]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isDisabled();
-      assert.strictEqual(uncaughtException.message, 'Intentional error thrown');
+      assert.strictEqual(
+        capturedExceptions[0].message,
+        'Intentional error thrown',
+      );
       await percySnapshot(
         'Integration | ai-assistant-panel | it can handle an error during room creation | error state',
       );
