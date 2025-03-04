@@ -332,6 +332,7 @@ export class FittedTask extends Component<typeof Task> {
         height: auto;
         overflow: unset;
         margin-left: auto;
+        --entity-display-align-items: center;
       }
       /*catch all for dismissing tags*/
       @container fitted-card (width <= 226px) {

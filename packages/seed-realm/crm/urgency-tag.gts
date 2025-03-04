@@ -121,7 +121,7 @@ class UrgencyTagEdit extends Component<typeof UrgencyTag> {
 
 export class UrgencyTag extends FieldDef {
   static icon = CalendarExclamation;
-  static displayName = 'CRM Urgency Tag';
+  static displayName = 'Urgency Tag';
   static values = URGENCY_TAG_VALUES;
   @field index = contains(NumberField);
   @field label = contains(StringField);

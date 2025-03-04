@@ -112,7 +112,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       :deep(.code-copy-button .copy-text) {
         color: transparent;
       }
-      :deep(.code-copy-button .copy-text:hover) {
+      :deep(.code-copy-button:hover .copy-text) {
         color: var(--boxel-highlight);
       }
     </style>
@@ -125,5 +125,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     scrollbar: {
       alwaysConsumeMouseWheel: false,
     },
+    lineNumbers: 'off',
   };
 }

@@ -3,6 +3,8 @@ export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 export const APP_BOXEL_COMMAND_MSGTYPE = 'app.boxel.command';
 export const APP_BOXEL_CARD_FORMAT = 'app.boxel.card';
 export const APP_BOXEL_COMMAND_RESULT_EVENT_TYPE = 'app.boxel.commandResult';
+export const APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE =
+  'app.boxel.commandDefinitions';
 export const APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE =
   'app.boxel.commandResultWithOutput';
 export const APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE =
@@ -16,6 +18,7 @@ export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
 export const DEFAULT_LLM = 'openai/gpt-4o';
 export const DEFAULT_LLM_LIST = [
   'anthropic/claude-3.5-sonnet',
+  'anthropic/claude-3.7-sonnet',
   'google/gemini-pro-1.5',
   'openai/gpt-4o',
   'openai/gpt-4o-mini',

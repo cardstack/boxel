@@ -648,7 +648,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           title: 'Person Card',
           description: 'Spec for Person card',
           moduleHref: `${testRealmURL}person`,
-          name: null,
           readMe: null,
           specType: 'card',
           isCard: true,
@@ -734,6 +733,27 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
           },
         },
+        'people-skill.json': {
+          data: {
+            attributes: {
+              instructions: 'How to win friends and influence people',
+              commands: [
+                {
+                  codeRef: {
+                    module: `@cardstack/boxel-host/commands/switch-submode`,
+                    name: 'default',
+                  },
+                },
+              ],
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/skill-card',
+                name: 'SkillCard',
+              },
+            },
+          },
+        },
       },
     });
     let indexer = realm.realmIndexQueryEngine;
@@ -751,7 +771,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           title: 'Person Card',
           description: 'Spec for Person card',
           moduleHref: `${testRealmURL}person`,
-          name: null,
           readMe: null,
           specType: 'card',
           isCard: true,
@@ -800,6 +819,66 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         containedExamples: null,
         isCard: true,
         isField: false,
+      });
+    } else {
+      assert.ok(
+        false,
+        `search entry was an error: ${entry?.error.errorDetail.message}`,
+      );
+    }
+    entry = await indexer.cardDocument(new URL(`${testRealmURL}people-skill`));
+    if (entry?.type === 'doc') {
+      assert.deepEqual(entry.doc.data, {
+        id: `${testRealmURL}people-skill`,
+        type: 'card',
+        links: {
+          self: `${testRealmURL}people-skill`,
+        },
+        attributes: {
+          commands: [
+            {
+              codeRef: {
+                module: '@cardstack/boxel-host/commands/switch-submode',
+                name: 'default',
+              },
+              functionName: 'switch-submode_dd88',
+              requiresApproval: null,
+            },
+          ],
+          description: null,
+          instructions: 'How to win friends and influence people',
+          thumbnailURL: null,
+          title: null,
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'https://cardstack.com/base/skill-card',
+            name: 'SkillCard',
+          },
+          lastModified: adapter.lastModifiedMap.get(
+            `${testRealmURL}people-skill.json`,
+          ),
+          resourceCreatedAt: adapter.resourceCreatedAtMap.get(
+            `${testRealmURL}people-skill.json`,
+          ),
+          realmInfo: testRealmInfo,
+          realmURL: testRealmURL,
+        },
+      });
+      let instance = await indexer.instance(
+        new URL(`${testRealmURL}people-skill`),
+      );
+      assert.deepEqual(instance?.searchDoc, {
+        _cardType: 'Skill',
+        id: `${testRealmURL}people-skill`,
+        instructions: 'How to win friends and influence people',
+        commands: [
+          {
+            codeRef: `@cardstack/boxel-host/commands/switch-submode/default`,
+            functionName: 'switch-submode_dd88',
+            requiresApproval: false,
+          },
+        ],
       });
     } else {
       assert.ok(
@@ -2498,7 +2577,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           specType: 'card',
           moduleHref: `${testModuleRealm}pet-person`,
-          name: null,
           containedExamples: [],
           isCard: true,
           isField: false,

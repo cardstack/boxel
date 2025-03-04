@@ -1,6 +1,7 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 
@@ -21,7 +22,7 @@ import {
   RealmIcon,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
@@ -40,6 +41,7 @@ import {
 import PrerenderedCardSearch, {
   PrerenderedCard,
 } from '@cardstack/host/components/prerendered-card-search';
+import Preview from '@cardstack/host/components/preview';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import {
@@ -78,10 +80,11 @@ interface Signature {
             typeof SpecPreviewContent,
             | 'showCreateSpecIntent'
             | 'canWrite'
-            | 'ids'
-            | 'selectId'
+            | 'onSelectCard'
             | 'selectedId'
             | 'spec'
+            | 'isLoading'
+            | 'cards'
           >
         | WithBoundArgs<typeof SpecPreviewLoading, never>
       ),
@@ -164,18 +167,38 @@ interface ContentSignature {
   Args: {
     showCreateSpecIntent: boolean;
     canWrite: boolean;
-    selectId: (id: string) => void;
+    onSelectCard: (cardId: string) => void;
     selectedId: string;
-    ids: string[];
+    cards: PrerenderedCard[];
     spec: Spec | undefined;
+    isLoading: boolean;
   };
 }
 
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
 
+  constructor(owner: Owner, args: ContentSignature['Args']) {
+    super(owner, args);
+    this.initializeCardSelection();
+  }
+
   get onlyOneInstance() {
-    return this.args.ids.length === 1;
+    return this.args.cards.length === 1;
+  }
+
+  get shouldSelectFirstCard() {
+    return this.args.cards.length > 0 && !this.args.spec;
+  }
+
+  get cardIds() {
+    return this.args.cards.map((card) => card.url);
+  }
+
+  @action initializeCardSelection() {
+    if (this.shouldSelectFirstCard) {
+      this.args.onSelectCard(this.cardIds[0]);
+    }
   }
 
   getDropdownData = (id: string) => {
@@ -191,49 +214,69 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     };
   };
 
+  get displayIsolated() {
+    return !this.args.canWrite && this.args.cards.length > 0;
+  }
+
+  get displayCannotWrite() {
+    return !this.args.canWrite && this.args.cards.length === 0;
+  }
+
   <template>
-    <div class='container'>
+    <div
+      class={{cn
+        'container'
+        spec-intent-message=@showCreateSpecIntent
+        cannot-write=this.displayCannotWrite
+      }}
+    >
       {{#if @showCreateSpecIntent}}
-        <div class='spec-intent-message' data-test-create-spec-intent-message>
+        <div data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
         </div>
-      {{else if (not @canWrite)}}
-        <div class='spec-intent-message' data-test-cannot-write-intent-message>
-          Cannot create Boxel Specification inside this realm
+      {{else if this.displayCannotWrite}}
+        <div data-test-cannot-write-intent-message>
+          Cannot create new Boxel Specification inside this realm
         </div>
-      {{else}}
-        <div class='spec-preview'>
-          <div class='spec-selector' data-test-spec-selector>
-            <BoxelSelect
-              @options={{@ids}}
-              @selected={{@selectedId}}
-              @onChange={{@selectId}}
-              @matchTriggerWidth={{true}}
-              @disabled={{this.onlyOneInstance}}
-              as |id|
-            >
-              {{#if id}}
-                {{#let (this.getDropdownData id) as |data|}}
-                  {{#if data}}
-                    <div class='spec-selector-item'>
-                      <RealmIcon
-                        class='url-realm-icon'
-                        @realmInfo={{data.realmInfo}}
-                      />
-                      {{data.localPath}}
-                    </div>
-                  {{/if}}
-                {{/let}}
-              {{/if}}
-            </BoxelSelect>
-          </div>
 
-          {{#if @spec}}
-            {{#let (getComponent @spec) as |CardComponent|}}
-              <CardComponent @format='edit' />
-            {{/let}}
-          {{/if}}
-        </div>
+      {{else}}
+
+        {{#if @spec}}
+          <div class='spec-preview'>
+            <div class='spec-selector' data-test-spec-selector>
+              <BoxelSelect
+                @options={{this.cardIds}}
+                @selected={{@selectedId}}
+                @onChange={{@onSelectCard}}
+                @matchTriggerWidth={{true}}
+                @disabled={{this.onlyOneInstance}}
+                as |id|
+              >
+                {{#if id}}
+                  {{#let (this.getDropdownData id) as |data|}}
+                    {{#if data}}
+                      <div class='spec-selector-item'>
+                        <RealmIcon
+                          @canAnimate={{true}}
+                          class='url-realm-icon'
+                          @realmInfo={{data.realmInfo}}
+                        />
+                        <span data-test-spec-selector-item-path>
+                          {{data.localPath}}
+                        </span>
+                      </div>
+                    {{/if}}
+                  {{/let}}
+                {{/if}}
+              </BoxelSelect>
+            </div>
+            {{#if this.displayIsolated}}
+              <Preview @card={{@spec}} @format='isolated' />
+            {{else}}
+              <Preview @card={{@spec}} @format='edit' />
+            {{/if}}
+          </div>
+        {{/if}}
       {{/if}}
     </div>
 
@@ -250,13 +293,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
-        height: 100%;
         width: 100%;
-      }
-      .spec-preview {
         padding: var(--boxel-sp-sm);
       }
-      .spec-intent-message {
+      .spec-intent-message,
+      .cannot-write {
         background-color: var(--boxel-200);
         color: var(--boxel-450);
         font-weight: 500;
@@ -316,17 +357,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
-  @tracked _selectedId?: string;
-  @tracked ids: string[] = [];
-
-  // We must do this so cardIds are available in the root for usage with getCard
-  @action setCardIds(cards: PrerenderedCard[]) {
-    this.ids = cards.map((card) => card.url);
-  }
-
-  get selectedId() {
-    return this._selectedId ?? this.ids[0];
-  }
+  @tracked private _selectedCardId?: string;
+  @tracked private newCardJSON: LooseSingleCardDocument | undefined;
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -352,11 +384,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       if (isResolvedCodeRef(maybeRef)) {
         ref = maybeRef;
       }
-      let doc: LooseSingleCardDocument = {
+      this.newCardJSON = {
         data: {
           attributes: {
             specType,
             ref,
+            title: ref.name,
           },
           meta: {
             adoptsFrom: specRef,
@@ -364,16 +397,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           },
         },
       };
-      try {
-        let card = await this.cardService.createFromSerialized(doc.data, doc);
-        if (!card) {
-          throw new Error(
-            `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
-          );
-        }
-        await this.cardService.saveModel(card);
-      } catch (e: any) {
-        console.log('Error saving', e);
+      await this.cardResource.loaded;
+      if (this.card) {
+        this._selectedCardId = this.card.id;
+        this.newCardJSON = undefined;
       }
     },
   );
@@ -397,10 +424,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         },
       ],
     };
-  }
-
-  private get showCreateSpecIntent() {
-    return this.ids.length === 0 && this.canWrite;
   }
 
   //TODO: Improve identification of isApp and isSkill
@@ -471,17 +494,21 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  @action selectId(id: string): void {
-    this._selectedId = id;
+  @action onSelectCard(cardId: string): void {
+    this._selectedCardId = cardId;
   }
 
   get canWrite() {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private cardResource = getCard(this, () => this.selectedId, {
-    isAutoSave: () => true,
-  });
+  private cardResource = getCard(
+    this,
+    () => this.newCardJSON ?? this._selectedCardId,
+    {
+      isAutoSave: () => true,
+    },
+  );
 
   get card() {
     if (!this.cardResource.card) {
@@ -494,6 +521,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.card?.specType as SpecType;
   }
 
+  getSpecIntent = (cards: PrerenderedCard[]) => {
+    return cards.length === 0 && this.canWrite;
+  };
+
   <template>
     <PrerenderedCardSearch
       @query={{this.specQuery}}
@@ -501,27 +532,28 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       @realms={{this.realms}}
     >
       <:response as |cards|>
-        {{this.setCardIds cards}}
-        {{yield
-          (component
-            SpecPreviewTitle
-            showCreateSpecIntent=this.showCreateSpecIntent
-            createSpec=this.createSpec
-            isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-            specType=this.specType
-            numberOfInstances=this.ids.length
-          )
-          (component
-            SpecPreviewContent
-            showCreateSpecIntent=this.showCreateSpecIntent
-            canWrite=this.canWrite
-            selectId=this.selectId
-            selectedId=this.selectedId
-            ids=this.ids
-            spec=this.card
-            isLoading=false
-          )
-        }}
+        {{#let (this.getSpecIntent cards) as |showCreateSpecIntent|}}
+          {{yield
+            (component
+              SpecPreviewTitle
+              showCreateSpecIntent=showCreateSpecIntent
+              createSpec=this.createSpec
+              isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+              specType=this.specType
+              numberOfInstances=cards.length
+            )
+            (component
+              SpecPreviewContent
+              showCreateSpecIntent=showCreateSpecIntent
+              canWrite=this.canWrite
+              onSelectCard=this.onSelectCard
+              selectedId=this._selectedCardId
+              spec=this.card
+              isLoading=false
+              cards=cards
+            )
+          }}
+        {{/let}}
       </:response>
       <:loading>
         {{yield
@@ -531,17 +563,13 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             createSpec=this.createSpec
             isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
             specType=this.specType
-            numberOfInstances=this.ids.length
+            numberOfInstances=0
           )
           (component SpecPreviewLoading)
         }}
       </:loading>
     </PrerenderedCardSearch>
   </template>
-}
-
-function getComponent(cardOrField: Spec) {
-  return cardOrField.constructor.getComponent(cardOrField);
 }
 
 interface SpecTagSignature {

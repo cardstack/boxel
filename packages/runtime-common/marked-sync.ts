@@ -1,6 +1,7 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
 import { simpleHash } from '.';
+import { escapeHtmlTags } from './helpers/html';
 
 const CODEBLOCK_KEY_PREFIX = 'codeblock_';
 
@@ -22,7 +23,7 @@ export function markedSync(markdown: string) {
           // also note that since we are in common, we don't have ember-window-mock
           // available to us.
           globalThis.localStorage?.setItem(id, code);
-          return `<pre id="${id}" class="language-${language}" data-codeblock="${language}">${code}</pre></div>`;
+          return `<pre id="${id}" class="language-${language}" data-codeblock="${language}">${escapeHtmlTags(code)}</pre></div>`;
         },
       },
     })

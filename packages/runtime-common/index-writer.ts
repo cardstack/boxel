@@ -514,6 +514,7 @@ export class Batch {
     this.#perfLog.debug(`starting invalidation of ${url.href}`);
     let alias = trimExecutableExtension(url).href;
     let visited = new Set<string>();
+
     let invalidations = [
       ...new Set([
         ...(!this.nodeResolvedInvalidations.includes(alias) ? [url.href] : []),
@@ -554,6 +555,7 @@ export class Batch {
         rows,
       ),
     ]);
+
     this.#perfLog.debug(
       `inserted invalidated rows for  ${url.href} in ${
         Date.now() - insertStart

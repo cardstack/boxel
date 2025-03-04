@@ -1,6 +1,4 @@
-import { click } from '@ember/test-helpers';
-
-import { fillIn } from '@ember/test-helpers';
+import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
@@ -38,6 +36,14 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
       activeRealms: [testRealmURL],
     });
   setupOnSave(hooks);
+
+  const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import { Component } from 'https://cardstack.com/base/card-api';
+import CodeRefField from 'https://cardstack.com/base/code-ref';
+export class CodeRefDriver extends CardDef {
+  static displayName = "Code Ref Driver";
+  @field ref = contains(CodeRefField);
+}`;
 
   const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -133,6 +139,7 @@ export class BlogPost extends CardDef {
       contents: {
         'author.gts': authorCard,
         'blog-post.gts': blogPostCard,
+        'code-ref-driver.gts': codeRefDriverCard,
         'Author/jane-doe.json': {
           data: {
             attributes: {
@@ -350,6 +357,7 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="author.gts"]');
+    await click('[data-test-accordion-item="playground"] button');
     assert.dom('[data-test-instance-chooser]').hasText('Please Select');
     await click('[data-test-instance-chooser]');
     assert.dom('li.ember-power-select-option').exists({ count: 1 });
@@ -523,6 +531,39 @@ export class BlogPost extends CardDef {
       .exists({ count: 16 });
   });
 
+  test('can toggle edit format via button on card header', async function (assert) {
+    const playgroundCard = `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"]`;
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .hasText('Author');
+    assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
+    assert.dom('[data-test-author-title]').hasText('Jane Doe');
+    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+    await click(
+      '[data-test-boxel-card-header-actions] [data-test-edit-button]',
+    );
+
+    assert.dom(`${playgroundCard}[data-test-card-format="edit"]`).exists();
+    assert.dom('[data-test-card-header]').hasClass('is-editing');
+    assert.dom('[data-test-format-chooser-isolated]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-edit]').hasClass('active');
+    await click(
+      '[data-test-boxel-card-header-actions] [data-test-edit-button]',
+    );
+
+    assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
+    assert.dom('[data-test-card-header]').hasNoClass('is-editing');
+    assert.dom('[data-test-format-chooser-edit]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+  });
+
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -584,6 +625,7 @@ export class BlogPost extends CardDef {
     assert.deepEqual(recentFiles[0], [
       testRealmURL,
       'BlogPost/mad-hatter.json',
+      null,
     ]);
   });
 
@@ -594,7 +636,11 @@ export class BlogPost extends CardDef {
       codePath: `${testRealmURL}blog-post.gts`,
     });
     let recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
-    assert.deepEqual(recentFiles[0], [testRealmURL, 'blog-post.gts']);
+    assert.deepEqual(recentFiles[0], [
+      testRealmURL,
+      'blog-post.gts',
+      { column: 38, line: 7 },
+    ]);
     await click('[data-boxel-selector-item-text="BlogPost"]');
     await click('[data-test-accordion-item="playground"] button');
     assert
@@ -630,6 +676,60 @@ export class BlogPost extends CardDef {
       .dom('[data-option-index]')
       .exists({ count: 1 }, 'dropdown instance count is correct');
     assert.dom('[data-option-index]').containsText('Blog Post');
+  });
+
+  test('can create new instance with CodeRef field', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}code-ref-driver.gts`,
+    });
+    await click('[data-boxel-selector-item-text="CodeRefDriver"]');
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-test-create-instance]');
+
+    assert
+      .dom('[data-test-instance-chooser] [data-test-selected-item]')
+      .hasText('Untitled Code Ref Driver', 'created instance is selected');
+    assert
+      .dom(
+        `[data-test-playground-panel] [data-test-card][data-test-card-format="edit"]`,
+      )
+      .exists('new card is rendered in edit format');
+    assert
+      .dom(
+        '[data-test-playground-panel] [data-test-card] [data-test-field="ref"] input',
+      )
+      .hasNoValue('code ref field is empty');
+  });
+
+  test('can set relative CodeRef field', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}code-ref-driver.gts`,
+    });
+    await click('[data-boxel-selector-item-text="CodeRefDriver"]');
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-test-create-instance]');
+
+    assert
+      .dom(
+        '[data-test-playground-panel] [data-test-card] [data-test-ref] [data-test-boxel-input-validation-state="valid"]',
+      )
+      .doesNotExist('code ref validity is not set');
+    await fillIn(
+      '[data-test-playground-panel] [data-test-card] [data-test-field="ref"] input',
+      `../blog-post/BlogPost`,
+    );
+    await waitFor(
+      '[data-test-playground-panel] [data-test-card] [data-test-hasValidated]',
+    );
+    assert
+      .dom(
+        '[data-test-playground-panel] [data-test-card] [data-test-field="ref"] [data-test-boxel-input-validation-state="valid"]',
+      )
+      .exists('code ref is valid');
   });
 
   test<TestContextWithSSE>('playground preview for card with contained fields can live update when module changes', async function (assert) {

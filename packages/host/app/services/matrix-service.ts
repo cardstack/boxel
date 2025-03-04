@@ -27,6 +27,7 @@ import {
   LooseCardResource,
   ResolvedCodeRef,
   aiBotUsername,
+  getClass,
 } from '@cardstack/runtime-common';
 
 import {
@@ -36,12 +37,14 @@ import {
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
@@ -73,11 +76,13 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
+  CommandDefinitionsContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { CommandField, SkillCard } from 'https://cardstack.com/base/skill-card';
 
+import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -100,7 +105,6 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -513,7 +517,8 @@ export default class MatrixService extends Service {
       | CardMessageContent
       | CardFragmentContent
       | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent,
+      | CommandResultWithOutputContent
+      | CommandDefinitionsContent,
   ) {
     let roomData = await this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -578,11 +583,61 @@ export default class MatrixService extends Service {
     }
   }
 
+  async addCommandDefinitionsToRoomHistory(
+    commandDefinitions: CommandField[],
+    roomId: string,
+  ) {
+    // Create the command defs so getting the json schema
+    // and send it to the matrix room.
+    let commandDefinitionSchemas: {
+      codeRef: ResolvedCodeRef;
+      tool: Tool;
+    }[] = [];
+    const mappings = await basicMappings(this.loaderService.loader);
+    for (let commandDef of commandDefinitions) {
+      const Command = await getClass(
+        commandDef.codeRef,
+        this.loaderService.loader,
+      );
+      const command = new Command(this.commandService.commandContext);
+      const name = commandDef.functionName;
+      commandDefinitionSchemas.push({
+        codeRef: commandDef.codeRef,
+        tool: {
+          type: 'function',
+          function: {
+            name,
+            description: command.description,
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                },
+                ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
+              },
+              required: ['attributes', 'description'],
+            },
+          },
+        },
+      });
+    }
+    await this.sendEvent(roomId, 'm.room.message', {
+      msgtype: APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+      body: 'Command Definitions',
+      data: {
+        commandDefinitions: commandDefinitionSchemas,
+      },
+    });
+  }
+
   async addSkillCardsToRoomHistory(
     skills: SkillCard[],
     roomId: string,
     opts?: CardAPI.SerializeOpts,
   ): Promise<string[]> {
+    const commandDefinitions = skills.flatMap((skill) => skill.commands);
+    await this.addCommandDefinitionsToRoomHistory(commandDefinitions, roomId);
     return this.addCardsToRoom(skills, roomId, this.skillCardHashes, opts);
   }
 
@@ -662,7 +717,8 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = markdownToHtml(body);
+    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
+
     let tools: Tool[] = [getSearchTool()];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
@@ -814,9 +870,23 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills() {
+  async loadDefaultSkills(submode: Submode) {
+    let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
+
+    let codeModeDefaultSkills = [
+      `${baseRealm.url}SkillCard/code-module-editing`,
+    ];
+
+    let defaultSkills;
+
+    if (submode === 'code') {
+      defaultSkills = codeModeDefaultSkills;
+    } else {
+      defaultSkills = interactModeDefaultSkills;
+    }
+
     return await Promise.all(
-      DefaultSkillCards.map(async (skillCardURL) => {
+      defaultSkills.map(async (skillCardURL) => {
         return await this.cardService.getCard<SkillCard>(skillCardURL);
       }),
     );
@@ -846,6 +916,12 @@ export default class MatrixService extends Service {
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
     this.cardHashes = new Map();
+    this.skillCardHashes = new Map();
+    this._currentRoomId = undefined;
+    this.messagesToSend = new TrackedMap();
+    this.cardsToSend = new TrackedMap();
+    this.filesToSend = new TrackedMap();
+    this.currentUserEventReadReceipts = new TrackedMap();
   }
 
   private bindEventListeners() {
@@ -1363,6 +1439,20 @@ export default class MatrixService extends Service {
       // we need to scroll back to capture any room events fired before this one
       await this.client?.scrollback(room);
     }
+  }
+
+  async activateCodingSkill() {
+    if (!this.currentRoomId) {
+      return;
+    }
+
+    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      this.commandService.commandContext,
+    );
+    await addSkillsToRoomCommand.execute({
+      roomId: this.currentRoomId,
+      skills: await this.loadDefaultSkills('code'),
+    });
   }
 
   async setLLMForCodeMode() {

@@ -1,142 +1,297 @@
 import * as vscode from 'vscode';
-import { createClient } from 'matrix-js-sdk';
-
-interface AuthEntry {
-  access_token: string;
-  user_id: string;
-  device_id: string;
-}
-async function loginWithEmail(
-  email: string,
-  password: string,
-  matrixURL: string,
-) {
-  matrixURL = matrixURL.endsWith('/') ? matrixURL : matrixURL + '/';
-  let response = await fetch(`${matrixURL}_matrix/client/v3/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      identifier: {
-        type: 'm.id.thirdparty',
-        medium: 'email',
-        address: email,
-      },
-      password,
-      type: 'm.login.password',
-    }),
-  });
-  if (response.ok) {
-    return (await response.json()) as AuthEntry;
-  } else {
-    let data = (await response.json()) as { errcode: string; error: string };
-    let error = new Error(data.error) as any;
-    error.data = data;
-    error.status = response.status;
-    throw error;
-  }
-}
-
-async function login(username: string, password: string, matrixUrl: string) {
-  let usernameIsMatrixId = username.startsWith('@');
-  let usernameIsEmailAddress = username.includes('@') && !usernameIsMatrixId;
-
-  let login;
-
-  if (usernameIsEmailAddress) {
-    login = await loginWithEmail(username, password, matrixUrl);
-  } else {
-    let client = createClient({
-      baseUrl: matrixUrl,
-    });
-
-    login = await client.loginWithPassword(username, password);
-  }
-  return login;
-}
 
 export class SynapseAuthProvider implements vscode.AuthenticationProvider {
   static id = 'synapse';
-  label = 'Synapse';
-
+  public label = 'Boxel';
   private _sessions: vscode.AuthenticationSession[] = [];
+  private _initialized = false;
   private _onDidChangeSessions =
     new vscode.EventEmitter<vscode.AuthenticationProviderAuthenticationSessionsChangeEvent>();
-  onDidChangeSessions = this._onDidChangeSessions.event;
-  private sessionsLoaded = false;
-  private secretsStorage: vscode.SecretStorage;
+  public readonly onDidChangeSessions = this._onDidChangeSessions.event;
 
-  constructor(private context: vscode.ExtensionContext) {
-    this.secretsStorage = context.secrets;
+  constructor(private readonly context: vscode.ExtensionContext) {
+    console.log('[SynapseAuthProvider] Constructor called');
+    // Don't initialize in constructor, defer until needed
+  }
+
+  private async initialize(): Promise<void> {
+    try {
+      console.log('[SynapseAuthProvider] Initializing...');
+      if (this._initialized) {
+        console.log('[SynapseAuthProvider] Already initialized, skipping');
+        return;
+      }
+
+      try {
+        const storedSessions = await this.context.secrets.get(
+          SynapseAuthProvider.id,
+        );
+
+        if (storedSessions) {
+          console.log('[SynapseAuthProvider] Found stored sessions');
+          try {
+            this._sessions = JSON.parse(storedSessions);
+          } catch (e) {
+            console.error(
+              '[SynapseAuthProvider] Error parsing stored sessions:',
+              e,
+            );
+            // If there's an error parsing the sessions, clear them
+            try {
+              await this.context.secrets.delete(SynapseAuthProvider.id);
+            } catch (deleteError) {
+              console.error(
+                '[SynapseAuthProvider] Error deleting invalid sessions:',
+                deleteError,
+              );
+            }
+            this._sessions = [];
+          }
+        } else {
+          console.log('[SynapseAuthProvider] No stored sessions found');
+          this._sessions = [];
+        }
+      } catch (secretsError) {
+        console.error(
+          '[SynapseAuthProvider] Error accessing secrets storage:',
+          secretsError,
+        );
+        this._sessions = [];
+      }
+
+      this._initialized = true;
+    } catch (error) {
+      console.error('[SynapseAuthProvider] Initialization error:', error);
+      // Don't throw - just log and mark as initialized with empty sessions
+      this._initialized = true;
+      this._sessions = [];
+    }
+  }
+
+  private async storeSessions(): Promise<void> {
+    try {
+      console.log('[SynapseAuthProvider] Storing sessions');
+      await this.context.secrets.store(
+        SynapseAuthProvider.id,
+        JSON.stringify(this._sessions),
+      );
+    } catch (error) {
+      console.error('[SynapseAuthProvider] Error storing sessions:', error);
+      throw error;
+    }
+  }
+
+  public async getSessions(
+    _scopes?: string[],
+  ): Promise<vscode.AuthenticationSession[]> {
+    try {
+      console.log('[SynapseAuthProvider] Getting sessions...');
+      await this.initialize();
+      return this._sessions;
+    } catch (error) {
+      console.error('[SynapseAuthProvider] Error getting sessions:', error);
+      // Don't throw - return empty array instead to avoid breaking caller
+      return [];
+    }
   }
 
   async clearAllSessions() {
-    await this.secretsStorage.store('synapse-sessions', '[]');
-    this._sessions = [];
-    this._onDidChangeSessions.fire({
-      added: [],
-      removed: this._sessions,
-      changed: [],
-    });
+    try {
+      console.log('[SynapseAuthProvider] Clearing all sessions');
+      await this.context.secrets.delete(SynapseAuthProvider.id);
+      this._sessions = [];
+      this._onDidChangeSessions.fire({
+        added: [],
+        removed: this._sessions,
+        changed: [],
+      });
+    } catch (error) {
+      console.error('[SynapseAuthProvider] Error clearing sessions:', error);
+      // Still clear the in-memory sessions even if storage operation failed
+      this._sessions = [];
+    }
   }
 
-  async getSessions(): Promise<vscode.AuthenticationSession[]> {
-    if (!this.sessionsLoaded) {
-      this.sessionsLoaded = true;
-      const existingSessions =
-        await this.secretsStorage.get('synapse-sessions');
-      if (existingSessions) {
-        this._sessions = JSON.parse(existingSessions);
+  async createSession(
+    _scopes: string[],
+  ): Promise<vscode.AuthenticationSession> {
+    console.log('[SynapseAuthProvider] Creating new session...');
+    try {
+      // Make sure we're initialized
+      if (!this._initialized) {
+        await this.initialize();
       }
+
+      const serverUrl = vscode.workspace
+        .getConfiguration('boxel-tools')
+        .get('matrixServer') as string;
+
+      if (!serverUrl) {
+        console.error('[SynapseAuthProvider] No server URL configured');
+        throw new Error(
+          'No server URL configured. Please check your settings.',
+        );
+      }
+
+      console.log(`[SynapseAuthProvider] Using server: ${serverUrl}`);
+
+      // Test the server connection
+      try {
+        console.log('[SynapseAuthProvider] Testing server connection...');
+        const versionsUrl = new URL('_matrix/client/versions', serverUrl);
+        const response = await fetch(versionsUrl.toString(), {
+          method: 'GET',
+          headers: {
+            Accept: 'application/json',
+          },
+        });
+
+        if (!response.ok) {
+          console.error(
+            `[SynapseAuthProvider] Server connection test failed: ${response.status} ${response.statusText}`,
+          );
+          throw new Error(
+            `Cannot connect to server: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        const data = await response.json();
+        console.log(
+          '[SynapseAuthProvider] Server connection successful:',
+          data,
+        );
+      } catch (connectionError) {
+        console.error(
+          '[SynapseAuthProvider] Server connection error:',
+          connectionError,
+        );
+        throw new Error(
+          `Failed to connect to server: ${
+            connectionError instanceof Error
+              ? connectionError.message
+              : String(connectionError)
+          }`,
+        );
+      }
+
+      const authUrl = new URL('_matrix/client/v3/login', serverUrl);
+      console.log(
+        `[SynapseAuthProvider] Opening auth URL: ${authUrl.toString()}`,
+      );
+
+      const result = await vscode.window.showInputBox({
+        ignoreFocusOut: true,
+        placeHolder: 'Username',
+        prompt: 'Enter your username',
+        title: 'Boxel Authentication',
+      });
+
+      if (!result) {
+        console.log('[SynapseAuthProvider] User canceled username input');
+        throw new Error('Authentication was canceled by the user');
+      }
+
+      console.log(
+        '[SynapseAuthProvider] Username provided, requesting password',
+      );
+      const username = result;
+
+      const password = await vscode.window.showInputBox({
+        ignoreFocusOut: true,
+        password: true,
+        placeHolder: 'Password',
+        prompt: 'Enter your password',
+        title: 'Boxel Authentication',
+      });
+
+      if (!password) {
+        console.log('[SynapseAuthProvider] User canceled password input');
+        throw new Error('Authentication was canceled by the user');
+      }
+
+      console.log(
+        '[SynapseAuthProvider] Credentials provided, attempting login...',
+      );
+
+      try {
+        const response = await fetch(authUrl.toString(), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            type: 'm.login.password',
+            user: username,
+            password: password,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('[SynapseAuthProvider] Login failed:', {
+            status: response.status,
+            statusText: response.statusText,
+            error: errorText,
+          });
+          throw new Error(
+            `Login failed: ${response.status} ${response.statusText}`,
+          );
+        }
+
+        console.log('[SynapseAuthProvider] Login successful, parsing response');
+        const data = await response.json();
+        console.log(
+          '[SynapseAuthProvider] Received auth data:',
+          JSON.stringify(data, (key, value) =>
+            key === 'access_token' ? '[REDACTED]' : value,
+          ),
+        );
+
+        if (!data.access_token) {
+          console.error(
+            '[SynapseAuthProvider] Missing access token in response',
+          );
+          throw new Error('Invalid response from server: missing access token');
+        }
+
+        const session: vscode.AuthenticationSession = {
+          id: data.user_id,
+          accessToken: JSON.stringify(data),
+          account: {
+            label: data.user_id,
+            id: data.user_id,
+          },
+          scopes: [],
+        };
+
+        // Store in memory
+        this._sessions = [session];
+
+        console.log(
+          '[SynapseAuthProvider] Session created successfully, storing session',
+        );
+        // Store in secret storage
+        await this.storeSessions();
+
+        this._onDidChangeSessions.fire({
+          added: [session],
+          removed: [],
+          changed: [],
+        });
+
+        return session;
+      } catch (error) {
+        console.error('[SynapseAuthProvider] Login process error:', error);
+        throw new Error(
+          `Authentication failed: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        );
+      }
+    } catch (error) {
+      console.error('[SynapseAuthProvider] Create session failed:', error);
+      throw error;
     }
-    return this._sessions;
-  }
-
-  async createSession(scopes: string[]): Promise<vscode.AuthenticationSession> {
-    const { username, password } = await promptForCredentials();
-    const matrixServer = vscode.workspace
-      .getConfiguration('boxel-tools')
-      .get('matrixServer') as string;
-    if (!matrixServer) {
-      throw new Error('No matrix server url found, please check your settings');
-    }
-
-    const { access_token, user_id, device_id } = await login(
-      username,
-      password,
-      matrixServer,
-    );
-
-    const authToken = JSON.stringify({
-      access_token,
-      user_id,
-      device_id,
-    });
-
-    const session: vscode.AuthenticationSession = {
-      id: access_token,
-      accessToken: authToken,
-      account: { id: user_id, label: username },
-      scopes,
-    };
-
-    // Only support one right now. TODO: Support multiple or handle the events properly
-    // The setup elsewhere forbids this anyway
-    this._sessions = [session];
-
-    await this.secretsStorage.store(
-      'synapse-sessions',
-      JSON.stringify(this._sessions),
-    );
-
-    this._onDidChangeSessions.fire({
-      added: [session],
-      removed: [],
-      changed: [],
-    });
-
-    return session;
   }
 
   async removeSession(sessionId: string): Promise<void> {
@@ -150,10 +305,7 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
       (session) => session.id !== sessionId,
     );
 
-    await this.secretsStorage.store(
-      'synapse-sessions',
-      JSON.stringify(this._sessions),
-    );
+    await this.storeSessions();
 
     this._onDidChangeSessions.fire({
       added: [],
@@ -161,23 +313,4 @@ export class SynapseAuthProvider implements vscode.AuthenticationProvider {
       changed: [],
     });
   }
-}
-
-async function promptForCredentials() {
-  const username = await vscode.window.showInputBox({
-    prompt: 'Enter Matrix username',
-  });
-  if (!username) {
-    throw new Error('Username is required.');
-  }
-
-  const password = await vscode.window.showInputBox({
-    prompt: 'Enter Matrix password',
-    password: true,
-  });
-  if (!password) {
-    throw new Error('Password is required.');
-  }
-
-  return { username, password };
 }
