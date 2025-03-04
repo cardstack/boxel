@@ -28,6 +28,10 @@ export default class MessageService extends Service {
     if (!this.listenerCallbacks.has(realmURL)) {
       this.listenerCallbacks.set(realmURL, []);
     }
+
+    // TODO might want to consider making separate subscription methods so that
+    // you can subscribe to a specific type of events instead of all of the
+    // events...
     this.listenerCallbacks.get(realmURL)?.push(cb);
 
     if (isTesting()) {
