@@ -240,7 +240,7 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
       return history.slice(lastEventIndex).some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          event.content.data.commandRequestId === commandRequest.id
+          event.content.commandRequestId === commandRequest.id
         );
       });
     },
@@ -612,7 +612,7 @@ function toPromptMessageWithToolResults(
       let content = 'pending';
       let commandResult = commandResults.find(
         (commandResult) =>
-          commandResult.content.data.commandRequestId === commandRequest.id,
+          commandResult.content.commandRequestId === commandRequest.id,
       );
       if (commandResult) {
         let status = commandResult.content['m.relates_to']?.key;

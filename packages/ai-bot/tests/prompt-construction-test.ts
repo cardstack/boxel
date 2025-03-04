@@ -1682,8 +1682,8 @@ test('Return host result of tool call back to open ai', async () => {
           key: 'applied',
         },
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+        commandRequestId: 'tool-call-id-1',
         data: {
-          commandRequestId: 'tool-call-id-1',
           card: {
             data: {
               type: 'card',

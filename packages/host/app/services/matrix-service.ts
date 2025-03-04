@@ -555,9 +555,7 @@ export default class MatrixService extends Service {
     if (resultCardEventId === undefined) {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-        data: {
-          commandRequestId: toolCallId,
-        },
+        commandRequestId: toolCallId,
         'm.relates_to': {
           event_id: invokedToolFromEventId,
           key: 'applied',
@@ -572,9 +570,9 @@ export default class MatrixService extends Service {
           key: 'applied',
           rel_type: 'm.annotation',
         },
+        commandRequestId: toolCallId,
         data: {
           cardEventId: resultCardEventId,
-          commandRequestId: toolCallId,
         },
       };
     }

@@ -254,8 +254,8 @@ export interface CommandResultWithOutputContent {
     key: string;
     event_id: string;
   };
+  commandRequestId: string;
   data: {
-    commandRequestId: string;
     cardEventId: string;
     // we materialize this field on the server
     card?: LooseSingleCardDocument;
@@ -269,10 +269,8 @@ export interface CommandResultWithNoOutputContent {
     key: string;
     event_id: string;
   };
-  data: {
-    commandRequestId: string;
-  };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
+  commandRequestId: string;
 }
 
 export type MatrixEvent =

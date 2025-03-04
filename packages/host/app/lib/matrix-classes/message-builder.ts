@@ -190,7 +190,7 @@ export default class MessageBuilder {
     if (this.builderContext.commandResultEvent) {
       let event = this.builderContext.commandResultEvent;
       let messageCommand = message.commands.find(
-        (c) => c.commandRequest.id === event.content.data.commandRequestId,
+        (c) => c.commandRequest.id === event.content.commandRequestId,
       );
       if (messageCommand) {
         messageCommand.commandStatus = event.content['m.relates_to']
@@ -230,7 +230,7 @@ export default class MessageBuilder {
           r.rel_type === 'm.annotation' &&
           (r.event_id === this.event.event_id ||
             r.event_id === this.builderContext.effectiveEventId) &&
-          e.content.data.commandRequestId === commandRequest.id
+          e.content.commandRequestId === commandRequest.id
         );
       }) as CommandResultEvent | undefined);
 

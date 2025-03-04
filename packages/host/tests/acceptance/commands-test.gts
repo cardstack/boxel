@@ -60,7 +60,6 @@ import {
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
-import { pauseTest } from '@ember/test-helpers';
 import { suspendGlobalErrorHook } from '../helpers/uncaught-exceptions';
 
 let matrixRoomId = '';
@@ -942,10 +941,7 @@ module('Acceptance | Commands tests', function (hooks) {
       'm.annotation',
     );
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
-    assert.strictEqual(
-      JSON.parse(message.content.data).commandRequestId,
-      'abc123',
-    );
+    assert.strictEqual(message.content.commandRequestId, 'abc123');
   });
 
   test('multiple commands can be requested in a single aibot message', async function (assert) {
@@ -987,7 +983,6 @@ module('Acceptance | Commands tests', function (hooks) {
       ],
     });
     await waitFor('[data-test-message-idx="0"]');
-    await this.pauseTest();
     assert
       .dom('[data-test-message-idx="0"] [data-test-command-apply]')
       .exists({ count: 2 });

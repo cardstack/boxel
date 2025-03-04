@@ -430,7 +430,8 @@
         "key": "applied",
         "rel_type": "m.annotation"
       },
-      "data": "{\"cardEventId\":\"$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc\",\"commandRequestId\": \"call_or0qFTa8y9Ef8ZVyRDNR2P1T\"}"
+      "commandRequestId": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
+      "data": "{\"cardEventId\":\"$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc\"}"
     },
     "origin_server_ts": 1736864370892,
     "unsigned": {
