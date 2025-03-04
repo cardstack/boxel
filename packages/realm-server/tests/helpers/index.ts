@@ -374,7 +374,6 @@ export async function runTestRealmServer({
   matrixConfig,
   matrixURL,
   permissions = { '*': ['read'] },
-  loginMatrix,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -387,7 +386,6 @@ export async function runTestRealmServer({
   dbAdapter: PgAdapter;
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
-  loginMatrix?: true;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -411,10 +409,7 @@ export async function runTestRealmServer({
     dbAdapter,
   });
 
-  // FIXME is this still needed, should it always happen?
-  if (loginMatrix) {
-    await testRealm.logInToMatrix();
-  }
+  await testRealm.logInToMatrix();
 
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
@@ -440,10 +435,6 @@ export async function runTestRealmServer({
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
   });
-
-  if (loginMatrix) {
-    // await matrixClient.login();
-  }
 
   let testRealmServer = new RealmServer({
     realms,
