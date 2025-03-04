@@ -228,12 +228,8 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       return;
     }
 
-    try {
-      const selectedUrl = new URL(this.args.selectedId);
-      this.operatorModeStateService.updateCodePath(selectedUrl);
-    } catch (error) {
-      console.error('Failed to open spec instance:', error);
-    }
+    const selectedUrl = new URL(this.args.selectedId);
+    this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
   <template>
