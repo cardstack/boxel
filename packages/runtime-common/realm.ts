@@ -505,11 +505,6 @@ export class Realm {
     return this.#flushUpdateEvents;
   }
 
-  // FIXME this is for tests only…?
-  get matrixUsername() {
-    return this.#matrixClient.username;
-  }
-
   createJWT(claims: TokenClaims, expiration: string): string {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
