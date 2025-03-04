@@ -536,7 +536,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
     let index = this.playgroundSelections[this.args.moduleId]?.fieldIndex ?? 0;
     let instance = (this.card as Spec)?.containedExamples?.[index];
-    return instance;
+    return instance; // TODO: handle UI for the case when there's a spec but has no instances
   }
 
   private copyToClipboard = task(async (id: string) => {
