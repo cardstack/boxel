@@ -7,6 +7,7 @@ import {
   type ResponseWithNodeStream,
   type TokenClaims,
 } from '@cardstack/runtime-common';
+import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
@@ -29,6 +30,8 @@ import type {
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import { APP_BOXEL_REALM_EVENT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -59,11 +62,18 @@ export class NodeAdapter implements RealmAdapter {
 
   private watcher: Watcher | undefined = undefined;
 
-  async subscribe(cb: (message: UpdateEventData) => void): Promise<void> {
+  async subscribe(
+    cb: (message: UpdateEventData) => void,
+    options: { watcher?: string },
+  ): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
-    this.watcher = sane(join(this.realmDir, '/'));
+
+    let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
+    console.log('watcherOptions', watcherOptions);
+
+    this.watcher = sane(join(this.realmDir, '/'), watcherOptions);
     this.watcher.on('change', (path, _root, stat) => {
       if (stat.isFile()) {
         cb({ updated: path });
@@ -79,7 +89,10 @@ export class NodeAdapter implements RealmAdapter {
       throw new Error(`watcher error: ${err}`);
     });
     await new Promise<void>((resolve) => {
-      this.watcher!.on('ready', resolve);
+      this.watcher!.on('ready', () => {
+        console.log('watcher ready');
+        resolve();
+      });
     });
   }
 
@@ -181,6 +194,58 @@ export class NodeAdapter implements RealmAdapter {
       iat: number;
       exp: number;
     };
+  }
+
+  async broadcastRealmEvent(
+    event: RealmEventContent,
+    matrixClient: MatrixClient,
+  ): Promise<void> {
+    // FIXME this can be shared in a realm, the function to send an individual event in a realm should be in the adapter
+    console.log('broadcasting realm event', event);
+
+    if (!matrixClient.isLoggedIn()) {
+      console.log(
+        `not logged in (${matrixClient.username}, skipping server event`,
+      );
+      return;
+    }
+
+    let dmRooms;
+
+    try {
+      dmRooms =
+        (await matrixClient.getAccountData<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+    } catch (e) {
+      // FIXME this is happening in CI, Matrix has been shut down presumably
+      console.log('error getting account data', e);
+      return;
+    }
+
+    console.log(
+      'raw dmrooms for username ' +
+        matrixClient.username +
+        JSON.stringify(dmRooms, null, 2),
+    );
+    console.log('sending to dm rooms', Object.values(dmRooms));
+
+    for (let userId of Object.keys(dmRooms)) {
+      let roomId = dmRooms[userId];
+      try {
+        await matrixClient.sendEvent(
+          roomId,
+          APP_BOXEL_REALM_EVENT_EVENT_TYPE,
+          event,
+        );
+      } catch (e) {
+        console.log(
+          `Unable to send event in room ${roomId} for user ${userId}`,
+          event,
+          e,
+        );
+      }
+    }
   }
 }
 

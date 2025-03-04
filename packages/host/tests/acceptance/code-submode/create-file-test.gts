@@ -10,7 +10,6 @@ import {
   testRealmURL,
   setupOnSave,
   setupAcceptanceTestRealm,
-  setupServerSentEvents,
   waitForCodeEditor,
   getMonacoContent,
   visitOperatorMode as _visitOperatorMode,
@@ -199,7 +198,6 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
   let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',

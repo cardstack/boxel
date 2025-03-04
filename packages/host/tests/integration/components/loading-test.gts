@@ -10,7 +10,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   lookupLoaderService,
 } from '../../helpers';
@@ -35,7 +34,6 @@ module('Integration | loading', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],

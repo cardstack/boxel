@@ -15,6 +15,8 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  APP_BOXEL_REALM_EVENT_EVENT_TYPE,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { type SerializedFile } from './file-api';
@@ -296,6 +298,75 @@ export interface CommandResultWithNoOutputContent {
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
 }
 
+export interface RealmServerEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: RealmServerEventContent;
+}
+
+export interface RealmServerEventContent {
+  msgtype: typeof APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
+  body: string;
+}
+
+export interface RealmEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_REALM_EVENT_EVENT_TYPE;
+  content: RealmEventContent;
+}
+
+export type RealmEventContent =
+  | IndexRealmEventContent
+  | UpdateRealmEventContent;
+
+export type IndexRealmEventContent =
+  | IncrementalIndexEventContent
+  | FullIndexEventContent
+  | CopiedIndexEventContent
+  | IncrementalIndexInitiationContent;
+
+export interface IncrementalIndexEventContent {
+  eventName: 'index';
+  indexType: 'incremental';
+  invalidations: string[];
+  clientRequestId?: string | null;
+}
+
+interface FullIndexEventContent {
+  eventName: 'index';
+  indexType: 'full';
+}
+
+interface CopiedIndexEventContent {
+  eventName: 'index';
+  indexType: 'copy';
+  sourceRealmURL: string;
+}
+
+interface IncrementalIndexInitiationContent {
+  eventName: 'index';
+  indexType: 'incremental-index-initiation';
+  updatedFile: string;
+}
+
+export type UpdateRealmEventContent =
+  | FileAddedEventContent
+  | FileUpdatedEventContent
+  | FileRemovedEventContent;
+
+interface FileAddedEventContent {
+  eventName: 'update';
+  added: string;
+}
+
+interface FileUpdatedEventContent {
+  eventName: 'update';
+  updated: string;
+}
+
+interface FileRemovedEventContent {
+  eventName: 'update';
+  removed: string;
+}
+
 export type MatrixEvent =
   | RoomCreateEvent
   | RoomJoinRules
@@ -305,6 +376,8 @@ export type MatrixEvent =
   | CommandResultEvent
   | CommandDefinitionsEvent
   | CardMessageEvent
+  | RealmServerEvent
+  | RealmEvent
   | RoomNameEvent
   | RoomTopicEvent
   | InviteEvent

@@ -195,7 +195,11 @@ export class ServerState {
     // duplicate the event fully
     let room = event.room_id && this.#rooms.get(event.room_id);
     if (!room) {
-      throw new Error(`room ${event.room_id} does not exist`);
+      throw new Error(
+        `room ${event.room_id} does not exist, known rooms: ${Array.from(
+          this.#rooms.keys(),
+        ).join(', ')}`,
+      );
     }
     let eventId = overrides?.event_id ?? this.eventId();
     let matrixEvent: IEvent = {

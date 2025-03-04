@@ -40,6 +40,31 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
 import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
 
+export async function waitUntil<T>(
+  condition: () => Promise<T>,
+  options: {
+    timeout?: number;
+    interval?: number;
+    timeoutMessage?: string;
+  } = {},
+): Promise<T> {
+  let timeout = options.timeout ?? 1000;
+  let interval = options.interval ?? 250;
+
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    const result = await condition();
+    if (result) {
+      return result;
+    }
+    await new Promise((resolve) => setTimeout(resolve, interval));
+  }
+  throw new Error(
+    'Timeout waiting for condition' +
+      (options.timeoutMessage ? `: ${options.timeoutMessage}` : ''),
+  );
+}
+
 export * from '@cardstack/runtime-common/helpers/indexer';
 
 export const testRealm = 'http://test-realm/';
@@ -55,6 +80,7 @@ export const testRealmInfo = {
   iconURL: null,
   showAsCatalog: null,
   visibility: 'public',
+  realmUserId: testMatrix.username,
 };
 
 export const realmServerTestMatrix: MatrixConfig = {
@@ -382,6 +408,9 @@ export async function runTestRealmServer({
     publisher,
     dbAdapter,
   });
+
+  await testRealm.logInToMatrix();
+
   virtualNetwork.mount(testRealm.handle);
   let realms = [testRealm];
   let seedRealmURL: URL | undefined;
@@ -406,6 +435,7 @@ export async function runTestRealmServer({
     username: realmServerTestMatrix.username,
     seed: realmSecretSeed,
   });
+
   let testRealmServer = new RealmServer({
     realms,
     virtualNetwork,
@@ -430,6 +460,7 @@ export async function runTestRealmServer({
     seedRealm,
     testRealmServer,
     testRealmHttpServer,
+    matrixClient,
   };
 }
 

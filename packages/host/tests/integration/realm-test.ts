@@ -23,8 +23,6 @@ import {
   testRealmInfo,
   setupCardLogs,
   setupLocalIndexing,
-  setupServerSentEvents,
-  type TestContextWithSSE,
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
@@ -36,6 +34,7 @@ import {
   StringField,
   field,
 } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -50,7 +49,8 @@ module('Integration | realm', function (hooks) {
     loader = lookupLoaderService().loader;
   });
 
-  setupServerSentEvents(hooks);
+  // FIXME maybe this needs to happen in every test now? And setupServerSentEvents is obsolete
+  setupMockMatrix(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
@@ -360,6 +360,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+              realmUserId: 'test_realm',
               showAsCatalog: null,
               visibility: 'public',
             },
@@ -721,7 +722,7 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 400, '400 server error');
   });
 
-  test<TestContextWithSSE>('realm can serve patch card requests', async function (assert) {
+  test('realm can serve patch card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -741,59 +742,36 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}dir/card`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}dir/card`],
-        },
-      },
-    ];
-    let response = await this.expectEvents({
-      assert,
+
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}dir/card`, {
-            method: 'PATCH',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-            body: JSON.stringify(
-              {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Van Gogh',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: 'http://localhost:4202/test/person',
-                      name: 'Person',
-                    },
-                  },
+      new Request(`${testRealmURL}dir/card`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/person',
+                  name: 'Person',
                 },
               },
-              null,
-              2,
-            ),
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     if (isSingleCardDocument(json)) {
@@ -2449,7 +2427,7 @@ module('Integration | realm', function (hooks) {
     );
   });
 
-  test<TestContextWithSSE>('realm can serve delete card requests', async function (assert) {
+  test('realm can serve delete card requests', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {
@@ -2495,41 +2473,17 @@ module('Integration | realm', function (hooks) {
       'found card in index',
     );
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}cards/2`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}cards/2`],
-        },
-      },
-    ];
-    let response = await this.expectEvents({
-      assert,
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}cards/2`, {
-            method: 'DELETE',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+      new Request(`${testRealmURL}cards/2`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 204, 'status was 204');
 
     result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/2`));
@@ -2614,49 +2568,24 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 404, '404 HTTP status');
   });
 
-  test<TestContextWithSSE>('realm can serve card source post request', async function (assert) {
+  test('realm can serve card source post request', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
       contents: {},
     });
 
     {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}dir/person.gts`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}dir/person.gts`],
-          },
-        },
-      ];
-      let response = await this.expectEvents({
-        assert,
+      let response = await handle(
         realm,
-        expectedEvents,
-        callback: async () => {
-          let response = handle(
-            realm,
-            new Request(`${testRealmURL}dir/person.gts`, {
-              method: 'POST',
-              headers: {
-                Accept: 'application/vnd.card+source',
-              },
-              body: cardSrc,
-            }),
-          );
-          await realm.flushUpdateEvents();
-          return await response;
-        },
-      });
+        new Request(`${testRealmURL}dir/person.gts`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.card+source',
+          },
+          body: cardSrc,
+        }),
+      );
+      await realm.flushUpdateEvents();
 
       assert.strictEqual(response.status, 204, 'HTTP status is 204');
       assert.ok(
@@ -2679,7 +2608,7 @@ module('Integration | realm', function (hooks) {
     }
   });
 
-  test<TestContextWithSSE>('realm can serve card source delete request', async function (assert) {
+  test('realm can serve card source delete request', async function (assert) {
     let { field, contains, CardDef } = await loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
@@ -2699,52 +2628,28 @@ module('Integration | realm', function (hooks) {
       },
     });
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}person.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}person.gts`],
-        },
-      },
-    ];
-    let response = await this.expectEvents({
-      assert,
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}person`, {
-            headers: {
-              Accept: 'application/vnd.card+source',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        assert.strictEqual((await response).status, 302, 'file exists');
+      new Request(`${testRealmURL}person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+    assert.strictEqual(response.status, 302, 'file exists');
 
-        response = handle(
-          realm,
-          new Request(`${testRealmURL}person`, {
-            method: 'DELETE',
-            headers: {
-              Accept: 'application/vnd.card+source',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+    response = await handle(
+      realm,
+      new Request(`${testRealmURL}person`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 204, 'file is deleted');
 
     response = await handle(
@@ -3080,6 +2985,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+              realmUserId: 'test_realm',
               showAsCatalog: null,
               visibility: 'public',
             },
@@ -3255,6 +3161,7 @@ posts/ignore-me.gts
             name: 'Example Workspace',
             backgroundURL: 'https://example-background-url.com',
             iconURL: 'https://example-icon-url.com',
+            realmUserId: '@realm/test-realm-test:localhost',
             showAsCatalog: null,
             visibility: 'public',
           },

@@ -15,6 +15,7 @@ import {
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
@@ -29,6 +30,7 @@ module('Integration | card-prerender', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  setupMockMatrix(hooks);
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),

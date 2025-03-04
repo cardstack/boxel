@@ -2,17 +2,15 @@ import { click, waitFor, fillIn } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Realm, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupServerSentEvents,
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
-  type TestContextWithSSE,
   type TestContextWithSave,
   setupOnSave,
 } from '../../helpers';
@@ -115,10 +113,8 @@ const newSkillCardSource = `
 
 let matrixRoomId: string;
 module('Acceptance | Spec preview', function (hooks) {
-  let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
 
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
@@ -136,7 +132,7 @@ module('Acceptance | Spec preview', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    ({ realm } = await setupAcceptanceTestRealm({
+    await setupAcceptanceTestRealm({
       realmURL: testRealmURL,
       contents: {
         'person.gts': personCardSource,
@@ -282,7 +278,7 @@ module('Acceptance | Spec preview', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    }));
+    });
     await setupAcceptanceTestRealm({
       realmURL: testRealm2URL,
       contents: {
@@ -393,21 +389,15 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
     await percySnapshot(assert);
   });
-  test<TestContextWithSSE>('have ability to create new spec instances', async function (assert) {
+  test('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-create-spec-button]');
-      },
-    });
+    await click('[data-test-create-spec-button]');
+
     assert
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('NewSkill');

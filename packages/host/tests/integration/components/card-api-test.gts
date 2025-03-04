@@ -21,7 +21,6 @@ import {
   lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   testRealmURL,
 } from '../../helpers';
 import {
@@ -33,6 +32,7 @@ import {
   Component,
   // realmURL,
 } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -87,7 +87,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
+  setupMockMatrix(hooks);
   setupBaseRealm(hooks);
 
   module('getCards', function (hooks) {

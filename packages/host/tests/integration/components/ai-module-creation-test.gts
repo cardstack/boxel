@@ -23,7 +23,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -62,8 +61,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-
-  setupServerSentEvents(hooks);
 
   hooks.beforeEach(async function () {
     operatorModeStateService = this.owner.lookup(

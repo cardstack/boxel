@@ -36,11 +36,9 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   type TestContextWithSave,
   lookupLoaderService,
-  TestContextWithSSE,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -69,7 +67,6 @@ module('Integration | operator-mode', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
@@ -2981,7 +2978,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-boxel-filter-list-button="CardDef"]`).doesNotExist();
   });
 
-  test<TestContextWithSSE>('updates filter list when there is indexing event', async function (assert) {
+  test('updates filter list when there is indexing event', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
@@ -3011,15 +3008,9 @@ module('Integration | operator-mode', function (hooks) {
     );
     await click('[data-test-card-catalog-go-button]');
 
-    await this.expectEvents({
-      assert,
-      realm: testRealm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await fillIn('[data-test-field="title"] input', 'New Skill');
-        await click('[data-test-close-button]');
-      },
-    });
+    await fillIn('[data-test-field="title"] input', 'New Skill');
+    await click('[data-test-close-button]');
+
     assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 11 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
@@ -3027,14 +3018,8 @@ module('Integration | operator-mode', function (hooks) {
     await triggerEvent(`[data-test-cards-grid-item]`, 'mouseenter');
     await click(`[data-test-overlay-card] [data-test-overlay-more-options]`);
     await click('[data-test-boxel-menu-item-text="Delete"]');
-    await this.expectEvents({
-      assert,
-      realm: testRealm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await click('[data-test-confirm-delete-button]');
 
     assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();

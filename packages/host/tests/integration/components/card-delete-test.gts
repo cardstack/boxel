@@ -27,8 +27,6 @@ import {
   setupCardLogs,
   setupLocalIndexing,
   setupOnSave,
-  setupServerSentEvents,
-  type TestContextWithSSE,
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../../helpers';
@@ -77,7 +75,6 @@ module('Integration | card-delete', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
   setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
@@ -187,25 +184,7 @@ module('Integration | card-delete', function (hooks) {
     }));
   });
 
-  test<TestContextWithSSE>('can delete a card from the index card stack item', async function (assert) {
-    assert.expect(6);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
+  test('can delete a card from the index card stack item', async function (assert) {
     await setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -233,14 +212,8 @@ module('Integration | card-delete', function (hooks) {
       .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
       .containsText('Delete the card Mango?');
 
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+    await click('[data-test-confirm-delete-button]');
+
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -289,25 +262,7 @@ module('Integration | card-delete', function (hooks) {
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
-  test<TestContextWithSSE>('can delete a card stack item in non-edit mode', async function (assert) {
-    assert.expect(6);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
+  test('can delete a card stack item in non-edit mode', async function (assert) {
     await setCardInOperatorModeState([
       `${testRealmURL}index`,
       `${testRealmURL}Pet/mango`,
@@ -322,28 +277,23 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
-        assert
-          .dom(
-            `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
-          )
-          .exists();
-        await click(
-          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-more-options-button]`,
-        );
-        await click('[data-test-boxel-menu-item-text="Delete"]');
-        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
-        assert
-          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
-          .containsText('Delete the card Mango?');
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
+      )
+      .exists();
+    await click(
+      `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-more-options-button]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+      .containsText('Delete the card Mango?');
+    await click('[data-test-confirm-delete-button]');
+
     await waitUntil(
       () =>
         !document.querySelector(
@@ -359,25 +309,7 @@ module('Integration | card-delete', function (hooks) {
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
-  test<TestContextWithSSE>('can delete a card stack item in edit mode', async function (assert) {
-    assert.expect(6);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
+  test('can delete a card stack item in edit mode', async function (assert) {
     await setCardInOperatorModeState([
       `${testRealmURL}index`,
       `${testRealmURL}Pet/mango`,
@@ -392,31 +324,26 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
-        assert
-          .dom(
-            `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
-          )
-          .exists();
-        await click(
-          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-edit-button]`,
-        );
-        await click(
-          `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-more-options-button]`,
-        );
-        await click('[data-test-boxel-menu-item-text="Delete"]');
-        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
-        assert
-          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
-          .containsText('Delete the card Mango?');
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
+      )
+      .exists();
+    await click(
+      `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-edit-button]`,
+    );
+    await click(
+      `[data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-more-options-button]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+      .containsText('Delete the card Mango?');
+    await click('[data-test-confirm-delete-button]');
+
     await waitUntil(
       () =>
         !document.querySelector(
@@ -432,25 +359,7 @@ module('Integration | card-delete', function (hooks) {
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
-  test<TestContextWithSSE>('can delete a card that appears in both stacks as a stack item', async function (assert) {
-    assert.expect(8);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
+  test('can delete a card that appears in both stacks as a stack item', async function (assert) {
     await setCardInOperatorModeState(
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
@@ -465,34 +374,29 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
-        await waitFor(`[data-test-operator-mode-stack="1"] [data-test-pet]`);
-        assert
-          .dom(
-            `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
-          )
-          .exists();
-        assert
-          .dom(
-            `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
-          )
-          .exists();
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-more-options-button]`,
-        );
-        await click('[data-test-boxel-menu-item-text="Delete"]');
-        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
-        assert
-          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
-          .containsText('Delete the card Mango?');
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await waitFor(`[data-test-operator-mode-stack="0"] [data-test-pet]`);
+    await waitFor(`[data-test-operator-mode-stack="1"] [data-test-pet]`);
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
+      )
+      .exists();
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"] [data-test-more-options-button]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+      .containsText('Delete the card Mango?');
+    await click('[data-test-confirm-delete-button]');
+
     await waitUntil(
       () =>
         !document.querySelector(
@@ -513,25 +417,7 @@ module('Integration | card-delete', function (hooks) {
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
-  test<TestContextWithSSE>('can delete a card that appears in both stacks as an element of the index card', async function (assert) {
-    assert.expect(4);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
+  test('can delete a card that appears in both stacks as an element of the index card', async function (assert) {
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealmURL}index`],
@@ -546,32 +432,27 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
-        );
-        await click('[data-test-boxel-menu-item-text="Delete"]');
-        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
-        assert
-          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
-          .containsText('Delete the card Mango?');
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+      .containsText('Delete the card Mango?');
+    await click('[data-test-confirm-delete-button]');
+
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -588,25 +469,7 @@ module('Integration | card-delete', function (hooks) {
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
-  test<TestContextWithSSE>('can delete a card that appears in both stacks as an index item and an element of the index card', async function (assert) {
-    assert.expect(6);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
+  test('can delete a card that appears in both stacks as an index item and an element of the index card', async function (assert) {
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
@@ -621,41 +484,36 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await waitFor(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-        );
-        await waitFor(`[data-test-operator-mode-stack="1"] [data-test-pet]`);
-        assert
-          .dom(
-            `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
-          )
-          .exists();
-        await triggerEvent(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
-        );
-        await click('[data-test-boxel-menu-item-text="Delete"]');
-        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
-        assert
-          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
-          .containsText('Delete the card Mango?');
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await waitFor(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+    );
+    await waitFor(`[data-test-operator-mode-stack="1"] [data-test-pet]`);
+    assert
+      .dom(
+        `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
+      )
+      .exists();
+    await triggerEvent(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+      .containsText('Delete the card Mango?');
+    await click('[data-test-confirm-delete-button]');
+
     await waitUntil(
       () =>
         !document.querySelector(
@@ -677,26 +535,7 @@ module('Integration | card-delete', function (hooks) {
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
-  test<TestContextWithSSE>('can delete a card that is a recent item', async function (assert) {
-    assert.expect(6);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
-
+  test('can delete a card that is a recent item', async function (assert) {
     // creates a recent item
     let recentCardsService = this.owner.lookup(
       'service:recent-cards-service',
@@ -715,37 +554,30 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await waitFor(
-          `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-        );
-        await focus(`[data-test-search-field]`);
-        assert
-          .dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`)
-          .exists();
-        await click('[data-test-search-sheet-cancel-button]');
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
-        );
-        await click('[data-test-boxel-menu-item-text="Delete"]');
-        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
-        assert
-          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
-          .containsText('Delete the card Mango?');
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await waitFor(
+      `[data-test-operator-mode-stack="0"] [data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+    );
+    await focus(`[data-test-search-field]`);
+    assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
+    await click('[data-test-search-sheet-cancel-button]');
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+      .containsText('Delete the card Mango?');
+    await click('[data-test-confirm-delete-button]');
+
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -760,25 +592,7 @@ module('Integration | card-delete', function (hooks) {
       .doesNotExist('recent item removed');
   });
 
-  test<TestContextWithSSE>('can delete a card that is a selected item', async function (assert) {
-    assert.expect(6);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/mango`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-        },
-      },
-    ];
+  test('can delete a card that is a selected item', async function (assert) {
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`http://localhost:4202/test/`],
@@ -793,42 +607,37 @@ module('Integration | card-delete', function (hooks) {
     );
     let fileRef = await adapter.openFile('Pet/mango.json');
     assert.ok(fileRef, 'card instance exists in file system');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-select]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] [data-test-overlay-select]`,
-        );
-        assert
-          .dom('[data-test-copy-button]')
-          .containsText('Copy 2 Cards', 'button text is correct');
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
-        );
-        await click('[data-test-boxel-menu-item-text="Delete"]');
-        await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
-        assert
-          .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
-          .containsText('Delete the card Mango?');
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-select]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] [data-test-overlay-select]`,
+    );
+    assert
+      .dom('[data-test-copy-button]')
+      .containsText('Copy 2 Cards', 'button text is correct');
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] [data-test-overlay-more-options]`,
+    );
+    await click('[data-test-boxel-menu-item-text="Delete"]');
+    await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`);
+    assert
+      .dom(`[data-test-delete-modal="${testRealmURL}Pet/mango"]`)
+      .containsText('Delete the card Mango?');
+    await click('[data-test-confirm-delete-button]');
+
     await waitUntil(
       () =>
         document.querySelectorAll(

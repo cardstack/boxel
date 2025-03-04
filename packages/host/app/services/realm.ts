@@ -25,7 +25,6 @@ import {
   JWTPayload,
   SupportedMimeType,
   type RealmInfo,
-  type IndexEventData,
   RealmPermissions,
   RealmPaths,
 } from '@cardstack/runtime-common';
@@ -33,6 +32,11 @@ import {
 import ENV from '@cardstack/host/config/environment';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
+
+import type {
+  IndexRealmEventContent,
+  RealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
@@ -151,21 +155,21 @@ class RealmResource {
     this.subscription = {
       unsubscribe: this.messageService.subscribe(
         this.realmURL,
-        ({ type, data: dataStr }: { type: string; data: string }) => {
+        (event: RealmEventContent) => {
           if (!this.info) {
             console.warn(
               `No realm info exists for ${this.realmURL} when trying to set indexing status`,
             );
             return;
           }
-          if (type !== 'index') {
+          if (event.eventName !== 'index') {
             return;
           }
-          let data = JSON.parse(dataStr) as IndexEventData;
-          if (data.type === 'full') {
+          let data = event as IndexRealmEventContent;
+          if (data.indexType === 'full') {
             return;
           }
-          switch (data.type) {
+          switch (data.indexType) {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
               break;
@@ -502,6 +506,12 @@ export default class RealmService extends Service {
       }
     }
     return undefined;
+  }
+
+  realmForSessionRoomId(sessionRoomId: string) {
+    return Array.from(this.realms.values()).find(
+      (r) => r.claims?.sessionRoom === sessionRoomId,
+    );
   }
 
   @cached

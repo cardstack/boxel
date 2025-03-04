@@ -1,5 +1,7 @@
 import { CardResource } from './card-document';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 // a card resource but with optional "id" and "type" props
 export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
   type?: 'card';
@@ -322,12 +324,12 @@ export async function createNewCard<T extends CardDef>(
 }
 
 export interface RealmSubscribe {
-  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void;
+  subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void;
 }
 
 export function subscribeToRealm(
   realmURL: string,
-  cb: (ev: MessageEvent) => void,
+  cb: (ev: RealmEventContent) => void,
 ): () => void {
   let here = globalThis as any;
   if (!here._CARDSTACK_REALM_SUBSCRIBE) {

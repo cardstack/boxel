@@ -37,7 +37,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   type TestContextWithSave,
   getMonacoContent,
@@ -77,7 +76,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
   let {
     createAndJoinRoom,
     simulateRemoteMessage,

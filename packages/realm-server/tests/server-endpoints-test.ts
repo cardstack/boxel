@@ -54,6 +54,10 @@ import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
 import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
+import type {
+  MatrixEvent,
+  RealmServerEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 import { monitoringAuthToken } from '../utils/monitoring';
 
 setGracefulCleanup();
@@ -1108,11 +1112,11 @@ module(basename(__filename), function () {
           done: () => void,
         ) {
           let messages = await matrixClient.roomMessages(roomId);
-          if (
-            messages[0].content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
-          ) {
+          let firstMessageContent = messages[0].content;
+
+          if (messageEventContentIsRealmServerEvent(firstMessageContent)) {
             assert.strictEqual(
-              messages[0].content.body,
+              (firstMessageContent as RealmServerEventContent).body,
               JSON.stringify({ eventType: 'billing-notification' }),
             );
             done();
@@ -1813,3 +1817,12 @@ module(basename(__filename), function () {
     });
   });
 });
+
+function messageEventContentIsRealmServerEvent(
+  content: MatrixEvent['content'],
+): content is RealmServerEventContent {
+  return (
+    'msgtype' in content &&
+    (content.msgtype as string) === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
+  );
+}
