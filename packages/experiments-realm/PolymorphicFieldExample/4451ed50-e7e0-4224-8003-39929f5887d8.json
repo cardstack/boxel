@@ -1,0 +1,31 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "specialField": {
+        "firstName": "Milo"
+      },
+      "title": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "cardsWithSpecialFields.0": {
+        "links": {
+          "self": "../CardWithSpecialFields/1796a22a-0d8a-4aae-a320-6a82d497fc7e"
+        }
+      },
+      "cardsWithSpecialFields.1": {
+        "links": {
+          "self": "../CardWithSpecialFields/c9442771-211f-4e1e-b767-4a8e0052de05"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../polymorphic-field",
+        "name": "PolymorphicFieldExample"
+      }
+    }
+  }
+}

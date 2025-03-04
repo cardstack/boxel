@@ -350,12 +350,12 @@ function callSerializeHook(
 
 function cardTypeFor(
   field: Field<typeof BaseDef>,
-  boxedElement: Box<BaseDef>,
+  boxedElement?: Box<BaseDef>,
 ): typeof BaseDef {
   if (primitive in field.card) {
     return field.card;
   }
-  if (boxedElement.value == null) {
+  if (boxedElement === undefined || boxedElement.value == null) {
     return field.card;
   }
   return Reflect.getPrototypeOf(boxedElement.value)!
