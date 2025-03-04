@@ -32,6 +32,7 @@ import {
   cardTypeIcon,
   chooseCard,
   internalKeyFor,
+  specRef,
   type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
@@ -48,7 +49,12 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  FieldDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
+import type { Spec } from 'https://cardstack.com/base/spec';
 
 import PrerenderedCardSearch, {
   type PrerenderedCard,
@@ -255,7 +261,8 @@ const InstanceSelectDropdown: TemplateOnlyComponent<DropdownSignature> =
 interface PlaygroundPreviewSignature {
   Args: {
     format: Format;
-    card: CardDef;
+    card: CardDef | FieldDef;
+    isFieldDef?: boolean;
     realmInfo?: EnhancedRealmInfo;
     contextMenuItems?: MenuItem[];
     onEdit?: () => void;
@@ -264,8 +271,8 @@ interface PlaygroundPreviewSignature {
 }
 const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
   <template>
-    {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
-      <CardContainer class='preview-container full-height-preview'>
+    {{#if @isFieldDef}}
+      <CardContainer class='preview-container'>
         <CardHeader
           class='preview-header'
           @cardTypeDisplayName={{cardTypeDisplayName @card}}
@@ -274,28 +281,45 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
           @onEdit={{@onEdit}}
           @onFinishEditing={{@onFinishEditing}}
           @isTopCard={{true}}
-          @moreOptionsMenuItems={{@contextMenuItems}}
         />
-        <Preview class='preview' @card={{@card}} @format={{@format}} />
+        <div class='field-preview-card'>
+          <Preview @card={{@card}} @format={{@format}} />
+        </div>
       </CardContainer>
-    {{else if (eq @format 'embedded')}}
-      <CardContainer class='preview-container'>
-        <Preview class='preview' @card={{@card}} @format={{@format}} />
-      </CardContainer>
-    {{else if (eq @format 'atom')}}
-      <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum
-        dolor sit amet, consectetur adipiscing elit, sed do
-        <Preview
-          class='atom-preview'
-          @card={{@card}}
-          @format={{@format}}
-          @displayContainer={{false}}
-        />
-        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
-        veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
-        commodo consequat.</div>
-    {{else if (eq @format 'fitted')}}
-      <FittedFormatGallery @card={{@card}} @isDarkMode={{true}} />
+    {{else}}
+      {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
+        <CardContainer class='preview-container full-height-preview'>
+          <CardHeader
+            class='preview-header'
+            @cardTypeDisplayName={{cardTypeDisplayName @card}}
+            @cardTypeIcon={{cardTypeIcon @card}}
+            @realmInfo={{@realmInfo}}
+            @onEdit={{@onEdit}}
+            @onFinishEditing={{@onFinishEditing}}
+            @isTopCard={{true}}
+            @moreOptionsMenuItems={{@contextMenuItems}}
+          />
+          <Preview class='preview' @card={{@card}} @format={{@format}} />
+        </CardContainer>
+      {{else if (eq @format 'embedded')}}
+        <CardContainer class='preview-container'>
+          <Preview class='preview' @card={{@card}} @format={{@format}} />
+        </CardContainer>
+      {{else if (eq @format 'atom')}}
+        <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum
+          dolor sit amet, consectetur adipiscing elit, sed do
+          <Preview
+            class='atom-preview'
+            @card={{@card}}
+            @format={{@format}}
+            @displayContainer={{false}}
+          />
+          tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+          veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
+          ea commodo consequat.</div>
+      {{else if (eq @format 'fitted')}}
+        <FittedFormatGallery @card={{@card}} @isDarkMode={{true}} />
+      {{/if}}
     {{/if}}
 
     <style scoped>
@@ -313,6 +337,10 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
       }
       .preview-header:not(.is-editing) {
         background-color: var(--boxel-100);
+      }
+      .field-preview-card {
+        min-height: 11rem;
+        padding: var(--boxel-sp-lg) var(--boxel-sp);
       }
       .preview {
         box-shadow: none;
@@ -341,6 +369,7 @@ interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
     moduleId: string;
+    isFieldDef?: boolean;
   };
 }
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
@@ -357,26 +386,29 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           @createNewIsRunning={{this.createNew.isRunning}}
         />
       </div>
-      {{#if this.card}}
-        <div class='preview-area'>
-          <PlaygroundPreview
-            @card={{this.card}}
+      {{#let (if @isFieldDef this.field this.card) as |card|}}
+        {{#if card}}
+          <div class='preview-area'>
+            <PlaygroundPreview
+              @card={{card}}
+              @format={{this.format}}
+              @realmInfo={{this.realmInfo}}
+              @contextMenuItems={{this.contextMenuItems}}
+              @onEdit={{if this.canEdit (fn this.setFormat 'edit')}}
+              @onFinishEditing={{if
+                (eq this.format 'edit')
+                (fn this.setFormat this.defaultFormat)
+              }}
+              @isFieldDef={{@isFieldDef}}
+            />
+          </div>
+          <FormatChooser
+            class='format-chooser'
             @format={{this.format}}
-            @realmInfo={{this.realmInfo}}
-            @contextMenuItems={{this.contextMenuItems}}
-            @onEdit={{if this.canEdit (fn this.setFormat 'edit')}}
-            @onFinishEditing={{if
-              (eq this.format 'edit')
-              (fn this.setFormat 'isolated')
-            }}
+            @setFormat={{this.setFormat}}
           />
-        </div>
-        <FormatChooser
-          class='format-chooser'
-          @format={{this.format}}
-          @setFormat={{this.setFormat}}
-        />
-      {{/if}}
+        {{/if}}
+      {{/let}}
     </div>
 
     <style scoped>
@@ -422,7 +454,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @tracked newCardJSON: LooseSingleCardDocument | undefined;
   private playgroundSelections: Record<
     string, // moduleId
-    { cardId: string; format: Format }
+    { cardId: string; format: Format; fieldIndex: number | undefined }
   >; // TrackedObject
 
   constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
@@ -481,8 +513,24 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     return this.cardResource.card;
   }
 
+  private get defaultFormat() {
+    return this.args.isFieldDef ? 'embedded' : 'isolated';
+  }
+
   private get format(): Format {
-    return this.playgroundSelections[this.args.moduleId]?.format ?? 'isolated';
+    return (
+      this.playgroundSelections[this.args.moduleId]?.format ??
+      this.defaultFormat
+    );
+  }
+
+  private get field(): FieldDef | undefined {
+    if (!this.args.isFieldDef) {
+      return undefined;
+    }
+    let index = this.playgroundSelections[this.args.moduleId]?.fieldIndex ?? 0;
+    let instance = (this.card as Spec)?.containedExamples?.[index];
+    return instance;
   }
 
   private copyToClipboard = task(async (id: string) => {
@@ -519,14 +567,22 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     return menuItems;
   }
 
-  private persistSelections = (cardId: string, format = this.format) => {
+  private persistSelections = (
+    cardId: string,
+    format = this.format,
+    fieldIndex = this.args.isFieldDef ? 0 : undefined,
+  ) => {
     if (this.newCardJSON) {
       this.newCardJSON = undefined;
     }
     if (this.card?.id === cardId && this.format === format) {
       return;
     }
-    this.playgroundSelections[this.args.moduleId] = { cardId, format };
+    this.playgroundSelections[this.args.moduleId] = {
+      cardId,
+      format,
+      fieldIndex,
+    };
 
     window.localStorage.setItem(
       PlaygroundSelections,
@@ -547,9 +603,10 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private chooseCard = task(async () => {
-    let chosenCard: CardDef | undefined = await chooseCard({
-      filter: { type: this.args.codeRef },
-    });
+    let filter: Query['filter'] = this.args.isFieldDef
+      ? { on: specRef, eq: { ref: this.args.codeRef } }
+      : { type: this.args.codeRef };
+    let chosenCard: CardDef | undefined = await chooseCard({ filter });
 
     if (chosenCard) {
       this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
@@ -594,6 +651,7 @@ interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
     isLoadingNewModule?: boolean;
+    isFieldDef?: boolean;
   };
   Element: HTMLElement;
 }
@@ -606,6 +664,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         <PlaygroundPanelContent
           @codeRef={{@codeRef}}
           @moduleId={{this.moduleId}}
+          @isFieldDef={{@isFieldDef}}
         />
       {{/if}}
     </section>

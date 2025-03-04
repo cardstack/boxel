@@ -29,7 +29,7 @@ import { File } from '@cardstack/boxel-ui/icons';
 
 import {
   identifyCard,
-  isCardDef,
+  isFieldDef,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
@@ -471,9 +471,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get selectedCardRef(): ResolvedCodeRef | undefined {
     let baseDefType = this.selectedCardOrField?.cardOrField;
-    if (!isCardDef(baseDefType)) {
-      return undefined;
-    }
     let codeRef = identifyCard(baseDefType);
     if (!isResolvedCodeRef(codeRef)) {
       return undefined;
@@ -1000,6 +997,9 @@ export default class CodeSubmode extends Component<Signature> {
                             <PlaygroundPanel
                               @codeRef={{this.selectedCardRef}}
                               @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
+                              @isFieldDef={{isFieldDef
+                                this.selectedCardOrField.cardOrField
+                              }}
                             />
                           </:content>
                         </A.Item>
