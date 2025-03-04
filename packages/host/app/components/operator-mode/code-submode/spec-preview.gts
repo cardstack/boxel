@@ -80,7 +80,7 @@ interface Signature {
             typeof SpecPreviewContent,
             | 'showCreateSpecIntent'
             | 'canWrite'
-            | 'selectCard'
+            | 'onSelectCard'
             | 'selectedId'
             | 'spec'
             | 'isLoading'
@@ -167,7 +167,7 @@ interface ContentSignature {
   Args: {
     showCreateSpecIntent: boolean;
     canWrite: boolean;
-    selectCard: (cardId: string) => void;
+    onSelectCard: (cardId: string) => void;
     selectedId: string;
     cards: PrerenderedCard[];
     spec: Spec | undefined;
@@ -188,9 +188,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   get shouldSelectFirstCard() {
-    return (
-      this.args.cards.length > 0 && !this.args.spec && !!this.args.selectCard
-    );
+    return this.args.cards.length > 0 && !this.args.spec;
   }
 
   get cardIds() {
@@ -199,7 +197,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   @action initializeCardSelection() {
     if (this.shouldSelectFirstCard) {
-      this.args.selectCard(this.cardIds[0]);
+      this.args.onSelectCard(this.cardIds[0]);
     }
   }
 
@@ -249,7 +247,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               <BoxelSelect
                 @options={{this.cardIds}}
                 @selected={{@selectedId}}
-                @onChange={{@selectCard}}
+                @onChange={{@onSelectCard}}
                 @matchTriggerWidth={{true}}
                 @disabled={{this.onlyOneInstance}}
                 as |id|
