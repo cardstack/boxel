@@ -7,10 +7,8 @@ import { OpenAIError } from 'openai/error';
 import throttle from 'lodash/throttle';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
-import {
-  CommandRequestContent,
-  FunctionToolCall,
-} from '@cardstack/runtime-common/helpers/ai';
+import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 import { thinkingMessage } from '../constants';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
@@ -126,9 +124,9 @@ export class Responder {
 
   toCommandRequest(
     toolCall: ChatCompletionMessageToolCall,
-  ): Partial<CommandRequestContent> {
+  ): Partial<CommandRequest> {
     let { id, function: f } = toolCall;
-    let result = {} as Partial<CommandRequestContent>;
+    let result = {} as Partial<CommandRequest>;
     if (id) {
       result['id'] = id;
     }

@@ -24,7 +24,7 @@ import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
-import type { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
@@ -112,13 +112,13 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   private get isDisplayingCode() {
     return this.args.roomResource.isDisplayingCode(
-      this.args.messageCommand.commandRequest as CommandRequestContent,
+      this.args.messageCommand.commandRequest as CommandRequest,
     );
   }
 
   private toggleViewCode = () => {
     this.args.roomResource.toggleViewCode(
-      this.args.messageCommand.commandRequest as CommandRequestContent,
+      this.args.messageCommand.commandRequest as CommandRequest,
     );
   };
 
@@ -185,7 +185,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   @cached
   private get failedCommandState() {
     let commandRequest = this.args.messageCommand
-      .commandRequest as CommandRequestContent;
+      .commandRequest as CommandRequest;
     if (!commandRequest.id) {
       return undefined;
     }

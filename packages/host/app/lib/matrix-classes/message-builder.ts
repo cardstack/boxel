@@ -11,7 +11,7 @@ import {
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -219,7 +219,7 @@ export default class MessageBuilder {
 
   private buildMessageCommand(
     message: Message,
-    commandRequest: Partial<CommandRequestContent>,
+    commandRequest: Partial<CommandRequest>,
   ) {
     let commandResultEvent =
       this.builderContext.commandResultEvent ??

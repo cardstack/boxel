@@ -3,10 +3,8 @@ import {
   type LooseSingleCardDocument,
   type CardResource,
 } from '@cardstack/runtime-common';
-import {
-  CommandRequestContent,
-  ToolChoice,
-} from '@cardstack/runtime-common/helpers/ai';
+import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
@@ -236,7 +234,7 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   }
   let lastEventIndex = history.indexOf(lastEventExcludingCommandResults);
   let allCommandsHaveResults = commandRequests.every(
-    (commandRequest: CommandRequestContent) => {
+    (commandRequest: CommandRequest) => {
       return history.slice(lastEventIndex).some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
@@ -589,7 +587,7 @@ function getCommandResults(
 
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (commandRequest: CommandRequestContent) => {
+    (commandRequest: CommandRequest) => {
       return {
         id: commandRequest.id,
         function: {
@@ -608,7 +606,7 @@ function toPromptMessageWithToolResults(
 ): OpenAIPromptMessage[] {
   let commandResults = getCommandResults(event, history);
   return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (commandRequest: CommandRequestContent) => {
+    (commandRequest: CommandRequest) => {
       let content = 'pending';
       let commandResult = commandResults.find(
         (commandResult) =>

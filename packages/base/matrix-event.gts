@@ -1,10 +1,10 @@
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { EventStatus, MatrixError } from 'matrix-js-sdk';
-import {
-  type AttributesSchema,
-  type CommandRequestContent,
-  type ToolChoice,
+import type {
+  AttributesSchema,
+  ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
@@ -166,7 +166,7 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequestContent>[];
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.

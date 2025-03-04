@@ -5,7 +5,7 @@ import { MatrixClient } from '../lib/matrix';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 class FakeMatrixClient implements MatrixClient {
@@ -79,7 +79,7 @@ function snapshotWithContent(content: string): ChatCompletionSnapshot {
 }
 
 function snapshotWithToolCall(
-  commandRequest: Partial<CommandRequestContent>,
+  commandRequest: Partial<CommandRequest>,
 ): ChatCompletionSnapshot {
   let toolCall = {
     type: 'function',

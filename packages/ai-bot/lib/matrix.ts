@@ -2,7 +2,7 @@ import { IContent } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
-import { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -56,7 +56,7 @@ export async function sendMessageEvent(
   body: string,
   eventIdToReplace: string | undefined,
   data: any = {},
-  commandRequests: Partial<CommandRequestContent>[] = [],
+  commandRequests: Partial<CommandRequest>[] = [],
 ) {
   log.debug('sending message', body);
   let contentObject: IContent = {

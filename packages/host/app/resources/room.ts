@@ -9,6 +9,7 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -33,7 +34,6 @@ import type {
 
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import { CommandRequestContent } from '../../../runtime-common/helpers/ai';
 import {
   RoomMember,
   type RoomMemberInterface,
@@ -534,11 +534,11 @@ export class RoomResource extends Resource<Args> {
     return cardDoc;
   };
 
-  public isDisplayingCode(commandRequest: CommandRequestContent) {
+  public isDisplayingCode(commandRequest: CommandRequest) {
     return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
   }
 
-  public toggleViewCode(commandRequest: CommandRequestContent) {
+  public toggleViewCode(commandRequest: CommandRequest) {
     this._isDisplayingViewCodeMap.set(
       commandRequest.id,
       !this.isDisplayingCode(commandRequest),

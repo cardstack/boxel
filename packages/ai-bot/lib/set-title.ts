@@ -19,7 +19,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
-import { CommandRequestContent } from '@cardstack/runtime-common/helpers/ai';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
 Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
@@ -121,9 +121,7 @@ export const getLatestCommandApplyMessage = (
   );
   let commandRequest = commandSourceEvent.content[
     APP_BOXEL_COMMAND_REQUESTS_KEY
-  ].find(
-    (cr: CommandRequestContent) => cr.id === eventContent.data.commandRequestId,
-  );
+  ].find((cr: CommandRequest) => cr.id === eventContent.data.commandRequestId);
   let args = JSON.stringify(commandRequest.content.data.toolCall);
   let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(
     mostRecentlyAttachedCard,
