@@ -335,6 +335,8 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
+    assert.dom('[data-test-view-spec-instance]').exists();
+    await click('[data-test-view-spec-instance]');
   });
   test('view when there are multiple spec instances', async function (assert) {
     await visitOperatorMode({
@@ -351,6 +353,8 @@ module('Acceptance | Spec preview', function (hooks) {
     assert
       .dom('[data-test-spec-selector-item-path]')
       .hasText('pet-entry-2.json');
+    assert.dom('[data-test-view-spec-instance]').exists();
+    await click('[data-test-view-spec-instance]');
   });
   test('view when there are no spec instances', async function (assert) {
     await visitOperatorMode({
