@@ -32,6 +32,7 @@ import {
   cardTypeIcon,
   chooseCard,
   internalKeyFor,
+  loadCard,
   specRef,
   type Query,
   type LooseSingleCardDocument,
@@ -42,6 +43,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -224,6 +226,7 @@ const InstanceSelectDropdown: TemplateOnlyComponent<DropdownSignature> =
             createNew=@createNew
             createNewIsRunning=@createNewIsRunning
           }}
+          data-playground-instance-chooser
           data-test-instance-chooser
           as |card|
         >
@@ -454,6 +457,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   </template>
 
   @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
@@ -658,28 +662,29 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   // TODO: convert this to @action once we no longer need to await below
   private createNew = task(async () => {
-    if (this.args.isFieldDef) {
-      if (!this.args.fieldDef) {
-        throw new Error('Can not create a new field instance without the field definition');
-      }
-      let newFieldInstance = new this.args.fieldDef();
-      if (this.card) {
+    let newFieldInstance: FieldDef | undefined;
+    const instanceChooser: BoxelSelect | null = document.querySelector('[data-playground-instance-chooser]');
 
-        // TODO: need a way to get the subtype that is intended to be used. but if the examples are allowed to be polymorphic,
-        // then we can't rely on the field type returned and should use fieldDef we got from code-submode
-        // let field = getField((this.card as Spec).constructor, 'containedExamples');
-        (this.card as Spec).containedExamples.push(newFieldInstance);
-        this.persistSelections(this.card.id, 'edit', (this.card as Spec).containedExamples.length - 1);
-        // TODO: close dropdown window
+    if (this.args.isFieldDef) {
+      let fieldCard = await loadCard(this.args.codeRef, {  loader: this.loaderService.loader });
+      newFieldInstance = new fieldCard();
+
+      if (this.card) {
+        let fieldInstances = (this.card as Spec).containedExamples;
+        // push new field instance to existing spec's containedExamples array
+        fieldInstances?.push(newFieldInstance);
+        let index = fieldInstances?.length ? fieldInstances.length - 1 : 0;
+        this.persistSelections(this.card.id, 'edit', index);
+        instanceChooser?.click(); // close instance chooser dropdown menu
         return;
       } else {
-        // create Boxel Spec card
+        // automatically create new spec, if one doesn't exist
         this.newCardJSON = {
           data: {
             attributes: {
               specType: 'field',
               ref: this.args.codeRef,
-              containedExamples: [newFieldInstance], // TODO: currently this serializes incorrectly as `{}`
+              // TODO: bug: cannot initialize with `containedExamples` instead of lines 707-711
             },
             meta: {
               adoptsFrom: specRef,
@@ -700,7 +705,12 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
 
     await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+
     if (this.card) {
+      if (newFieldInstance) {
+        (this.card as Spec).containedExamples?.push(newFieldInstance);
+        instanceChooser?.click(); // close instance chooser dropdown menu
+      }
       this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
       this.persistSelections(this.card.id, 'edit', this.args.isFieldDef ? 0 : undefined); // open new instance in playground in edit format
     }
