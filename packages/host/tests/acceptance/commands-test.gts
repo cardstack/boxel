@@ -1190,7 +1190,7 @@ module('Acceptance | Commands tests', function (hooks) {
       assert.equal(
         commandResultEvents.length,
         1,
-        'No command result event dispatched',
+        'Command result event was dispatched',
       );
       assert.dom('[data-test-apply-state="applied"]').exists();
     });

@@ -43,7 +43,6 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import Preview from '../preview';
-import { next } from '@ember/runloop';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -130,7 +129,7 @@ export default class RoomMessageCommand extends Component<Signature> {
       return;
     }
     element.style.height = `${height}px`; // max-height is constrained by CSS
-    next(this, this.scrollIntoView, element.parentElement as HTMLElement);
+    this.scrollIntoView(element.parentElement as HTMLElement);
   });
 
   private scrollIntoView(element: HTMLElement) {
