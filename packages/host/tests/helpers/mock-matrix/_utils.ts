@@ -39,6 +39,9 @@ export class MockUtils {
       origin_server_ts?: number;
     },
   ) => {
+    if (content.isStreamingFinished === undefined) {
+      content.isStreamingFinished = true;
+    }
     return this.testState.sdk!.serverState.addRoomEvent(
       sender,
       {
