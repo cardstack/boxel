@@ -472,7 +472,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
   });
 
-  test('clicking view file button correctly navigates to spec file and displays content in editor', async function (assert) {
+  test('clicking view instances button correctly navigates to spec file and displays content in editor', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,

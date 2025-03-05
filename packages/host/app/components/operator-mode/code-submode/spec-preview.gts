@@ -287,7 +287,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 {{on 'click' this.viewSpecInstance}}
                 data-test-view-spec-instance
               >
-                View File
+                View Instance
               </BoxelButton>
             </div>
             {{#if this.displayIsolated}}
