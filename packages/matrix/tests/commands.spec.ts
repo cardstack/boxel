@@ -168,6 +168,7 @@ test.describe('Commands', () => {
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
@@ -217,6 +218,7 @@ test.describe('Commands', () => {
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
