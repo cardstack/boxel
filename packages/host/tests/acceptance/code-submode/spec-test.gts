@@ -472,7 +472,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
   });
 
-  test('clicking view instances button correctly navigates to spec file and displays content in editor', async function (assert) {
+  test('clicking view instance button correctly navigates to spec file and displays content in editor', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
@@ -493,8 +493,10 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-editor]').containsText('Spec');
     assert.dom('[data-test-editor]').containsText('specType');
 
-    await waitFor('[data-test-module-href]');
-    assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
-    assert.dom('[data-test-exported-name]').containsText('Person');
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}person-entry"][data-test-card-format="isolated"]`,
+      )
+      .exists();
   });
 });
