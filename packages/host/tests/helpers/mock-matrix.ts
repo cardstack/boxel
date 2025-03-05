@@ -70,7 +70,6 @@ export function setupMockMatrix(
       }
     }
 
-    // FIXME are these still needed?
     this.owner.register(
       'service:matrixSdkLoader',
       {

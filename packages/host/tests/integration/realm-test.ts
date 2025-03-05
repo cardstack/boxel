@@ -49,7 +49,6 @@ module('Integration | realm', function (hooks) {
     loader = lookupLoaderService().loader;
   });
 
-  // FIXME maybe this needs to happen in every test now? And setupServerSentEvents is obsolete
   setupMockMatrix(hooks);
   setupLocalIndexing(hooks);
   setupCardLogs(
