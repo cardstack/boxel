@@ -192,7 +192,7 @@ interface DropdownSignature {
     card: CardDef | undefined;
     onSelect: (card: PrerenderedCard) => void;
     chooseCard: () => void;
-    createNew: () => void;
+    createNew?: () => void;
     createNewIsRunning?: boolean;
   };
 }
@@ -391,8 +391,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           @card={{this.card}}
           @onSelect={{this.onSelect}}
           @chooseCard={{perform this.chooseCard}}
-          @createNew={{if this.canWriteRealm (perform this.createNew)}}
-          @createNewIsRunning={{this.createNew.isRunning}}
+          @createNew={{if this.canWriteRealm this.createNew}}
+          @createNewIsRunning={{this.createNewIsRunning}}
         />
       </div>
       {{#let (if @isFieldDef this.field this.card) as |card|}}
@@ -564,15 +564,21 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       return undefined;
     }
     let fieldInstances = (this.card as Spec)?.containedExamples;
-    if (!fieldInstances) {
+    if (!fieldInstances || !fieldInstances.length) {
+      // TODO: handle case when spec has no instances
       return undefined;
     }
     let index = this.fieldIndex ?? 0;
     if (index >= fieldInstances.length) {
-      // TODO: handle case when spec has no instances, or when instance index
-      // do not match any item in array as a result of deletion
-      // maybe create new? // this.createNew.perform();
-      return undefined;
+      // display the next available instance if item was deleted
+      index = fieldInstances.length - 1;
+      if (this.playgroundSelections[this.args.moduleId]) {
+        this.playgroundSelections[this.args.moduleId].fieldIndex = index;
+        window.localStorage.setItem(
+          PlaygroundSelections,
+          JSON.stringify(this.playgroundSelections),
+        );
+      }
     }
     return fieldInstances?.[index];
   }
@@ -616,6 +622,9 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     format = this.format,
     fieldIndex = this.fieldIndex,
   ) => {
+    if (!cardId) {
+      return;
+    }
     if (this.newCardJSON) {
       this.newCardJSON = undefined;
     }
@@ -659,59 +668,59 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
   });
 
+  @action private createNew() {
+    this.args.isFieldDef ? this.createNewField.perform() : this.createNewCard.perform();
+  }
+
+  private get createNewIsRunning() {
+    return this.createNewCard.isRunning || this.createNewField.isRunning;
+  }
+
   // TODO: convert this to @action once we no longer need to await below
-  private createNew = task(async () => {
-    let newFieldInstance: FieldDef | undefined;
-    const instanceChooser: BoxelSelect | null = document.querySelector('[data-playground-instance-chooser][aria-expanded="true"]');
+  private createNewCard = task(async () => {
+    this.newCardJSON = {
+      data: {
+        meta: {
+          adoptsFrom: this.args.codeRef,
+          realmURL: this.operatorModeStateService.realmURL.href,
+        },
+      },
+    };
+    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+    if (this.card) {
+      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
+      this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
+    }
+  });
 
-    if (this.args.isFieldDef) {
-      let fieldCard = await loadCard(this.args.codeRef, {  loader: this.loaderService.loader });
-      newFieldInstance = new fieldCard();
-
-      if (this.card) {
-        let fieldInstances = (this.card as Spec).containedExamples;
-        // push new field instance to existing spec's containedExamples array
-        fieldInstances?.push(newFieldInstance);
-        let index = fieldInstances?.length ? fieldInstances.length - 1 : 0;
-        this.persistSelections(this.card.id, 'edit', index);
-        instanceChooser?.click(); // close instance chooser dropdown menu
-        return;
-      } else {
-        // automatically create new spec, if one doesn't exist
-        this.newCardJSON = {
-          data: {
-            attributes: {
-              specType: 'field',
-              ref: this.args.codeRef,
-              // TODO: bug: cannot initialize with `containedExamples` instead of lines 707-711
-            },
-            meta: {
-              adoptsFrom: specRef,
-              realmURL: this.operatorModeStateService.realmURL.href,
-            },
-          },
-        };
-      }
-    } else {
+  // TODO: convert this to @action once we no longer need to await below
+  private createNewField = task(async () => {
+    let specCard = this.card as Spec | undefined;
+    if (!specCard) {
       this.newCardJSON = {
         data: {
+          attributes: {
+            specType: 'field',
+            ref: this.args.codeRef,
+          },
           meta: {
-            adoptsFrom: this.args.codeRef,
+            adoptsFrom: specRef,
             realmURL: this.operatorModeStateService.realmURL.href,
           },
         },
       };
-    }
-
-    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
-
-    if (this.card) {
-      if (newFieldInstance) {
-        (this.card as Spec).containedExamples?.push(newFieldInstance);
-        instanceChooser?.click(); // close instance chooser dropdown menu // TODO: check if open
+      await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+      if (this.card) {
+        this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
       }
-      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
-      this.persistSelections(this.card.id, 'edit', this.args.isFieldDef ? 0 : undefined); // open new instance in playground in edit format
+    }
+    if (this.card) {
+      let fieldCard = await loadCard(this.args.codeRef, {  loader: this.loaderService.loader });
+      let examples = (this.card as Spec).containedExamples;
+      examples?.push(new fieldCard());
+      let index = examples?.length ? examples.length - 1 : 0;
+      this.persistSelections(this.card.id, 'edit', index);
+      (document.querySelector('[data-playground-instance-chooser][aria-expanded="true"]') as BoxelSelect | null)?.click(); // close instance chooser dropdown menu if open
     }
   });
 
