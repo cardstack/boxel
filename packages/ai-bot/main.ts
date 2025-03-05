@@ -212,7 +212,7 @@ Common issues are:
         let eventList = (initial!.messages?.chunk ||
           []) as DiscreteMatrixEvent[];
         try {
-          promptParts = getPromptParts(eventList, aiBotUserId);
+          promptParts = await getPromptParts(eventList, aiBotUserId);
           if (!promptParts.shouldRespond) {
             return;
           }

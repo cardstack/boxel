@@ -354,7 +354,7 @@ module('Responding', (hooks) => {
     let sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(
       sentEvents.length,
-      4,
+      5,
       'Thinking message, and event with content, event with partial tool call, and event with full tool call should be sent',
     );
     assert.equal(
@@ -447,6 +447,16 @@ module('Responding', (hooks) => {
         event_id: '0',
       },
       'The replacement event with the tool call event should replace the original message',
+    );
+    assert.deepEqual(
+      sentEvents[3].content.isStreamingFinished,
+      false,
+      'The tool call event should not be sent with isStreamingFinished set to true',
+    );
+    assert.deepEqual(
+      sentEvents[4].content.isStreamingFinished,
+      true,
+      'The final event should be sent with isStreamingFinished set to true',
     );
   });
 

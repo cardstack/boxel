@@ -147,8 +147,8 @@ importers:
         specifier: ^31.0.0
         version: 31.0.0(patch_hash=5fxoq6o42simiavsj5daibqlfy)
       openai:
-        specifier: 4.81.0
-        version: 4.81.0
+        specifier: 4.86.1
+        version: 4.86.1
       qunit:
         specifier: ^2.18.0
         version: 2.19.4
@@ -20592,8 +20592,8 @@ packages:
       is-wsl: 2.2.0
     dev: true
 
-  /openai@4.81.0:
-    resolution: {integrity: sha512-lXkFkV+He3O6RGnldHncRGef4uWHssDsAVwN5I3bWcgIdDPy/w8vgtIAwvZxAj49m4WiwWVD0+eGTJ9xOv/ISA==}
+  /openai@4.86.1:
+    resolution: {integrity: sha512-x3iCLyaC3yegFVZaxOmrYJjitKxZ9hpVbLi+ZlT5UHuHTMlEQEbKXkGOM78z9qm2T5GF+XRUZCP2/aV4UPFPJQ==}
     hasBin: true
     peerDependencies:
       ws: ^8.18.0

@@ -75,10 +75,10 @@ export class Responder {
   ) {
     const toolCallsSnapshot = snapshot.choices[0].message.tool_calls;
     if (toolCallsSnapshot?.length) {
-      if (
-        JSON.stringify(this.toolCalls) !== JSON.stringify(toolCallsSnapshot)
-      ) {
+      let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
+      if (this.toolCallsJson !== latestToolCallsJson) {
         this.toolCalls = toolCallsSnapshot;
+        this.toolCallsJson = latestToolCallsJson;
         await this.sendMessageEventWithThrottling();
       }
     }
@@ -134,7 +134,14 @@ export class Responder {
       result['name'] = f.name;
     }
     if (f.arguments) {
-      result['arguments'] = JSON.parse(f.arguments);
+      try {
+        result['arguments'] = JSON.parse(f.arguments);
+      } catch (error) {
+        // If the arguments are not valid JSON, we'll just return an empty object
+        // This will happen during streaming, when the tool call is not yet complete
+        // and the arguments are not yet available
+        result['arguments'] = {};
+      }
     }
     return result;
   }
@@ -162,6 +169,10 @@ export class Responder {
   }
 
   async finalize() {
+    if (!this.isStreamingFinished) {
+      this.isStreamingFinished = true;
+      await this.sendMessageEventWithThrottling();
+    }
     await this.flush();
   }
 }
