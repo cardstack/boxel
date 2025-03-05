@@ -125,5 +125,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     scrollbar: {
       alwaysConsumeMouseWheel: false,
     },
+    lineNumbers: 'off',
   };
 }

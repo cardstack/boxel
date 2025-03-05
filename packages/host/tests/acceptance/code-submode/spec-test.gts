@@ -128,7 +128,10 @@ module('Acceptance | Spec preview', function (hooks) {
     });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings
@@ -324,6 +327,9 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-accordion-item="spec-preview"] button');
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
+    assert
+      .dom('[data-test-spec-selector-item-path]')
+      .hasText('person-entry.json');
     await percySnapshot(assert);
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person');
     assert
@@ -345,6 +351,9 @@ module('Acceptance | Spec preview', function (hooks) {
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
+    assert
+      .dom('[data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2.json');
   });
   test('view when there are no spec instances', async function (assert) {
     await visitOperatorMode({

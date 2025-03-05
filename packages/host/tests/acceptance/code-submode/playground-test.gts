@@ -131,7 +131,10 @@ export class BlogPost extends CardDef {
 }`;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     ({ realm } = await setupAcceptanceTestRealm({
@@ -357,6 +360,7 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="author.gts"]');
+    await click('[data-test-accordion-item="playground"] button');
     assert.dom('[data-test-instance-chooser]').hasText('Please Select');
     await click('[data-test-instance-chooser]');
     assert.dom('li.ember-power-select-option').exists({ count: 1 });
@@ -530,6 +534,39 @@ export class BlogPost extends CardDef {
       .exists({ count: 16 });
   });
 
+  test('can toggle edit format via button on card header', async function (assert) {
+    const playgroundCard = `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"]`;
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    assert
+      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
+      .hasText('Author');
+    assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
+    assert.dom('[data-test-author-title]').hasText('Jane Doe');
+    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+    await click(
+      '[data-test-boxel-card-header-actions] [data-test-edit-button]',
+    );
+
+    assert.dom(`${playgroundCard}[data-test-card-format="edit"]`).exists();
+    assert.dom('[data-test-card-header]').hasClass('is-editing');
+    assert.dom('[data-test-format-chooser-isolated]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-edit]').hasClass('active');
+    await click(
+      '[data-test-boxel-card-header-actions] [data-test-edit-button]',
+    );
+
+    assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
+    assert.dom('[data-test-card-header]').hasNoClass('is-editing');
+    assert.dom('[data-test-format-chooser-edit]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+  });
+
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -591,6 +628,7 @@ export class BlogPost extends CardDef {
     assert.deepEqual(recentFiles[0], [
       testRealmURL,
       'BlogPost/mad-hatter.json',
+      null,
     ]);
   });
 
@@ -601,7 +639,11 @@ export class BlogPost extends CardDef {
       codePath: `${testRealmURL}blog-post.gts`,
     });
     let recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
-    assert.deepEqual(recentFiles[0], [testRealmURL, 'blog-post.gts']);
+    assert.deepEqual(recentFiles[0], [
+      testRealmURL,
+      'blog-post.gts',
+      { column: 38, line: 7 },
+    ]);
     await click('[data-boxel-selector-item-text="BlogPost"]');
     await click('[data-test-accordion-item="playground"] button');
     assert
