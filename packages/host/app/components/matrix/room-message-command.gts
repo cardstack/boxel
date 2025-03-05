@@ -7,7 +7,7 @@ import { cached } from '@glimmer/tracking';
 
 import { task, timeout } from 'ember-concurrency';
 
-// import { modifier } from 'ember-modifier';
+import { modifier } from 'ember-modifier';
 
 import { resource, use } from 'ember-resources';
 
@@ -43,6 +43,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import Preview from '../preview';
+import { next } from '@ember/runloop';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -123,36 +124,23 @@ export default class RoomMessageCommand extends Component<Signature> {
     );
   };
 
-  // TODO need to reevalutate this modifier--do we want to hijack the scroll
-  // when the user views the code?
-  // private scrollBottomIntoView = modifier((element: HTMLElement) => {
-  //   if (this.args.currentEditor !== this.args.messageIndex) {
-  //     return;
-  //   }
+  private scrollBottomIntoView = modifier((element: HTMLElement) => {
+    let height = this.monacoService.getContentHeight();
+    if (!height || height < 0) {
+      return;
+    }
+    element.style.height = `${height}px`; // max-height is constrained by CSS
+    next(this, this.scrollIntoView, element.parentElement as HTMLElement);
+  });
 
-  //   let height = this.monacoService.getContentHeight();
-  //   if (!height || height < 0) {
-  //     return;
-  //   }
-  //   element.style.height = `${height}px`;
+  private scrollIntoView(element: HTMLElement) {
+    let { top, bottom } = element.getBoundingClientRect();
+    let isVerticallyInView = top >= 0 && bottom <= window.innerHeight;
 
-  //   let outerContainer = document.getElementById(
-  //     `message-container-${this.args.messageIndex}`,
-  //   );
-  //   if (!outerContainer) {
-  //     return;
-  //   }
-  //   this.scrollIntoView(outerContainer);
-  // });
-
-  // private scrollIntoView(element: HTMLElement) {
-  //   let { top, bottom } = element.getBoundingClientRect();
-  //   let isVerticallyInView = top >= 0 && bottom <= window.innerHeight;
-
-  //   if (!isVerticallyInView) {
-  //     element.scrollIntoView({ block: 'end' });
-  //   }
-  // }
+    if (!isVerticallyInView) {
+      element.scrollIntoView({ block: 'end' });
+    }
+  }
 
   private get headerTitle() {
     if (this.commandResultCard.card) {
@@ -244,7 +232,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           </Button>
           <div
             class='monaco-container'
-            {{! this.scrollBottomIntoView }}
+            {{this.scrollBottomIntoView}}
             {{monacoModifier
               content=this.previewCommandCode
               contentChanged=undefined
