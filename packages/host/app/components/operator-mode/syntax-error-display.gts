@@ -1,5 +1,7 @@
 import Component from '@glimmer/component';
 
+import { CopyButton } from '@cardstack/boxel-ui/components';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -26,6 +28,12 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
         background: var(--boxel-200);
       }
 
+      .syntax-error-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
       .syntax-error-text {
         color: red;
         font-weight: 600;
@@ -44,8 +52,13 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
 
     <div class='syntax-error-container' data-test-syntax-error>
       <div class='syntax-error-box'>
-        <div class='syntax-error-text'>
-          Syntax Error
+        <div class='syntax-error-header'>
+          <div class='syntax-error-text'>
+            Syntax Error
+          </div>
+          <CopyButton
+            @textToCopy={{this.removeSourceMappingURL @syntaxErrors}}
+          />
         </div>
 
         <hr />
