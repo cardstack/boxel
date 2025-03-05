@@ -1064,7 +1064,10 @@ module(basename(__filename), function () {
               {
                 type: 'catalog-realm',
                 id: `${testRealm2URL}`,
-                attributes: testRealmInfo,
+                attributes: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
               },
               // the seed realm is automatically added to the realm server running
               // on port 4445 as a public realm
