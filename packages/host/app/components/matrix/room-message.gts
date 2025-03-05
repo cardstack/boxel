@@ -22,10 +22,12 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
+import ApplyButton from '../ai-assistant/apply-button';
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
 import RoomMessageCommand from './room-message-command';
+import { on } from '@ember/modifier';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -68,6 +70,11 @@ export default class RoomMessage extends Component<Signature> {
     return this.args.roomResource.messages[this.args.index];
   }
 
+  private hasCodePatch() {
+    const searchReplaceBlockRegex = /^.+?\n```\w*\n<<<<<<< SEARCH\n[\s\S]*?\n=======\n[\s\S]*?\n>>>>>>> REPLACE\n```$/m;
+    return this.message.formattedMessage.match(searchReplaceBlockRegex);
+  }
+
   private checkStreamingTimeout = task(async () => {
     if (!this.isFromAssistant || !this.args.isStreaming) {
       return;
@@ -94,6 +101,10 @@ export default class RoomMessage extends Component<Signature> {
       throw new Error('No command to run');
     }
     return this.commandService.run.unlinked().perform(this.message.command);
+  });
+
+  runCodepatchCommand = task(async () => {
+    console.log('runCodepatchCommand');
   });
 
   <template>
@@ -143,6 +154,12 @@ export default class RoomMessage extends Component<Signature> {
             @currentEditor={{@currentEditor}}
             @failedCommandState={{this.failedCommandState}}
             @isError={{bool this.errorMessage}}
+          />
+        {{/if}}
+        {{#if this.hasCodePatch}}
+          <ApplyButton
+            @state='ready'
+            {{on 'click' (perform this.runCodepatchCommand)}}
           />
         {{/if}}
       </AiAssistantMessage>
