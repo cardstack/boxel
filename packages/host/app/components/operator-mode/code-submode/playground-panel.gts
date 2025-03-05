@@ -662,7 +662,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   // TODO: convert this to @action once we no longer need to await below
   private createNew = task(async () => {
     let newFieldInstance: FieldDef | undefined;
-    const instanceChooser: BoxelSelect | null = document.querySelector('[data-playground-instance-chooser]');
+    const instanceChooser: BoxelSelect | null = document.querySelector('[data-playground-instance-chooser][aria-expanded="true"]');
 
     if (this.args.isFieldDef) {
       let fieldCard = await loadCard(this.args.codeRef, {  loader: this.loaderService.loader });
@@ -708,7 +708,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (this.card) {
       if (newFieldInstance) {
         (this.card as Spec).containedExamples?.push(newFieldInstance);
-        instanceChooser?.click(); // close instance chooser dropdown menu
+        instanceChooser?.click(); // close instance chooser dropdown menu // TODO: check if open
       }
       this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
       this.persistSelections(this.card.id, 'edit', this.args.isFieldDef ? 0 : undefined); // open new instance in playground in edit format
