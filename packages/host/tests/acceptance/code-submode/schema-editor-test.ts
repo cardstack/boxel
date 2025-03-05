@@ -1112,8 +1112,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitForCodeEditor();
     await waitFor('[data-test-syntax-errors]');
 
-    assert.dom('[data-test-copy-syntax-error]').exists();
-    await triggerEvent(`[data-test-copy-syntax-error]`, 'mouseenter');
+    assert.dom('[data-test-boxel-copy-button]').exists();
+    await triggerEvent(`[data-test-boxel-copy-button]`, 'mouseenter');
     assert.dom('[data-test-tooltip-content]').hasText('Copy to clipboard');
     assert.dom('[data-test-syntax-errors]').hasText('File is empty');
   });
