@@ -383,11 +383,7 @@ function shouldRenderEditor(
 }
 const componentCache = initSharedState(
   'linksToManyComponentCache',
-  () =>
-    new WeakMap<
-      Box<BaseDef[]>,
-      { component: BoxComponent; cardOrField: typeof BaseDef }
-    >(),
+  () => new WeakMap<Box<BaseDef[]>, { component: BoxComponent }>(),
 );
 
 export function getLinksToManyComponent({
@@ -404,9 +400,8 @@ export function getLinksToManyComponent({
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
 }): BoxComponent {
-  let cardOrField = cardTypeFor(field, arrayField.children[0]);
   let stable = componentCache.get(arrayField);
-  if (stable?.cardOrField === cardOrField) {
+  if (stable) {
     return stable.component;
   }
   let getComponents = () =>
@@ -506,7 +501,6 @@ export function getLinksToManyComponent({
   });
   stable = {
     component: proxy as unknown as BoxComponent,
-    cardOrField: cardOrField,
   };
 
   componentCache.set(arrayField, stable);
