@@ -1,7 +1,7 @@
 import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
@@ -76,10 +76,11 @@ export class Author extends CardDef {
   }
 }`;
 
-  const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+  const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import StringField from "https://cardstack.com/base/string";
+import { Sparkle } from '@cardstack/boxel-ui/icons';
 import { Author } from './author';
 
 export class Category extends CardDef {
@@ -91,8 +92,25 @@ export class Category extends CardDef {
   }
 }
 
-class Status extends StringField {
+export class Status extends StringField {
   static displayName = 'Status';
+}
+
+export class Comment extends FieldDef {
+  static displayName = 'Comment';
+  static icon = Sparkle;
+  @field title = contains(StringField);
+  @field name = contains(StringField);
+  @field message = contains(StringField);
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <div data-test-embedded-comment>
+        <h4 data-test-embedded-comment-title><@fields.title /></h4>
+        <p><@fields.message /> - by <@fields.name /></p>
+      </div>
+    </template>
+  }
 }
 
 export class BlogPost extends CardDef {
@@ -239,6 +257,53 @@ export class BlogPost extends CardDef {
               adoptsFrom: {
                 module: `${testRealmURL}blog-post`,
                 name: 'Category',
+              },
+            },
+          },
+        },
+        'Spec/comment.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'Comment',
+                module: '../blog-post',
+              },
+              specType: 'field',
+              containedExamples: [
+                {
+                  title: 'Terrible product',
+                  name: 'Marco',
+                  message: 'I would give 0 stars if I could. Do not buy!',
+                },
+                {
+                  title: 'Needs better packaging',
+                  name: 'Harry',
+                  message: 'Arrived broken',
+                },
+              ],
+              title: 'Comment spec',
+            },
+            meta: {
+              fields: {
+                containedExamples: [
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'Comment',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'Comment',
+                    },
+                  },
+                ],
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
               },
             },
           },
@@ -994,5 +1059,86 @@ export class BlogPost extends CardDef {
       '[data-test-field="firstName"] [data-test-boxel-input]',
       newFirstName,
     );
+  });
+
+  module('usage with field def', function () {
+    test('can preview compound field instance', async function (assert) {
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}blog-post.gts`,
+      });
+
+      await click('[data-test-boxel-selector-item-text="Comment"]');
+      await click('[data-test-accordion-item="playground"] button');
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+
+      await click('[data-test-instance-chooser]');
+      assert.dom('[data-option-index]').exists({ count: 1 });
+      assert
+        .dom('[data-option-index] [data-test-card-title]')
+        .hasText('Comment spec');
+
+      await click('[data-option-index="0"]');
+      assert.dom('[data-test-selected-item]').hasText('Comment spec'); // TODO
+      assert.dom('[data-test-field-preview-header]').containsText('Comment');
+      // assert.dom('[data-test-playground-format-chooser] button').exists({ count: 3 }); // TODO
+      assert.dom('[data-test-format-chooser-embedded]').hasClass('active');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText(
+          'Terrible product',
+          'preview defaults to embedded view of first example',
+        );
+
+      await click('[data-test-format-chooser-atom]');
+      assert
+        .dom(
+          '[data-test-field-preview-card] [data-test-compound-field-format="atom"]',
+        )
+        .exists();
+
+      await click('[data-test-edit-button]');
+      assert
+        .dom(
+          '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
+        )
+        .exists();
+      assert
+        .dom('[data-test-field-preview-card] [data-test-field]')
+        .exists({ count: 3 });
+      assert
+        .dom('[data-test-field-preview-card] [data-test-field="name"] input')
+        .hasValue('Marco');
+
+      await click('[data-test-edit-button]');
+      assert.dom('[data-test-embedded-comment]').exists();
+    });
+
+    skip("can select a different instance to preview from the spec's containedExamples collection", async function (_assert) {});
+
+    skip('preview panel updates when selecting a different field or card declaration', async function (_assert) {});
+
+    skip('can preview primitive field def instance', async function (_assert) {
+      // await visitOperatorMode({
+      //   stacks: [],
+      //   submode: 'code',
+      //   codePath: `${testRealmURL}blog-post.gts`,
+      // });
+      // await click('[data-test-boxel-selector-item-text="Status"]');
+      // await click('[data-test-accordion-item="playground"] button');
+      // assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      // await click('[data-test-instance-chooser]');
+      // await this.pauseTest();
+    });
+
+    skip('can create new field instance (no preexisting Spec)', async function (_assert) {});
+
+    skip('can create new field instance (has preexisting Spec)', async function (_assert) {});
+
+    skip('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (_assert) {});
+
+    skip<TestContextWithSave>('can edit compound field instance and trigger auto save', async function (_assert) {});
+    skip<TestContextWithSave>('can edit primitive field instance and trigger auto save', async function (_assert) {});
   });
 });

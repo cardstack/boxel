@@ -299,8 +299,9 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
           @onEdit={{@onEdit}}
           @onFinishEditing={{@onFinishEditing}}
           @isTopCard={{true}}
+          data-test-field-preview-header
         />
-        <CardContainer class='field-preview-card'>
+        <CardContainer class='field-preview-card' data-test-field-preview-card>
           <Preview @card={{@card}} @format={{@format}} />
         </CardContainer>
       </CardContainer>
@@ -423,6 +424,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
             class='format-chooser'
             @format={{this.format}}
             @setFormat={{this.setFormat}}
+            data-test-playground-format-chooser
           />
         {{/if}}
       {{/let}}
