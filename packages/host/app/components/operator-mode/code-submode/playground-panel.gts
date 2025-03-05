@@ -31,6 +31,7 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   chooseCard,
+  identifyCard,
   internalKeyFor,
   loadCard,
   specRef,
@@ -73,6 +74,13 @@ const getItemTitle = (item: CardDef) => {
   }
   return item.title ?? `Untitled ${cardTypeDisplayName(item)}`;
 };
+
+const isSpec = (card: CardDef, cardRef?: ResolvedCodeRef): card is Spec => {
+  if (!cardRef) {
+    cardRef = identifyCard(card.constructor) as ResolvedCodeRef | undefined;
+  }
+  return cardRef?.name === specRef.name && cardRef.module === specRef.module;
+}
 
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
   <template>
@@ -537,8 +545,28 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     { isAutoSave: () => true },
   );
 
+  private selectedDeclarationHasChanged = (card: CardDef) => {
+    let cardRef = identifyCard(card.constructor) as ResolvedCodeRef | undefined;
+    let { name } = this.args.codeRef;
+    if (!cardRef) {
+      return true;
+    }
+    if (this.args.isFieldDef) {
+      if (!isSpec(card, cardRef)) {
+        return true;
+      }
+      return card.ref.name !== name;
+    } else {
+      return cardRef.name !== name;
+    }
+  }
+
   private get card(): CardDef | undefined {
-    return this.cardResource.card;
+    let card = this.cardResource.card;
+    if (card && this.selectedDeclarationHasChanged(card)) {
+      return undefined;
+    }
+    return card;
   }
 
   private get defaultFormat() {
