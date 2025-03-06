@@ -74,6 +74,7 @@ import {
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { tracked } from '@glimmer/tracking';
 
 let loader: Loader;
 const testModuleRealm = 'http://localhost:4202/test/';
@@ -2281,6 +2282,157 @@ module('Integration | card-basics', function (hooks) {
       assert.dom(root.children[0]).containsText('Arthur');
       child.firstName = 'Quint';
       await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Quint');
+    });
+
+    test('Re-order linksToMany fields action will use the cached template that UI state', async function (assert) {
+      class Fitted extends Component<typeof Pet1> {
+        @tracked counter = 0;
+
+        incrementCounter = () => {
+          this.counter++;
+        };
+        <template>
+          {{this.args.model.name}}
+          <button
+            {{on 'click' this.incrementCounter}}
+            data-test-increment-counter
+          >Increment</button>
+          <div data-test-counter>
+            {{this.counter}}
+          </div>
+        </template>
+      }
+
+      class FittedPrime extends Component<typeof Pet1Prime> {
+        @tracked counter = 0;
+
+        incrementCounter = () => {
+          this.counter++;
+        };
+        <template>
+          <div data-test-different-template>Different Template</div>
+          {{this.args.model.name}}
+          <button
+            {{on 'click' this.incrementCounter}}
+            data-test-increment-counter
+          >Increment</button>
+          <div data-test-counter>
+            {{this.counter}}
+          </div>
+        </template>
+      }
+      class Pet1 extends CardDef {
+        @field name = contains(StringField);
+        static fitted = Fitted;
+      }
+
+      class Pet1Prime extends Pet1 {
+        static fitted = FittedPrime;
+      }
+
+      class Person1 extends CardDef {
+        @field pets = linksToMany(Pet1);
+        static isolated = class Embedded extends Component<typeof this> {
+          reorder = () => {
+            if (
+              this.args.model.pets &&
+              this.args.model.pets[0] &&
+              this.args.model.pets[1]
+            ) {
+              this.args.model.pets = [
+                this.args.model.pets[1],
+                this.args.model.pets[0],
+              ];
+            }
+          };
+          <template>
+            <button
+              {{on 'click' this.reorder}}
+              data-test-reorder
+            >Reorder</button>
+            <@fields.pets @format='fitted' />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        Pet1,
+        Pet1Prime,
+        Person1,
+      });
+
+      let pet1 = new Pet1({ name: 'jersey' });
+      let pet2 = new Pet1Prime({ name: 'boboy' });
+      await saveCard(pet1, `${testRealmURL}Pet/pet1`, loader);
+      await saveCard(pet2, `${testRealmURL}Pet/pet2`, loader);
+      let person = new Person1({
+        name: 'Mango',
+        pets: [pet1, pet2],
+      });
+      await renderCard(loader, person, 'isolated');
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-counter]`)
+        .hasText('0');
+      assert
+        .dom(
+          `[data-test-plural-view-item="0"][data-test-card="${testRealmURL}Pet/pet1"]`,
+        )
+        .containsText('jersey');
+
+      await click(
+        `[data-test-plural-view-item="0"] [data-test-increment-counter]`,
+      );
+      await click(
+        `[data-test-plural-view-item="0"] [data-test-increment-counter]`,
+      );
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-counter]`)
+        .hasText('2');
+      assert
+        .dom(
+          `[data-test-plural-view-item="0"][data-test-card="${testRealmURL}Pet/pet1"]`,
+        )
+        .containsText('jersey');
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-different-template]`)
+        .doesNotExist();
+      assert
+        .dom(`[data-test-plural-view-item="1"] [data-test-counter]`)
+        .hasText('0');
+      assert
+        .dom(
+          `[data-test-plural-view-item="1"][data-test-card="${testRealmURL}Pet/pet2"]`,
+        )
+        .containsText('boboy');
+      assert
+        .dom(`[data-test-plural-view-item="1"] [data-test-different-template]`)
+        .exists();
+      await click('[data-test-reorder]'); //Reorder
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-counter]`)
+        .hasText('0');
+      assert
+        .dom(
+          `[data-test-plural-view-item="0"][data-test-card="${testRealmURL}Pet/pet2"]`,
+        )
+        .containsText('boboy');
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-counter]`)
+        .hasText('0');
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-different-template]`)
+        .exists();
+      assert
+        .dom(
+          `[data-test-plural-view-item="1"][data-test-card="${testRealmURL}Pet/pet1"]`,
+        )
+        .containsText('jersey');
+      assert
+        .dom(`[data-test-plural-view-item="1"] [data-test-counter]`)
+        .hasText('2');
+      assert
+        .dom(`[data-test-plural-view-item="1"] [data-test-different-template]`)
+        .doesNotExist();
     });
 
     test('rerender when a containsMany field is fully replaced', async function (assert) {
