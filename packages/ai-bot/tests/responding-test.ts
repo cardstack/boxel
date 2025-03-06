@@ -133,7 +133,7 @@ module('Responding', (hooks) => {
   test('Sends thinking message', async () => {
     await responder.ensureThinkingMessageSent();
 
-    const sentEvents = fakeMatrixClient.getSentEvents();
+    let sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(sentEvents.length, 1, 'One event should be sent');
     assert.equal(
       sentEvents[0].eventType,
@@ -150,6 +150,10 @@ module('Responding', (hooks) => {
       thinkingMessage,
       'Message body should match',
     );
+
+    await responder.ensureThinkingMessageSent();
+    sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 1, 'Still only one event');
   });
 
   test('Sends first content message immediately, replace the thinking message', async () => {
