@@ -62,6 +62,7 @@ import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
 import type { Skill } from '../ai-assistant/skill-menu';
+import { Submodes } from '../submode-switcher';
 
 interface Signature {
   Args: {
@@ -289,7 +290,10 @@ export default class Room extends Component<Signature> {
       },
     });
 
-    if (!this.autoAttachedFileUrl) {
+    if (
+      !this.autoAttachedFileUrl ||
+      this.operatorModeStateService.state.submode === Submodes.Interact
+    ) {
       state.value = undefined;
     } else {
       state.value = this.matrixService.fileAPI.createFileDef({
