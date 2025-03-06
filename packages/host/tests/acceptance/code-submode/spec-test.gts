@@ -53,6 +53,15 @@ const personCardSource = `
   }
 `;
 
+const person1CardSource = `
+  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+  import StringCard from "https://cardstack.com/base/string";
+
+  export class Person1 extends CardDef {
+    static displayName = 'Person1';
+  }
+`;
+
 const petCardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
@@ -108,8 +117,12 @@ const newSkillCardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
   import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-  export class NewSkill extends CardDef {
+  export class NewSkill extends SkillCard {
     static displayName = 'NewSkill';
+  }
+
+  export class ExtendedNewSkill extends NewSkill {
+    static displayName = 'ExtendedNewSkill';
   }
 `;
 
@@ -140,6 +153,7 @@ module('Acceptance | Spec preview', function (hooks) {
       realmURL: testRealmURL,
       contents: {
         'person.gts': personCardSource,
+        'person-1.gts': person1CardSource,
         'pet.gts': petCardSource,
         'employee.gts': employeeCardSource,
         'new-skill.gts': newSkillCardSource,
@@ -400,6 +414,26 @@ module('Acceptance | Spec preview', function (hooks) {
   test<TestContextWithSSE>('have ability to create new spec instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
+      codePath: `${testRealmURL}person-1.gts`,
+    });
+    assert.dom('[data-test-create-spec-button]').exists();
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedNumberOfEvents: 2,
+      callback: async () => {
+        await click('[data-test-create-spec-button]');
+      },
+    });
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
+    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-name]').hasText('Person1');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person-1`);
+  });
+  test<TestContextWithSSE>('have ability to create new skill spec type instances', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
@@ -415,8 +449,31 @@ module('Acceptance | Spec preview', function (hooks) {
     assert
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('NewSkill');
-    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-type]').hasText('skill');
     assert.dom('[data-test-exported-name]').hasText('NewSkill');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
+  });
+  test<TestContextWithSSE>('have ability to create new extended skill spec type instances', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}new-skill.gts`,
+    });
+    await click('[data-boxel-selector-item-text="ExtendedNewSkill"]');
+    assert.dom('[data-test-create-spec-button]').exists();
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await this.expectEvents({
+      assert,
+      realm,
+      expectedNumberOfEvents: 2,
+      callback: async () => {
+        await click('[data-test-create-spec-button]');
+      },
+    });
+    assert
+      .dom('[data-test-title] [data-test-boxel-input]')
+      .hasValue('ExtendedNewSkill');
+    assert.dom('[data-test-exported-type]').hasText('skill');
+    assert.dom('[data-test-exported-name]').hasText('ExtendedNewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
 
