@@ -17,9 +17,15 @@ import {
   PermissionsConsumer,
 } from './field-component';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
-import { getPlural } from '@cardstack/runtime-common';
+import {
+  getPlural,
+  type ResolvedCodeRef,
+  Loader,
+  loadCard,
+} from '@cardstack/runtime-common';
 import { IconTrash } from '@cardstack/boxel-ui/icons';
 import { TemplateOnlyComponent } from '@ember/component/template-only';
+import { restartableTask } from 'ember-concurrency';
 
 interface ContainsManyEditorSignature {
   Args: {
@@ -30,6 +36,7 @@ interface ContainsManyEditorSignature {
       field: Field<typeof BaseDef>,
       boxedElement: Box<BaseDef>,
     ): typeof BaseDef;
+    typeConstraint?: ResolvedCodeRef;
   };
 }
 
@@ -131,11 +138,21 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     </style>
   </template>
 
-  add = () => {
-    // TODO probably each field card should have the ability to say what a new item should be
-    let newValue =
+  addField = restartableTask(async () => {
+    let newValue: FieldDef | null =
       primitive in this.args.field.card ? null : new this.args.field.card();
+    // TODO probably each field card should have the ability to say what a new item should be
+    if (this.args.typeConstraint) {
+      let subclassField = await loadCard(this.args.typeConstraint, {
+        loader: myLoader(),
+      });
+      newValue = new subclassField();
+    }
     (this.args.model.value as any)[this.args.field.name].push(newValue);
+  });
+
+  add = () => {
+    this.addField.perform();
   };
 
   remove = (index: number) => {
@@ -202,6 +219,7 @@ export function getContainsManyComponent({
             @arrayField={{arrayField}}
             @field={{field}}
             @cardTypeFor={{cardTypeFor}}
+            @typeConstraint={{@typeConstraint}}
           />
         {{else}}
           {{#let
@@ -269,4 +287,15 @@ export function getContainsManyComponent({
       return containsManyComponent;
     },
   });
+}
+
+function myLoader(): Loader {
+  // we know this code is always loaded by an instance of our Loader, which sets
+  // import.meta.loader.
+
+  // When type-checking realm-server, tsc sees this file and thinks
+  // it will be transpiled to CommonJS and so it complains about this line. But
+  // this file is always loaded through our loader and always has access to import.meta.
+  // @ts-ignore
+  return (import.meta as any).loader;
 }
