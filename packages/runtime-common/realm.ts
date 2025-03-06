@@ -1951,7 +1951,7 @@ export class Realm {
       },
     );
 
-    // To remove as part of CS-XXXX, a workaround for a file watcher irregularity in tests
+    // To remove as part of CS-8104, a workaround for a file watcher irregularity in tests
     let subscribeOptions: { watcher?: string } = {};
 
     if (new URL(request.url).searchParams.has('testFileWatcher')) {

@@ -73,7 +73,7 @@ export class NodeAdapter implements RealmAdapter {
       throw new Error(`tried to subscribe to watcher twice`);
     }
 
-    // FIXME remove with CS-XXXX
+    // TODO remove with CS-8014
     let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
 
     this.watcher = sane(join(this.realmDir, '/'), watcherOptions);

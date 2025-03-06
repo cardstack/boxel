@@ -3186,7 +3186,7 @@ module(basename(__filename), function () {
           copySync(join(__dirname, 'cards'), testRealmDir);
           await startRealmServer(dbAdapter2, publisher, runner);
 
-          // To remove as part of CS-XXXX
+          // To remove as part of CS-8014
           testRealmEventSource = new eventSource(
             `${testRealmHref}_message?testFileWatcher=watchexec`,
           );
