@@ -469,7 +469,7 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  private get selectedCardRef(): ResolvedCodeRef | undefined {
+  private get selectedCodeRef(): ResolvedCodeRef | undefined {
     let baseDefType = this.selectedCardOrField?.cardOrField;
     let codeRef = identifyCard(baseDefType);
     if (!isResolvedCodeRef(codeRef)) {
@@ -984,7 +984,7 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.selectedCardRef}}
+                      {{#if this.selectedCodeRef}}
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
@@ -996,7 +996,7 @@ export default class CodeSubmode extends Component<Signature> {
                           <:content>
                             {{#if (eq this.selectedAccordionItem 'playground')}}
                               <PlaygroundPanel
-                                @codeRef={{this.selectedCardRef}}
+                                @codeRef={{this.selectedCodeRef}}
                                 @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
                                 @isFieldDef={{isFieldDef
                                   this.selectedCardOrField.cardOrField

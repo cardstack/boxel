@@ -503,23 +503,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   get query(): Query {
     if (this.args.isFieldDef) {
-      // For fields, we're querying the Boxel Spec instances in recent realms, regardless of recent cards...
-      return {
-        filter: {
-          on: specRef,
-          eq: {
-            ref: this.args.codeRef,
-          },
-        },
-        sort: [
-          {
-            by: 'createdAt',
-            direction: 'desc',
-          },
-        ],
-      };
+      // TODO
     }
-
     return {
       filter: {
         every: [
@@ -688,10 +673,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private chooseCard = task(async () => {
-    let filter: Query['filter'] = this.args.isFieldDef
-      ? { on: specRef, eq: { ref: this.args.codeRef } }
-      : { type: this.args.codeRef };
-    let chosenCard: CardDef | undefined = await chooseCard({ filter });
+    if (this.args.isFieldDef) {
+      // TODO: display examples in selected spec
+      return;
+    }
+    let chosenCard: CardDef | undefined = await chooseCard({ filter: { type: this.args.codeRef } });
 
     if (chosenCard) {
       this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
@@ -733,6 +719,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           attributes: {
             specType: 'field',
             ref: this.args.codeRef,
+            title: this.args.codeRef.name
           },
           meta: {
             adoptsFrom: specRef,

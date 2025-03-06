@@ -1120,6 +1120,10 @@ export class BlogPost extends CardDef {
     // and compound fields will cease to exist. See linear ticket [CS-6689].
     skip('preview is not available for primitive fields', async function (_assert) {});
 
+    skip('previewing when spec is available but has no examples', async function (_assert) {}); // TODO
+
+    skip('preview the next available example is the previously selected one has been deleted', async function (_assert) {});
+
     skip("can select a different instance to preview from the spec's containedExamples collection", async function (_assert) {});
 
     skip('preview panel updates when selecting a different field or card declaration', async function (_assert) {});
