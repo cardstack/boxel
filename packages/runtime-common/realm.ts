@@ -1984,7 +1984,6 @@ export class Realm {
       }, subscribeOptions);
     }
 
-    // FIXME listeningClients should go away
     this.listeningClients.push(writable);
 
     // TODO: We may need to store something else here to do cleanup to keep
