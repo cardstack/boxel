@@ -323,7 +323,6 @@ export class Realm {
     this.paths = new RealmPaths(new URL(url));
     let { username, url: matrixURL } = matrix;
     this.#realmSecretSeed = secretSeed;
-
     this.#matrixClient = new MatrixClient({
       matrixURL,
       username,
