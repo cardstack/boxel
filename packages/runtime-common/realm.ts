@@ -1966,9 +1966,7 @@ export class Realm {
         }
         this.broadcastRealmEvent({
           eventName: 'update',
-          // FIXME what to do with this?
-          // @ts-expect-error
-          data,
+          ...data,
         });
         this.#updateItems.push({
           operation: ('added' in data
