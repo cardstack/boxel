@@ -128,7 +128,10 @@ module('Acceptance | Spec preview', function (hooks) {
     });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings
@@ -335,6 +338,8 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
+    await waitFor('[data-test-view-spec-instance]');
+    assert.dom('[data-test-view-spec-instance]').exists();
   });
   test('view when there are multiple spec instances', async function (assert) {
     await visitOperatorMode({
@@ -351,6 +356,8 @@ module('Acceptance | Spec preview', function (hooks) {
     assert
       .dom('[data-test-spec-selector-item-path]')
       .hasText('pet-entry-2.json');
+    await waitFor('[data-test-view-spec-instance]');
+    assert.dom('[data-test-view-spec-instance]').exists();
   });
   test('view when there are no spec instances', async function (assert) {
     await visitOperatorMode({
@@ -466,5 +473,33 @@ module('Acceptance | Spec preview', function (hooks) {
       assert.strictEqual(json.data.attributes?.readMe, readMeInput);
     });
     await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
+  });
+
+  test('clicking view instance button correctly navigates to spec file and displays content in editor', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+
+    await waitFor('[data-test-view-spec-instance]');
+    assert.dom('[data-test-view-spec-instance]').exists();
+    await click('[data-test-view-spec-instance]');
+
+    await waitFor('[data-test-card-url-bar-input]');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person-entry.json`);
+
+    await waitFor('[data-test-editor]');
+    assert.dom('[data-test-editor]').hasAnyText();
+    assert.dom('[data-test-editor]').containsText('Person');
+    assert.dom('[data-test-editor]').containsText('Spec');
+    assert.dom('[data-test-editor]').containsText('specType');
+
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}person-entry"][data-test-card-format="isolated"]`,
+      )
+      .exists();
   });
 });

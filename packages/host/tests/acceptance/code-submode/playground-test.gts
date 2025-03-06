@@ -131,7 +131,10 @@ export class BlogPost extends CardDef {
 }`;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     ({ realm } = await setupAcceptanceTestRealm({
@@ -625,6 +628,7 @@ export class BlogPost extends CardDef {
     assert.deepEqual(recentFiles[0], [
       testRealmURL,
       'BlogPost/mad-hatter.json',
+      null,
     ]);
   });
 
@@ -635,7 +639,11 @@ export class BlogPost extends CardDef {
       codePath: `${testRealmURL}blog-post.gts`,
     });
     let recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
-    assert.deepEqual(recentFiles[0], [testRealmURL, 'blog-post.gts']);
+    assert.deepEqual(recentFiles[0], [
+      testRealmURL,
+      'blog-post.gts',
+      { column: 38, line: 7 },
+    ]);
     await click('[data-boxel-selector-item-text="BlogPost"]');
     await click('[data-test-accordion-item="playground"] button');
     assert
