@@ -131,6 +131,9 @@ export class Responder {
     if (contentSnapshot?.length) {
       contentSnapshot = cleanContent(contentSnapshot);
       if (this.latestContent !== contentSnapshot) {
+        if (this.latestReasoning === thinkingMessage) {
+          this.latestReasoning = '';
+        }
         this.latestContent = contentSnapshot;
         await this.sendMessageEventWithThrottling();
       }

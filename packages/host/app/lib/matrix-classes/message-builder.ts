@@ -79,6 +79,9 @@ export default class MessageBuilder {
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
       attachedFiles: this.attachedFiles,
+      reasoningContent:
+        (this.event.content as CardMessageContent)['app.boxel.reasoning'] ||
+        null,
     });
   }
 
@@ -156,6 +159,8 @@ export default class MessageBuilder {
 
     message.message = this.event.content.body;
     message.formattedMessage = this.event.content.formatted_body;
+    message.reasoningContent =
+      (this.event.content as CardMessageContent)['app.boxel.reasoning'] || null;
     message.isStreamingFinished =
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished

@@ -60,6 +60,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     formattedMessage: SafeString;
+    formattedReasoningContent?: SafeString | null;
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
@@ -226,6 +227,12 @@ export default class AiAssistantMessage extends Component<Signature> {
                 Retry
               </Button>
             {{/if}}
+          </div>
+        {{/if}}
+
+        {{#if @formattedReasoningContent}}
+          <div class='reasoning-content'>
+            {{@formattedReasoningContent}}
           </div>
         {{/if}}
 
@@ -405,6 +412,12 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .content > :deep(* + *) {
         margin-top: var(--boxel-sp);
+      }
+
+      .reasoning-content {
+        font-size: var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+        color: var(--boxel-450);
       }
 
       .error-container {
