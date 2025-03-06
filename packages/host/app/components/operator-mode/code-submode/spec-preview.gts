@@ -446,14 +446,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   isSkill(selectedDeclaration: CardOrFieldDeclaration) {
-    if (
-      selectedDeclaration.cardType.type &&
-      isResolvedCodeRef(selectedDeclaration.cardType.type.codeRef) &&
-      selectedDeclaration.cardType.type.codeRef.name === 'SkillCard' &&
-      selectedDeclaration.cardType.type.codeRef.module ===
-        'https://cardstack.com/base/skill-card'
-    ) {
-      return true;
+    if (selectedDeclaration.cardType.typeCache) {
+      const skillCard = Array.from(
+        selectedDeclaration.cardType.typeCache.values(),
+      ).find(
+        (type) =>
+          type.localName === 'SkillCard' &&
+          type.module === 'https://cardstack.com/base/skill-card',
+      );
+      if (skillCard) {
+        return true;
+      }
     }
     return false;
   }
