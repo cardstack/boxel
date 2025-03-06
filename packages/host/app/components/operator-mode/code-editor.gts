@@ -254,10 +254,13 @@ export default class CodeEditor extends Component<Signature> {
     if (!this.codePath) {
       return;
     }
-    this.recentFilesService.updateCursorPositionByURL(this.codePath, {
-      line: position.lineNumber,
-      column: position.column,
-    });
+    this.recentFilesService.updateCursorPositionByURL(
+      this.codePath.toString(),
+      {
+        line: position.lineNumber,
+        column: position.column,
+      },
+    );
   }
 
   @action
