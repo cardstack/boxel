@@ -1850,7 +1850,6 @@ export class Realm {
       iconURL: null,
       showAsCatalog: null,
       visibility: await this.visibility(),
-      // FIXME can the latter replace the former?
       realmUserId:
         this.#matrixClient.getUserId()! || this.#matrixClient.username,
     };
@@ -1867,7 +1866,6 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
-        // FIXME can the latter replace the former?
         realmInfo.realmUserId =
           realmConfigJson.realmUserId ??
           (this.#matrixClient.getUserId()! || this.#matrixClient.username);
