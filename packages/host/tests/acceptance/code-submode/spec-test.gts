@@ -128,7 +128,10 @@ module('Acceptance | Spec preview', function (hooks) {
     });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings

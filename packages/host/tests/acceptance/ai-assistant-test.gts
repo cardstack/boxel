@@ -133,7 +133,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     class Pet extends CardDef {
@@ -366,7 +369,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
 
-    createAndJoinRoom('@testuser:localhost', 'room-test-2');
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test-2',
+    });
 
     await click('[data-test-past-sessions-button]');
     await waitFor("[data-test-enter-room='mock_room_2']");
