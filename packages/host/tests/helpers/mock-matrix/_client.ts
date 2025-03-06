@@ -10,7 +10,6 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
-  APP_BOXEL_TEST_SENTINEL,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
@@ -428,7 +427,6 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
-      case APP_BOXEL_TEST_SENTINEL:
       case 'm.room.create':
       case 'm.room.message':
       case 'm.room.name':

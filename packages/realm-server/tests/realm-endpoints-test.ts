@@ -195,23 +195,14 @@ module(basename(__filename), function () {
         await matrixClient.setAccountData('boxel.session-rooms', {
           [userId]: json.room,
         });
-
-        // FIXME maybe use timestamp instead?
-        await matrixClient.sendEvent(json.room, 'm.room.message', {
-          body: `sentinel-event`,
-          msgtype: 'app.boxel.test.sentinel',
-        });
       });
 
       return {
         matrixClient,
-        getMessagesSinceTestStarted: async function () {
+        getMessagesSince: async function (since: number) {
           let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-          let messagesAfterSentinel = allMessages.slice(
-            0,
-            allMessages.findIndex(
-              (m) => (m.content as any).msgtype === 'app.boxel.test.sentinel',
-            ),
+          let messagesAfterSentinel = allMessages.filter(
+            (m) => m.origin_server_ts > since,
           );
 
           return messagesAfterSentinel;
@@ -890,10 +881,11 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
-        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+        let { getMessagesSince } = setupMatrixRoom(hooks);
 
         test('serves the request', async function (assert) {
           let id: string | undefined;
+          let realmEventTimestampStart = Date.now();
 
           let response = await request
             .post('/')
@@ -911,9 +903,12 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
 
-          let messages = await getMessagesSinceTestStarted();
+          let messages = await getMessagesSince(realmEventTimestampStart);
           let incrementalEvent = findRealmEvent(
             messages,
             'index',
@@ -1065,7 +1060,7 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
-        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+        let { getMessagesSince } = setupMatrixRoom(hooks);
 
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
@@ -1161,6 +1156,8 @@ module(basename(__filename), function () {
         });
 
         test('broadcasts realm events', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
           await request
             .patch('/person-1')
             .send({
@@ -1179,9 +1176,12 @@ module(basename(__filename), function () {
             })
             .set('Accept', 'application/vnd.card+json');
 
-          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
 
-          let messages = await getMessagesSinceTestStarted();
+          let messages = await getMessagesSince(realmEventTimestampStart);
           let incrementalIndexInitiationEvent = findRealmEvent(
             messages,
             'index',
@@ -1281,7 +1281,7 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
-        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+        let { getMessagesSince } = setupMatrixRoom(hooks);
 
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
@@ -1306,13 +1306,18 @@ module(basename(__filename), function () {
         });
 
         test('broadcasts realm events', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
           await request
             .delete('/person-1')
             .set('Accept', 'application/vnd.card+json');
 
-          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
 
-          let messages = await getMessagesSinceTestStarted();
+          let messages = await getMessagesSince(realmEventTimestampStart);
           let incrementalIndexInitiationEvent = findRealmEvent(
             messages,
             'index',
@@ -1567,7 +1572,7 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
-        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+        let { getMessagesSince } = setupMatrixRoom(hooks);
 
         test('serves the request', async function (assert) {
           let entry = 'unused-card.gts';
@@ -1592,13 +1597,18 @@ module(basename(__filename), function () {
         });
 
         test('broadcasts realm events', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
           await request
             .delete('/unused-card.gts')
             .set('Accept', 'application/vnd.card+source');
 
-          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
 
-          let messages = await getMessagesSinceTestStarted();
+          let messages = await getMessagesSince(realmEventTimestampStart);
           let incrementalIndexInitiationEvent = findRealmEvent(
             messages,
             'index',
@@ -1689,7 +1699,7 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
-        let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+        let { getMessagesSince } = setupMatrixRoom(hooks);
 
         test('serves a card-source POST request', async function (assert) {
           let entry = 'unused-card.gts';
@@ -1721,14 +1731,19 @@ module(basename(__filename), function () {
         });
 
         test('broadcasts realm events', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
           await request
             .post('/unused-card.gts')
             .set('Accept', 'application/vnd.card+source')
             .send(`//TEST UPDATE\n${cardSrc}`);
 
-          await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
 
-          let messages = await getMessagesSinceTestStarted();
+          let messages = await getMessagesSince(realmEventTimestampStart);
           let incrementalIndexInitiationEvent = findRealmEvent(
             messages,
             'index',
@@ -1776,6 +1791,8 @@ module(basename(__filename), function () {
         });
 
         test('can serialize a card instance correctly after card definition is changed', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
           // create a card def
           {
             let response = await request
@@ -1954,7 +1971,7 @@ module(basename(__filename), function () {
             });
           }
 
-          let messages = await getMessagesSinceTestStarted();
+          let messages = await getMessagesSince(realmEventTimestampStart);
 
           let expected = [
             {
@@ -3148,7 +3165,7 @@ module(basename(__filename), function () {
         '*': ['read', 'write'],
       });
 
-      let { getMessagesSinceTestStarted } = setupMatrixRoom(hooks);
+      let { getMessagesSince } = setupMatrixRoom(hooks);
 
       async function startRealmServer(
         dbAdapter: PgAdapter,
@@ -3286,6 +3303,8 @@ module(basename(__filename), function () {
 
       // CS-8095
       skip('can index a newly added file to the filesystem', async function (assert) {
+        let realmEventTimestampStart = Date.now();
+
         {
           let response = await request
             .get('/new-card')
@@ -3310,9 +3329,12 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument,
         );
 
-        await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+        await waitForIncrementalIndexEvent(
+          getMessagesSince,
+          realmEventTimestampStart,
+        );
 
-        let messages = await getMessagesSinceTestStarted();
+        let messages = await getMessagesSince(realmEventTimestampStart);
 
         let incrementalIndexInitiationEvent = findRealmEvent(
           messages,
@@ -3384,6 +3406,8 @@ module(basename(__filename), function () {
 
       // CS-8095
       skip('can index a changed file in the filesystem', async function (assert) {
+        let realmEventTimestampStart = Date.now();
+
         {
           let response = await request
             .get('/person-1')
@@ -3414,9 +3438,12 @@ module(basename(__filename), function () {
           } as LooseSingleCardDocument,
         );
 
-        await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+        await waitForIncrementalIndexEvent(
+          getMessagesSince,
+          realmEventTimestampStart,
+        );
 
-        let messages = await getMessagesSinceTestStarted();
+        let messages = await getMessagesSince(realmEventTimestampStart);
 
         let incrementalIndexInitiationEvent = findRealmEvent(
           messages,
@@ -3453,6 +3480,8 @@ module(basename(__filename), function () {
 
       // CS-8095
       skip('can index a file deleted from the filesystem', async function (assert) {
+        let realmEventTimestampStart = Date.now();
+
         {
           let response = await request
             .get('/person-1')
@@ -3462,9 +3491,12 @@ module(basename(__filename), function () {
 
         removeSync(join(dir.name, 'realm_server_1', 'test', 'person-1.json'));
 
-        await waitForIncrementalIndexEvent(getMessagesSinceTestStarted);
+        await waitForIncrementalIndexEvent(
+          getMessagesSince,
+          realmEventTimestampStart,
+        );
 
-        let messages = await getMessagesSinceTestStarted();
+        let messages = await getMessagesSince(realmEventTimestampStart);
 
         let incrementalIndexInitiationEvent = findRealmEvent(
           messages,
@@ -4061,10 +4093,11 @@ let cardDefModuleDependencies = [
 ];
 
 async function waitForIncrementalIndexEvent(
-  getMessagesSinceTestStarted: () => Promise<MatrixEvent[]>,
+  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
+  since: number,
 ) {
   await waitUntil(async () => {
-    let matrixMessages = await getMessagesSinceTestStarted();
+    let matrixMessages = await getMessagesSince(since);
 
     return matrixMessages.some(
       (m) =>
