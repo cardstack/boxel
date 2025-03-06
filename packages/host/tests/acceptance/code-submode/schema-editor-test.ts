@@ -234,7 +234,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings
@@ -1112,6 +1115,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await waitForCodeEditor();
     await waitFor('[data-test-syntax-errors]');
 
+    assert.dom('[data-test-boxel-copy-button]').exists();
+    await triggerEvent(`[data-test-boxel-copy-button]`, 'mouseenter');
+    assert.dom('[data-test-tooltip-content]').hasText('Copy to clipboard');
     assert.dom('[data-test-syntax-errors]').hasText('File is empty');
   });
 });
