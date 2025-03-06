@@ -1115,22 +1115,14 @@ export class BlogPost extends CardDef {
       assert.dom('[data-test-embedded-comment]').exists();
     });
 
+    // Note: Currently we can not have polymorphism in primitive fields. However, this can be done
+    // after the `.value` refactor when the distinctions in the implementations of primitive
+    // and compound fields will cease to exist. See linear ticket [CS-6689].
+    skip('preview is not available for primitive fields', async function (_assert) {});
+
     skip("can select a different instance to preview from the spec's containedExamples collection", async function (_assert) {});
 
     skip('preview panel updates when selecting a different field or card declaration', async function (_assert) {});
-
-    skip('can preview primitive field def instance', async function (_assert) {
-      // await visitOperatorMode({
-      //   stacks: [],
-      //   submode: 'code',
-      //   codePath: `${testRealmURL}blog-post.gts`,
-      // });
-      // await click('[data-test-boxel-selector-item-text="Status"]');
-      // await click('[data-test-accordion-item="playground"] button');
-      // assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-      // await click('[data-test-instance-chooser]');
-      // await this.pauseTest();
-    });
 
     skip('can create new field instance (no preexisting Spec)', async function (_assert) {});
 
@@ -1139,6 +1131,5 @@ export class BlogPost extends CardDef {
     skip('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (_assert) {});
 
     skip<TestContextWithSave>('can edit compound field instance and trigger auto save', async function (_assert) {});
-    skip<TestContextWithSave>('can edit primitive field instance and trigger auto save', async function (_assert) {});
   });
 });
