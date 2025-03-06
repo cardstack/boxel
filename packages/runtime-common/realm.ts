@@ -1850,7 +1850,9 @@ export class Realm {
       iconURL: null,
       showAsCatalog: null,
       visibility: await this.visibility(),
-      realmUserId: this.#matrixClient.username,
+      // FIXME can the latter replace the former?
+      realmUserId:
+        this.#matrixClient.getUserId()! || this.#matrixClient.username,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -1865,8 +1867,10 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
+        // FIXME can the latter replace the former?
         realmInfo.realmUserId =
-          realmConfigJson.realmUserId ?? this.#matrixClient.username;
+          realmConfigJson.realmUserId ??
+          (this.#matrixClient.getUserId()! || this.#matrixClient.username);
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
