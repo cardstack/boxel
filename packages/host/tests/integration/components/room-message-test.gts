@@ -34,7 +34,10 @@ module('Integration | Component | RoomMessage', function (hooks) {
     };
 
     let testScenario = {
-      roomId: await createAndJoinRoom('@testuser:localhost', 'Test Room'),
+      roomId: createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'Test Room',
+      }),
       message,
       messages: [message],
       isStreaming,

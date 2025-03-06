@@ -42,12 +42,13 @@ export class ServerState {
     sender: string,
     name?: string,
     timestamp: number = this.#now(),
+    id?: string,
   ): string {
     if (document.querySelector('[data-test-throw-room-error]')) {
       throw new Error('Intentional error thrown');
     }
 
-    let roomId = `mock_room_${this.#roomCounter++}`;
+    let roomId = id ?? `mock_room_${this.#roomCounter++}`;
 
     if (this.#rooms.has(roomId)) {
       throw new Error(`room ${roomId} already exists`);
