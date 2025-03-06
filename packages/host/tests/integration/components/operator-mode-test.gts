@@ -67,11 +67,13 @@ module('Integration | operator-mode', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });
+
   let noop = () => {};
 
   hooks.beforeEach(async function () {
@@ -374,6 +376,7 @@ module('Integration | operator-mode', function (hooks) {
     ({ adapter: testRealmAdapter, realm: testRealm } =
       await setupIntegrationTestRealm({
         loader,
+        mockMatrixUtils,
         contents: {
           'pet.gts': { Pet },
           'shipping-info.gts': { ShippingInfo },

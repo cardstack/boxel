@@ -49,7 +49,8 @@ module('Integration | realm', function (hooks) {
     loader = lookupLoaderService().loader;
   });
 
-  setupMockMatrix(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
@@ -67,6 +68,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve GET card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/empty.json': {
           data: {
@@ -126,6 +128,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve GET card requests with linksTo relationships', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/owner.json': {
           data: {
@@ -256,6 +259,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve GET card requests with linksTo relationships to other realms', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/mango.json': {
           data: {
@@ -376,6 +380,7 @@ module('Integration | realm', function (hooks) {
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/empty.json': {
           data: {
@@ -433,6 +438,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve create card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
     let response = await handle(
@@ -497,6 +503,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve POST requests that include linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/owner.json': {
           data: {
@@ -672,6 +679,7 @@ module('Integration | realm', function (hooks) {
     }
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
         'person.gts': { Person },
@@ -724,6 +732,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve patch card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/card.json': {
           data: {
@@ -863,6 +872,7 @@ module('Integration | realm', function (hooks) {
   test('realm can remove item from containsMany field via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'ski-trip.json': {
           data: {
@@ -1004,6 +1014,7 @@ module('Integration | realm', function (hooks) {
   test('realm can remove item from linksToMany field via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1223,6 +1234,7 @@ module('Integration | realm', function (hooks) {
   test('realm can add an item to linksToMany relationships via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1365,6 +1377,7 @@ module('Integration | realm', function (hooks) {
   test('realm can add items to null linksToMany relationship via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1480,6 +1493,7 @@ module('Integration | realm', function (hooks) {
   test('realm can remove all items to in a linksToMany relationship via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1586,6 +1600,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve PATCH requests to linksTo field in a card that also has a linksToMany field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1717,6 +1732,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve PATCH requests to both linksTo and linksToMany fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1862,6 +1878,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve PATCH requests that include linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/hassan.json': {
           data: {
@@ -2072,6 +2089,7 @@ module('Integration | realm', function (hooks) {
     }
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
         'person.gts': { Person },
@@ -2236,6 +2254,7 @@ module('Integration | realm', function (hooks) {
     }
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'car.gts': { Car },
@@ -2322,6 +2341,7 @@ module('Integration | realm', function (hooks) {
     }
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
         'person.gts': { Person },
@@ -2429,6 +2449,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve delete card requests', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'cards/1.json': {
           data: {
@@ -2507,6 +2528,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve card source file', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
       },
@@ -2531,6 +2553,7 @@ module('Integration | realm', function (hooks) {
   test('realm provide redirect for card source', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
       },
@@ -2554,6 +2577,7 @@ module('Integration | realm', function (hooks) {
   test('realm returns 404 when no card source can be found', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
     let response = await handle(
@@ -2570,6 +2594,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve card source post request', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
 
@@ -2622,6 +2647,7 @@ module('Integration | realm', function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
       },
@@ -2665,6 +2691,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
       },
@@ -2685,6 +2712,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve compiled js file when requested with file extension ', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
       },
@@ -2712,6 +2740,7 @@ module('Integration | realm', function (hooks) {
     `.trim();
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/index.html': html,
       },
@@ -2728,6 +2757,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve search requests', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/empty.json': {
           data: {
@@ -2766,6 +2796,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve search requests whose results have linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/mariko.json': {
           data: {
@@ -3001,6 +3032,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve directory requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/empty.json': {
           data: {
@@ -3067,6 +3099,7 @@ module('Integration | realm', function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'sample-post.json': '',
         'posts/1.json': '',
@@ -3133,6 +3166,7 @@ posts/ignore-me.gts
   test('realm can serve info requests by reading .realm.json', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         '.realm.json': `{
           "name": "Example Workspace",
@@ -3173,6 +3207,7 @@ posts/ignore-me.gts
   test('realm can serve info requests if .realm.json is missing', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
     let response = await handle(
@@ -3200,6 +3235,7 @@ posts/ignore-me.gts
   test('realm can serve info requests if .realm.json is malformed', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         '.realm.json': `Some example content that is not valid json`,
       },
@@ -3229,6 +3265,7 @@ posts/ignore-me.gts
   test('realm does not crash when indexing a broken instance', async function (assert) {
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'FieldDef/1.json': {
           data: {

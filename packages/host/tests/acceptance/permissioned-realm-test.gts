@@ -16,10 +16,13 @@ let matrixRoomId: string;
 module('Acceptance | permissioned realm tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -75,6 +78,7 @@ module('Acceptance | permissioned realm tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'index.gts': { Index },
         'person.gts': { Person },

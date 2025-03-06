@@ -32,7 +32,8 @@ const baseRealmCardCount = 2;
 module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
@@ -103,6 +104,7 @@ module('Integration | card-catalog', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'blog-post.gts': { BlogPost },
         'address.gts': { Address },

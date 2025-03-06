@@ -53,11 +53,13 @@ module('Acceptance | interact submode tests', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
 
-  let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
-    });
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
+  });
+
+  let { createAndJoinRoom, setActiveRealms, setRealmPermissions } =
+    mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -274,6 +276,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     let mangoPet = new Pet({ name: 'Mango' });
 
     ({ realm } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'address.gts': { Address },
         'person.gts': { Person },
@@ -354,6 +357,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       },
     }));
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
         'index.json': new CardsGrid(),
@@ -382,6 +386,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       },
     });
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       realmURL: testRealm3URL,
       contents: {
         'index.json': new CardsGrid(),

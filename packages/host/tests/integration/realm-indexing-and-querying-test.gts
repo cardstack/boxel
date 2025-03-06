@@ -58,7 +58,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -78,6 +79,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('full indexing discovers card instances', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'empty.json': {
           data: {
@@ -126,6 +128,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('full indexing skips over unchanged items in index', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'test1.json': {
           data: {
@@ -198,6 +201,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can recover from indexing a card with a broken link', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Pet/mango.json': {
           data: {
@@ -308,6 +312,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can query the "production" index while performing indexing operations', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Pet/mango.json': {
           data: {
@@ -434,6 +439,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index card with linkTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Person/owner.json': {
           data: {
@@ -522,6 +528,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index card with a relative linkTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Person/owner.json': {
           data: {
@@ -612,6 +619,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'person-spec.json': {
@@ -714,6 +722,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'person-spec.json': {
@@ -925,6 +934,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
       let { realm } = await setupIntegrationTestRealm({
         loader,
+        mockMatrixUtils,
         contents: {
           'person.gts': { Person },
           'boom.gts': { Boom },
@@ -1093,6 +1103,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     }
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'boom-person.gts': { BoomPerson },
         'boom.gts': { Boom },
@@ -1228,6 +1239,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'boom-person2.gts': { BoomPerson2 },
         'custom-boom.gts': { CustomBoom },
@@ -1344,6 +1356,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     }
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'vangogh.json': {
@@ -1403,6 +1416,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'fancy-person.gts': { FancyPerson },
@@ -1522,6 +1536,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'fancy-person.gts': { FancyPerson },
@@ -1639,6 +1654,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person-card.gts': { Person },
         'appointment.gts': { Appointment },
@@ -1707,6 +1723,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index a card with a containsMany composite containing a linkTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Vendor/vendor1.json': {
           data: {
@@ -1918,6 +1935,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can tolerate a card whose computed throws an exception', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Boom/boom.json': {
           data: {
@@ -1979,6 +1997,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test(`search doc includes 'contains' and used 'linksTo' fields, including contained computed fields`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Pet/mango.json': {
           data: {
@@ -2039,6 +2058,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test(`search doc includes unused 'linksTo' field if isUsed option is set to true`, async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Publication/pacific.json': {
           data: {
@@ -2182,6 +2202,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     }
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'booking.gts': { Booking },
         'person.gts': { Person },
@@ -2233,6 +2254,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index a card with linksToMany field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Pet/vanGogh.json': {
           data: {
@@ -2423,6 +2445,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index a card with empty linksToMany field value', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'PetPerson/burcu.json': {
           data: {
@@ -2511,6 +2534,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index a card that contains a field with a linksToMany field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Pet/vanGogh.json': {
           data: {
@@ -2641,6 +2665,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index a card that has nested linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Friend/hassan.json': {
           data: {
@@ -2794,6 +2819,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index a field with a cycle in the linksTo field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Friend/hassan.json': {
           data: {
@@ -3082,6 +3108,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('can index a card that has a linksTo relationship to itself', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Friend/hassan.json': {
           data: {
@@ -3193,6 +3220,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
     };
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'Friends/vanGogh.json': {
           data: {
@@ -3646,6 +3674,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test("indexing identifies an instance's card references", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person-1.json': {
           data: {
@@ -3722,6 +3751,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   test('search index does not contain entries that match patterns in ignore files', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'ignore-me-1.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
@@ -3800,6 +3830,7 @@ posts/please-ignore-me.json
   test('search index ignores .realm.json file', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         '.realm.json': `{ name: 'Example Workspace' }`,
         'post.json': { data: { meta: { adoptsFrom: baseCardRef } } },
@@ -3822,6 +3853,7 @@ posts/please-ignore-me.json
   test("incremental indexing doesn't process ignored files", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'posts/ignore-me.json': {
           data: { meta: { adoptsFrom: baseCardRef } },
@@ -4392,6 +4424,7 @@ posts/ignore-me.json
     hooks.beforeEach(async function () {
       let { realm } = await setupIntegrationTestRealm({
         loader,
+        mockMatrixUtils,
         contents: sampleCards,
       });
       queryEngine = realm.realmIndexQueryEngine;

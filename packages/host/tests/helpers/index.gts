@@ -62,6 +62,8 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
+import type { MockUtils } from './mock-matrix/_utils';
+
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
@@ -278,31 +280,37 @@ export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
   permissions,
+  mockMatrixUtils,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
+  mockMatrixUtils: MockUtils;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: true,
     permissions,
+    mockMatrixUtils,
   });
 }
 
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
+  mockMatrixUtils,
 }: {
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
+  mockMatrixUtils: MockUtils;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: false,
+    mockMatrixUtils,
   });
 }
 
@@ -327,11 +335,13 @@ async function setupTestRealm({
   realmURL,
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
+  mockMatrixUtils,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
+  mockMatrixUtils: MockUtils;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = lookupNetworkService();
@@ -358,7 +368,12 @@ async function setupTestRealm({
   ) as unknown as MockLocalIndexer;
   let realm: Realm;
 
-  let adapter = new TestRealmAdapter(contents, new URL(realmURL), owner);
+  let adapter = new TestRealmAdapter(
+    contents,
+    new URL(realmURL),
+    mockMatrixUtils,
+    owner,
+  );
   let indexRunner: IndexRunner = async (optsId) => {
     let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
     await localIndexer.configureRunner(registerRunner, adapter, indexWriter);

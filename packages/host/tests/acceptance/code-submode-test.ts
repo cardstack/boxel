@@ -415,9 +415,12 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
-    let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
     });
+
+    let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
 
     async function openNewFileModal(menuSelection: string) {
       await waitFor('[data-test-new-file-button]');
@@ -441,6 +444,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
 
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: personalRealmURL,
         permissions: {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
@@ -455,6 +459,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       });
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: additionalRealmURL,
         permissions: {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
@@ -469,6 +474,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       });
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: catalogRealmURL,
         permissions: {
           '*': ['read'],
@@ -527,10 +533,13 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
-    let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],
     });
+
+    let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
 
     hooks.beforeEach(async function () {
       matrixRoomId = createAndJoinRoom({
@@ -546,6 +555,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       // this seeds the loader used during index which obtains url mappings
       // from the global loader
       ({ realm } = await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         contents: {
           'index.gts': indexCardSource,
           'pet-person.gts': personCardSource,

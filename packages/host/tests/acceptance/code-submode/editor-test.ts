@@ -65,6 +65,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     );
 
     ({ adapter } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";

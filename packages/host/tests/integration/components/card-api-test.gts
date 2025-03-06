@@ -87,7 +87,9 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
   setupBaseRealm(hooks);
 
   module('getCards', function (hooks) {
@@ -152,6 +154,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
       };
       await setupIntegrationTestRealm({
         loader,
+        mockMatrixUtils,
         contents: {
           'author.gts': { Author },
           ...authorCards,

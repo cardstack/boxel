@@ -42,14 +42,13 @@ module('Integration | create app module via ai-assistant', function (hooks) {
 
   setupRenderingTest(hooks);
 
-  let { getRoomEvents, simulateRemoteMessage, getRoomState } = setupMockMatrix(
-    hooks,
-    {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL],
-      autostart: true,
-    },
-  );
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+
+  let { getRoomEvents, simulateRemoteMessage, getRoomState } = mockMatrixUtils;
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
@@ -117,6 +116,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   skip('it can create a module using a tool call', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'PRD/1.json': {
           data: {

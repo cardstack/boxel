@@ -36,7 +36,8 @@ class StubRealmService extends RealmService {
 module('Integration | commands | switch-submode', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
@@ -46,6 +47,7 @@ module('Integration | commands | switch-submode', function (hooks) {
   hooks.beforeEach(async function () {
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
   });

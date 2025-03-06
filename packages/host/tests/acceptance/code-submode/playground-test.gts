@@ -27,11 +27,15 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
   let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL],
-    });
+    mockMatrixUtils;
+
   setupOnSave(hooks);
 
   const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
@@ -135,6 +139,7 @@ export class BlogPost extends CardDef {
     setupUserSubscription(matrixRoomId);
 
     ({ realm } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
         'author.gts': authorCard,

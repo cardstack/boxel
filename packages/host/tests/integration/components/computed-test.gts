@@ -40,7 +40,9 @@ let loader: Loader;
 
 module('Integration | computeds', function (hooks) {
   setupRenderingTest(hooks);
-  setupMockMatrix(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
@@ -102,6 +104,7 @@ module('Integration | computeds', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post, Person },
       },
@@ -225,6 +228,7 @@ module('Integration | computeds', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'test-cards.gts': { Family, Person },
       },
@@ -307,6 +311,7 @@ module('Integration | computeds', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'test-cards.gts': { Family, Person },
       },

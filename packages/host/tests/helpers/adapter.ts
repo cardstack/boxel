@@ -61,15 +61,20 @@ export class TestRealmAdapter implements RealmAdapter {
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
+  #mockMatrixUtils: MockUtils;
+
   owner?: Owner;
 
   constructor(
     contents: TestAdapterContents,
     realmURL = new URL(testRealmURL),
+    mockMatrixUtils: MockUtils,
     owner?: Owner,
   ) {
     this.owner = owner;
     this.#paths = new RealmPaths(realmURL);
+    this.#mockMatrixUtils = mockMatrixUtils;
+
     let now = unixTime(Date.now());
 
     for (let [path, content] of Object.entries(contents)) {
@@ -105,15 +110,7 @@ export class TestRealmAdapter implements RealmAdapter {
       return;
     }
 
-    let mockLoader = this.owner.lookup('service:matrix-mock-utils') as any;
-
-    if (!mockLoader) {
-      return;
-    }
-
-    let mockMatrixUtils = (await mockLoader.load()) as MockUtils;
-
-    let { getRoomIds, simulateRemoteMessage } = mockMatrixUtils;
+    let { getRoomIds, simulateRemoteMessage } = this.#mockMatrixUtils;
 
     let realmMatrixUsername = matrixClient.username;
 

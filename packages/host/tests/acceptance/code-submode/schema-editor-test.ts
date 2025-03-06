@@ -225,6 +225,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'index.gts': indexCardSource,
         'empty.gts': ' ',

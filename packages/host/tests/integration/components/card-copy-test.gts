@@ -64,12 +64,14 @@ module('Integration | card-copy', function (hooks) {
 
   let loggedInAs = '@testuser:localhost';
 
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs,
+    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
+    autostart: true,
+  });
+
   let { getRoomIdForRealmAndUser, getRealmEventMessagesSince } =
-    setupMockMatrix(hooks, {
-      loggedInAs,
-      activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
-      autostart: true,
-    });
+    mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = async (
@@ -141,6 +143,7 @@ module('Integration | card-copy', function (hooks) {
 
     ({ realm: realm1 } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'pet.gts': { Pet },
@@ -215,6 +218,7 @@ module('Integration | card-copy', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
         'index.json': {

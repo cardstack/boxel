@@ -25,7 +25,8 @@ let loader: Loader;
 module('Integration | text-suggestion | card-chooser-title', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     loader = lookupLoaderService().loader;
@@ -66,6 +67,7 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'article.gts': { Article },
         'blog-post.gts': { BlogPost },

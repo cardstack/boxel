@@ -55,11 +55,13 @@ module(`Integration | prerendered-card-search`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
+
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class PersonField extends FieldDef {
@@ -300,6 +302,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
 
     ({ realm: testRealm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'article.gts': { Article },
         'blog-post.gts': { BlogPost },

@@ -64,11 +64,14 @@ module('Acceptance | Commands tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [baseRealm.url, testRealmURL],
+  });
+
   let { simulateRemoteMessage, getRoomIds, getRoomEvents, createAndJoinRoom } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [baseRealm.url, testRealmURL],
-    });
+    mockMatrixUtils;
 
   setupBaseRealm(hooks);
 
@@ -354,6 +357,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let mangoPet = new Pet({ name: 'Mango' });
 
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person, Meeting },
         'pet.gts': { Pet },

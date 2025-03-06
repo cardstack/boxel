@@ -49,7 +49,8 @@ module(`Integration | search resource`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
@@ -270,6 +271,7 @@ module(`Integration | search resource`, function (hooks) {
 
     ({ realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'article.gts': { Article },
         'blog-post.gts': { BlogPost },

@@ -117,11 +117,13 @@ module('Acceptance | Spec preview', function (hooks) {
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
 
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL, testRealm2URL],
+  });
+
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL, testRealm2URL],
-    });
+    mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -133,6 +135,7 @@ module('Acceptance | Spec preview', function (hooks) {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
         'person.gts': personCardSource,
@@ -280,6 +283,7 @@ module('Acceptance | Spec preview', function (hooks) {
       },
     });
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
         'new-skill.gts': newSkillCardSource,
