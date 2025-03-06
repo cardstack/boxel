@@ -10,6 +10,8 @@ import {
   triggerEvent,
 } from '@ember/test-helpers';
 
+import { tracked } from '@glimmer/tracking';
+
 import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
 import parseISO from 'date-fns/parseISO';
@@ -74,7 +76,6 @@ import {
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
-import { tracked } from '@glimmer/tracking';
 
 let loader: Loader;
 const testModuleRealm = 'http://localhost:4202/test/';
@@ -2292,7 +2293,7 @@ module('Integration | card-basics', function (hooks) {
           this.counter++;
         };
         <template>
-          {{this.args.model.name}}
+          {{@model.name}}
           <button
             {{on 'click' this.incrementCounter}}
             data-test-increment-counter
@@ -2311,7 +2312,7 @@ module('Integration | card-basics', function (hooks) {
         };
         <template>
           <div data-test-different-template>Different Template</div>
-          {{this.args.model.name}}
+          {{@model.name}}
           <button
             {{on 'click' this.incrementCounter}}
             data-test-increment-counter
