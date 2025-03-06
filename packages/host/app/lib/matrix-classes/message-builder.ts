@@ -15,6 +15,7 @@ import { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -227,7 +228,7 @@ export default class MessageBuilder {
         let r = e.content['m.relates_to'];
         return (
           e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          r.rel_type === 'm.annotation' &&
+          r.rel_type === APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
           (r.event_id === this.event.event_id ||
             r.event_id === this.builderContext.effectiveEventId) &&
           e.content.commandRequestId === commandRequest.id

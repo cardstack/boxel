@@ -10,6 +10,7 @@ import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -250,7 +251,7 @@ export interface CommandDefinitionsContent {
 }
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
-    rel_type: 'm.annotation';
+    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
     key: string;
     event_id: string;
   };
@@ -265,7 +266,7 @@ export interface CommandResultWithOutputContent {
 
 export interface CommandResultWithNoOutputContent {
   'm.relates_to': {
-    rel_type: 'm.annotation';
+    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
     key: string;
     event_id: string;
   };

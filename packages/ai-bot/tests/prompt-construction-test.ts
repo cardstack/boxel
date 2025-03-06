@@ -14,6 +14,7 @@ import {
 import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   DEFAULT_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
@@ -1678,7 +1679,7 @@ test('Return host result of tool call back to open ai', async () => {
       content: {
         'm.relates_to': {
           event_id: 'command-event-id-1',
-          rel_type: 'm.annotation',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
           key: 'applied',
         },
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,

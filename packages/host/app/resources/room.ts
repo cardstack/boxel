@@ -15,6 +15,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -452,7 +453,8 @@ export class RoomResource extends Resource<Args> {
     event: MessageEvent | CardMessageEvent | CommandResultEvent,
   ) {
     return event.content['m.relates_to']?.rel_type === 'm.replace' ||
-      event.content['m.relates_to']?.rel_type === 'm.annotation'
+      event.content['m.relates_to']?.rel_type ===
+        APP_BOXEL_COMMAND_RESULT_REL_TYPE
       ? event.content['m.relates_to'].event_id
       : event.event_id;
   }

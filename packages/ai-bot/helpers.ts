@@ -23,6 +23,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '../runtime-common/matrix-constants';
 import {
@@ -794,7 +795,8 @@ export function isCommandResultEvent(
   }
   return (
     event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-    event.content['m.relates_to']?.rel_type === 'm.annotation'
+    event.content['m.relates_to']?.rel_type ===
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE
   );
 }
 

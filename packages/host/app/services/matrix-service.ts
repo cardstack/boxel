@@ -46,6 +46,7 @@ import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -559,7 +560,7 @@ export default class MatrixService extends Service {
         'm.relates_to': {
           event_id: invokedToolFromEventId,
           key: 'applied',
-          rel_type: 'm.annotation',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
       };
     } else {
@@ -568,7 +569,7 @@ export default class MatrixService extends Service {
         'm.relates_to': {
           event_id: invokedToolFromEventId,
           key: 'applied',
-          rel_type: 'm.annotation',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
         commandRequestId: toolCallId,
         data: {

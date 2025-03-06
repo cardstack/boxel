@@ -20,6 +20,7 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -938,7 +939,7 @@ module('Acceptance | Commands tests', function (hooks) {
     );
     assert.strictEqual(
       message.content['m.relates_to']?.rel_type,
-      'm.annotation',
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
     );
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
     assert.strictEqual(message.content.commandRequestId, 'abc123');
@@ -1125,7 +1126,8 @@ module('Acceptance | Commands tests', function (hooks) {
     let commandResultEvents = await getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(

@@ -4,6 +4,7 @@ import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/b
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -416,7 +417,7 @@ module('shouldSetRoomTitle', () => {
         'm.relates_to': {
           event_id: '1',
           key: 'applied',
-          rel_type: 'm.annotation',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
       },
