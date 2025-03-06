@@ -32,6 +32,7 @@ import {
   isCardDef,
   isCardDocumentString,
   hasExecutableExtension,
+  RealmPaths,
   isResolvedCodeRef,
   type ResolvedCodeRef,
   PermissionsContextName,
@@ -507,7 +508,7 @@ export default class CodeSubmode extends Component<Signature> {
     if (this.codePath) {
       let urlString = this.codePath.toString();
       this.recentFilesService.updateCursorPositionByURL(
-        new URL(urlString.endsWith('gts') ? urlString : `${urlString}.gts`),
+        urlString.endsWith('gts') ? urlString : `${urlString}.gts`,
         undefined,
       );
     }
@@ -627,7 +628,9 @@ export default class CodeSubmode extends Component<Signature> {
         let realmURL = this.operatorModeStateService.realmURL;
 
         if (realmURL) {
-          this.recentFilesService.removeRecentFile(file);
+          let realmPaths = new RealmPaths(realmURL);
+          let filePath = realmPaths.local(file);
+          this.recentFilesService.removeRecentFile(filePath);
         }
         await this.cardService.deleteSource(file);
       });

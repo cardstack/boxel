@@ -95,9 +95,6 @@ export default class CardSchemaEditor extends Component<Signature> {
         cursor: pointer;
         width: 100%;
       }
-      .card-field:hover {
-        background-color: var(--boxel-100);
-      }
       .card-field + .card-field {
         margin-top: var(--boxel-sp-xxs);
       }
@@ -169,6 +166,13 @@ export default class CardSchemaEditor extends Component<Signature> {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        border: none;
+        background-color: transparent;
+        padding: 0;
+        text-align: left;
+      }
+      .field-name:hover {
+        color: var(--boxel-highlight);
       }
 
       .overridden-field {
@@ -291,7 +295,7 @@ export default class CardSchemaEditor extends Component<Signature> {
       <div class='card-fields'>
         {{#each @cardType.fields as |field|}}
           {{#if (this.isOwnField field.name)}}
-            <button
+            <div
               class='card-field
                 {{if (this.isOverriding field) "card-field--overriding"}}
                 {{if
@@ -300,18 +304,19 @@ export default class CardSchemaEditor extends Component<Signature> {
                 }}'
               data-field-name={{field.name}}
               data-test-field-name={{field.name}}
-              {{on 'click' (fn this.goToField field)}}
             >
               <div class='left'>
-                <div
+                <button
                   class={{if
                     (this.isOverridden field)
                     'field-name overridden-field'
                     'field-name'
                   }}
+                  data-test-field-name-button={{field.name}}
+                  {{on 'click' (fn this.goToField field)}}
                 >
                   {{field.name}}
-                </div>
+                </button>
                 <div class='field-types' data-test-field-types>
                   {{this.fieldTypes field}}
                 </div>
@@ -410,7 +415,7 @@ export default class CardSchemaEditor extends Component<Signature> {
                   {{/let}}
                 {{/let}}
               </div>
-            </button>
+            </div>
           {{/if}}
         {{/each}}
       </div>

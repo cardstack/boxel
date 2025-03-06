@@ -10,8 +10,6 @@ import { TrackedArray } from 'tracked-built-ins';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 
-import RealmService from './realm';
-
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 
@@ -28,9 +26,10 @@ export interface RecentFile {
 }
 
 export default class RecentFilesService extends Service {
+  // we shouldn't be making assumptions about what realm the files are coming
+  // from, the caller should just tell us
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private reset: ResetService;
-  @service declare private realm: RealmService;
 
   @tracked declare recentFiles: TrackedArray<RecentFile>;
 
@@ -45,8 +44,8 @@ export default class RecentFilesService extends Service {
     this.recentFiles = new TrackedArray([]);
   }
 
-  removeRecentFile(url: URL) {
-    let index = this.findRecentFileIndex(url);
+  removeRecentFile(file: LocalPath) {
+    let index = this.findRecentFileIndex(file);
 
     if (index === -1) {
       return;
@@ -54,25 +53,40 @@ export default class RecentFilesService extends Service {
 
     while (index !== -1) {
       this.recentFiles.splice(index, 1);
-      index = this.findRecentFileIndex(url);
+      index = this.findRecentFileIndex(file);
     }
 
     this.persistRecentFiles();
   }
 
-  addRecentFile(url: URL) {
-    let realmURL = this.realm.realmOfURL(url);
-    if (!realmURL) {
+  addRecentFileUrl(urlString: string) {
+    if (!urlString) {
+      return;
+    }
+    // TODO this wont work when visiting files that come from multiple realms in
+    // code mode...
+    let realmURL = this.operatorModeStateService.realmURL;
+
+    if (realmURL) {
+      let realmPaths = new RealmPaths(new URL(realmURL));
+      let url = new URL(urlString);
+
+      if (realmPaths.inRealm(url)) {
+        this.addRecentFile(realmPaths.local(url));
+      }
+    }
+  }
+
+  addRecentFile(file: LocalPath) {
+    // TODO this wont work when visiting files that come from multiple realms in
+    // code mode...
+    let currentRealmUrl = this.operatorModeStateService.realmURL;
+
+    if (!currentRealmUrl) {
       return;
     }
 
-    let realmPaths = new RealmPaths(realmURL);
-
-    if (!realmPaths.inRealm(url)) {
-      return;
-    }
-
-    const existingIndex = this.findRecentFileIndex(url);
+    const existingIndex = this.findRecentFileIndex(file);
 
     let cursorPosition;
     if (existingIndex > -1) {
@@ -83,8 +97,8 @@ export default class RecentFilesService extends Service {
     }
 
     this.recentFiles.unshift({
-      realmURL,
-      filePath: realmPaths.local(url),
+      realmURL: new URL(currentRealmUrl),
+      filePath: file,
       cursorPosition,
     });
 
@@ -95,13 +109,16 @@ export default class RecentFilesService extends Service {
     this.persistRecentFiles();
   }
 
-  findRecentFile(url: URL) {
-    const existingIndex = this.findRecentFileIndex(url);
+  findRecentFileByURL(urlString: string) {
+    const existingIndex = this.findRecentFileIndexByURL(urlString);
     return existingIndex > -1 ? this.recentFiles[existingIndex] : undefined;
   }
 
-  updateCursorPositionByURL(url: URL, cursorPosition?: CursorPosition) {
-    const existingIndex = this.findRecentFileIndex(url);
+  updateCursorPositionByURL(
+    urlString: string,
+    cursorPosition?: CursorPosition,
+  ) {
+    const existingIndex = this.findRecentFileIndexByURL(urlString);
     if (existingIndex > -1) {
       this.recentFiles[existingIndex].cursorPosition = cursorPosition;
       this.persistRecentFiles();
@@ -121,9 +138,20 @@ export default class RecentFilesService extends Service {
     );
   }
 
-  private findRecentFileIndex(url: URL) {
+  private findRecentFileIndex(path: LocalPath) {
+    // TODO this wont work when visiting files that come from multiple realms in
+    // code mode...
+    let currentRealmUrl = this.operatorModeStateService.realmURL;
+
     return this.recentFiles.findIndex(
-      ({ realmURL, filePath }) => `${realmURL}${filePath}` === url.href,
+      ({ realmURL, filePath }) =>
+        realmURL.href === currentRealmUrl.href && filePath === path,
+    );
+  }
+
+  private findRecentFileIndexByURL(urlString: string) {
+    return this.recentFiles.findIndex(
+      ({ realmURL, filePath }) => `${realmURL}${filePath}` === urlString,
     );
   }
 

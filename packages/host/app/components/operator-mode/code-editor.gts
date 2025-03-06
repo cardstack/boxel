@@ -128,7 +128,9 @@ export default class CodeEditor extends Component<Signature> {
   @cached
   private get initialMonacoCursorPosition() {
     if (this.codePath) {
-      let recentFile = this.recentFilesService.findRecentFile(this.codePath);
+      let recentFile = this.recentFilesService.findRecentFileByURL(
+        this.codePath.toString(),
+      );
       if (recentFile?.cursorPosition) {
         return new Position(
           recentFile.cursorPosition.line,

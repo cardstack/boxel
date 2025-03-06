@@ -552,7 +552,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     });
 
     if (chosenCard) {
-      this.recentFilesService.addRecentFile(new URL(`${chosenCard.id}.json`));
+      this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
       this.persistSelections(chosenCard.id);
     }
   });
@@ -569,7 +569,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     };
     await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
     if (this.card) {
-      this.recentFilesService.addRecentFile(new URL(`${this.card.id}.json`));
+      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
       this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
     }
   });
