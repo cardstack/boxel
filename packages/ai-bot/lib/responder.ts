@@ -12,11 +12,47 @@ import { CommandRequest } from '@cardstack/runtime-common/commands';
 import { thinkingMessage } from '../constants';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
+import {
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
 export class Responder {
-  // internally has a debounced function that will send the matrix messages
+  static eventMayTriggerResponse(event: DiscreteMatrixEvent) {
+    // If it's a message, we should respond unless it's a card fragment
+    if (event.getType() === 'm.room.message') {
+      if (
+        event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE ||
+        event.getContent().msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE
+      ) {
+        return false;
+      }
+      return true;
+    }
+
+    // If it's a command result with output, we might respond
+    if (
+      event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+      event.getContent().msgtype ===
+        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+    ) {
+      return true;
+    }
+
+    // If it's a different type, or a command result without output, we should not respond
+    return false;
+  }
+
+  static eventWillDefinitelyTriggerResponse(event: DiscreteMatrixEvent) {
+    return (
+      this.eventMayTriggerResponse(event) &&
+      event.getType() !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+    );
+  }
 
   constructor(
     readonly client: MatrixClient,
@@ -25,6 +61,7 @@ export class Responder {
 
   messagePromises: Promise<ISendEventResponse | void>[] = [];
 
+  initialMessageSent = false;
   responseEventId: string | undefined;
   latestContent = '';
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
@@ -58,15 +95,18 @@ export class Responder {
     await messagePromise;
   };
 
-  async initialize() {
-    let initialMessage = await sendMessageEvent(
-      this.client,
-      this.roomId,
-      thinkingMessage,
-      undefined,
-      { isStreamingFinished: false },
-    );
-    this.responseEventId = initialMessage.event_id;
+  async ensureThinkingMessageSent() {
+    if (!this.initialMessageSent) {
+      let initialMessage = await sendMessageEvent(
+        this.client,
+        this.roomId,
+        thinkingMessage,
+        undefined,
+        { isStreamingFinished: false },
+      );
+      this.responseEventId = initialMessage.event_id;
+      this.initialMessageSent = true;
+    }
   }
 
   async onChunk(
