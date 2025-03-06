@@ -103,7 +103,8 @@ export default class ButtonComponent extends Component<Signature> {
           height: min-content;
           align-items: center;
           border-radius: 100px;
-          white-space: nowrap;
+          white-space: var(--boxel-button-white-space, normal);
+          word-break: var(--boxel-button-word-break, break-word);
           transition:
             background-color var(--boxel-transition),
             border var(--boxel-transition);
