@@ -5,6 +5,7 @@ import * as Sentry from '@sentry/node';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -57,6 +58,7 @@ export async function sendMessageEvent(
   eventIdToReplace: string | undefined,
   data: any = {},
   commandRequests: Partial<CommandRequest>[] = [],
+  reasoning: string | undefined = undefined,
 ) {
   log.debug('sending message', body);
   let contentObject: IContent = {
@@ -65,6 +67,7 @@ export async function sendMessageEvent(
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: body,
       format: 'org.matrix.custom.html',
+      [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
     },
     ...data,
@@ -75,6 +78,7 @@ export async function sendMessageEvent(
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: body,
       format: 'org.matrix.custom.html',
+      [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
     };
   }
