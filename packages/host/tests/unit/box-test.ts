@@ -25,26 +25,31 @@ module('Unit | box', function (hooks) {
     let parentCardModel = {
       someField: [],
     };
-    let childCard1Model = {
-      name: 'Adam Sandler',
-    };
-    let childCard2Model = {
-      name: 'Owen Wilson',
-      age: 20,
-    };
+    let childCard1Model = {};
+    let childCard2Model = {};
+    let childCard3Model = {};
     let box = Box.create(parentCardModel);
     let boxArr = box.field('someField');
-    let childValues: any = [childCard1Model, childCard2Model];
+    let childValues: any = [childCard1Model, childCard2Model, childCard3Model];
     boxArr.set(childValues);
     assert.strictEqual(boxArr.children[0].value, childCard1Model);
     assert.strictEqual(boxArr.children[1].value, childCard2Model);
+    assert.strictEqual(boxArr.children[2].value, childCard3Model);
     assert.strictEqual(boxArr.children[0].name, '0');
     assert.strictEqual(boxArr.children[1].name, '1');
-    let childValuesReordered: any = [childCard2Model, childCard1Model];
+    assert.strictEqual(boxArr.children[2].name, '2');
+
+    let childValuesReordered: any = [
+      childCard2Model,
+      childCard3Model,
+      childCard1Model,
+    ];
     boxArr.set(childValuesReordered);
     assert.strictEqual(boxArr.children[0].value, childCard2Model);
-    assert.strictEqual(boxArr.children[1].value, childCard1Model);
+    assert.strictEqual(boxArr.children[1].value, childCard3Model);
+    assert.strictEqual(boxArr.children[2].value, childCard1Model);
     assert.strictEqual(boxArr.children[0].name, '0');
     assert.strictEqual(boxArr.children[1].name, '1');
+    assert.strictEqual(boxArr.children[2].name, '2');
   });
 });
