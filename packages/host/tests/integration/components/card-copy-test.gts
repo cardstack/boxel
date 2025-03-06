@@ -47,8 +47,6 @@ let setCardInOperatorModeState: (
   rightCards?: string[],
 ) => Promise<void>;
 
-type TestContextForCopy = TestContextWithSave;
-
 module('Integration | card-copy', function (hooks) {
   let realm1: Realm;
   let noop = () => {};
@@ -638,7 +636,7 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Copy 1 Card', 'button text is correct');
   });
 
-  test<TestContextForCopy>('can copy a card', async function (assert) {
+  test<TestContextWithSave>('can copy a card', async function (assert) {
     assert.expect(13);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -773,7 +771,7 @@ module('Integration | card-copy', function (hooks) {
       .exists('copy button with left arrow exists');
   });
 
-  test<TestContextForCopy>('can copy multiple cards', async function (assert) {
+  test<TestContextWithSave>('can copy multiple cards', async function (assert) {
     assert.expect(7);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -891,7 +889,7 @@ module('Integration | card-copy', function (hooks) {
     );
   });
 
-  test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
+  test<TestContextWithSave>('can copy a card that has a relative link to card in source realm', async function (assert) {
     assert.expect(16);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -1034,7 +1032,7 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Hassan');
   });
 
-  test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
+  test<TestContextWithSave>('can copy a card that has a link to card in destination realm', async function (assert) {
     assert.expect(16);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
