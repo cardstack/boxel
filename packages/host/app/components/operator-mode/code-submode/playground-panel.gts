@@ -9,7 +9,8 @@ import { tracked } from '@glimmer/tracking';
 
 import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
+// import perform from 'ember-concurrency/helpers/perform';
+import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -59,6 +60,8 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
+import FieldPickerModal from '../field-picker-modal';
+
 import PrerenderedCardSearch, {
   type PrerenderedCard,
 } from '../../prerendered-card-search';
@@ -80,7 +83,7 @@ const isSpec = (card: CardDef, cardRef?: ResolvedCodeRef): card is Spec => {
     cardRef = identifyCard(card.constructor) as ResolvedCodeRef | undefined;
   }
   return cardRef?.name === specRef.name && cardRef.module === specRef.module;
-}
+};
 
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
   <template>
@@ -287,7 +290,6 @@ interface PlaygroundPreviewSignature {
   };
 }
 const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
-  // For fields, the innermost CardContainer represents a card that's embedding this field in available field formats
   <template>
     {{#if @isFieldDef}}
       <CardContainer class='preview-container full-height-preview'>
@@ -399,7 +401,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           @realms={{this.recentRealms}}
           @card={{this.card}}
           @onSelect={{this.onSelect}}
-          @chooseCard={{perform this.chooseCard}}
+          @chooseCard={{this.chooseInstance}}
           @createNew={{if this.canWriteRealm this.createNew}}
           @createNewIsRunning={{this.createNewIsRunning}}
         />
@@ -429,6 +431,18 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         {{/if}}
       {{/let}}
     </div>
+
+    {{#if this.displayFieldPicker}}
+      <ToElsewhere
+        @named='playground-field-picker'
+        @send={{component
+          FieldPickerModal
+          instances=this.fieldInstances
+          onConfirm=this.onCancelFieldSelection
+          onCancel=this.onCancelFieldSelection
+        }}
+      />
+    {{/if}}
 
     <style scoped>
       .playground-panel-content {
@@ -472,6 +486,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
   @tracked newCardJSON: LooseSingleCardDocument | undefined;
+  @tracked displayFieldPicker = false;
   private playgroundSelections: Record<
     string, // moduleId
     { cardId: string; format: Format; fieldIndex: number | undefined }
@@ -546,7 +561,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     } else {
       return cardRef.name !== name;
     }
-  }
+  };
 
   private get card(): CardDef | undefined {
     let card = this.cardResource.card;
@@ -572,6 +587,18 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       return this.playgroundSelections[this.args.moduleId].fieldIndex;
     }
     return this.args.isFieldDef ? 0 : undefined;
+  }
+
+  private get fieldInstances(): FieldDef[] | undefined {
+    if (!this.args.isFieldDef) {
+      return undefined;
+    }
+    let instances = (this.card as Spec)?.containedExamples;
+    if (!instances?.length) {
+      // TODO: handle case when spec has no instances
+      return undefined;
+    }
+    return instances;
   }
 
   private get field(): FieldDef | undefined {
@@ -640,8 +667,14 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       this.newCardJSON = undefined;
     }
     if (this.playgroundSelections[this.args.moduleId]) {
-      let { cardId, format, fieldIndex } = this.playgroundSelections[this.args.moduleId];
-      if (cardId && cardId === selectedCardId && format === selectedFormat && fieldIndex === selectedFieldIndex) {
+      let { cardId, format, fieldIndex } =
+        this.playgroundSelections[this.args.moduleId];
+      if (
+        cardId &&
+        cardId === selectedCardId &&
+        format === selectedFormat &&
+        fieldIndex === selectedFieldIndex
+      ) {
         return;
       }
     }
@@ -651,7 +684,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       fieldIndex: selectedFieldIndex,
     };
     this.persistSelections();
-  }
+  };
 
   private persistSelections = () => {
     window.localStorage.setItem(
@@ -672,12 +705,16 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     this.updatePlaygroundSelections(this.card.id, format);
   }
 
+  @action private chooseInstance() {
+    this.args.isFieldDef
+      ? (this.displayFieldPicker = true)
+      : this.chooseCard.perform();
+  }
+
   private chooseCard = task(async () => {
-    if (this.args.isFieldDef) {
-      // TODO: display examples in selected spec
-      return;
-    }
-    let chosenCard: CardDef | undefined = await chooseCard({ filter: { type: this.args.codeRef } });
+    let chosenCard: CardDef | undefined = await chooseCard({
+      filter: { type: this.args.codeRef },
+    });
 
     if (chosenCard) {
       this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
@@ -685,8 +722,14 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
   });
 
+  @action private onCancelFieldSelection() {
+    this.displayFieldPicker = false;
+  }
+
   @action private createNew() {
-    this.args.isFieldDef ? this.createNewField.perform() : this.createNewCard.perform();
+    this.args.isFieldDef
+      ? this.createNewField.perform()
+      : this.createNewCard.perform();
   }
 
   private get createNewIsRunning() {
@@ -719,7 +762,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           attributes: {
             specType: 'field',
             ref: this.args.codeRef,
-            title: this.args.codeRef.name
+            title: this.args.codeRef.name,
           },
           meta: {
             adoptsFrom: specRef,
@@ -733,12 +776,18 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       }
     }
     if (this.card) {
-      let fieldCard = await loadCard(this.args.codeRef, {  loader: this.loaderService.loader });
+      let fieldCard = await loadCard(this.args.codeRef, {
+        loader: this.loaderService.loader,
+      });
       let examples = (this.card as Spec).containedExamples;
       examples?.push(new fieldCard());
       let index = examples?.length ? examples.length - 1 : 0;
       this.updatePlaygroundSelections(this.card.id, 'edit', index);
-      (document.querySelector('[data-playground-instance-chooser][aria-expanded="true"]') as BoxelSelect | null)?.click(); // close instance chooser dropdown menu if open
+      (
+        document.querySelector(
+          '[data-playground-instance-chooser][aria-expanded="true"]',
+        ) as BoxelSelect | null
+      )?.click(); // close instance chooser dropdown menu if open
     }
   });
 

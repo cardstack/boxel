@@ -1101,6 +1101,7 @@ export default class CodeSubmode extends Component<Signature> {
       {{/if}}
       <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
       <FromElseWhere @name='schema-editor-modal' />
+      <FromElseWhere @name='playground-field-picker' />
     </SubmodeLayout>
 
     <style scoped>
