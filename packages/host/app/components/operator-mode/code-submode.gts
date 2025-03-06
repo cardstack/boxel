@@ -32,10 +32,10 @@ import {
   isCardDef,
   isCardDocumentString,
   hasExecutableExtension,
-  RealmPaths,
   isResolvedCodeRef,
   type ResolvedCodeRef,
   PermissionsContextName,
+  CodeRef,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -158,7 +158,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
-  private updateCursorByName: ((name: string) => void) | undefined;
+  private updateCursorByName:
+    | ((name: string, fieldName?: string) => void)
+    | undefined;
   private panelSelections: Record<string, SelectedAccordionItem>;
 
   private createFileModal: CreateFileModal | undefined;
@@ -497,14 +499,15 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private goToDefinitionAndResetCursorPosition(
-    codeRef: ResolvedCodeRef | undefined,
+    codeRef: CodeRef | undefined,
     localName: string | undefined,
+    fieldName?: string,
   ) {
-    this.goToDefinition(codeRef, localName);
+    this.goToDefinition(codeRef, localName, fieldName);
     if (this.codePath) {
       let urlString = this.codePath.toString();
       this.recentFilesService.updateCursorPositionByURL(
-        urlString.endsWith('gts') ? urlString : `${urlString}.gts`,
+        new URL(urlString.endsWith('gts') ? urlString : `${urlString}.gts`),
         undefined,
       );
     }
@@ -512,14 +515,16 @@ export default class CodeSubmode extends Component<Signature> {
 
   @action
   private goToDefinition(
-    codeRef: ResolvedCodeRef | undefined,
+    codeRef: CodeRef | undefined,
     localName: string | undefined,
+    fieldName?: string,
   ) {
-    this.operatorModeStateService.updateCodePathWithCodeSelection(
+    this.operatorModeStateService.updateCodePathWithSelection({
       codeRef,
       localName,
-      this.updateCursorByName,
-    );
+      fieldName,
+      onLocalSelection: this.updateCursorByName,
+    });
   }
 
   private loadScopedCSS = restartableTask(async () => {
@@ -622,9 +627,7 @@ export default class CodeSubmode extends Component<Signature> {
         let realmURL = this.operatorModeStateService.realmURL;
 
         if (realmURL) {
-          let realmPaths = new RealmPaths(realmURL);
-          let filePath = realmPaths.local(file);
-          this.recentFilesService.removeRecentFile(filePath);
+          this.recentFilesService.removeRecentFile(file);
         }
         await this.cardService.deleteSource(file);
       });
@@ -713,7 +716,9 @@ export default class CodeSubmode extends Component<Signature> {
     this.createFileModal = createFileModal;
   };
 
-  private setupCodeEditor = (updateCursorByName: (name: string) => void) => {
+  private setupCodeEditor = (
+    updateCursorByName: (name: string, fieldName?: string) => void,
+  ) => {
     this.updateCursorByName = updateCursorByName;
   };
 

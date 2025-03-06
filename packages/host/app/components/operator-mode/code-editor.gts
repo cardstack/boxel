@@ -45,7 +45,9 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
-    onSetup: (updateCursorByName: (name: string) => void) => void;
+    onSetup: (
+      updateCursorByName: (name: string, fieldName?: string) => void,
+    ) => void;
   };
 }
 
@@ -126,9 +128,7 @@ export default class CodeEditor extends Component<Signature> {
   @cached
   private get initialMonacoCursorPosition() {
     if (this.codePath) {
-      let recentFile = this.recentFilesService.findRecentFileByURL(
-        this.codePath.toString(),
-      );
+      let recentFile = this.recentFilesService.findRecentFile(this.codePath);
       if (recentFile?.cursorPosition) {
         return new Position(
           recentFile.cursorPosition.line,
@@ -136,14 +136,32 @@ export default class CodeEditor extends Component<Signature> {
         );
       }
     }
+    let loc;
+    let selectedFieldName = this.operatorModeStateService.state.fieldSelection;
+    if (
+      selectedFieldName &&
+      this.args.selectedDeclaration &&
+      'possibleFields' in this.args.selectedDeclaration &&
+      this.args.selectedDeclaration.possibleFields
+    ) {
+      let possibleFields = this.args.selectedDeclaration.possibleFields;
+      let field = possibleFields.get(selectedFieldName);
+      loc =
+        field?.path?.node && 'loc' in field.path.node && field.path.node.loc
+          ? field.path.node.loc
+          : undefined;
+    }
 
-    let loc =
-      this.args.selectedDeclaration?.path?.node &&
-      'body' in this.args.selectedDeclaration.path.node &&
-      'loc' in this.args.selectedDeclaration.path.node.body &&
-      this.args.selectedDeclaration.path.node.body.loc
-        ? this.args.selectedDeclaration?.path?.node.body.loc
-        : undefined;
+    if (!loc) {
+      loc =
+        this.args.selectedDeclaration?.path?.node &&
+        'body' in this.args.selectedDeclaration.path.node &&
+        'loc' in this.args.selectedDeclaration.path.node.body &&
+        this.args.selectedDeclaration.path.node.body.loc
+          ? this.args.selectedDeclaration?.path?.node.body.loc
+          : undefined;
+    }
+
     if (loc) {
       let { start } = loc;
       return new Position(start.line, start.column);
@@ -152,17 +170,34 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   @action
-  private updateMonacoCursorPositionByName(name: string) {
+  private updateMonacoCursorPositionByName(name: string, fieldName?: string) {
     let declaration = findDeclarationByName(name, this.declarations);
     if (declaration === undefined) return;
-    return this.updateMonacoCursorPositionByDeclaration(declaration);
+    return this.updateMonacoCursorPositionByDeclaration(declaration, fieldName);
   }
 
   @action
   private updateMonacoCursorPositionByDeclaration(
     declaration: ModuleDeclaration,
+    fieldName?: string,
   ) {
     if (
+      fieldName &&
+      'possibleFields' in declaration &&
+      declaration.possibleFields
+    ) {
+      let possibleFields = declaration.possibleFields;
+      let field = possibleFields.get(fieldName);
+      let loc =
+        field?.path?.node && 'loc' in field.path.node && field.path.node.loc
+          ? field.path.node.loc
+          : undefined;
+      if (loc) {
+        this.monacoService.updateCursorPosition(
+          new Position(loc.start.line, loc.start.column),
+        );
+      }
+    } else if (
       declaration.path?.node &&
       'body' in declaration.path.node &&
       'loc' in declaration.path.node.body &&
@@ -217,13 +252,10 @@ export default class CodeEditor extends Component<Signature> {
     if (!this.codePath) {
       return;
     }
-    this.recentFilesService.updateCursorPositionByURL(
-      this.codePath.toString(),
-      {
-        line: position.lineNumber,
-        column: position.column,
-      },
-    );
+    this.recentFilesService.updateCursorPositionByURL(this.codePath, {
+      line: position.lineNumber,
+      column: position.column,
+    });
   }
 
   @action

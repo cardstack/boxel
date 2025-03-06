@@ -15,8 +15,9 @@ import {
   mergeRelationships,
   type PatchData,
   RealmPaths,
-  type ResolvedCodeRef,
   type LocalPath,
+  CodeRef,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -56,6 +57,7 @@ export interface OperatorModeState {
   fileView?: FileView;
   openDirs: Map<string, string[]>;
   codeSelection?: string;
+  fieldSelection?: string;
 }
 
 interface CardItem {
@@ -75,6 +77,7 @@ export type SerializedState = {
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
+  fieldSelection?: string;
 };
 
 interface OpenFileSubscriber {
@@ -202,9 +205,7 @@ export default class OperatorModeStateService extends Service {
     for (let item of items) {
       this.trimItemsFromStack(item);
     }
-    let realmPaths = new RealmPaths(new URL(cardRealmUrl));
-    let cardPath = realmPaths.local(new URL(`${cardId}.json`));
-    this.recentFilesService.removeRecentFile(cardPath);
+    this.recentFilesService.removeRecentFile(new URL(`${cardId}.json`));
     this.recentCardsService.remove(cardId);
   }
 
@@ -322,21 +323,38 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  updateCodePathWithCodeSelection(
-    codeRef: ResolvedCodeRef | undefined,
-    localName: string | undefined,
-    onLocalSelection?: (name: string) => void,
-  ) {
+  updateCodePathWithSelection({
+    codeRef,
+    localName,
+    fieldName,
+    onLocalSelection,
+  }: {
+    codeRef: CodeRef | undefined;
+    localName: string | undefined;
+    fieldName: string | undefined;
+    onLocalSelection?: (name: string, fieldName?: string) => void;
+  }) {
     //moving from one definition to another
-    if (codeRef) {
+    if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this.state.codeSelection = codeRef.name;
       this.updateCodePath(new URL(codeRef.module));
+    } else if (
+      codeRef &&
+      'type' in codeRef &&
+      codeRef.type === 'fieldOf' &&
+      'card' in codeRef &&
+      isResolvedCodeRef(codeRef.card)
+    ) {
+      this.state.fieldSelection = codeRef.field;
+      this.state.codeSelection = codeRef.card.name;
+      this.updateCodePath(new URL(codeRef.card.module));
     } else if (localName && onLocalSelection) {
       //in the same module
       this.state.codeSelection = localName;
+      this.state.fieldSelection = fieldName;
       this.schedulePersist();
-      onLocalSelection(localName);
+      onLocalSelection(localName, fieldName);
     }
   }
 
@@ -465,6 +483,7 @@ export default class OperatorModeStateService extends Service {
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
       codeSelection: this.state.codeSelection,
+      fieldSelection: this.state.fieldSelection,
     };
 
     for (let stack of this.state.stacks) {
@@ -523,6 +542,7 @@ export default class OperatorModeStateService extends Service {
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection,
+      fieldSelection: rawState.fieldSelection,
     });
 
     let stackIndex = 0;
