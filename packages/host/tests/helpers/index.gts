@@ -376,15 +376,13 @@ async function setupTestRealm({
     secretSeed: testRealmSecretSeed,
   });
 
-  let iteratedTestMatrix = {
-    ...baseTestMatrix,
-    username: testRealmURLToUsername(realmURL),
-  };
-
   realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: iteratedTestMatrix,
+    matrix: {
+      ...baseTestMatrix,
+      username: testRealmURLToUsername(realmURL),
+    },
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
