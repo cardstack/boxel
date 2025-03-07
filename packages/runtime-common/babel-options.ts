@@ -3,6 +3,7 @@ import { ParserOptions, ParserPlugin } from '@babel/parser';
 export type Overrides = Partial<{
   sourceType: ParserOptions['sourceType'];
   strictMode: ParserOptions['strictMode'];
+  sourceFilename: ParserOptions['sourceFilename'];
 }>;
 
 export function getBabelOptions(
