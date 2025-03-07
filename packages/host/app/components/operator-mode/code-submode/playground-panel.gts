@@ -14,12 +14,13 @@ import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
 
 import {
+  AddButton,
   LoadingIndicator,
   BoxelSelect,
   CardContainer,
   CardHeader,
 } from '@cardstack/boxel-ui/components';
-import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
 import {
   Eye,
   IconCode,
@@ -418,6 +419,16 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
             @setFormat={{this.setFormat}}
             data-test-playground-format-chooser
           />
+        {{else if (and (bool this.card) this.canWriteRealm)}}
+          <AddButton
+            class='add-field-button'
+            @variant='full-width'
+            @iconWidth='12px'
+            @iconHeight='12px'
+            {{on 'click' this.createNew}}
+          >
+            Add Field
+          </AddButton>
         {{/if}}
       {{/let}}
     </div>
@@ -467,6 +478,10 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         --boxel-format-chooser-button-bg-color: var(--boxel-light);
         --boxel-format-chooser-button-width: 80px;
         --boxel-format-chooser-button-min-width: 80px;
+      }
+      .add-field-button {
+        max-width: 500px;
+        margin-inline: auto;
       }
     </style>
   </template>
@@ -577,21 +592,22 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (!this.args.isFieldDef || !this.card) {
       return undefined;
     }
+
     let fieldInstances = (this.card as Spec).containedExamples;
     if (!fieldInstances?.length) {
-      // TODO: handle case when spec has no instances
       return undefined;
     }
+
     let index = this.fieldIndex!;
     if (index >= fieldInstances.length) {
       // display the next available instance if item was deleted
       index = fieldInstances.length - 1;
-
       // update the index in local storage
       if (this.playgroundSelections[this.args.moduleId]) {
         this.persistSelections(this.card.id, this.format, index);
       }
     }
+
     return fieldInstances[index];
   }
 
