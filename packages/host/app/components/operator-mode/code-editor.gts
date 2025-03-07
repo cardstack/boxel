@@ -35,7 +35,6 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import BinaryFileInfo from './binary-file-info';
-import { end } from '@ember/runloop';
 
 interface Signature {
   Args: {
@@ -139,7 +138,7 @@ export default class CodeEditor extends Component<Signature> {
         );
       }
     }
-    let loc;
+
     let selectedFieldName = this.operatorModeStateService.state.fieldSelection;
     let { selectedDeclaration } = this.args;
     if (
@@ -150,25 +149,30 @@ export default class CodeEditor extends Component<Signature> {
     ) {
       let possibleFields = selectedDeclaration.possibleFields;
       let field = possibleFields.get(selectedFieldName);
-      loc =
+      let loc =
         field?.path?.node && 'loc' in field.path.node && field.path.node.loc
           ? field.path.node.loc
           : undefined;
+      if (loc) {
+        let { start } = loc;
+        let { line, column } = start;
+        // Adjusts column to make cursor position right after the field name
+        let fieldDecoratorTextLength = 8;
+        column = column + fieldDecoratorTextLength + selectedFieldName.length;
+        return new Position(line, column);
+      }
     }
 
-    if (!loc) {
-      loc =
-        selectedDeclaration?.path?.node &&
-        'body' in selectedDeclaration.path.node &&
-        'loc' in selectedDeclaration.path.node.body &&
-        selectedDeclaration.path.node.body.loc
-          ? selectedDeclaration?.path?.node.body.loc
-          : undefined;
-    }
-
+    let loc =
+      selectedDeclaration?.path?.node &&
+      'body' in selectedDeclaration.path.node &&
+      'loc' in selectedDeclaration.path.node.body &&
+      selectedDeclaration.path.node.body.loc
+        ? selectedDeclaration?.path?.node.body.loc
+        : undefined;
     if (loc) {
-      let { start, end } = loc;
-      return new Position(start.line, end.column);
+      let { start } = loc;
+      return new Position(start.line, start.column);
     }
     return undefined;
   }
