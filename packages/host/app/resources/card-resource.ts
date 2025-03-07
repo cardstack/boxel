@@ -46,7 +46,13 @@ export class CardResource extends Resource<Args> {
   // and just being symmetric with the card error as well
   @tracked private _error: CardError | undefined;
   @tracked private _isLoaded = false;
-  @tracked private _loaded: Promise<void> | undefined;
+  private _loading:
+    | {
+        promise: Promise<void>;
+        urlOrDoc: string | LooseSingleCardDocument | undefined;
+        relativeTo: URL | undefined;
+      }
+    | undefined;
   declare private store: StoreService;
   declare private cardService: CardService;
   #url: string | undefined;
@@ -74,8 +80,15 @@ export class CardResource extends Resource<Args> {
     this.#isLive = isLive;
     this.#isAutoSave = isAutoSave;
 
-    if (urlOrDoc) {
-      this._loaded = this.load.perform(urlOrDoc, relativeTo);
+    if (
+      urlOrDoc !== this._loading?.urlOrDoc ||
+      relativeTo !== this._loading?.relativeTo
+    ) {
+      this._loading = {
+        promise: this.load.perform(urlOrDoc, relativeTo),
+        urlOrDoc,
+        relativeTo,
+      };
     }
 
     registerDestructor(this, () => {
@@ -114,23 +127,32 @@ export class CardResource extends Resource<Args> {
   // This is deprecated. consumers of this resource need to be reactive such
   // that they can deal with a resource that doesn't have a card yet.
   get loaded() {
-    return this._loaded;
+    return this._loading?.promise;
   }
 
   private load = restartableTask(
-    async (urlOrDoc: string | LooseSingleCardDocument, relativeTo?: URL) => {
-      this.#api = await this.cardService.getAPI();
-      let { url, card, error } = await this.store.createSubscriber({
-        resource: this,
-        urlOrDoc,
-        relativeTo,
-        setCard: (card) => {
-          if (card !== this.card) {
-            this._card = card;
-          }
-        },
-        setCardError: (error) => (this._error = error),
-      });
+    async (
+      urlOrDoc: string | LooseSingleCardDocument | undefined,
+      relativeTo?: URL,
+    ) => {
+      let url: string | undefined;
+      let card: CardDef | undefined;
+      let error: CardError | undefined;
+
+      if (urlOrDoc) {
+        this.#api = await this.cardService.getAPI();
+        ({ url, card, error } = await this.store.createSubscriber({
+          resource: this,
+          urlOrDoc,
+          relativeTo,
+          setCard: (card) => {
+            if (card !== this.card) {
+              this._card = card;
+            }
+          },
+          setCardError: (error) => (this._error = error),
+        }));
+      }
       this.#url = url;
       this._card = card;
       this._error = error;
