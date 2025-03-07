@@ -380,7 +380,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
   });
 
-  test('ensures to not display auto attached file in interact mode', async function (assert) {
+  test('auto-attached file is not displayed in interact mode', async function (assert) {
     await visitOperatorMode({
       submode: 'interact',
       codePath: `${testRealmURL}index.json`,
