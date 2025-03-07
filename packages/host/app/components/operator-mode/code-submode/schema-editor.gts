@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
 import { getPlural } from '@cardstack/runtime-common';
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+import { type CodeRef } from '@cardstack/runtime-common/code-ref';
 
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
@@ -30,8 +30,9 @@ interface Signature {
     card: typeof BaseDef;
     isReadOnly: boolean;
     goToDefinition: (
-      codeRef: ResolvedCodeRef | undefined,
+      codeRef: CodeRef | undefined,
       localName: string | undefined,
+      fieldName?: string,
     ) => void;
   };
   Blocks: {
