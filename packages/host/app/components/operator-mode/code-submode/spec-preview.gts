@@ -57,11 +57,11 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import type { WithBoundArgs } from '@glint/template';
-
-import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 interface Signature {
   Element: HTMLElement;

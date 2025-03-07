@@ -43,8 +43,8 @@ import {
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CardService from '@cardstack/host/services/card-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -59,14 +59,13 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
-import FieldPickerModal from '../field-picker-modal';
-
 import PrerenderedCardSearch, {
   type PrerenderedCard,
 } from '../../prerendered-card-search';
 
 import Preview from '../../preview';
 import FittedFormatGallery from '../card-preview-panel/fitted-format-gallery';
+import FieldPickerModal from '../field-picker-modal';
 
 import FormatChooser from './format-chooser';
 
