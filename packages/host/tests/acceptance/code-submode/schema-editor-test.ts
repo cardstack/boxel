@@ -1161,5 +1161,12 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-current-module-name="employee.gts"]').doesNotExist();
     assert.dom('[data-test-current-module-name="person.gts"]').exists();
     assert.true(monacoService.getLineCursorOn()?.includes('@field address'));
+
+    await click(
+      `[data-test-card-schema="Card"] [data-test-field-name-button="title"]`,
+    );
+    assert.dom('[data-test-current-module-name="person.gts"]').doesNotExist();
+    assert.dom('[data-test-current-module-name="card-api.gts"]').exists();
+    assert.true(monacoService.getLineCursorOn()?.includes('@field title'));
   });
 });

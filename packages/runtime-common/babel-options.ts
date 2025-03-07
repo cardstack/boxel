@@ -16,6 +16,7 @@ export function getBabelOptions(
   return {
     sourceType: getOption(options, 'sourceType', 'module'),
     strictMode: getOption(options, 'strictMode', false),
+    sourceFilename: getOption(options, 'sourceFilename', undefined),
     allowImportExportEverywhere: true,
     allowReturnOutsideFunction: true,
     startLine: 1,
