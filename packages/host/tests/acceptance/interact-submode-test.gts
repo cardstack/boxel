@@ -59,13 +59,8 @@ module('Acceptance | interact submode tests', function (hooks) {
     activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
   });
 
-  let {
-    createAndJoinRoom,
-    getRoomIdForRealmAndUser,
-    setActiveRealms,
-    setRealmPermissions,
-    simulateRemoteMessage,
-  } = mockMatrixUtils;
+  let { createAndJoinRoom, setActiveRealms, setRealmPermissions } =
+    mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -611,11 +606,6 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await click('[data-test-edit-button]');
 
-      let roomId = getRoomIdForRealmAndUser(
-        testRealmURL,
-        '@testuser:localhost',
-      );
-
       await realm.write(
         'Pet/vangogh.json',
         JSON.stringify({
@@ -637,20 +627,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
 
       await settled();
-
-      simulateRemoteMessage(
-        roomId,
-        '@node-test_realm:localhost',
-        {
-          eventName: 'index',
-          indexType: 'incremental',
-          invalidations: [`${testRealmURL}Pet/mango`],
-          clientRequestId: 'test-client-request-id',
-        },
-        {
-          type: 'app.boxel.realm-event',
-        },
-      );
 
       assert.dom('[data-test-pet-title]').containsText('Renamed via UI');
     });
