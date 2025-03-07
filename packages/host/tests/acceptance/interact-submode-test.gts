@@ -58,8 +58,13 @@ module('Acceptance | interact submode tests', function (hooks) {
     activeRealms: [testRealmURL, testRealm2URL, testRealm3URL],
   });
 
-  let { createAndJoinRoom, setActiveRealms, setRealmPermissions } =
-    mockMatrixUtils;
+  let {
+    createAndJoinRoom,
+    getRoomIdForRealmAndUser,
+    setActiveRealms,
+    setRealmPermissions,
+    simulateRemoteMessage,
+  } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -112,7 +117,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <GridContainer class='container'>
-            <h2><@fields.title /></h2>
+            <h2 data-test-pet-title><@fields.title /></h2>
             <div>
               <div>Favorite Treat: <@fields.favoriteTreat /></div>
               <div data-test-editable-meta>
@@ -572,6 +577,81 @@ module('Acceptance | interact submode tests', function (hooks) {
           })!,
         )}`,
       );
+    });
+
+    test<TestContextWithSave>('a realm event with known clientRequestId is ignored', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/vangogh`,
+              format: 'edit',
+            },
+          ],
+        ],
+        codePath: `${testRealmURL}Pet/vangogh.json`,
+      });
+
+      let deferred = new Deferred<void>();
+
+      this.onSave(() => {
+        deferred.fulfill();
+      });
+
+      await fillIn(`[data-test-field="name"] input`, 'Renamed via UI');
+
+      let saveRequestIds = this.owner
+        .lookup('service:card-service')
+        .clientRequestIds.values();
+
+      let saveRequestId = saveRequestIds.next().value;
+
+      await deferred.promise;
+
+      await click('[data-test-edit-button]');
+
+      let roomId = getRoomIdForRealmAndUser(
+        testRealmURL,
+        '@testuser:localhost',
+      );
+
+      await realm.write(
+        'Pet/vangogh.json',
+        {
+          data: {
+            type: 'card',
+            id: 'http://test-realm/test/Pet/vangogh',
+            attributes: {
+              name: 'Renamed via realm call',
+              favoriteTreat: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: { module: 'http://test-realm/test/pet', name: 'Pet' },
+            },
+          },
+        },
+        saveRequestId,
+      );
+
+      await settled();
+
+      simulateRemoteMessage(
+        roomId,
+        '@node-test_realm:localhost',
+        {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}Pet/mango`],
+          clientRequestId: 'test-client-request-id',
+        },
+        {
+          type: 'app.boxel.realm-event',
+        },
+      );
+
+      assert.dom('[data-test-pet-title]').containsText('Renamed via UI');
     });
 
     test('restoring the stack from query param when card is in edit format', async function (assert) {
