@@ -595,16 +595,14 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
 
       await fillIn(`[data-test-field="name"] input`, 'Renamed via UI');
+      await deferred.promise;
+      await click('[data-test-edit-button]');
 
       let knownClientRequestIds = (
         this.owner.lookup('service:card-service') as CardService
       ).clientRequestIds.values();
 
       let knownClientRequestId = knownClientRequestIds.next().value;
-
-      await deferred.promise;
-
-      await click('[data-test-edit-button]');
 
       await realm.write(
         'Pet/vangogh.json',
