@@ -291,10 +291,7 @@ export default class Room extends Component<Signature> {
       },
     });
 
-    if (
-      !this.autoAttachedFileUrl ||
-      this.operatorModeStateService.state.submode === Submodes.Interact
-    ) {
+    if (!this.autoAttachedFileUrl) {
       state.value = undefined;
     } else {
       state.value = this.matrixService.fileAPI.createFileDef({
@@ -311,7 +308,9 @@ export default class Room extends Component<Signature> {
   }
 
   private get autoAttachedFile() {
-    return this.autoAttachedFileResource.value;
+    return this.operatorModeStateService.state.submode === Submodes.Code
+      ? this.autoAttachedFileResource.value
+      : undefined;
   }
 
   private get removeAutoAttachedFile() {
