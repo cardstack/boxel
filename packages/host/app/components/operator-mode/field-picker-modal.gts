@@ -1,8 +1,11 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-// import { fn } from '@ember/helper';
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
-import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
+import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
+
+import { CardContainer } from '@cardstack/boxel-ui/components';
+import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import type { FieldDef } from 'https://cardstack.com/base/card-api';
 
@@ -12,44 +15,38 @@ import Preview from '../preview';
 interface Signature {
   Args: {
     instances: FieldDef[] | undefined;
-    onConfirm: () => void;
-    onCancel: () => void;
-    error?: string;
+    selectedIndex: number;
+    onSelect: (index: number) => void;
+    onClose: () => void;
+    name?: string;
   };
 }
 
-let component: TemplateOnlyComponent<Signature> = <template>
+let FieldChooser: TemplateOnlyComponent<Signature> = <template>
   <ModalContainer
     class='field-picker-modal'
     @cardContainerClass='field-picker'
-    @title='Choose a field instance'
+    @title='Choose a {{if @name @name "Field"}} Instance'
     @size='medium'
-    @onClose={{@onCancel}}
+    @centered={{true}}
+    @onClose={{@onClose}}
+    {{focusTrap}}
   >
     <:content>
       <div class='instances'>
-        {{#each @instances as |instance|}}
-          <CardContainer @displayBoundaries={{true}}>
+        {{#each @instances as |instance i|}}
+          <CardContainer
+            class={{cn 'instance-container' selected=(eq i @selectedIndex)}}
+            @tag='button'
+            @displayBoundaries={{true}}
+            {{on 'click' (fn @onSelect i)}}
+            aria-label='Select instance {{add i 1}}'
+          >
             <Preview @card={{instance}} @format='embedded' />
           </CardContainer>
         {{/each}}
       </div>
     </:content>
-    <:footer>
-      <p class='error-message'>{{@error}}</p>
-      <div class='footer-buttons'>
-        <BoxelButton
-          @size='tall'
-          @kind='secondary-light'
-          {{on 'click' @onCancel}}
-        >
-          Cancel
-        </BoxelButton>
-        <BoxelButton @size='tall' @kind='primary' {{on 'click' @onConfirm}}>
-          Select
-        </BoxelButton>
-      </div>
-    </:footer>
   </ModalContainer>
 
   <style scoped>
@@ -63,22 +60,19 @@ let component: TemplateOnlyComponent<Signature> = <template>
       display: grid;
       gap: var(--boxel-sp);
     }
-    .field-picker-modal :deep(.dialog-box__footer) {
-      justify-content: space-between;
-      gap: var(--boxel-sp);
+    .instance-container {
+      appearance: none;
+      border: none;
+      padding: var(--boxel-sp);
     }
-    .footer-buttons {
-      display: flex;
-      justify-content: flex-end;
-      gap: var(--boxel-sp-xs);
+    .instance-container.selected:not(:hover):not(:focus) {
+      box-shadow: 0 0 0 1px var(--boxel-dark);
     }
-    .error-message {
-      margin-block: 0;
-      color: var(--boxel-danger);
-      font: 500 var(--boxel-font-sm);
-      letter-spacing: var(--boxel-lsp-xs);
+    .instance-container:hover,
+    .instance-container:focus {
+      box-shadow: 0 0 0 2px var(--boxel-highlight-hover);
     }
   </style>
 </template>;
 
-export default component;
+export default FieldChooser;

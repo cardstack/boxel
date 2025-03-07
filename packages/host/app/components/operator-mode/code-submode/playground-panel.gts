@@ -9,7 +9,6 @@ import { tracked } from '@glimmer/tracking';
 
 import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
-// import perform from 'ember-concurrency/helpers/perform';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import window from 'ember-window-mock';
 import { TrackedObject } from 'tracked-built-ins';
@@ -432,14 +431,16 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       {{/let}}
     </div>
 
-    {{#if this.displayFieldPicker}}
+    {{#if this.fieldChooserIsOpen}}
       <ToElsewhere
         @named='playground-field-picker'
         @send={{component
           FieldPickerModal
           instances=this.fieldInstances
-          onConfirm=this.onCancelFieldSelection
-          onCancel=this.onCancelFieldSelection
+          selectedIndex=this.fieldIndex
+          onSelect=this.chooseField
+          onClose=this.closeFieldChooser
+          name=(if this.field (cardTypeDisplayName this.field))
         }}
       />
     {{/if}}
@@ -486,7 +487,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare realmServer: RealmServerService;
   @service declare recentFilesService: RecentFilesService;
   @tracked newCardJSON: LooseSingleCardDocument | undefined;
-  @tracked displayFieldPicker = false;
+  @tracked fieldChooserIsOpen = false;
   private playgroundSelections: Record<
     string, // moduleId
     { cardId: string; format: Format; fieldIndex: number | undefined }
@@ -705,10 +706,31 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     this.updatePlaygroundSelections(this.card.id, format);
   }
 
+  // only closes the dropdown if it's open
+  private closeInstanceChooser = () =>
+    (
+      document.querySelector(
+        '[data-playground-instance-chooser][aria-expanded="true"]',
+      ) as BoxelSelect | null
+    )?.click();
+
   @action private chooseInstance() {
     this.args.isFieldDef
-      ? (this.displayFieldPicker = true)
+      ? (this.fieldChooserIsOpen = true)
       : this.chooseCard.perform();
+    this.closeInstanceChooser();
+  }
+
+  @action private chooseField(index: number) {
+    if (!this.card?.id) {
+      return;
+    }
+    this.updatePlaygroundSelections(this.card.id, this.format, index);
+    this.closeFieldChooser();
+  }
+
+  @action private closeFieldChooser() {
+    this.fieldChooserIsOpen = false;
   }
 
   private chooseCard = task(async () => {
@@ -721,10 +743,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       this.updatePlaygroundSelections(chosenCard.id);
     }
   });
-
-  @action private onCancelFieldSelection() {
-    this.displayFieldPicker = false;
-  }
 
   @action private createNew() {
     this.args.isFieldDef
@@ -783,11 +801,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       examples?.push(new fieldCard());
       let index = examples?.length ? examples.length - 1 : 0;
       this.updatePlaygroundSelections(this.card.id, 'edit', index);
-      (
-        document.querySelector(
-          '[data-playground-instance-chooser][aria-expanded="true"]',
-        ) as BoxelSelect | null
-      )?.click(); // close instance chooser dropdown menu if open
+      this.closeInstanceChooser();
     }
   });
 
