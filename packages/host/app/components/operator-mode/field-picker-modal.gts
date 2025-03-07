@@ -2,15 +2,11 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 // import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 
-import {
-  BoxelButton,
-  CardContainer,
-  Modal,
-} from '@cardstack/boxel-ui/components';
-import { cssVar } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton, CardContainer } from '@cardstack/boxel-ui/components';
 
 import type { FieldDef } from 'https://cardstack.com/base/card-api';
 
+import ModalContainer from '../modal-container';
 import Preview from '../preview';
 
 interface Signature {
@@ -23,22 +19,25 @@ interface Signature {
 }
 
 let component: TemplateOnlyComponent<Signature> = <template>
-  <Modal
-    @layer='urgent'
+  <ModalContainer
+    class='field-picker-modal'
+    @cardContainerClass='field-picker'
+    @title='Choose a field instance'
     @size='medium'
-    @isOpen={{true}}
     @onClose={{@onCancel}}
-    style={{cssVar boxel-modal-offset-top='20px'}}
   >
-    <section class='field-picker'>
+    <:content>
       <div class='instances'>
         {{#each @instances as |instance|}}
-          <CardContainer class='instance-container' @displayBoundaries={{true}}>
+          <CardContainer @displayBoundaries={{true}}>
             <Preview @card={{instance}} @format='embedded' />
           </CardContainer>
         {{/each}}
       </div>
-      <footer>
+    </:content>
+    <:footer>
+      <p class='error-message'>{{@error}}</p>
+      <div class='footer-buttons'>
         <BoxelButton
           @size='tall'
           @kind='secondary-light'
@@ -49,44 +48,35 @@ let component: TemplateOnlyComponent<Signature> = <template>
         <BoxelButton @size='tall' @kind='primary' {{on 'click' @onConfirm}}>
           Select
         </BoxelButton>
-        {{#if @error}}
-          <p class='error'>{{@error}}</p>
-        {{/if}}
-      </footer>
-    </section>
-  </Modal>
+      </div>
+    </:footer>
+  </ModalContainer>
 
   <style scoped>
-    .field-picker {
-      padding: var(--boxel-sp-lg) var(--boxel-sp-lg) var(--boxel-sp);
-      background-color: var(--boxel-light);
-      border-radius: var(--boxel-border-radius-xl);
-      box-shadow: var(--boxel-deep-box-shadow);
+    .field-picker-modal > :deep(.boxel-modal__inner) {
+      display: flex;
+    }
+    :deep(.field-picker) {
+      height: 60%;
     }
     .instances {
       display: grid;
       gap: var(--boxel-sp);
     }
-    .instance-container {
-      padding: var(--boxel-sp);
+    .field-picker-modal :deep(.dialog-box__footer) {
+      justify-content: space-between;
+      gap: var(--boxel-sp);
     }
-    footer {
-      margin-top: var(--boxel-sp-lg);
+    .footer-buttons {
       display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      width: 100%;
+      justify-content: flex-end;
+      gap: var(--boxel-sp-xs);
     }
-    button:first-child {
-      margin-right: var(--boxel-sp-xs);
-    }
-    .error {
-      flex-grow: 1;
+    .error-message {
+      margin-block: 0;
       color: var(--boxel-danger);
       font: 500 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
-      margin-top: var(--boxel-sp);
-      margin-bottom: 0;
     }
   </style>
 </template>;
