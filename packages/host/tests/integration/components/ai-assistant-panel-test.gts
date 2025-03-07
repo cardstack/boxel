@@ -1758,6 +1758,36 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
   });
 
+  test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
+    await setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await openAiAssistant();
+    let element = document.querySelector('#ai-chat-input');
+
+    let initialHeight = element
+      ? parseInt(window.getComputedStyle(element).height)
+      : 0;
+
+    assert.true(initialHeight < 50, 'input box is short');
+    await fillIn('[data-test-message-field]', 'Hello '.repeat(1000));
+
+    let newHeight = element
+      ? parseInt(window.getComputedStyle(element).height)
+      : 0;
+
+    assert.true(
+      newHeight >= 300,
+      'input box grows when entering/pasting lots of text',
+    );
+  });
+
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
