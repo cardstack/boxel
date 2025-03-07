@@ -22,7 +22,7 @@ interface Signature {
   };
 }
 
-let FieldChooser: TemplateOnlyComponent<Signature> = <template>
+const FieldChooser: TemplateOnlyComponent<Signature> = <template>
   <ModalContainer
     class='field-picker-modal'
     @cardContainerClass='field-picker'

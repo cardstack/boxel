@@ -31,7 +31,6 @@ import {
   cardTypeDisplayName,
   cardTypeIcon,
   chooseCard,
-  identifyCard,
   internalKeyFor,
   loadCard,
   specRef,
@@ -74,13 +73,6 @@ const getItemTitle = (item: CardDef) => {
     return;
   }
   return item.title ?? `Untitled ${cardTypeDisplayName(item)}`;
-};
-
-const isSpec = (card: CardDef, cardRef?: ResolvedCodeRef): card is Spec => {
-  if (!cardRef) {
-    cardRef = identifyCard(card.constructor) as ResolvedCodeRef | undefined;
-  }
-  return cardRef?.name === specRef.name && cardRef.module === specRef.module;
 };
 
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
@@ -547,28 +539,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     { isAutoSave: () => true },
   );
 
-  private selectedDeclarationHasChanged = (card: CardDef) => {
-    let cardRef = identifyCard(card.constructor) as ResolvedCodeRef | undefined;
-    let { name } = this.args.codeRef;
-    if (!cardRef) {
-      return true;
-    }
-    if (this.args.isFieldDef) {
-      if (!isSpec(card, cardRef)) {
-        return true;
-      }
-      return card.ref.name !== name;
-    } else {
-      return cardRef.name !== name;
-    }
-  };
-
   private get card(): CardDef | undefined {
-    let card = this.cardResource.card;
-    if (card && this.selectedDeclarationHasChanged(card)) {
-      return undefined;
-    }
-    return card;
+    return this.cardResource.card;
   }
 
   private get defaultFormat() {
@@ -602,23 +574,22 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private get field(): FieldDef | undefined {
-    if (!this.args.isFieldDef) {
+    if (!this.args.isFieldDef || !this.card) {
       return undefined;
     }
-    let fieldInstances = (this.card as Spec)?.containedExamples;
+    let fieldInstances = (this.card as Spec).containedExamples;
     if (!fieldInstances?.length) {
       // TODO: handle case when spec has no instances
       return undefined;
     }
-    let index = this.fieldIndex ?? 0;
+    let index = this.fieldIndex!;
     if (index >= fieldInstances.length) {
       // display the next available instance if item was deleted
       index = fieldInstances.length - 1;
 
       // update the index in local storage
       if (this.playgroundSelections[this.args.moduleId]) {
-        this.playgroundSelections[this.args.moduleId].fieldIndex = index;
-        this.persistSelections();
+        this.persistSelections(this.card.id, this.format, index);
       }
     }
     return fieldInstances[index];
@@ -658,22 +629,21 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     return menuItems;
   }
 
-  private updatePlaygroundSelections = (
+  private persistSelections = (
     selectedCardId: string,
     selectedFormat = this.format,
-    selectedFieldIndex = this.fieldIndex,
+    index = this.fieldIndex,
   ) => {
     if (this.newCardJSON) {
       this.newCardJSON = undefined;
     }
-    if (this.playgroundSelections[this.args.moduleId]) {
-      let { cardId, format, fieldIndex } =
-        this.playgroundSelections[this.args.moduleId];
+    let selection = this.playgroundSelections[this.args.moduleId];
+    if (selection?.cardId) {
+      let { cardId, format, fieldIndex } = selection;
       if (
-        cardId &&
         cardId === selectedCardId &&
         format === selectedFormat &&
-        fieldIndex === selectedFieldIndex
+        fieldIndex === index
       ) {
         return;
       }
@@ -681,12 +651,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     this.playgroundSelections[this.args.moduleId] = {
       cardId: selectedCardId,
       format: selectedFormat,
-      fieldIndex: selectedFieldIndex,
+      fieldIndex: index,
     };
-    this.persistSelections();
-  };
-
-  private persistSelections = () => {
     window.localStorage.setItem(
       PlaygroundSelections,
       JSON.stringify(this.playgroundSelections),
@@ -694,7 +660,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   };
 
   @action private onSelect(card: PrerenderedCard) {
-    this.updatePlaygroundSelections(card.url.replace(/\.json$/, ''));
+    this.persistSelections(card.url.replace(/\.json$/, ''));
   }
 
   @action
@@ -702,7 +668,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (!this.card?.id) {
       return;
     }
-    this.updatePlaygroundSelections(this.card.id, format);
+    this.persistSelections(this.card.id, format);
   }
 
   // only closes the dropdown if it's open
@@ -724,7 +690,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (!this.card?.id) {
       return;
     }
-    this.updatePlaygroundSelections(this.card.id, this.format, index);
+    this.persistSelections(this.card.id, this.format, index);
     this.closeFieldChooser();
   }
 
@@ -739,7 +705,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
     if (chosenCard) {
       this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
-      this.updatePlaygroundSelections(chosenCard.id);
+      this.persistSelections(chosenCard.id);
     }
   });
 
@@ -766,7 +732,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
     if (this.card) {
       this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
-      this.updatePlaygroundSelections(this.card.id, 'edit'); // open new instance in playground in edit format
+      this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
     }
   });
 
@@ -799,7 +765,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       let examples = (this.card as Spec).containedExamples;
       examples?.push(new fieldCard());
       let index = examples?.length ? examples.length - 1 : 0;
-      this.updatePlaygroundSelections(this.card.id, 'edit', index);
+      this.persistSelections(this.card.id, 'edit', index);
       this.closeInstanceChooser();
     }
   });
