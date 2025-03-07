@@ -262,10 +262,10 @@ export default class StoreService extends Service {
           // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
           // the inputs with past values. This can happen if the user makes edits in the time between the auto
           // save request and the arrival SSE event.
-          /*if (
+          if (
             !event.clientRequestId ||
             !this.cardService.clientRequestIds.has(event.clientRequestId)
-          )*/ {
+          ) {
             this.reload.perform(liveCard);
           }
         } else if (!this.identityContext.get(invalidation)) {
