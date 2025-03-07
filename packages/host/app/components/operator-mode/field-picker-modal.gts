@@ -44,6 +44,8 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
           >
             <Preview @card={{instance}} @format='embedded' />
           </CardContainer>
+        {{else}}
+          <p>No field instances available</p>
         {{/each}}
       </div>
     </:content>
