@@ -35,6 +35,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import BinaryFileInfo from './binary-file-info';
+import { end } from '@ember/runloop';
 
 interface Signature {
   Args: {
@@ -166,8 +167,8 @@ export default class CodeEditor extends Component<Signature> {
     }
 
     if (loc) {
-      let { start } = loc;
-      return new Position(start.line, start.column);
+      let { start, end } = loc;
+      return new Position(start.line, end.column);
     }
     return undefined;
   }
@@ -196,8 +197,11 @@ export default class CodeEditor extends Component<Signature> {
           ? field.path.node.loc
           : undefined;
       if (loc) {
+        // Adjusts column to make cursor position right after the field name
+        let fieldDecoratorTextLength = 8;
+        let columnAdjustment = fieldDecoratorTextLength + fieldName.length;
         this.monacoService.updateCursorPosition(
-          new Position(loc.start.line, loc.start.column),
+          new Position(loc.start.line, loc.start.column + columnAdjustment),
         );
       }
     } else if (
