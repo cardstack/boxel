@@ -140,13 +140,14 @@ export default class CodeEditor extends Component<Signature> {
     }
     let loc;
     let selectedFieldName = this.operatorModeStateService.state.fieldSelection;
+    let { selectedDeclaration } = this.args;
     if (
       selectedFieldName &&
-      this.args.selectedDeclaration &&
-      'possibleFields' in this.args.selectedDeclaration &&
-      this.args.selectedDeclaration.possibleFields
+      selectedDeclaration &&
+      'possibleFields' in selectedDeclaration &&
+      selectedDeclaration.possibleFields
     ) {
-      let possibleFields = this.args.selectedDeclaration.possibleFields;
+      let possibleFields = selectedDeclaration.possibleFields;
       let field = possibleFields.get(selectedFieldName);
       loc =
         field?.path?.node && 'loc' in field.path.node && field.path.node.loc
@@ -156,11 +157,11 @@ export default class CodeEditor extends Component<Signature> {
 
     if (!loc) {
       loc =
-        this.args.selectedDeclaration?.path?.node &&
-        'body' in this.args.selectedDeclaration.path.node &&
-        'loc' in this.args.selectedDeclaration.path.node.body &&
-        this.args.selectedDeclaration.path.node.body.loc
-          ? this.args.selectedDeclaration?.path?.node.body.loc
+        selectedDeclaration?.path?.node &&
+        'body' in selectedDeclaration.path.node &&
+        'loc' in selectedDeclaration.path.node.body &&
+        selectedDeclaration.path.node.body.loc
+          ? selectedDeclaration?.path?.node.body.loc
           : undefined;
     }
 
