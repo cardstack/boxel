@@ -611,12 +611,8 @@ module('Acceptance | interact submode tests', function (hooks) {
         JSON.stringify({
           data: {
             type: 'card',
-            id: 'http://test-realm/test/Pet/vangogh',
             attributes: {
               name: 'Renamed via realm call',
-              favoriteTreat: null,
-              description: null,
-              thumbnailURL: null,
             },
             meta: {
               adoptsFrom: { module: 'http://test-realm/test/pet', name: 'Pet' },
