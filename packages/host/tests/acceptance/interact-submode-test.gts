@@ -23,6 +23,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -600,9 +601,9 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await fillIn(`[data-test-field="name"] input`, 'Renamed via UI');
 
-      let saveRequestIds = this.owner
-        .lookup('service:card-service')
-        .clientRequestIds.values();
+      let saveRequestIds = (
+        this.owner.lookup('service:card-service') as CardService
+      ).clientRequestIds.values();
 
       let saveRequestId = saveRequestIds.next().value;
 
@@ -617,7 +618,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await realm.write(
         'Pet/vangogh.json',
-        {
+        JSON.stringify({
           data: {
             type: 'card',
             id: 'http://test-realm/test/Pet/vangogh',
@@ -631,7 +632,7 @@ module('Acceptance | interact submode tests', function (hooks) {
               adoptsFrom: { module: 'http://test-realm/test/pet', name: 'Pet' },
             },
           },
-        },
+        }),
         saveRequestId,
       );
 
