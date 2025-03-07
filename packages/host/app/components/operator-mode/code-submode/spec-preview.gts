@@ -541,14 +541,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   );
 
   get card() {
-    let card = this.cardResource.card as Spec | undefined;
-    if (!card) {
+    if (!this.cardResource.card) {
       return undefined;
     }
-    if (card && this.selectedDeclarationHasChanged(card)) {
-      return undefined;
-    }
-    return card;
+    return this.cardResource.card as Spec;
   }
 
   get specType() {
@@ -557,11 +553,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   getSpecIntent = (cards: PrerenderedCard[]) => {
     return cards.length === 0 && this.canWrite;
-  };
-
-  private selectedDeclarationHasChanged = (card: Spec) => {
-    let { name } = this.getSelectedDeclarationAsCodeRef;
-    return card.ref.name !== name;
   };
 
   // When previewing a field spec, changing the spec in Spec panel should
