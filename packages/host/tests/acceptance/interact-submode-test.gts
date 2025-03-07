@@ -596,11 +596,11 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await fillIn(`[data-test-field="name"] input`, 'Renamed via UI');
 
-      let saveRequestIds = (
+      let knownClientRequestIds = (
         this.owner.lookup('service:card-service') as CardService
       ).clientRequestIds.values();
 
-      let saveRequestId = saveRequestIds.next().value;
+      let knownClientRequestId = knownClientRequestIds.next().value;
 
       await deferred.promise;
 
@@ -623,7 +623,7 @@ module('Acceptance | interact submode tests', function (hooks) {
             },
           },
         }),
-        saveRequestId,
+        knownClientRequestId,
       );
 
       await settled();
