@@ -35,6 +35,7 @@ export default class CodeBlock extends Modifier<Signature> {
       languageAttr,
       monacoSDK,
       editorDisplayOptions,
+      registerMonacoEditor,
     }: Signature['Args']['Named'],
   ) {
     let codeBlocks = element.querySelectorAll(codeBlockSelector);
@@ -57,6 +58,20 @@ export default class CodeBlock extends Modifier<Signature> {
       }
       let content = maybeContent;
       let lines = content.split('\n').length;
+      // if first line is // File url: http://localhost:4201/jurgen/jurgens/author.gts
+      // then parse the file url in a variable and remove the first line
+      let fileUrl = undefined;
+      debugger;
+      if (content.startsWith('// File url: ')) {
+        let firstLine = content.split('\n')[0];
+        // use regex to extract the file url
+        let fileUrlRegex = /File url: (.*)/;
+        let fileUrlMatch = firstLine.match(fileUrlRegex);
+        if (fileUrlMatch) {
+          fileUrl = fileUrlMatch[1];
+        }
+        content = content.slice(firstLine.length).trimStart();
+      }
       let language = codeBlock.getAttribute(languageAttr) ?? undefined;
       let state = this.monacoState[index];
       if (state) {
@@ -106,9 +121,18 @@ export default class CodeBlock extends Modifier<Signature> {
           'preview-code monaco-container code-block',
         );
         monacoContainer.setAttribute('style', `height: ${lines + 4}rem`);
+        monacoContainer.setAttribute('data-file-url', fileUrl ?? '');
         codeBlock.replaceWith(monacoContainer);
         let editor = monacoSDK.editor.create(monacoContainer, editorOptions);
         let model = editor.getModel()!;
+
+        let actionsElement = makeActionsDiv();
+        monacoContainer.insertBefore(
+          actionsElement,
+          monacoContainer.firstChild,
+        );
+
+        registerMonacoEditor(monacoContainer, actionsElement, editor, model);
         this.monacoState.push({ editor, model, language });
 
         let copyButton = makeCopyButton();
@@ -140,6 +164,15 @@ export default class CodeBlock extends Modifier<Signature> {
       }
     });
   }
+}
+
+function makeActionsDiv() {
+  let template = document.createElement('template');
+  template.innerHTML = `
+    <div id=${Math.random().toString(36).substring(2, 15)} class="code-actions">
+    </div>
+  `.trim();
+  return template.content.firstChild as HTMLButtonElement;
 }
 
 function makeCopyButton() {

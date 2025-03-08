@@ -43,6 +43,11 @@ const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
 };
 
+interface SearchReplaceBlock {
+  index: number; // Starting index in the original string
+  content: string; // The full search/replace block content
+}
+
 export default class MessageBuilder {
   constructor(
     private event: MessageEvent | CardMessageEvent,
@@ -145,6 +150,7 @@ export default class MessageBuilder {
     } else if (event.content.msgtype === 'm.text') {
       message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
     }
+
     return message;
   }
 
@@ -204,6 +210,26 @@ export default class MessageBuilder {
     }
   }
 
+  private parseSearchReplaceBlocks(input: string): SearchReplaceBlock[] {
+    const result: SearchReplaceBlock[] = [];
+
+    // Regular expression to match the search/replace pattern
+    const pattern =
+      /<<<<<<< SEARCH\r?\n[\s\S]*?=======\r?\n[\s\S]*?>>>>>>> REPLACE/g;
+
+    let match;
+    while ((match = pattern.exec(input)) !== null) {
+      const fullMatch = match[0];
+
+      result.push({
+        index: match.index,
+        content: fullMatch,
+      });
+    }
+
+    return result;
+  }
+
   private buildMessageCommands(message: Message) {
     let eventContent = this.event.content as CardMessageContent;
     let commandRequests = eventContent[APP_BOXEL_COMMAND_REQUESTS_KEY];
@@ -215,6 +241,8 @@ export default class MessageBuilder {
       let command = this.buildMessageCommand(message, commandRequest);
       commands.push(command);
     }
+
+    // in formatted message, check for existance of search/replace blocks
     return commands;
   }
 
@@ -234,17 +262,20 @@ export default class MessageBuilder {
           e.content.commandRequestId === commandRequest.id
         );
       }) as CommandResultEvent | undefined);
-
+    debugger;
     // Find command in skills
+
     let commandCodeRef: ResolvedCodeRef | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
       for (let skillCommand of skill.card.commands) {
         if (commandRequest.name === skillCommand.functionName) {
+          debugger;
           commandCodeRef = skillCommand.codeRef;
           break findCommand;
         }
       }
     }
+    debugger;
     let messageCommand = new MessageCommand(
       message,
       commandRequest,

@@ -132,6 +132,24 @@ export default class CommandService extends Service {
     return result;
   }
 
+  applyCodePatch = task(
+    async (
+      roomId: string,
+      eventId: string,
+      _fileUrl: URL,
+      _patch: string,
+      codePatchIndex: number,
+    ) => {
+      await timeout(3000);
+      // send a non-tool result event
+      await this.matrixService.sendNonToolResultEvent(
+        roomId,
+        eventId,
+        codePatchIndex,
+      );
+    },
+  );
+
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageCommand) => {
     let { arguments: payload, eventId, id: commandRequestId } = command;

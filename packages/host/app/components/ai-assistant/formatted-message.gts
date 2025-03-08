@@ -5,14 +5,56 @@ import CodeBlock from '@cardstack/host/modifiers/code-block';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import { tracked } from '@glimmer/tracking';
+import { TrackedArray } from 'tracked-built-ins';
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import ApplyButton from '../ai-assistant/apply-button';
+import { fn } from '@ember/helper';
 
+import type CardService from '@cardstack/host/services/card-service';
+import { service } from '@ember/service';
+import LoaderService from '@cardstack/host/services/loader-service';
 interface FormattedMessageSignature {
   sanitizedHtml: SafeString;
   monacoSDK: MonacoSDK;
   renderCodeBlocks: boolean;
 }
 
+interface CodeAction {
+  fileUrl: string;
+  code: string;
+  element: HTMLButtonElement;
+}
+
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
+  @tracked actionElements: TrackedArray<CodeAction> = new TrackedArray([]);
+  @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
+
+  registerMonacoEditor = (
+    monacoContainer: HTMLElement,
+    actionElement: HTMLButtonElement,
+    editor: MonacoSDK.editor.IStandaloneCodeEditor,
+    model: MonacoSDK.editor.ITextModel,
+  ) => {
+    this.actionElements.push({
+      fileUrl: monacoContainer.getAttribute('data-file-url') ?? '',
+      code: model.getValue(),
+      element: actionElement,
+    });
+  };
+
+  // todo ec task
+  @action async patchCode(codeAction: CodeAction) {
+    debugger;
+
+    let source = await this.cardService.getSource(new URL(codeAction.fileUrl));
+    let patched = applyPatch(source, codeAction.code);
+    await this.cardService.saveSource(new URL(codeAction.fileUrl), patched);
+    this.loaderService.reset();
+  }
+
   <template>
     {{#if @renderCodeBlocks}}
       <div
@@ -22,9 +64,20 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           languageAttr='data-codeblock'
           monacoSDK=@monacoSDK
           editorDisplayOptions=this.editorDisplayOptions
+          registerMonacoEditor=this.registerMonacoEditor
         }}
       >
+
         {{@sanitizedHtml}}
+
+        {{#each this.actionElements as |actionElement index|}}
+          {{#in-element actionElement.element}}
+            <ApplyButton
+              @state='ready'
+              {{on 'click' (fn this.patchCode actionElement)}}
+            />
+          {{/in-element}}
+        {{/each}}
       </div>
     {{else}}
       <div class='message'>
@@ -33,7 +86,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     {{/if}}
 
     <style scoped>
-      /* code blocks can be rendered inline and as blocks, 
+      /* code blocks can be rendered inline and as blocks,
          this is the styling for when it is rendered as a block */
       .message > :deep(.preview-code.code-block) {
         width: calc(100% + 2 * var(--boxel-sp));
@@ -84,7 +137,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
       }
 
-      /* we are cribbing the boxel-ui style here as we have a rather 
+      /* we are cribbing the boxel-ui style here as we have a rather
       awkward way that we insert the copy button */
       :deep(.code-copy-button) {
         --spacing: calc(1rem / 1.333);
@@ -115,6 +168,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       :deep(.code-copy-button:hover .copy-text) {
         color: var(--boxel-highlight);
       }
+
+      :deep(.code-actions) {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+      }
     </style>
   </template>
 
@@ -127,4 +186,60 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     },
     lineNumbers: 'off',
   };
+}
+
+/**
+ * Applies a search/replace patch to a file's content
+ * @param {string} fileContent - The content of the file to be patched
+ * @param {string} patchText - The patch text in the specified format
+ * @returns {string} Updated file content with patch applied
+ */
+export function applyPatch(fileContent, patchText) {
+  // Parse the patch text to extract search and replace content
+  const { searchText, replaceText } = parsePatch(patchText);
+
+  // Check if search text exists in the file content
+  if (!fileContent.includes(searchText)) {
+    throw new Error('Search text not found in file content');
+  }
+
+  // Apply the patch by replacing the search text with the replace text
+  return fileContent.replace(searchText, replaceText);
+}
+
+/**
+ * Parses a search/replace block to extract search and replace text
+ * @param {string} patchText - The patch text in the specified format
+ * @returns {Object} Object containing searchText and replaceText
+ */
+function parsePatch(patchText) {
+  const lines = patchText.split('\n');
+
+  // Find the start of the search block
+  const searchStartIndex = lines.findIndex(
+    (line) => line.trim() === '<<<<<<< SEARCH',
+  );
+  if (searchStartIndex === -1) {
+    throw new Error('Search marker not found');
+  }
+
+  // Find the divider
+  const dividerIndex = lines.findIndex((line) => line.trim() === '=======');
+  if (dividerIndex === -1) {
+    throw new Error('Divider marker not found');
+  }
+
+  // Find the end of the replace block
+  const replaceEndIndex = lines.findIndex(
+    (line) => line.trim() === '>>>>>>> REPLACE',
+  );
+  if (replaceEndIndex === -1) {
+    throw new Error('Replace marker not found');
+  }
+
+  // Extract the search and replace text
+  const searchText = lines.slice(searchStartIndex + 1, dividerIndex).join('\n');
+  const replaceText = lines.slice(dividerIndex + 1, replaceEndIndex).join('\n');
+
+  return { searchText, replaceText };
 }

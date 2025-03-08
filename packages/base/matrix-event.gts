@@ -227,7 +227,10 @@ export interface ActiveLLMEvent extends RoomStateEvent {
 
 export interface CommandResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
-  content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
+  content:
+    | CommandResultWithOutputContent
+    | CommandResultWithNoOutputContent
+    | CommandResultForCodePatch;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -272,6 +275,16 @@ export interface CommandResultWithNoOutputContent {
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
   commandRequestId: string;
+}
+
+export interface CommandResultForCodePatch {
+  'm.relates_to': {
+    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
+    key: string;
+    event_id: string;
+  };
+  msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
+  // no commandRequestId - no tool used for this
 }
 
 export type MatrixEvent =

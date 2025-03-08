@@ -226,6 +226,7 @@ export class RoomResource extends Resource<Args> {
           this.matrixRoom?.skillsConfig.enabledEventIds.includes(skillEventId),
       });
     }
+
     return result;
   }
 
@@ -236,6 +237,10 @@ export class RoomResource extends Resource<Args> {
       if (skill.isActive) {
         commands.push(...skill.card.commands);
       }
+    }
+
+    if (commands.length > 0) {
+      debugger;
     }
     return commands;
   }

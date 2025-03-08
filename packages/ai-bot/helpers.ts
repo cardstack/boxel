@@ -375,6 +375,7 @@ export async function loadCurrentlyAttachedFiles(
 ): Promise<
   {
     url: string;
+    sourceUrl: string;
     name: string;
     contentType?: string;
     content: string | undefined;
@@ -388,7 +389,12 @@ export async function loadCurrentlyAttachedFiles(
   let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
     msgtype?: string;
     data?: {
-      attachedFiles?: { url: string; name: string; contentType?: string }[];
+      attachedFiles?: {
+        url: string;
+        sourceUrl: string;
+        name: string;
+        contentType?: string;
+      }[];
     };
   };
 
@@ -412,6 +418,7 @@ export async function loadCurrentlyAttachedFiles(
     attachedFiles.map(
       async (attachedFile: {
         url: string;
+        sourceUrl: string;
         name: string;
         contentType?: string;
       }) => {
@@ -430,6 +437,7 @@ export async function loadCurrentlyAttachedFiles(
 
           return {
             url: attachedFile.url,
+            sourceUrl: attachedFile.sourceUrl,
             name: attachedFile.name,
             contentType: attachedFile.contentType,
             content,
@@ -442,6 +450,7 @@ export async function loadCurrentlyAttachedFiles(
           });
           return {
             url: attachedFile.url,
+            sourceUrl: attachedFile.sourceUrl,
             name: attachedFile.name,
             contentType: attachedFile.contentType,
             content: undefined,
@@ -456,6 +465,7 @@ export async function loadCurrentlyAttachedFiles(
 export function attachedFilesToPrompt(
   attachedFiles: {
     url: string;
+    sourceUrl: string;
     name: string;
     contentType?: string;
     content: string | undefined;
@@ -467,11 +477,12 @@ export function attachedFilesToPrompt(
   }
   return attachedFiles
     .map((f) => {
+      let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
       if (f.error) {
-        return `${f.name}: ${f.error}`;
+        return `${hyperlink}: ${f.error}`;
       }
 
-      return `${f.name}: ${f.content}`;
+      return `${hyperlink}: ${f.content}`;
     })
     .join('\n');
 }
