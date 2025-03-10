@@ -13,8 +13,6 @@ const RoomMessageCommand: TemplateOnlyComponent<Signature> = <template>
     </div>
   </div>
 
-  {{! template-lint-disable no-whitespace-for-layout  }}
-  {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
   <style scoped>
     .command-button-bar {
       display: flex;
