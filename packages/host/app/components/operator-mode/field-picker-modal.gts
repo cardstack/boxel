@@ -31,6 +31,7 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
     @centered={{true}}
     @onClose={{@onClose}}
     {{focusTrap}}
+    data-test-field-chooser
   >
     <:content>
       <div class='instances'>
@@ -41,6 +42,7 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
             @displayBoundaries={{true}}
             {{on 'click' (fn @onSelect i)}}
             aria-label='Select instance {{add i 1}}'
+            data-test-field-instance={{i}}
           >
             <Preview @card={{instance}} @format='embedded' />
           </CardContainer>

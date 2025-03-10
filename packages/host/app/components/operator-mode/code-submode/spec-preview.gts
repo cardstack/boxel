@@ -571,19 +571,15 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     let selections = window.localStorage.getItem(PlaygroundSelections);
     let playgroundSelections = selections?.length ? JSON.parse(selections) : {};
     let item = playgroundSelections[moduleId];
-    if (!item) {
+    let cardId = id.replace(/\.json$/, ''); // remove .json extension
+    if (item?.cardId === cardId) {
+      return;
+    } else {
       playgroundSelections[moduleId] = {
-        cardId: id,
+        cardId,
         format: 'embedded',
         fieldIndex: 0,
       };
-    } else {
-      if (item.cardId === id) {
-        return;
-      }
-      item.cardId = id;
-      item.format = 'embedded';
-      item.fieldIndex = 0;
     }
     window.localStorage.setItem(
       PlaygroundSelections,

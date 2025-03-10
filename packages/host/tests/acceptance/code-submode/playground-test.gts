@@ -1246,7 +1246,7 @@ export class BlogPost extends CardDef {
         `${testRealmURL}blog-post/Comment`,
       );
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1.json`,
+        cardId: `${testRealmURL}Spec/comment-1`,
         format: 'embedded',
         fieldIndex: 0,
       });
@@ -1285,15 +1285,60 @@ export class BlogPost extends CardDef {
         `${testRealmURL}blog-post/Comment`,
       );
       assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-2.json`,
+        cardId: `${testRealmURL}Spec/comment-2`,
         format: 'embedded',
         fieldIndex: 0,
       });
     });
 
-    skip('preview the next available example is the previously selected one has been deleted', async function (_assert) {});
+    test("can select a different instance to preview from the spec's containedExamples collection", async function (assert) {
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}blog-post.gts`,
+      });
+      await selectClass('Comment');
+      await click('[data-test-accordion-item="playground"] button');
+      assert.dom('[data-test-selected-item]').hasText('Comment spec');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText('Terrible product');
+      let selection = getPersistedPlaygroundSelection(
+        `${testRealmURL}blog-post/Comment`,
+      );
+      assert.deepEqual(selection, {
+        cardId: `${testRealmURL}Spec/comment-1`,
+        format: 'embedded',
+        fieldIndex: 0,
+      });
 
-    skip("can select a different instance to preview from the spec's containedExamples collection", async function (_assert) {});
+      await click('[data-test-instance-chooser]');
+      await click('[data-test-choose-another-instance]');
+      assert
+        .dom('[data-test-field-chooser] [data-test-boxel-header-title]')
+        .hasText('Choose a Comment Instance');
+      assert.dom('[data-test-field-instance]').exists({ count: 2 });
+      assert.dom('[data-test-field-instance="0"]').hasClass('selected');
+      assert.dom('[data-test-field-instance="1"]').doesNotHaveClass('selected');
+
+      await click('[data-test-field-instance="1"]');
+      assert
+        .dom('[data-test-field-chooser]')
+        .doesNotExist('field chooser modal is closed');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText('Needs better packaging');
+      selection = getPersistedPlaygroundSelection(
+        `${testRealmURL}blog-post/Comment`,
+      );
+      assert.deepEqual(selection, {
+        cardId: `${testRealmURL}Spec/comment-1`,
+        format: 'embedded',
+        fieldIndex: 1,
+      });
+    });
+
+    skip('preview the next available example is the previously selected one has been deleted', async function (_assert) {});
 
     skip('preview panel updates when selecting a different field or card declaration', async function (_assert) {});
 
