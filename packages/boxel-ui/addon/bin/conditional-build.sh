@@ -1,5 +1,4 @@
 #! /bin/sh
-set -x
 
 CURRENT_DIR="$(pwd)"
 SCRIPTS_DIR="$(cd "$(dirname "$0")" && pwd)"
