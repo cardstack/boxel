@@ -287,7 +287,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 {{on 'click' this.viewSpecInstance}}
                 data-test-view-spec-instance
               >
-                View Instance
+                <span class='view-instance-btn-text'>View Instance</span>
               </BoxelButton>
             </div>
             {{#if this.displayIsolated}}
@@ -339,6 +339,14 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
+      }
+      .view-instance-btn-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-break: break-word;
       }
     </style>
   </template>
