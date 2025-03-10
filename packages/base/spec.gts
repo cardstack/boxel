@@ -17,7 +17,6 @@ import MarkdownField from './markdown';
 import { restartableTask } from 'ember-concurrency';
 import {
   FieldContainer,
-  LoadingIndicator,
   Pill,
   RealmIcon,
   BoxelInput,
