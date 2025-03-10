@@ -1,13 +1,14 @@
 {
   "name": "@cardstack/ai-bot",
   "dependencies": {
-    "@cardstack/runtime-common": "workspace:*",
-    "@cardstack/postgres": "workspace:*",
     "@cardstack/billing": "workspace:*",
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
     "@sentry/node": "^8.31.0",
     "@types/node": "^18.18.5",
     "@types/stream-chain": "^2.0.1",
     "@types/stream-json": "^1.7.3",
+    "faktory-worker": "^4.7.0",
     "matrix-js-sdk": "^31.0.0",
     "openai": "4.47.1",
     "qunit": "^2.18.0",
@@ -26,6 +27,8 @@
     "lint": "eslint . --cache --ext ts",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:development": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly main",
+    "start:worker": "NODE_NO_WARNINGS=1 ts-node --transpileOnly worker",
+    "start:worker:development": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly worker",
     "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
     "get-chat": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/get_chat.ts"
   },

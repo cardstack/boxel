@@ -35,8 +35,6 @@ import { OpenAIError } from 'openai/error';
 
 let log = logger('ai-bot');
 
-import faktory from 'faktory-worker';
-
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 
 const MINIMUM_CREDITS = 10;
@@ -127,6 +125,8 @@ class Assistant {
 
 let startTime = Date.now();
 
+import faktory from 'faktory-worker';
+
 (async () => {
   const matrixUrl = process.env.MATRIX_URL || 'http://localhost:8008';
   let client = createClient({
@@ -158,138 +158,87 @@ Common issues are:
   let { user_id: aiBotUserId } = auth;
   let assistant = new Assistant(client, aiBotUserId);
   await assistant.loadToolCallCapableModels();
+  faktory.register(
+    'GenerateResponse',
+    async ({ roomId, senderMatrixUserId }) => {
+      const responder = new Responder(client, roomId);
+      await responder.initialize();
 
-  const faktoryClient = await faktory.connect();
-
-  // reuse client if possible! remember to disconnect!
-
-  client.on(RoomMemberEvent.Membership, function (_event, member) {
-    if (member.membership === 'invite' && member.userId === aiBotUserId) {
-      client
-        .joinRoom(member.roomId)
-        .then(function () {
-          log.info('%s auto-joined %s', member.name, member.roomId);
-        })
-        .catch(function (err) {
-          log.info(
-            'Error joining this room, typically happens when a user invites then leaves before this is joined',
-            err,
-          );
-        });
-    }
-  });
-
-  // TODO: Set this up to use a queue that gets drained
-  client.on(
-    RoomEvent.Timeline,
-    async function (event, room, toStartOfTimeline) {
+      let promptParts: PromptParts;
+      let initial = await client.roomInitialSync(roomId, 1000);
+      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
       try {
-        let eventBody = event.getContent().body;
-        let senderMatrixUserId = event.getSender()!;
-        if (!room) {
-          return;
-        }
-
-        if (event.event.origin_server_ts! < startTime) {
-          return;
-        }
-        if (toStartOfTimeline) {
-          return; // don't print paginated results
-        }
-        if (!eventRequiresResponse(event)) {
-          return; // only print messages
-        }
-
-        if (senderMatrixUserId === aiBotUserId) {
-          return;
-        }
-        log.info(
-          '(%s) (Room: "%s" %s) (Message: %s %s)',
-          event.getType(),
-          room?.name,
-          room?.roomId,
-          senderMatrixUserId,
-          eventBody,
-        );
-        faktoryClient
-          .job('GenerateResponse', {
-            roomId: room.roomId,
-            senderMatrixUserId: senderMatrixUserId,
-          })
-          .push();
+        promptParts = await getPromptParts(eventList, aiBotUserId);
       } catch (e) {
         log.error(e);
-        Sentry.captureException(e);
+        responder.finalize(
+          'There was an error processing chat history. Please open another session.',
+        );
         return;
       }
+
+      // Do not generate new responses if previous ones' cost is still being reported
+      let pendingCreditsConsumptionPromise = trackAiUsageCostPromises.get(
+        senderMatrixUserId!,
+      );
+      if (pendingCreditsConsumptionPromise) {
+        try {
+          await pendingCreditsConsumptionPromise;
+        } catch (e) {
+          log.error(e);
+          return responder.onError(
+            'There was an error saving your Boxel credits usage. Try again or contact support if the problem persists.',
+          );
+        }
+      }
+
+      let availableCredits = await getAvailableCredits(
+        assistant.pgAdapter,
+        senderMatrixUserId,
+      );
+
+      if (availableCredits < MINIMUM_CREDITS) {
+        return responder.onError(
+          `You need a minimum of ${MINIMUM_CREDITS} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
+        );
+      }
+
+      let generationId: string | undefined;
+      const runner = assistant
+        .getResponse(promptParts)
+        .on('chunk', async (chunk, _snapshot) => {
+          generationId = chunk.id;
+          await responder.onChunk(chunk);
+        })
+        .on('content', async (_delta, snapshot) => {
+          await responder.onContent(snapshot);
+        })
+        .on('message', async (msg) => {
+          await responder.onMessage(msg);
+        })
+        .on('error', async (error) => {
+          await responder.onError(error);
+        });
+
+      let finalContent;
+      try {
+        finalContent = await runner.finalContent();
+        await responder.finalize(finalContent);
+      } catch (error) {
+        await responder.onError(error as OpenAIError);
+      } finally {
+        if (generationId) {
+          assistant.trackAiUsageCost(senderMatrixUserId, generationId);
+        }
+      }
+      return;
     },
   );
 
-  //handle set title by commands
-  client.on(RoomEvent.Timeline, async function (event, room) {
-    if (!room) {
-      return;
-    }
-    if (!isCommandResultStatusApplied(event)) {
-      return;
-    }
-    log.info(
-      '(%s) (Room: "%s" %s) (Message: %s %s)',
-      event.getType(),
-      room?.name,
-      room?.roomId,
-      event.getSender(),
-      undefined,
-    );
-    try {
-      //TODO: optimise this so we don't need to sync room events within a reaction event
-      let initial = await client.roomInitialSync(room!.roomId, 1000);
-      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
-      if (roomTitleAlreadySet(eventList)) {
-        return;
-      }
-      let cardFragments = extractCardFragmentsFromEvents(eventList);
-      let history: DiscreteMatrixEvent[] = constructHistory(
-        eventList,
-        cardFragments,
-      );
-      return await assistant.setTitle(room.roomId, history, event);
-    } catch (e) {
-      log.error(e);
-      Sentry.captureException(e);
-      return;
-    }
+  faktory.work().catch((error) => {
+    console.error(`worker failed to start: ${error}`);
+    process.exit(1);
   });
-
-  //handle debug events
-  client.on(RoomEvent.Timeline, async function (event, room) {
-    if (event.event.origin_server_ts! < startTime) {
-      return;
-    }
-    if (event.getType() !== 'm.room.message') {
-      return;
-    }
-    if (!room) {
-      return;
-    }
-    let eventBody = event.getContent().body;
-    let isDebugEvent = eventBody.startsWith('debug:');
-    if (!isDebugEvent) {
-      return;
-    }
-    log.info(
-      '(%s) (Room: "%s" %s) (Message: %s %s)',
-      event.getType(),
-      room?.name,
-      room?.roomId,
-      event.getSender(),
-      eventBody,
-    );
-    return await assistant.handleDebugCommands(eventBody, room.roomId);
-  });
-
-  await client.startClient();
-  log.info('client started');
 })().catch((e) => {
   log.error(e);
   Sentry.captureException(e);
