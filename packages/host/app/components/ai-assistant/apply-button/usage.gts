@@ -57,10 +57,11 @@ export default class AiAssistantApplyButtonUsage extends Component {
 
     <style scoped>
       .example-container {
-        background: var(--boxel-ai-purple);
+        background: #3b394b;
         overflow: hidden;
         position: relative;
         padding: var(--boxel-sp);
+        --ai-bot-message-background-color: #3b394b;
       }
     </style>
   </template>
