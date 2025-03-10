@@ -57,17 +57,17 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import {
   CardContext,
   CardDef,
   type Format,
   type FieldType,
 } from 'https://cardstack.com/base/card-api';
-
-import type { WithBoundArgs } from '@glint/template';
+import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker from '../../../resources/element-tracker';
+
+import type { WithBoundArgs } from '@glint/template';
 
 interface Signature {
   Element: HTMLElement;

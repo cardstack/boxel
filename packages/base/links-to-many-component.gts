@@ -200,7 +200,9 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                 )
                 as |Item|
               }}
-                <div
+                <button
+                  type='button'
+                  class='card-button'
                   {{this.cardContext.cardComponentModifier
                     card=boxedElement.value
                     format='fitted'
@@ -210,7 +212,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                   {{on 'click' (fn this.viewCard boxedElement.value)}}
                 >
                   <Item @format='fitted' />
-                </div>
+                </button>
               {{/let}}
             </li>
           {{/each}}
@@ -279,6 +281,12 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       :deep(.is-dragging) {
         z-index: 99;
         transform: translateY(var(--boxel-sp));
+      }
+      .card-button {
+        all: unset;
+        display: block;
+        width: 100%;
+        cursor: pointer;
       }
     </style>
   </template>
