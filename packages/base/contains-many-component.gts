@@ -25,7 +25,7 @@ import {
 } from '@cardstack/runtime-common';
 import { IconTrash } from '@cardstack/boxel-ui/icons';
 import { TemplateOnlyComponent } from '@ember/component/template-only';
-import { restartableTask } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 interface ContainsManyEditorSignature {
   Args: {
@@ -138,7 +138,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     </style>
   </template>
 
-  addField = restartableTask(async () => {
+  addField = task(async () => {
     let newValue: FieldDef | null =
       primitive in this.args.field.card ? null : new this.args.field.card();
     if (this.args.typeConstraint) {
