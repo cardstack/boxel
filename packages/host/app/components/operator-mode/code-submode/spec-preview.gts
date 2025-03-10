@@ -4,16 +4,16 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
-
 import { tracked } from '@glimmer/tracking';
 
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import Brain from '@cardstack/boxel-icons/brain';
 import DotIcon from '@cardstack/boxel-icons/dot';
-
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
+
 import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
 
 import {
   BoxelButton,

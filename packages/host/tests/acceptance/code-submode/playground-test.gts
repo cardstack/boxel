@@ -286,7 +286,7 @@ export class BlogPost extends CardDef {
             },
           },
         },
-        'Spec/comment.json': {
+        'Spec/comment-1.json': {
           data: {
             type: 'card',
             attributes: {
@@ -333,7 +333,41 @@ export class BlogPost extends CardDef {
             },
           },
         },
-        'Spec/author.json': {
+        'Spec/comment-2.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'Comment',
+                module: '../blog-post',
+              },
+              specType: 'field',
+              containedExamples: [
+                {
+                  title: 'Spec 2 Example 1',
+                },
+              ],
+              title: 'Comment spec II',
+            },
+            meta: {
+              fields: {
+                containedExamples: [
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'Comment',
+                    },
+                  },
+                ],
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'Spec/full-name.json': {
           data: {
             type: 'card',
             attributes: {
@@ -380,6 +414,14 @@ export class BlogPost extends CardDef {
     await click(
       `[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="${name}"]`,
     );
+
+  const getPersistedPlaygroundSelection = (moduleId: string) => {
+    let selections = window.localStorage.getItem(PlaygroundSelections);
+    if (!selections) {
+      throw new Error('No selections found in mock local storage');
+    }
+    return JSON.parse(selections)[moduleId];
+  };
 
   test('can render playground panel when an exported card def or exported compound field def is selected', async function (assert) {
     await visitOperatorMode({
@@ -1039,13 +1081,6 @@ export class BlogPost extends CardDef {
         },
       }),
     );
-    const getSelection = (moduleId: string) => {
-      let selections = window.localStorage.getItem(PlaygroundSelections);
-      if (!selections) {
-        throw new Error('No selections found in mock local storage');
-      }
-      return JSON.parse(selections)[moduleId];
-    };
     const assertCorrectFormat = (
       cardId: string,
       format: Format,
@@ -1064,7 +1099,7 @@ export class BlogPost extends CardDef {
     await click('[data-test-format-chooser-atom]'); // change selected format
     assertCorrectFormat(authorId, 'atom');
     assert.deepEqual(
-      getSelection(authorModuleId),
+      getPersistedPlaygroundSelection(authorModuleId),
       {
         cardId: authorId,
         format: 'atom',
@@ -1081,7 +1116,7 @@ export class BlogPost extends CardDef {
     await click('[data-option-index="1"]'); // change selected instance
     assertCorrectFormat(categoryId2, 'embedded');
     assert.deepEqual(
-      getSelection(categoryModuleId),
+      getPersistedPlaygroundSelection(categoryModuleId),
       {
         cardId: categoryId2,
         format: 'embedded',
@@ -1093,14 +1128,14 @@ export class BlogPost extends CardDef {
     await click('[data-test-boxel-selector-item-text="BlogPost"]'); // change selected module
     assertCorrectFormat(blogPostId1, 'isolated', 'default format is correct');
     await click('[data-test-format-chooser-fitted]'); // change selected format
-    assert.deepEqual(getSelection(blogPostModuleId), {
+    assert.deepEqual(getPersistedPlaygroundSelection(blogPostModuleId), {
       cardId: blogPostId1,
       format: 'fitted',
     });
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]'); // change selected instance
     assertCorrectFormat(blogPostId2, 'fitted');
-    assert.deepEqual(getSelection(blogPostModuleId), {
+    assert.deepEqual(getPersistedPlaygroundSelection(blogPostModuleId), {
       cardId: blogPostId2,
       format: 'fitted',
     });
@@ -1158,16 +1193,7 @@ export class BlogPost extends CardDef {
       });
       await click('[data-test-boxel-selector-item-text="Comment"]');
       await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-
-      await click('[data-test-instance-chooser]');
-      assert.dom('[data-option-index]').exists({ count: 1 });
-      assert
-        .dom('[data-option-index] [data-test-card-title]')
-        .hasText('Comment spec');
-
-      await click('[data-option-index="0"]');
-      assert.dom('[data-test-selected-item]').hasText('Comment spec'); // TODO
+      assert.dom('[data-test-selected-item]').hasText('Comment spec');
       assert.dom('[data-test-field-preview-header]').containsText('Comment');
       // assert.dom('[data-test-playground-format-chooser] button').exists({ count: 3 }); // TODO
       assert.dom('[data-test-format-chooser-embedded]').hasClass('active');
@@ -1202,7 +1228,80 @@ export class BlogPost extends CardDef {
       assert.dom('[data-test-embedded-comment]').exists();
     });
 
-    test('previewing when spec is available but has no examples', async function (assert) {
+    test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}blog-post.gts`,
+      });
+      await selectClass('Comment');
+      // playground panel
+      await click('[data-test-accordion-item="playground"] button');
+      assert.dom('[data-test-selected-item]').hasText('Comment spec');
+      assert.dom('[data-test-field-preview-header]').hasText('Comment');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText('Terrible product');
+      let selection = getPersistedPlaygroundSelection(
+        `${testRealmURL}blog-post/Comment`,
+      );
+      assert.deepEqual(selection, {
+        cardId: `${testRealmURL}Spec/comment-1.json`,
+        format: 'embedded',
+        fieldIndex: 0,
+      });
+
+      // spec panel
+      await click('[data-test-accordion-item="spec-preview"] button');
+      assert
+        .dom(
+          `[data-test-card="${testRealmURL}Spec/comment-1"] [data-test-boxel-input-id="spec-title"]`,
+        )
+        .hasValue('Comment spec');
+      assert
+        .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
+        .containsText('Spec/comment-1.json');
+      await click('[data-test-spec-selector] > div');
+      assert
+        .dom('[data-option-index="1"] [data-test-spec-selector-item-path]')
+        .hasText('Spec/comment-2.json');
+      await click('[data-option-index="1"]');
+      assert
+        .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
+        .containsText('Spec/comment-2.json');
+      assert
+        .dom(
+          `[data-test-card="${testRealmURL}Spec/comment-2"] [data-test-boxel-input-id="spec-title"]`,
+        )
+        .hasValue('Comment spec II');
+
+      // playground panel
+      await click('[data-test-accordion-item="playground"] button');
+      assert.dom('[data-test-selected-item]').hasText('Comment spec II');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText('Spec 2 Example 1');
+      selection = getPersistedPlaygroundSelection(
+        `${testRealmURL}blog-post/Comment`,
+      );
+      assert.deepEqual(selection, {
+        cardId: `${testRealmURL}Spec/comment-2.json`,
+        format: 'embedded',
+        fieldIndex: 0,
+      });
+    });
+
+    skip('preview the next available example is the previously selected one has been deleted', async function (_assert) {});
+
+    skip("can select a different instance to preview from the spec's containedExamples collection", async function (_assert) {});
+
+    skip('preview panel updates when selecting a different field or card declaration', async function (_assert) {});
+
+    skip('can create new field instance (no preexisting Spec)', async function (_assert) {});
+
+    skip('can create new field instance (has preexisting Spec)', async function (_assert) {});
+
+    test('can create new field instance when spec exists but has no examples', async function (assert) {
       await visitOperatorMode({
         stacks: [],
         submode: 'code',
@@ -1210,9 +1309,7 @@ export class BlogPost extends CardDef {
       });
       await selectClass('FullNameField');
       await click('[data-test-accordion-item="playground"] button');
-      await click('[data-test-instance-chooser]');
-      await click('[data-option-index="0"]');
-      assert.dom('[data-test-selected-item]').hasText('FullNameField spec'); // TODO
+      assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
       assert.dom('[data-test-field-preview-header]').doesNotExist();
 
       await click('[data-test-add-field-instance]');
@@ -1227,19 +1324,9 @@ export class BlogPost extends CardDef {
           '[data-test-field-preview-card] [data-test-field="firstName"] input',
         )
         .hasNoValue();
+
+      // TODO: add more assertions
     });
-
-    skip('preview the next available example is the previously selected one has been deleted', async function (_assert) {});
-
-    skip("can select a different instance to preview from the spec's containedExamples collection", async function (_assert) {});
-
-    skip('preview panel updates when selecting a different field or card declaration', async function (_assert) {});
-
-    skip('can create new field instance (no preexisting Spec)', async function (_assert) {});
-
-    skip('can create new field instance (has preexisting Spec)', async function (_assert) {});
-
-    skip('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (_assert) {});
 
     skip<TestContextWithSave>('can edit compound field instance and trigger auto save', async function (_assert) {});
   });
