@@ -105,9 +105,7 @@ export default class RoomMessage extends Component<Signature> {
         @formattedMessage={{htmlSafe
           (markdownToHtml this.message.formattedMessage)
         }}
-        @formattedReasoningContent={{htmlSafe
-          (markdownToHtml this.message.reasoningContent)
-        }}
+        @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
         @index={{@index}}

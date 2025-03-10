@@ -6,15 +6,19 @@ import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { tracked } from '@glimmer/tracking';
+
 import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { and, cn } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance } from '@cardstack/runtime-common';
+
+import { markdownToHtml } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
@@ -60,7 +64,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     formattedMessage: SafeString;
-    formattedReasoningContent?: SafeString | null;
+    reasoningContent?: string | null;
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
@@ -180,16 +184,40 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
   }
 }
 
+function isThinkingMessage(s: string | null | undefined) {
+  if (!s) {
+    return false;
+  }
+  return s.trim() === 'Thinking...';
+}
+
+function isPresent(val: SafeString | string | null | undefined) {
+  if (val?.toString) {
+    val = val?.toString().trim();
+  }
+  return val ? val !== '' : false;
+}
+
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
   get isReasoningExpandedByDefault() {
-    return (
-      this.args.formattedReasoningContent &&
-      this.args.formattedReasoningContent.toString().trim() !== 'Thinking...' &&
+    let result =
       this.args.isStreaming &&
-      !this.args.formattedMessage
+      !isPresent(this.args.formattedMessage) &&
+      isPresent(this.args.reasoningContent) &&
+      !isThinkingMessage(this.args.reasoningContent);
+    return result;
+  }
+  @tracked _explicitlySetReasoningExpanded: boolean | undefined;
+  get isReasoningExpanded() {
+    return (
+      this._explicitlySetReasoningExpanded ?? this.isReasoningExpandedByDefault
     );
   }
+  updateReasoningExpanded = (ev: MouseEvent) => {
+    ev.preventDefault();
+    this._explicitlySetReasoningExpanded = !this.isReasoningExpanded;
+  };
 
   <template>
     <div
@@ -239,12 +267,18 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{/if}}
 
         <div class='content' data-test-ai-message-content>
-          {{#if @formattedReasoningContent}}
+          {{#if @reasoningContent}}
             <div class='reasoning-content'>
-              <details open={{this.isReasoningExpandedByDefault}}>
-                <summary>Thinking...</summary>
-                {{@formattedReasoningContent}}
-              </details>
+              {{#if (eq 'Thinking...' @reasoningContent)}}
+                Thinking...
+              {{else}}
+                <details open={{this.isReasoningExpanded}} data-test-reasoning>
+                  <summary
+                    {{on 'click' this.updateReasoningExpanded}}
+                  >Thinking...</summary>
+                  {{htmlSafe (markdownToHtml @reasoningContent)}}
+                </details>
+              {{/if}}
             </div>
           {{/if}}
           {{#if (and @isFromAssistant @isStreaming)}}
@@ -427,6 +461,10 @@ export default class AiAssistantMessage extends Component<Signature> {
       .reasoning-content {
         color: var(--boxel-300);
         font-style: italic;
+      }
+
+      .reasoning-content summary {
+        cursor: pointer;
       }
 
       .error-container {
