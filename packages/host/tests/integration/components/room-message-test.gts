@@ -42,8 +42,6 @@ module('Integration | Component | RoomMessage', function (hooks) {
       messages: [message],
       isStreaming,
       monacoSDK: {},
-      currentEditor: {},
-      setCurrentMonacoContainer: null,
       maybeRetryAction: null,
     } as unknown as RoomResource;
 
@@ -60,10 +58,8 @@ module('Integration | Component | RoomMessage', function (hooks) {
         @roomResource={{testScenario}}
         @monacoSDK={{testScenario.monacoSDK}}
         @isStreaming={{testScenario.isStreaming}}
-        @currentEditor={{testScenario.currentEditor}}
         @registerScroller={{noop}}
         @index={{0}}
-        @setCurrentEditor={{testScenario.setCurrentMonacoContainer}}
         @retryAction={{testScenario.maybeRetryAction}}
         data-test-message-idx='1'
       />

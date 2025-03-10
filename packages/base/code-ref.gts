@@ -19,39 +19,13 @@ import { restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 import {
   type ResolvedCodeRef,
+  isUrlLike,
   CardURLContextName,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import CodeIcon from '@cardstack/boxel-icons/code';
-
-function moduleIsUrlLike(module: string) {
-  return (
-    module.startsWith('http') ||
-    module.startsWith('.') ||
-    module.startsWith('/')
-  );
-}
-
-function maybeSerializeCodeRef(
-  codeRef: ResolvedCodeRef | {} | undefined,
-  stack: CardDef[] = [],
-) {
-  if (codeRef && isResolvedCodeRef(codeRef)) {
-    if (moduleIsUrlLike(codeRef.module)) {
-      // if a stack is passed in, use the containing card to resolve relative references
-      let moduleHref =
-        stack.length > 0
-          ? new URL(codeRef.module, stack[0][relativeTo]).href
-          : codeRef.module;
-      return `${moduleHref}/${codeRef.name}`;
-    } else {
-      return `${codeRef.module}/${codeRef.name}`;
-    }
-  }
-  return undefined;
-}
 
 class BaseView extends Component<typeof CodeRefField> {
   <template>
@@ -111,7 +85,7 @@ class EditView extends Component<typeof CodeRefField> {
 
       let name = parts.pop()!;
       let module = parts.join('/');
-      if (moduleIsUrlLike(module) && this.cardURL) {
+      if (isUrlLike(module) && this.cardURL) {
         module = new URL(module, new URL(this.cardURL)).href;
       }
       try {
@@ -147,7 +121,7 @@ export default class CodeRefField extends FieldDef {
       codeRef &&
       isResolvedCodeRef(codeRef) &&
       !opts?.useAbsoluteURL &&
-      moduleIsUrlLike(codeRef.module)
+      isUrlLike(codeRef.module)
         ? { module: opts.maybeRelativeURL(codeRef.module) }
         : {}),
     };
@@ -158,12 +132,14 @@ export default class CodeRefField extends FieldDef {
   ): Promise<BaseInstanceType<T>> {
     return { ...codeRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
   }
+
   static [queryableValue](
     codeRef: ResolvedCodeRef | {} | undefined,
     stack: CardDef[] = [],
   ) {
     return maybeSerializeCodeRef(codeRef, stack);
   }
+
   static [formatQuery](codeRef: ResolvedCodeRef | {}) {
     return maybeSerializeCodeRef(codeRef);
   }
@@ -171,4 +147,23 @@ export default class CodeRefField extends FieldDef {
   static embedded = class Embedded extends BaseView {};
 
   static edit = EditView;
+}
+
+function maybeSerializeCodeRef(
+  codeRef: ResolvedCodeRef | {} | undefined,
+  stack: CardDef[] = [],
+) {
+  if (codeRef && isResolvedCodeRef(codeRef)) {
+    if (isUrlLike(codeRef.module)) {
+      // if a stack is passed in, use the containing card to resolve relative references
+      let moduleHref =
+        stack.length > 0
+          ? new URL(codeRef.module, stack[0][relativeTo]).href
+          : codeRef.module;
+      return `${moduleHref}/${codeRef.name}`;
+    } else {
+      return `${codeRef.module}/${codeRef.name}`;
+    }
+  }
+  return undefined;
 }

@@ -20,14 +20,15 @@ import { TrackedMap } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  type LooseSingleCardDocument,
-  markdownToHtml,
-  splitStringIntoChunks,
-  baseRealm,
-  LooseCardResource,
-  ResolvedCodeRef,
   aiBotUsername,
+  baseRealm,
+  codeRefWithAbsoluteURL,
   getClass,
+  LooseCardResource,
+  markdownToHtml,
+  ResolvedCodeRef,
+  splitStringIntoChunks,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import {
@@ -43,9 +44,9 @@ import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -53,6 +54,7 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM_LIST,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -66,7 +68,11 @@ import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  relativeTo,
+  BaseDef,
+  CardDef,
+} from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -490,7 +496,7 @@ export default class MatrixService extends Service {
     let activeRealms = this.realmServer.availableRealmURLs;
 
     await Promise.all(
-      activeRealms.map(async (realmURL) => {
+      activeRealms.map(async (realmURL: string) => {
         try {
           // Our authorization-middleware can login automatically after seeing a
           // 401, but this preemptive login makes it possible to see
@@ -537,6 +543,7 @@ export default class MatrixService extends Service {
   async sendCommandResultEvent(
     roomId: string,
     invokedToolFromEventId: string,
+    toolCallId: string,
     resultCard?: CardDef,
   ) {
     let resultCardEventId: string | undefined;
@@ -549,10 +556,11 @@ export default class MatrixService extends Service {
     if (resultCardEventId === undefined) {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        commandRequestId: toolCallId,
         'm.relates_to': {
           event_id: invokedToolFromEventId,
           key: 'applied',
-          rel_type: 'm.annotation',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
       };
     } else {
@@ -561,8 +569,9 @@ export default class MatrixService extends Service {
         'm.relates_to': {
           event_id: invokedToolFromEventId,
           key: 'applied',
-          rel_type: 'm.annotation',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
+        commandRequestId: toolCallId,
         data: {
           cardEventId: resultCardEventId,
         },
@@ -595,8 +604,12 @@ export default class MatrixService extends Service {
     }[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
     for (let commandDef of commandDefinitions) {
-      const Command = await getClass(
+      let absoluteCodeRef = codeRefWithAbsoluteURL(
         commandDef.codeRef,
+        commandDef[Symbol.for('cardstack-relative-to') as typeof relativeTo],
+      ) as ResolvedCodeRef;
+      const Command = await getClass(
+        absoluteCodeRef,
         this.loaderService.loader,
       );
       const command = new Command(this.commandService.commandContext);
@@ -669,9 +682,9 @@ export default class MatrixService extends Service {
         if (eventId === undefined) {
           let responses = await this.sendCardFragments(roomId, card);
           eventId = responses[0].event_id; // we only care about the first fragment
-          cardHashes.set(this.generateCardHashKey(roomId, card), eventId);
+          cardHashes.set(this.generateCardHashKey(roomId, card), eventId!);
         }
-        eventIds.push(eventId);
+        eventIds.push(eventId!);
       }
     }
     return eventIds;
@@ -1430,9 +1443,9 @@ export default class MatrixService extends Service {
 
     if (
       event.type === 'm.room.message' &&
-      event.content?.msgtype === APP_BOXEL_COMMAND_MSGTYPE
+      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length
     ) {
-      this.commandService.executeCommandEventIfNeeded(event);
+      this.commandService.executeCommandEventsIfNeeded(event);
     }
 
     if (room.oldState.paginationToken != null) {
