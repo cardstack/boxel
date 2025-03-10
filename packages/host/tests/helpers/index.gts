@@ -410,6 +410,13 @@ async function setupTestRealm({
   await worker.run();
   await realm.start();
 
+  // Workaround to refetch realm info, as it is first fetched before the virtual network
+  // is present, and the fetch fails, leading to realmUserId being undefined.
+  let realmResource = (
+    owner.lookup('service:realm') as any
+  ).getOrCreateRealmResource(realmURL);
+  await realmResource.fetchInfo();
+
   return { realm, adapter };
 }
 
