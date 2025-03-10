@@ -4,15 +4,18 @@ import { getOwner, setOwner } from '@ember/owner';
 
 import { inject as service } from '@ember/service';
 
+import { TrackedArray } from 'tracked-built-ins';
+
 import {
   LooseSingleCardDocument,
   ResolvedCodeRef,
-  sanitizeHtml,
 } from '@cardstack/runtime-common';
 
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -27,7 +30,6 @@ import { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
-  CommandEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
@@ -43,7 +45,7 @@ const ErrorMessage: Record<string, string> = {
 
 export default class MessageBuilder {
   constructor(
-    private event: MessageEvent | CommandEvent | CardMessageEvent,
+    private event: MessageEvent | CardMessageEvent,
     owner: Owner,
     private builderContext: {
       roomId: string;
@@ -73,7 +75,6 @@ export default class MessageBuilder {
       // These are not guaranteed to exist in the event
       transactionId: this.event.unsigned?.transaction_id || null,
       attachedCardIds: null,
-      command: null,
       status: this.event.status,
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
@@ -131,12 +132,6 @@ export default class MessageBuilder {
     return errorMessage;
   }
 
-  private get formattedMessageForCommand() {
-    return `<p data-test-command-message class="command-message">${sanitizeHtml(
-      this.event.content.formatted_body,
-    )}</p>`;
-  }
-
   buildMessage(): Message {
     let { event } = this;
     let message = this.coreMessageArgs;
@@ -144,15 +139,11 @@ export default class MessageBuilder {
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       message.clientGeneratedId = this.clientGeneratedId;
       message.attachedCardIds = this.attachedCardIds;
+      if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
+        message.commands = this.buildMessageCommands(message);
+      }
     } else if (event.content.msgtype === 'm.text') {
       message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
-    } else if (
-      event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-      event.content.data.toolCall
-    ) {
-      message.formattedMessage = this.formattedMessageForCommand;
-      message.command = this.buildMessageCommand(message);
-      message.isStreamingFinished = true;
     }
     return message;
   }
@@ -171,68 +162,93 @@ export default class MessageBuilder {
         : undefined;
     message.updated = new Date();
 
-    if (
-      this.event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-      this.event.content.data?.toolCall
-    ) {
-      message.command = this.buildMessageCommand(message);
+    let commandRequests =
+      (this.event.content as CardMessageContent)[
+        APP_BOXEL_COMMAND_REQUESTS_KEY
+      ] ?? [];
+    for (let commandRequest of commandRequests) {
+      let command = message.commands.find(
+        (c) => c.commandRequest.id === commandRequest.id,
+      );
+      if (command) {
+        command.commandRequest = commandRequest;
+      } else {
+        message.commands.push(
+          this.buildMessageCommand(message, commandRequest),
+        );
+      }
+    }
+    if (commandRequests.length > 0) {
       message.isStreamingFinished = true;
-      message.formattedMessage = this.formattedMessageForCommand;
-
-      let command = this.event.content.data.toolCall;
-      message.command.name = command.name;
-      message.command.payload = command.arguments;
     }
   }
 
   updateMessageCommandResult(message: Message) {
-    if (!message.command) {
-      message.command = this.buildMessageCommand(message);
+    if (message.commands.length === 0) {
+      message.commands = this.buildMessageCommands(message);
     }
 
     if (this.builderContext.commandResultEvent) {
       let event = this.builderContext.commandResultEvent;
-      message.command.commandStatus = event.content['m.relates_to']
-        .key as CommandStatus;
-      message.command.commandResultCardEventId =
-        event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-          ? event.content.data.cardEventId
-          : undefined;
+      let messageCommand = message.commands.find(
+        (c) => c.commandRequest.id === event.content.commandRequestId,
+      );
+      if (messageCommand) {
+        messageCommand.commandStatus = event.content['m.relates_to']
+          .key as CommandStatus;
+        messageCommand.commandResultCardEventId =
+          event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+            ? event.content.data.cardEventId
+            : undefined;
+      }
     }
   }
 
-  private buildMessageCommand(message: Message) {
-    let event = this.event as CommandEvent;
+  private buildMessageCommands(message: Message) {
+    let eventContent = this.event.content as CardMessageContent;
+    let commandRequests = eventContent[APP_BOXEL_COMMAND_REQUESTS_KEY];
+    if (!commandRequests) {
+      return new TrackedArray<MessageCommand>();
+    }
+    let commands = new TrackedArray<MessageCommand>();
+    for (let commandRequest of commandRequests) {
+      let command = this.buildMessageCommand(message, commandRequest);
+      commands.push(command);
+    }
+    return commands;
+  }
+
+  private buildMessageCommand(
+    message: Message,
+    commandRequest: Partial<CommandRequest>,
+  ) {
     let commandResultEvent =
       this.builderContext.commandResultEvent ??
       (this.builderContext.events.find((e: any) => {
         let r = e.content['m.relates_to'];
         return (
           e.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          r.rel_type === 'm.annotation' &&
-          (r.event_id === event!.content.data.eventId ||
-            r.event_id === event!.event_id ||
-            r.event_id === this.builderContext.effectiveEventId)
+          r.rel_type === APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          (r.event_id === this.event.event_id ||
+            r.event_id === this.builderContext.effectiveEventId) &&
+          e.content.commandRequestId === commandRequest.id
         );
       }) as CommandResultEvent | undefined);
 
-    let command = event.content.data.toolCall;
     // Find command in skills
-    let codeRef: ResolvedCodeRef | undefined;
+    let commandCodeRef: ResolvedCodeRef | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
       for (let skillCommand of skill.card.commands) {
-        if (command.name === skillCommand.functionName) {
-          codeRef = skillCommand.codeRef;
+        if (commandRequest.name === skillCommand.functionName) {
+          commandCodeRef = skillCommand.codeRef;
           break findCommand;
         }
       }
     }
     let messageCommand = new MessageCommand(
       message,
-      command.id,
-      command.name,
-      command.arguments,
-      codeRef,
+      commandRequest,
+      commandCodeRef,
       this.builderContext.effectiveEventId,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,

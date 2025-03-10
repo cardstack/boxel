@@ -231,43 +231,6 @@ export class ServerState {
     return matrixEvent.event_id;
   }
 
-  addReactionEvent(
-    sender: string,
-    roomId: string,
-    eventId: string,
-    status: string,
-  ) {
-    let room = this.#rooms.get(roomId);
-    if (!room) {
-      throw new Error(`room ${roomId} does not exist`);
-    }
-
-    let content = {
-      'm.relates_to': {
-        event_id: eventId,
-        key: status,
-        rel_type: 'm.annotation' as MatrixSDK.RelationType.Annotation,
-      },
-    };
-
-    let reactionEvent = {
-      event_id: this.eventId(),
-      origin_server_ts: this.#now(),
-      room_id: roomId,
-      type: 'm.reaction' as MatrixSDK.EventType.Reaction,
-      sender,
-      content,
-      state_key: '',
-      unsigned: { age: 0 },
-      status: 'sent' as MatrixSDK.EventStatus.SENT,
-    };
-
-    room.events.push(reactionEvent);
-    this.#listeners.forEach((listener) => listener(reactionEvent));
-
-    return reactionEvent;
-  }
-
   addReceiptEvent(
     roomId: string,
     eventId: string,
