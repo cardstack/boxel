@@ -366,6 +366,30 @@ module('Responding', (hooks) => {
       thinkingMessage,
       'Thinking message should be sent first',
     );
+    assert.notOk(
+      sentEvents[0].content['m.relates_to'],
+      'The tool call event should not replace any message',
+    );
+    assert.equal(
+      sentEvents[1].content.body,
+      'some content',
+      'Content message should be sent next',
+    );
+    assert.strictEqual(
+      sentEvents[1].content['m.relates_to']?.event_id,
+      sentEvents[0].eventId,
+      'The content event should replace the initial message',
+    );
+    assert.equal(
+      sentEvents[2].content.body,
+      'some content',
+      'Content message plus function description should be sent next',
+    );
+    assert.strictEqual(
+      sentEvents[2].content['m.relates_to']?.event_id,
+      sentEvents[0].eventId,
+      'The command event should replace the initial message',
+    );
     assert.deepEqual(
       sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
       [

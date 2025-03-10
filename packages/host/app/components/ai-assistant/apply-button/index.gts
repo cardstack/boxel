@@ -5,7 +5,12 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, Exclamation } from '@cardstack/boxel-ui/icons';
 import { setCssVar } from '@cardstack/boxel-ui/modifiers';
 
-export type ApplyButtonState = 'ready' | 'applying' | 'applied' | 'failed';
+export type ApplyButtonState =
+  | 'ready'
+  | 'applying'
+  | 'applied'
+  | 'failed'
+  | 'preparing';
 
 interface Signature {
   Element: HTMLButtonElement | HTMLDivElement;
@@ -34,6 +39,18 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
         <CheckMark width='16' height='16' />
       {{else if (eq @state 'failed')}}
         <Exclamation width='16' height='16' />
+      {{else if (eq @state 'preparing')}}
+        <BoxelButton
+          @kind='secondary-dark'
+          @size='small'
+          class='apply-button'
+          tabindex='-1'
+          {{setCssVar boxel-button-text-color='var(--boxel-200)'}}
+          data-test-apply-state='preparing'
+          ...attributes
+        >
+          Working…
+        </BoxelButton>
       {{/if}}
     </div>
   {{/if}}
@@ -67,7 +84,70 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       width: 58px;
       border-radius: 100px;
     }
-    .state-indicator:not(.applying) {
+
+    .state-indicator.preparing {
+      width: 78px;
+      padding: 1px;
+      border-radius: 100px;
+    }
+    .state-indicator.preparing .apply-button {
+      border: 0;
+      min-width: 74px;
+    }
+    .state-indicator.preparing .apply-button:hover,
+    .state-indicator.preparing .apply-button:focus {
+      --boxel-button-color: inherit;
+      filter: none;
+      cursor: not-allowed;
+    }
+
+    .state-indicator.preparing::before {
+      content: '';
+      position: absolute;
+      top: -105px;
+      left: -55px;
+      width: 250px;
+      height: 250px;
+      background: conic-gradient(
+        #ffcc8f 0deg,
+        #ff3966 45deg,
+        #ff309e 90deg,
+        #aa1dc9 135deg,
+        #d7fad6 180deg,
+        #5fdfea 225deg,
+        #3d83f2 270deg,
+        #5145e8 315deg,
+        #ffcc8f 360deg
+      );
+      z-index: -1;
+      animation: spin 4s infinite linear;
+    }
+
+    .state-indicator.preparing::after {
+      content: '';
+      position: absolute;
+      top: 1px;
+      left: 1px;
+      right: 1px;
+      bottom: 1px;
+      background: var(--ai-bot-message-background-color);
+      border-radius: inherit;
+      z-index: -1;
+    }
+
+    .state-indicator.preparing {
+      position: relative;
+      display: inline-block;
+      border-radius: 3rem;
+      color: white;
+      background: var(--boxel-700);
+      border: none;
+      cursor: pointer;
+      z-index: 1;
+      overflow: hidden;
+    }
+
+    .state-indicator:not(.applying):not(.preparing) {
       width: 1.5rem;
       aspect-ratio: 1;
       border-radius: 50%;
@@ -76,6 +156,12 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       --icon-color: var(--boxel-light);
       background-color: var(--boxel-error-200);
       border-color: var(--boxel-error-200);
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
     }
   </style>
 </template>;

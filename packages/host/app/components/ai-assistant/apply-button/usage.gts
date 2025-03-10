@@ -23,6 +23,9 @@ export default class AiAssistantApplyButtonUsage extends Component {
         this.state = 'failed';
         break;
       case 'failed':
+        this.state = 'preparing';
+        break;
+      case 'preparing':
         this.state = 'ready';
         break;
     }
@@ -31,7 +34,7 @@ export default class AiAssistantApplyButtonUsage extends Component {
     <FreestyleUsage @name='AiAssistant::ApplyButton'>
       <:description>
         Displays button for applying change proposed by AI Assistant. Includes
-        ready, applying, applied and failed states.
+        ready, applying, applied, failed, and preparing states.
       </:description>
       <:example>
         <div class='example-container'>
@@ -45,7 +48,7 @@ export default class AiAssistantApplyButtonUsage extends Component {
         <Args.String
           @name='state'
           @value={{this.state}}
-          @options={{array 'ready' 'applying' 'applied' 'failed'}}
+          @options={{array 'ready' 'applying' 'applied' 'failed' 'preparing'}}
           @description='Button state'
           @onInput={{fn (mut this.state)}}
         />
@@ -54,10 +57,11 @@ export default class AiAssistantApplyButtonUsage extends Component {
 
     <style scoped>
       .example-container {
-        background: var(--boxel-ai-purple);
+        background: #3b394b;
         overflow: hidden;
         position: relative;
         padding: var(--boxel-sp);
+        --ai-bot-message-background-color: #3b394b;
       }
     </style>
   </template>

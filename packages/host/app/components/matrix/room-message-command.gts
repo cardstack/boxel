@@ -42,7 +42,10 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
+
 import Preview from '../preview';
+
+import PreparingRoomMessageCommand from './preparing-room-message-command';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -53,6 +56,7 @@ interface Signature {
     runCommand: () => void;
     isError?: boolean;
     isPending?: boolean;
+    isStreaming: boolean;
     monacoSDK: MonacoSDK;
   };
 }
@@ -190,97 +194,101 @@ export default class RoomMessageCommand extends Component<Signature> {
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes
     >
-      <div
-        class='command-button-bar'
-        {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
-              Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
-        {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
-        data-test-command-card-idle={{this.commandService.run.isIdle}}
-      >
-        <Button
-          class='view-code-button'
-          {{on 'click' this.toggleViewCode}}
-          @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-          @size='extra-small'
-          data-test-view-code-button
+      {{#if @isStreaming}}
+        <PreparingRoomMessageCommand />
+      {{else}}
+        <div
+          class='command-button-bar'
+          {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
+                Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
+          {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
+          data-test-command-card-idle={{this.commandService.run.isIdle}}
         >
-          {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-        </Button>
-        <ApplyButton
-          @state={{this.applyButtonState}}
-          {{on 'click' @runCommand}}
-          data-test-command-apply={{this.applyButtonState}}
-        />
-      </div>
-      {{#if this.isDisplayingCode}}
-        <div class='preview-code'>
           <Button
-            class='code-copy-button'
-            @kind='text-only'
+            class='view-code-button'
+            {{on 'click' this.toggleViewCode}}
+            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
             @size='extra-small'
-            {{on 'click' this.copyToClipboard}}
-            data-test-copy-code
+            data-test-view-code-button
           >
-            <CopyIcon
-              width='16'
-              height='16'
-              role='presentation'
-              aria-hidden='true'
-            />
-            <span class='copy-text'>Copy to clipboard</span>
+            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
           </Button>
-          <div
-            class='monaco-container'
-            {{this.scrollBottomIntoView}}
-            {{monacoModifier
-              content=this.previewCommandCode
-              contentChanged=undefined
-              monacoSDK=@monacoSDK
-              language='json'
-              readOnly=true
-              editorDisplayOptions=this.editorDisplayOptions
-            }}
-            data-test-editor
-            data-test-percy-hide
-          />
-        </div>
-      {{/if}}
-      {{#if this.failedCommandState}}
-        <div class='failed-command-result'>
-          <span class='failed-command-text'>
-            {{this.failedCommandState.message}}
-          </span>
-          <Button
+          <ApplyButton
+            @state={{this.applyButtonState}}
             {{on 'click' @runCommand}}
-            class='retry-button'
-            @size='small'
-            @kind='secondary-dark'
-            data-test-retry-command-button
-          >
-            Retry
-          </Button>
+            data-test-command-apply={{this.applyButtonState}}
+          />
         </div>
-      {{/if}}
-      {{#if this.commandResultCard.card}}
-        <CardContainer
-          @displayBoundaries={{false}}
-          class='command-result-card-preview'
-          data-test-command-result-container
-        >
-          <CardHeader
-            @cardTypeDisplayName={{this.headerTitle}}
-            @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
-            @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
-            class='header'
-            data-test-command-result-header
-          />
-          <Preview
-            @card={{this.commandResultCard.card}}
-            @format='embedded'
-            @displayContainer={{false}}
-            data-test-boxel-command-result
-          />
-        </CardContainer>
+        {{#if this.isDisplayingCode}}
+          <div class='preview-code'>
+            <Button
+              class='code-copy-button'
+              @kind='text-only'
+              @size='extra-small'
+              {{on 'click' this.copyToClipboard}}
+              data-test-copy-code
+            >
+              <CopyIcon
+                width='16'
+                height='16'
+                role='presentation'
+                aria-hidden='true'
+              />
+              <span class='copy-text'>Copy to clipboard</span>
+            </Button>
+            <div
+              class='monaco-container'
+              {{this.scrollBottomIntoView}}
+              {{monacoModifier
+                content=this.previewCommandCode
+                contentChanged=undefined
+                monacoSDK=@monacoSDK
+                language='json'
+                readOnly=true
+                editorDisplayOptions=this.editorDisplayOptions
+              }}
+              data-test-editor
+              data-test-percy-hide
+            />
+          </div>
+        {{/if}}
+        {{#if this.failedCommandState}}
+          <div class='failed-command-result'>
+            <span class='failed-command-text'>
+              {{this.failedCommandState.message}}
+            </span>
+            <Button
+              {{on 'click' @runCommand}}
+              class='retry-button'
+              @size='small'
+              @kind='secondary-dark'
+              data-test-retry-command-button
+            >
+              Retry
+            </Button>
+          </div>
+        {{/if}}
+        {{#if this.commandResultCard.card}}
+          <CardContainer
+            @displayBoundaries={{false}}
+            class='command-result-card-preview'
+            data-test-command-result-container
+          >
+            <CardHeader
+              @cardTypeDisplayName={{this.headerTitle}}
+              @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
+              @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+              class='header'
+              data-test-command-result-header
+            />
+            <Preview
+              @card={{this.commandResultCard.card}}
+              @format='embedded'
+              @displayContainer={{false}}
+              data-test-boxel-command-result
+            />
+          </CardContainer>
+        {{/if}}
       {{/if}}
     </div>
 

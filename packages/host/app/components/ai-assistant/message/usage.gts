@@ -17,6 +17,7 @@ export default class AiAssistantMessageUsage extends Component {
   @tracked datetime = new Date(2024, 0, 3, 12, 30);
   @tracked isFromAssistant = false;
   @tracked isStreaming = false;
+  @tracked isCommandMessage = false;
   @tracked userId = 'johndoe:boxel.ai';
   @tracked errorMessage = '';
 

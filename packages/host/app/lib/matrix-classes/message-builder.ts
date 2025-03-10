@@ -178,9 +178,6 @@ export default class MessageBuilder {
         );
       }
     }
-    if (commandRequests.length > 0) {
-      message.isStreamingFinished = true;
-    }
   }
 
   updateMessageCommandResult(message: Message) {
@@ -188,7 +185,7 @@ export default class MessageBuilder {
       message.commands = this.buildMessageCommands(message);
     }
 
-    if (this.builderContext.commandResultEvent) {
+    if (this.builderContext.commandResultEvent && message.commands.length > 0) {
       let event = this.builderContext.commandResultEvent;
       let messageCommand = message.commands.find(
         (c) => c.commandRequest.id === event.content.commandRequestId,

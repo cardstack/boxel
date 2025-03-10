@@ -45,7 +45,9 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
-    onSetup: (updateCursorByName: (name: string) => void) => void;
+    onSetup: (
+      updateCursorByName: (name: string, fieldName?: string) => void,
+    ) => void;
   };
 }
 
@@ -137,12 +139,36 @@ export default class CodeEditor extends Component<Signature> {
       }
     }
 
+    let selectedFieldName = this.operatorModeStateService.state.fieldSelection;
+    let { selectedDeclaration } = this.args;
+    if (
+      selectedFieldName &&
+      selectedDeclaration &&
+      'possibleFields' in selectedDeclaration &&
+      selectedDeclaration.possibleFields
+    ) {
+      let possibleFields = selectedDeclaration.possibleFields;
+      let field = possibleFields.get(selectedFieldName);
+      let loc =
+        field?.path?.node && 'loc' in field.path.node && field.path.node.loc
+          ? field.path.node.loc
+          : undefined;
+      if (loc) {
+        let { start } = loc;
+        let { line, column } = start;
+        // Adjusts column to make cursor position right after the field name
+        let fieldDecoratorTextLength = 8;
+        column = column + fieldDecoratorTextLength + selectedFieldName.length;
+        return new Position(line, column);
+      }
+    }
+
     let loc =
-      this.args.selectedDeclaration?.path?.node &&
-      'body' in this.args.selectedDeclaration.path.node &&
-      'loc' in this.args.selectedDeclaration.path.node.body &&
-      this.args.selectedDeclaration.path.node.body.loc
-        ? this.args.selectedDeclaration?.path?.node.body.loc
+      selectedDeclaration?.path?.node &&
+      'body' in selectedDeclaration.path.node &&
+      'loc' in selectedDeclaration.path.node.body &&
+      selectedDeclaration.path.node.body.loc
+        ? selectedDeclaration?.path?.node.body.loc
         : undefined;
     if (loc) {
       let { start } = loc;
@@ -152,17 +178,37 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   @action
-  private updateMonacoCursorPositionByName(name: string) {
+  private updateMonacoCursorPositionByName(name: string, fieldName?: string) {
     let declaration = findDeclarationByName(name, this.declarations);
     if (declaration === undefined) return;
-    return this.updateMonacoCursorPositionByDeclaration(declaration);
+    return this.updateMonacoCursorPositionByDeclaration(declaration, fieldName);
   }
 
   @action
   private updateMonacoCursorPositionByDeclaration(
     declaration: ModuleDeclaration,
+    fieldName?: string,
   ) {
     if (
+      fieldName &&
+      'possibleFields' in declaration &&
+      declaration.possibleFields
+    ) {
+      let possibleFields = declaration.possibleFields;
+      let field = possibleFields.get(fieldName);
+      let loc =
+        field?.path?.node && 'loc' in field.path.node && field.path.node.loc
+          ? field.path.node.loc
+          : undefined;
+      if (loc) {
+        // Adjusts column to make cursor position right after the field name
+        let fieldDecoratorTextLength = 8;
+        let columnAdjustment = fieldDecoratorTextLength + fieldName.length;
+        this.monacoService.updateCursorPosition(
+          new Position(loc.start.line, loc.start.column + columnAdjustment),
+        );
+      }
+    } else if (
       declaration.path?.node &&
       'body' in declaration.path.node &&
       'loc' in declaration.path.node.body &&
