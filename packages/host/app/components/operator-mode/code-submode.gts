@@ -997,6 +997,7 @@ export default class CodeSubmode extends Component<Signature> {
                             {{#if (eq this.selectedAccordionItem 'playground')}}
                               <PlaygroundPanel
                                 @codeRef={{this.selectedCodeRef}}
+                                @isUpdating={{this.moduleContentsResource.isLoading}}
                                 @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
                                 @isFieldDef={{isFieldDef
                                   this.selectedCardOrField.cardOrField

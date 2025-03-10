@@ -1,7 +1,7 @@
 import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
@@ -73,6 +73,22 @@ export class Author extends CardDef {
       }
     </style>
   </template>
+  }
+}
+
+export class Quote extends FieldDef {
+  static displayName = 'Quote';
+  @field quote = contains(StringField);
+  @field attribution = contains(StringField);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <div data-test-quote-field-embedded>
+        <blockquote data-test-quote>
+          <p><@fields.quote /></p>
+        </blockquote>
+        <p data-test-attribution><@fields.attribution /></p>
+      </div>
+    </template>
   }
 }
 
@@ -927,34 +943,34 @@ export class BlogPost extends CardDef {
   test('playground preview for card with contained fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from "https://cardstack.com/base/string";
-export class Author extends CardDef {
-  static displayName = 'Author';
-  @field firstName = contains(StringField);
-  @field lastName = contains(StringField);
-  @field bio = contains(MarkdownField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Author) {
-      return [this.firstName, this.lastName].filter(Boolean).join(' ');
-    },
-  });
-  static isolated = class Isolated extends Component<typeof this> {
-<template>
-  <article>
-    <header>
-      <h1 data-test-author-title>Hello <@fields.title /></h1>
-    </header>
-    <div data-test-author-bio><@fields.bio /></div>
-  </article>
-  <style scoped>
-    article {
-      margin-inline: 20px;
-    }
-  </style>
-</template>
-  }
-}`;
+      import MarkdownField from 'https://cardstack.com/base/markdown';
+      import StringField from "https://cardstack.com/base/string";
+      export class Author extends CardDef {
+        static displayName = 'Author';
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        @field bio = contains(MarkdownField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Author) {
+            return [this.firstName, this.lastName].filter(Boolean).join(' ');
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article>
+          <header>
+            <h1 data-test-author-title>Hello <@fields.title /></h1>
+          </header>
+          <div data-test-author-bio><@fields.bio /></div>
+        </article>
+        <style scoped>
+          article {
+            margin-inline: 20px;
+          }
+        </style>
+      </template>
+        }
+      }`;
     await visitOperatorMode({
       stacks: [],
       submode: 'code',
@@ -1338,13 +1354,165 @@ export class BlogPost extends CardDef {
       });
     });
 
-    skip('preview the next available example is the previously selected one has been deleted', async function (_assert) {});
+    test('preview the next available example if the previously selected one has been deleted', async function (assert) {
+      window.localStorage.setItem(
+        PlaygroundSelections,
+        JSON.stringify({
+          [`${testRealmURL}blog-post/Comment`]: {
+            cardId: `${testRealmURL}Spec/comment-1`,
+            format: 'embedded',
+            fieldIndex: 1,
+          },
+        }),
+      );
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}blog-post.gts`,
+      });
+      await selectClass('Comment');
+      await click('[data-test-accordion-item="playground"] button');
+      assert.dom('[data-test-selected-item]').hasText('Comment spec');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText('Needs better packaging');
 
-    skip('preview panel updates when selecting a different field or card declaration', async function (_assert) {});
+      await click('[data-test-accordion-item="spec-preview"] button');
+      assert
+        .dom(
+          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="title"] input',
+        )
+        .hasValue('Needs better packaging');
+      await click(
+        '[data-test-contains-many="containedExamples"] [data-test-remove="1"]',
+      );
+      assert
+        .dom(
+          '[data-test-contains-many="containedExamples"] [data-test-item="1"]',
+        )
+        .doesNotExist();
+      assert
+        .dom(
+          '[data-test-contains-many="containedExamples"] [data-test-item="0"]',
+        )
+        .exists();
 
-    skip('can create new field instance (no preexisting Spec)', async function (_assert) {});
+      await click('[data-test-accordion-item="playground"] button');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText('Terrible product');
 
-    skip('can create new field instance (has preexisting Spec)', async function (_assert) {});
+      await click('[data-test-accordion-item="spec-preview"] button');
+      await click(
+        '[data-test-contains-many="containedExamples"] [data-test-remove="0"]',
+      ); // remove remaining contained example from spec
+      assert
+        .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
+        .doesNotExist();
+
+      await click('[data-test-accordion-item="playground"] button');
+      assert.dom('[data-test-embedded-comment]').doesNotExist();
+      assert.dom('[data-test-add-field-instance]').exists();
+    });
+
+    test('can create new field instance (no preexisting Spec)', async function (assert) {
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}author.gts`,
+      });
+      await selectClass('Quote');
+      await click('[data-test-accordion-item="playground"] button');
+      assert.dom('[data-test-quote-field-embedded]').doesNotExist();
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom(
+          '[data-test-accordion-item="spec-preview"] [data-test-create-spec-button]',
+        )
+        .exists();
+
+      await click('[data-test-instance-chooser]');
+      await click('[data-test-create-instance]');
+      assert
+        .dom('[data-test-instance-chooser] [data-test-selected-item]')
+        .hasText('Quote');
+      assert
+        .dom(
+          '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
+        )
+        .exists();
+      assert.dom('[data-test-field="quote"] input').hasNoValue();
+
+      assert
+        .dom(
+          '[data-test-accordion-item="spec-preview"] [data-test-create-spec-button]',
+        )
+        .doesNotExist();
+      assert
+        .dom('[data-test-accordion-item="spec-preview"] [data-test-has-spec]')
+        .hasText('field');
+
+      await click('[data-test-accordion-item="spec-preview"] button');
+      assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Quote');
+      assert
+        .dom(
+          '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="quote"] input',
+        )
+        .hasNoValue();
+    });
+
+    test('can create new field instance (has preexisting Spec)', async function (assert) {
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}blog-post.gts`,
+      });
+      await selectClass('Comment');
+      await click('[data-test-accordion-item="playground"] button');
+      assert.dom('[data-test-selected-item]').hasText('Comment spec');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText('Terrible product');
+      let selection = getPersistedPlaygroundSelection(
+        `${testRealmURL}blog-post/Comment`,
+      );
+      assert.deepEqual(selection, {
+        cardId: `${testRealmURL}Spec/comment-1`,
+        format: 'embedded',
+        fieldIndex: 0,
+      });
+
+      await click('[data-test-instance-chooser]');
+      await click('[data-test-create-instance]');
+      assert
+        .dom('[data-test-field-preview-card] [data-test-field="title"] input')
+        .hasNoValue();
+      selection = getPersistedPlaygroundSelection(
+        `${testRealmURL}blog-post/Comment`,
+      );
+      assert.deepEqual(selection, {
+        cardId: `${testRealmURL}Spec/comment-1`,
+        format: 'edit',
+        fieldIndex: 2,
+      });
+
+      await click('[data-test-accordion-item="spec-preview"] button');
+      assert
+        .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
+        .exists({ count: 3 });
+      assert
+        .dom(
+          '[data-test-contains-many="containedExamples"] [data-test-item="2"] [data-test-field="title"] input',
+        )
+        .hasNoValue();
+
+      await click('[data-test-accordion-item="playground"] button');
+      await click('[data-test-instance-chooser]');
+      await click('[data-test-choose-another-instance]');
+      assert
+        .dom('[data-test-field-chooser] [data-test-field-instance]')
+        .exists({ count: 3 });
+    });
 
     test('can create new field instance when spec exists but has no examples', async function (assert) {
       await visitOperatorMode({
@@ -1369,10 +1537,74 @@ export class BlogPost extends CardDef {
           '[data-test-field-preview-card] [data-test-field="firstName"] input',
         )
         .hasNoValue();
+      await fillIn('[data-test-field="firstName"] input', 'Marco');
+      await fillIn('[data-test-field="lastName"] input', 'N.');
 
-      // TODO: add more assertions
+      await click('[data-test-instance-chooser]');
+      await click('[data-test-choose-another-instance]');
+      assert
+        .dom('[data-test-field-chooser] [data-test-field-instance]')
+        .exists({ count: 1 });
+      assert
+        .dom('[data-test-field-chooser] [data-test-full-name-embedded]')
+        .hasText('Marco N.');
+      await click('[data-test-field-chooser] [data-test-close-modal]');
+
+      await click('[data-test-accordion-item="spec-preview"] button');
+      assert
+        .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
+        .exists({ count: 1 });
+      assert
+        .dom(
+          '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="firstName"] input',
+        )
+        .hasValue('Marco');
+
+      let selection = getPersistedPlaygroundSelection(
+        `${testRealmURL}author/FullNameField`,
+      );
+      assert.deepEqual(selection, {
+        cardId: `${testRealmURL}Spec/full-name`,
+        format: 'edit',
+        fieldIndex: 0,
+      });
     });
 
-    skip<TestContextWithSave>('can edit compound field instance and trigger auto save', async function (_assert) {});
+    test('editing compound field instance live updates the preview', async function (assert) {
+      const updatedCommentField = `import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
+        import StringField from "https://cardstack.com/base/string";
+
+        export class Comment extends FieldDef {
+          static displayName = 'Comment';
+          @field title = contains(StringField);
+          @field name = contains(StringField);
+          @field message = contains(StringField);
+
+          static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-embedded-comment>
+            <p><@fields.message /> - by <@fields.name /></p>
+          </div>
+        </template>
+          }
+        }`;
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}blog-post.gts`,
+      });
+      await selectClass('Comment');
+      await click('[data-test-accordion-item="playground"] button');
+      assert
+        .dom('[data-test-embedded-comment-title]')
+        .hasText('Terrible product');
+      await realm.write('blog-post.gts', updatedCommentField),
+        await waitUntil(
+          () =>
+            document.querySelector('[data-test-embedded-comment-title]') ===
+            null,
+        );
+      assert.dom('[data-test-embedded-comment-title]').doesNotExist();
+    });
   });
 });

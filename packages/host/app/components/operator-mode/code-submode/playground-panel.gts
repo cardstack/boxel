@@ -526,21 +526,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   get query(): Query {
     if (this.args.isFieldDef) {
-      // For fields, we're querying the Boxel Spec instances in recent realms, regardless of recent cards...
-      return {
-        filter: {
-          on: specRef,
-          eq: {
-            ref: this.args.codeRef,
-          },
-        },
-        sort: [
-          {
-            by: 'createdAt',
-            direction: 'desc',
-          },
-        ],
-      };
+      // TODO
     }
 
     return {
@@ -618,12 +604,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (index >= fieldInstances.length) {
       // display the next available instance if item was deleted
       index = fieldInstances.length - 1;
-      // update the index in local storage
-      if (this.playgroundSelections[this.args.moduleId]) {
-        this.persistSelections(this.card.id, this.format, index);
-      }
     }
-
     return fieldInstances[index];
   }
 
@@ -827,13 +808,14 @@ interface Signature {
     codeRef: ResolvedCodeRef;
     isLoadingNewModule?: boolean;
     isFieldDef?: boolean;
+    isUpdating?: boolean;
   };
   Element: HTMLElement;
 }
 export default class PlaygroundPanel extends Component<Signature> {
   <template>
     <section class='playground-panel' data-test-playground-panel>
-      {{#if @isLoadingNewModule}}
+      {{#if this.isLoading}}
         <LoadingIndicator @color='var(--boxel-light)' />
       {{else}}
         <PlaygroundPanelContent
@@ -863,5 +845,13 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
+  }
+
+  get isLoading() {
+    // TODO: improve live updating UX for fields
+    return (
+      this.args.isLoadingNewModule ||
+      (this.args.isFieldDef && this.args.isUpdating)
+    );
   }
 }
