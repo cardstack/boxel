@@ -2285,7 +2285,7 @@ module('Integration | card-basics', function (hooks) {
       await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Quint');
     });
 
-    test('Re-order linksToMany fields action will use the cached template that UI state', async function (assert) {
+    test('Re-order items in a linksToMany field will preserve the template type and box component state', async function (assert) {
       class Fitted extends Component<typeof Pet1> {
         @tracked counter = 0;
 
