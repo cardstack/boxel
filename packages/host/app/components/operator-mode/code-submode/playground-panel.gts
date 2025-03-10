@@ -426,6 +426,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
             @iconWidth='12px'
             @iconHeight='12px'
             {{on 'click' this.createNew}}
+            data-test-add-field-instance
           >
             Add Field
           </AddButton>
@@ -525,8 +526,23 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   get query(): Query {
     if (this.args.isFieldDef) {
-      // TODO
+      // For fields, we're querying the Boxel Spec instances in recent realms, regardless of recent cards...
+      return {
+        filter: {
+          on: specRef,
+          eq: {
+            ref: this.args.codeRef,
+          },
+        },
+        sort: [
+          {
+            by: 'createdAt',
+            direction: 'desc',
+          },
+        ],
+      };
     }
+
     return {
       filter: {
         every: [

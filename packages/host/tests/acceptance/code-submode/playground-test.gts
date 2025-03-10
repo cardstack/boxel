@@ -46,7 +46,7 @@ export class CodeRefDriver extends CardDef {
   @field ref = contains(CodeRefField);
 }`;
 
-  const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+  const authorCard = `import { contains, field, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import StringField from "https://cardstack.com/base/string";
 export class Author extends CardDef {
@@ -74,9 +74,22 @@ export class Author extends CardDef {
     </style>
   </template>
   }
+}
+
+export class FullNameField extends FieldDef {
+  static displayName = 'Full Name';
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <div data-test-full-name-embedded>
+        <@fields.firstName /> <@fields.lastName />
+      </div>
+    </template>
+  }
 }`;
 
-  const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
+  const blogPostCard = `import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
 import DatetimeField from 'https://cardstack.com/base/datetime';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import StringField from "https://cardstack.com/base/string";
@@ -92,9 +105,13 @@ export class Category extends CardDef {
   }
 }
 
+class LocalCategoryCard extends Category {}
+
 export class Status extends StringField {
   static displayName = 'Status';
 }
+
+class LocalStatusField extends Status {}
 
 export class Comment extends FieldDef {
   static displayName = 'Comment';
@@ -113,11 +130,18 @@ export class Comment extends FieldDef {
   }
 }
 
+class LocalCommentField extends Comment {}
+
+export class RandomClass {}
+
 export class BlogPost extends CardDef {
   static displayName = 'Blog Post';
   @field publishDate = contains(DatetimeField);
   @field author = linksTo(Author);
   @field categories = linksToMany(Category);
+  @field localCategories = linksToMany(LocalCategoryCard);
+  @field comments = containsMany(Comment);
+  @field localComments = containsMany(LocalCommentField);
   @field body = contains(MarkdownField);
   @field status = contains(Status, {
     computeVia: function (this: BlogPost) {
@@ -130,6 +154,7 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
+  @field localStatus = contains(LocalStatusField);
 
   static isolated = class Isolated extends Component<typeof this> {
   <template>
@@ -308,6 +333,26 @@ export class BlogPost extends CardDef {
             },
           },
         },
+        'Spec/author.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'FullNameField',
+                module: '../author',
+              },
+              specType: 'field',
+              containedExamples: [],
+              title: 'FullNameField spec',
+            },
+            meta: {
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
       },
     }));
     window.localStorage.setItem(
@@ -331,7 +376,12 @@ export class BlogPost extends CardDef {
     });
   });
 
-  test('can render playground panel when a card def is selected', async function (assert) {
+  const selectClass = async (name: string) =>
+    await click(
+      `[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="${name}"]`,
+    );
+
+  test('can render playground panel when an exported card def or exported compound field def is selected', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}blog-post.gts`,
@@ -340,22 +390,59 @@ export class BlogPost extends CardDef {
       .dom(
         '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="Category"]',
       )
-      .exists();
-    assert.dom('[data-test-accordion-item="playground"]').exists();
-
-    // TODO: extend playground to field defs and test that it only works for field and card defs
-    await click(
-      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="Status"]',
-    );
+      .exists(); // pre-selected since it's the first definition
     assert
       .dom('[data-test-accordion-item="playground"]')
-      .doesNotExist('playground panel currently only exists for card defs');
+      .exists(
+        'playground accordion item exists for Category (exported card def)',
+      );
+    await click('[data-test-accordion-item="playground"] button'); // open panel
+    assert
+      .dom('[data-test-playground-panel]')
+      .exists('playground panel exists for Category (exported card def)');
 
-    await click(
-      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
-    );
-    await click('[data-test-accordion-item="playground"] button');
-    assert.dom('[data-test-playground-panel]').exists();
+    await selectClass('LocalCategoryCard');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist(
+        'playground does not exist for LocalCategory (local card def)',
+      );
+
+    await selectClass('Comment');
+    assert
+      .dom('[data-test-playground-panel]')
+      .exists('playground exists for Comment (exported compound field def)');
+
+    await selectClass('LocalCommentField');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist(
+        'does not exist for LocalComment (local compound field def)',
+      );
+
+    // Note: Currently we can not have polymorphism in primitive fields. However, this can be done
+    // after the `.value` refactor when the distinctions in the implementations of primitive
+    // and compound fields will cease to exist. See linear ticket [CS-6689].
+    // TODO
+    await selectClass('Status');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist('does not exist for Status (primitive field def)');
+
+    await selectClass('LocalStatusField');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist('does not exist for LocalStatus (primitive field def)');
+
+    await selectClass('RandomClass');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist('does not exist for RandomClass (not a card or field def)');
+
+    await selectClass('BlogPost');
+    assert
+      .dom('[data-test-playground-panel]')
+      .exists('exists for BlogPost (exported card def)');
   });
 
   test('can populate instance chooser dropdown options from recent files', async function (assert) {
@@ -465,12 +552,11 @@ export class BlogPost extends CardDef {
     assertCardExists('Author/jane-doe');
 
     await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`);
+    await click('[data-test-accordion-item="playground"] button');
     assert.dom('[data-test-selected-item]').hasText('City Design');
     assertCardExists('Category/city-design');
 
-    await click(
-      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
-    );
+    await selectClass('BlogPost');
     assert.dom('[data-test-selected-item]').containsText('Remote Work');
     assertCardExists('BlogPost/remote-work');
   });
@@ -709,7 +795,7 @@ export class BlogPost extends CardDef {
     assert.deepEqual(recentFiles[0], [
       testRealmURL,
       'blog-post.gts',
-      { column: 38, line: 7 },
+      { line: 8, column: 38 },
     ]);
     await click('[data-boxel-selector-item-text="BlogPost"]');
     await click('[data-test-accordion-item="playground"] button');
@@ -973,6 +1059,7 @@ export class BlogPost extends CardDef {
       submode: 'code',
       codePath: `${testRealmURL}author.gts`,
     });
+    await click('[data-test-accordion-item="playground"] button');
     assertCorrectFormat(authorId, 'edit');
     await click('[data-test-format-chooser-atom]'); // change selected format
     assertCorrectFormat(authorId, 'atom');
@@ -987,6 +1074,7 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="blog-post.gts"]'); // change open file
+    await click('[data-test-accordion-item="playground"] button');
     assertCorrectFormat(categoryId1, 'embedded');
 
     await click('[data-test-instance-chooser]');
@@ -1068,7 +1156,6 @@ export class BlogPost extends CardDef {
         submode: 'code',
         codePath: `${testRealmURL}blog-post.gts`,
       });
-
       await click('[data-test-boxel-selector-item-text="Comment"]');
       await click('[data-test-accordion-item="playground"] button');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
@@ -1115,12 +1202,32 @@ export class BlogPost extends CardDef {
       assert.dom('[data-test-embedded-comment]').exists();
     });
 
-    // Note: Currently we can not have polymorphism in primitive fields. However, this can be done
-    // after the `.value` refactor when the distinctions in the implementations of primitive
-    // and compound fields will cease to exist. See linear ticket [CS-6689].
-    skip('preview is not available for primitive fields', async function (_assert) {});
+    test('previewing when spec is available but has no examples', async function (assert) {
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}author.gts`,
+      });
+      await selectClass('FullNameField');
+      await click('[data-test-accordion-item="playground"] button');
+      await click('[data-test-instance-chooser]');
+      await click('[data-option-index="0"]');
+      assert.dom('[data-test-selected-item]').hasText('FullNameField spec'); // TODO
+      assert.dom('[data-test-field-preview-header]').doesNotExist();
 
-    skip('previewing when spec is available but has no examples', async function (_assert) {}); // TODO
+      await click('[data-test-add-field-instance]');
+      assert.dom('[data-test-field-preview-header]').containsText('Full Name');
+      assert
+        .dom(
+          '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
+        )
+        .exists();
+      assert
+        .dom(
+          '[data-test-field-preview-card] [data-test-field="firstName"] input',
+        )
+        .hasNoValue();
+    });
 
     skip('preview the next available example is the previously selected one has been deleted', async function (_assert) {});
 
