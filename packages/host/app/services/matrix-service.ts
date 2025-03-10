@@ -125,16 +125,16 @@ export type OperatorModeContext = {
 };
 
 export default class MatrixService extends Service {
-  @service private declare loaderService: LoaderService;
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare realm: RealmService;
-  @service private declare matrixSdkLoader: MatrixSDKLoader;
-  @service private declare messageService: MessageService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare router: RouterService;
-  @service private declare reset: ResetService;
-  @service private declare network: NetworkService;
+  @service declare private loaderService: LoaderService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private realm: RealmService;
+  @service declare private matrixSdkLoader: MatrixSDKLoader;
+  @service declare private messageService: MessageService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private router: RouterService;
+  @service declare private reset: ResetService;
+  @service declare private network: NetworkService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;

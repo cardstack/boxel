@@ -80,9 +80,9 @@ export class RoomResource extends Resource<Args> {
   // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
   // that updates immediately after the user selects the LLM.
   @tracked private llmBeingActivated: string | undefined;
-  @service private declare matrixService: MatrixService;
-  @service private declare commandService: CommandService;
-  @service private declare cardService: CardService;
+  @service declare private matrixService: MatrixService;
+  @service declare private commandService: CommandService;
+  @service declare private cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
     if (!named.roomId) {
