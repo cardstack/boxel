@@ -12,6 +12,8 @@ import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import MonacoService from '@cardstack/host/services/monaco-service';
+
 import {
   setupLocalIndexing,
   testRealmURL,
@@ -27,6 +29,7 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const indexCardSource = `
@@ -89,6 +92,7 @@ const employeeCardSource = `
 
   export class Employee extends Person {
     static displayName = 'Employee';
+    @field employeeId = contains(StringField);
     @field department = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
@@ -209,6 +213,7 @@ const ambiguousDisplayNamesCardSource = `
 let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
   let realm: Realm;
+  let monacoService: MonacoService;
 
   async function saveField(
     context: TestContextWithSSE,
@@ -329,6 +334,10 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
         },
       },
     }));
+
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
   });
 
   test('schema editor lists the inheritance chain', async function (assert) {
@@ -1119,5 +1128,38 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await triggerEvent(`[data-test-boxel-copy-button]`, 'mouseenter');
     assert.dom('[data-test-tooltip-content]').hasText('Copy to clipboard');
     assert.dom('[data-test-syntax-errors]').hasText('File is empty');
+  });
+
+  test<TestContextWithSave>('updates cursor position in monaco editor when field row clicked', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}employee.gts`,
+    });
+
+    await waitForCodeEditor();
+    await waitFor('[data-test-card-schema]');
+
+    assert.false(
+      monacoService.getLineCursorOn()?.includes('@field department'),
+    );
+    await click(
+      `[data-test-card-schema="Employee"] [data-test-field-name-button="department"]`,
+    );
+    assert.true(monacoService.getLineCursorOn()?.includes('@field department'));
+
+    await click(
+      `[data-test-card-schema="Employee"] [data-test-field-name-button="employeeId"]`,
+    );
+    assert.true(monacoService.getLineCursorOn()?.includes('@field employeeId'));
+
+    assert.dom('[data-test-current-module-name="employee.gts"]').exists();
+    assert.dom('[data-test-current-module-name="person.gts"]').doesNotExist();
+
+    await click(
+      `[data-test-card-schema="Person"] [data-test-field-name-button="address"]`,
+    );
+    assert.dom('[data-test-current-module-name="employee.gts"]').doesNotExist();
+    assert.dom('[data-test-current-module-name="person.gts"]').exists();
+    assert.true(monacoService.getLineCursorOn()?.includes('@field address'));
   });
 });

@@ -20,7 +20,7 @@ import { ArrowTopLeft, IconLink, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import { getPlural } from '@cardstack/runtime-common';
 
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+import { type CodeRef } from '@cardstack/runtime-common/code-ref';
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import EditFieldModal from '@cardstack/host/components/operator-mode/edit-field-modal';
@@ -57,8 +57,9 @@ interface Signature {
     childFields: string[];
     parentFields: string[];
     goToDefinition: (
-      codeRef: ResolvedCodeRef | undefined,
+      codeRef: CodeRef | undefined,
       localName: string | undefined,
+      fieldName?: string,
     ) => void;
   };
 }
@@ -91,6 +92,8 @@ export default class CardSchemaEditor extends Component<Signature> {
         border-radius: var(--code-mode-container-border-radius);
         background-color: var(--boxel-light);
         overflow: hidden;
+        cursor: pointer;
+        width: 100%;
       }
       .card-field + .card-field {
         margin-top: var(--boxel-sp-xxs);
@@ -163,6 +166,13 @@ export default class CardSchemaEditor extends Component<Signature> {
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        border: none;
+        background-color: transparent;
+        padding: 0;
+        text-align: left;
+      }
+      .field-name:hover {
+        color: var(--boxel-highlight);
       }
 
       .overridden-field {
@@ -244,7 +254,10 @@ export default class CardSchemaEditor extends Component<Signature> {
               <Pill
                 class='field-pill'
                 @kind='button'
-                {{on 'click' (fn @goToDefinition codeRef @cardType.localName)}}
+                {{on
+                  'click'
+                  (fn @goToDefinition codeRef @cardType.localName undefined)
+                }}
                 data-test-card-schema-navigational-button
               >
                 <:iconLeft>
@@ -293,15 +306,17 @@ export default class CardSchemaEditor extends Component<Signature> {
               data-test-field-name={{field.name}}
             >
               <div class='left'>
-                <div
+                <button
                   class={{if
                     (this.isOverridden field)
                     'field-name overridden-field'
                     'field-name'
                   }}
+                  data-test-field-name-button={{field.name}}
+                  {{on 'click' (fn this.goToField field)}}
                 >
                   {{field.name}}
-                </div>
+                </button>
                 <div class='field-types' data-test-field-types>
                   {{this.fieldTypes field}}
                 </div>
@@ -333,7 +348,12 @@ export default class CardSchemaEditor extends Component<Signature> {
                             @kind='button'
                             {{on
                               'click'
-                              (fn @goToDefinition codeRef field.card.localName)
+                              (fn
+                                @goToDefinition
+                                codeRef
+                                field.card.localName
+                                undefined
+                              )
                             }}
                             data-test-card-schema-field-navigational-button
                           >
@@ -543,5 +563,34 @@ export default class CardSchemaEditor extends Component<Signature> {
       block: 'end',
       inline: 'nearest',
     });
+  }
+
+  @action
+  private goToField(field: FieldOfType) {
+    if (
+      `${this.args.cardType.module}.gts` ===
+      this.operatorModeStateService.codePathString
+    ) {
+      // In the same file
+      this.args.goToDefinition(
+        undefined,
+        this.args.cardType.localName,
+        field.name,
+      );
+      return;
+    }
+
+    let codeRef = getCodeRef(this.args.cardType);
+    if (!codeRef) {
+      return undefined;
+    }
+    this.args.goToDefinition(
+      {
+        type: 'fieldOf',
+        card: codeRef,
+        field: field.name,
+      },
+      this.args.cardType.localName,
+    );
   }
 }

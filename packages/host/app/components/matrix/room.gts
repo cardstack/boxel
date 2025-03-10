@@ -57,6 +57,8 @@ import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
+import { Submodes } from '../submode-switcher';
+
 import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
@@ -300,7 +302,9 @@ export default class Room extends Component<Signature> {
   }
 
   private get autoAttachedFile() {
-    return this.autoAttachedFileResource.value;
+    return this.operatorModeStateService.state.submode === Submodes.Code
+      ? this.autoAttachedFileResource.value
+      : undefined;
   }
 
   private get removeAutoAttachedFile() {
