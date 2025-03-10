@@ -155,6 +155,11 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
     this.args.arrayField.set(items);
   }
 
+  @action
+  viewCard(card: CardDef) {
+    this.cardContext.actions?.viewCard(card);
+  }
+
   <template>
     <PermissionsConsumer as |permissions|>
       {{#if @arrayField.children.length}}
@@ -195,7 +200,17 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                 )
                 as |Item|
               }}
-                <Item @format='fitted' />
+                <div
+                  {{this.cardContext.cardComponentModifier
+                    card=boxedElement.value
+                    format='fitted'
+                    fieldType='linksToMany'
+                    fieldName=@field.name
+                  }}
+                  {{on 'click' (fn this.viewCard boxedElement.value)}}
+                >
+                  <Item @format='fitted' />
+                </div>
               {{/let}}
             </li>
           {{/each}}
