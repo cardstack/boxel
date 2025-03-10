@@ -20,6 +20,7 @@ import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -436,8 +437,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
-    let room2Id = createAndJoinRoom('@testuser:localhost', 'test room 2');
+    let room1Id = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    let room2Id = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 2',
+    });
     simulateRemoteMessage(room2Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Incorrect command',
@@ -1249,11 +1256,19 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      createAndJoinRoom('@testuser:localhost', 'test room 0');
-      let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
-      const room2Id = createAndJoinRoom('@testuser:localhost', 'test room 2');
+      createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'test room 0',
+      });
+      let room1Id = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'test room 1',
+      });
+      const room2Id = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'test room 2',
+      });
       await settled();
-
       await openAiAssistant();
       await waitFor(`[data-room-settled]`);
 
@@ -1486,10 +1501,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = createAndJoinRoom(
-      '@testuser:localhost',
-      'Another Room',
-    );
+    let anotherRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Another Room',
+    });
 
     simulateRemoteMessage(
       anotherRoomId,
@@ -1650,7 +1665,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     fillRoomWithReadMessages(roomId, false);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1672,7 +1690,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     fillRoomWithReadMessages(roomId);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1694,7 +1715,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     fillRoomWithReadMessages(roomId);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1732,6 +1756,36 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
   });
 
+  test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
+    await setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await openAiAssistant();
+    let element = document.querySelector('#ai-chat-input');
+
+    let initialHeight = element
+      ? parseInt(window.getComputedStyle(element).height)
+      : 0;
+
+    assert.true(initialHeight < 50, 'input box is short');
+    await fillIn('[data-test-message-field]', 'Hello '.repeat(1000));
+
+    let newHeight = element
+      ? parseInt(window.getComputedStyle(element).height)
+      : 0;
+
+    assert.true(
+      newHeight >= 300,
+      'input box grows when entering/pasting lots of text',
+    );
+  });
+
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
@@ -1759,10 +1813,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
 
-    let anotherRoomId = createAndJoinRoom(
-      '@testuser:localhost',
-      'Another Room',
-    );
+    let anotherRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Another Room',
+    });
 
     let eventId3 = simulateRemoteMessage(
       anotherRoomId,
@@ -2133,10 +2187,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await createAndJoinRoom(
-      '@testuser:localhost',
-      'Another Room',
-    );
+    let anotherRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Another Room',
+    });
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);
@@ -2368,7 +2422,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
@@ -2395,7 +2452,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
@@ -2419,7 +2477,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     commandResultEvents = await getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
@@ -2440,7 +2499,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2809,7 +2871,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:localhost', 'test room 1');
+    let room1Id = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,

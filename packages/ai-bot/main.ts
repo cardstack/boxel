@@ -9,7 +9,6 @@ import {
   isCommandResultStatusApplied,
   getPromptParts,
   extractCardFragmentsFromEvents,
-  eventRequiresResponse,
 } from './helpers';
 
 import {
@@ -188,13 +187,15 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if (!eventRequiresResponse(event)) {
-          return; // only print messages
-        }
 
         if (senderMatrixUserId === aiBotUserId) {
           return;
         }
+
+        if (!Responder.eventMayTriggerResponse(event)) {
+          return; // early exit for events that will not trigger a response
+        }
+
         log.info(
           '(%s) (Room: "%s" %s) (Message: %s %s)',
           event.getType(),
@@ -205,7 +206,10 @@ Common issues are:
         );
 
         const responder = new Responder(client, room.roomId);
-        await responder.initialize();
+
+        if (Responder.eventWillDefinitelyTriggerResponse(event)) {
+          await responder.ensureThinkingMessageSent();
+        }
 
         let promptParts: PromptParts;
         let initial = await client.roomInitialSync(room!.roomId, 1000);
@@ -216,6 +220,7 @@ Common issues are:
           if (!promptParts.shouldRespond) {
             return;
           }
+          await responder.ensureThinkingMessageSent();
         } catch (e) {
           log.error(e);
           await responder.onError(

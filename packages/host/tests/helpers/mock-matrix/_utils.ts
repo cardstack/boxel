@@ -68,11 +68,22 @@ export class MockUtils {
   setActiveRealms = (realmURLs: string[]) => {
     this.testState.opts!.activeRealms = realmURLs;
   };
-  createAndJoinRoom = (sender: string, name: string, timestamp?: number) => {
+  createAndJoinRoom = ({
+    sender,
+    name,
+    id,
+    timestamp,
+  }: {
+    sender: string;
+    name: string;
+    id?: string;
+    timestamp?: number;
+  }) => {
     let roomId = this.testState.sdk!.serverState.createRoom(
       sender,
       name,
       timestamp,
+      id,
     );
     return roomId;
   };

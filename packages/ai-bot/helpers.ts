@@ -20,17 +20,16 @@ import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-} from '../runtime-common/matrix-constants';
-import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
@@ -653,7 +652,7 @@ export async function getModifyPrompt(
       continue;
     }
     if (isCommandResultEvent(event)) {
-      continue;
+      continue; // we'll include these with the tool calls
     }
     if (
       'isStreamingFinished' in event.content &&
@@ -662,40 +661,39 @@ export async function getModifyPrompt(
       continue;
     }
     let body = event.content.body;
-    if (body) {
-      if (event.sender === aiBotUserId) {
-        let toolCalls = toToolCalls(event);
-        let historicalMessage: OpenAIPromptMessage = {
-          role: 'assistant',
-          content: body,
-        };
-        if (toolCalls.length) {
-          historicalMessage.tool_calls = toolCalls;
-        }
-        historicalMessages.push(historicalMessage);
-        if (toolCalls.length) {
-          toPromptMessageWithToolResults(event, history).forEach((message) =>
-            historicalMessages.push(message),
-          );
-        }
-      } else {
-        if (
-          event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-          event.content.data?.context?.openCardIds
-        ) {
-          body = `User message: ${body}
+    if (event.sender === aiBotUserId) {
+      let toolCalls = toToolCalls(event);
+      let historicalMessage: OpenAIPromptMessage = {
+        role: 'assistant',
+        content: body,
+      };
+      if (toolCalls.length) {
+        historicalMessage.tool_calls = toolCalls;
+      }
+      historicalMessages.push(historicalMessage);
+      if (toolCalls.length) {
+        toPromptMessageWithToolResults(event, history).forEach((message) =>
+          historicalMessages.push(message),
+        );
+      }
+    }
+    if (body && event.sender !== aiBotUserId) {
+      if (
+        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
+        event.content.data?.context?.openCardIds
+      ) {
+        body = `User message: ${body}
           Context: the user has the following cards open: ${JSON.stringify(
             event.content.data.context.openCardIds,
           )}`;
-        } else {
-          body = `User message: ${body}
+      } else {
+        body = `User message: ${body}
           Context: the user has no open cards.`;
-        }
-        historicalMessages.push({
-          role: 'user',
-          content: body,
-        });
       }
+      historicalMessages.push({
+        role: 'user',
+        content: body,
+      });
     }
   }
 
@@ -794,30 +792,7 @@ export function isCommandResultEvent(
   }
   return (
     event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-    event.content['m.relates_to']?.rel_type === 'm.annotation'
+    event.content['m.relates_to']?.rel_type ===
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE
   );
-}
-
-export function eventRequiresResponse(event: MatrixEvent) {
-  // If it's a message, we should respond unless it's a card fragment
-  if (event.getType() === 'm.room.message') {
-    if (
-      event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE ||
-      event.getContent().msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE
-    ) {
-      return false;
-    }
-    return true;
-  }
-
-  // If it's a command result with output, we should respond
-  if (
-    event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-    event.getContent().msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-  ) {
-    return true;
-  }
-
-  // If it's a different type, or a command result without output, we should not respond
-  return false;
 }

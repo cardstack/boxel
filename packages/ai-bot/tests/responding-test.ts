@@ -131,9 +131,9 @@ module('Responding', (hooks) => {
   });
 
   test('Sends thinking message', async () => {
-    await responder.initialize();
+    await responder.ensureThinkingMessageSent();
 
-    const sentEvents = fakeMatrixClient.getSentEvents();
+    let sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(sentEvents.length, 1, 'One event should be sent');
     assert.equal(
       sentEvents[0].eventType,
@@ -150,10 +150,14 @@ module('Responding', (hooks) => {
       thinkingMessage,
       'Message body should match',
     );
+
+    await responder.ensureThinkingMessageSent();
+    sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 1, 'Still only one event');
   });
 
   test('Sends first content message immediately, replace the thinking message', async () => {
-    await responder.initialize();
+    await responder.ensureThinkingMessageSent();
 
     // Send several messages
     for (let i = 0; i < 10; i++) {
@@ -188,7 +192,7 @@ module('Responding', (hooks) => {
   });
 
   test('Sends first content message immediately, only sends new content updates after 250ms, replacing the thinking message', async () => {
-    await responder.initialize();
+    await responder.ensureThinkingMessageSent();
 
     // Send several messages
     for (let i = 0; i < 10; i++) {
@@ -260,7 +264,7 @@ module('Responding', (hooks) => {
       },
     };
 
-    await responder.initialize();
+    await responder.ensureThinkingMessageSent();
 
     await responder.onChunk(
       {} as any,
@@ -326,7 +330,7 @@ module('Responding', (hooks) => {
         },
       },
     };
-    await responder.initialize();
+    await responder.ensureThinkingMessageSent();
 
     await responder.onChunk({} as any, snapshotWithContent('some content'));
 
@@ -473,7 +477,7 @@ module('Responding', (hooks) => {
         zipCode: '90210',
       },
     };
-    await responder.initialize();
+    await responder.ensureThinkingMessageSent();
 
     await responder.onChunk({} as any, snapshotWithContent('some content'));
 

@@ -3,7 +3,7 @@ import Component from '@glimmer/component';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+import { type CodeRef } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
@@ -24,8 +24,9 @@ interface Signature {
     moduleSyntax: ModuleSyntax;
     isReadOnly: boolean;
     goToDefinition: (
-      codeRef: ResolvedCodeRef | undefined,
+      codeRef: CodeRef | undefined,
       localName: string | undefined,
+      fieldName?: string,
     ) => void;
     isLoading: boolean;
   };
