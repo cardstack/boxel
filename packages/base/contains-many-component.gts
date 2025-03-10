@@ -141,7 +141,6 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
   addField = restartableTask(async () => {
     let newValue: FieldDef | null =
       primitive in this.args.field.card ? null : new this.args.field.card();
-    // TODO probably each field card should have the ability to say what a new item should be
     if (this.args.typeConstraint) {
       let subclassField = await loadCard(this.args.typeConstraint, {
         loader: myLoader(),
