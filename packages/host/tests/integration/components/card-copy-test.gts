@@ -3,7 +3,6 @@ import { waitUntil, waitFor, click, triggerEvent } from '@ember/test-helpers';
 import { buildWaiter } from '@ember/test-waiters';
 import GlimmerComponent from '@glimmer/component';
 
-import flatMap from 'lodash/flatMap';
 import { module, test } from 'qunit';
 import { validate as uuidValidate } from 'uuid';
 
@@ -13,6 +12,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -21,14 +21,17 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  IncrementalIndexEventContent,
+  IndexRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
+
+import {
   percySnapshot,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
   setupOnSave,
-  setupServerSentEvents,
   type TestContextWithSave,
-  type TestContextWithSSE,
   setupIntegrationTestRealm,
   lookupLoaderService,
   lookupNetworkService,
@@ -44,11 +47,8 @@ let setCardInOperatorModeState: (
   rightCards?: string[],
 ) => Promise<void>;
 
-type TestContextForCopy = TestContextWithSave & TestContextWithSSE;
-
 module('Integration | card-copy', function (hooks) {
   let realm1: Realm;
-  let realm2: Realm;
   let noop = () => {};
 
   setupRenderingTest(hooks);
@@ -61,7 +61,17 @@ module('Integration | card-copy', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
+
+  let loggedInAs = '@testuser:localhost';
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs,
+    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
+    autostart: true,
+  });
+
+  let { getRoomIdForRealmAndUser, getRealmEventMessagesSince } =
+    mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     setCardInOperatorModeState = async (
@@ -133,6 +143,7 @@ module('Integration | card-copy', function (hooks) {
 
     ({ realm: realm1 } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'pet.gts': { Pet },
@@ -205,8 +216,9 @@ module('Integration | card-copy', function (hooks) {
       },
     }));
 
-    ({ realm: realm2 } = await setupIntegrationTestRealm({
+    await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
         'index.json': {
@@ -241,7 +253,7 @@ module('Integration | card-copy', function (hooks) {
           iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
         },
       },
-    }));
+    });
 
     // write in the new record last because it's link didn't exist until realm2 was created
     await realm1.write(
@@ -268,12 +280,6 @@ module('Integration | card-copy', function (hooks) {
         },
       } as LooseSingleCardDocument),
     );
-  });
-
-  setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:localhost',
-    activeRealms: [baseRealm.url, testRealmURL, testRealm2URL],
-    autostart: true,
   });
 
   test('copy button does not appear when there is 1 stack for single card item', async function (assert) {
@@ -634,8 +640,8 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Copy 1 Card', 'button text is correct');
   });
 
-  test<TestContextForCopy>('can copy a card', async function (assert) {
-    assert.expect(12);
+  test<TestContextWithSave>('can copy a card', async function (assert) {
+    assert.expect(13);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -663,49 +669,72 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.strictEqual(json.data.meta.realmURL, testRealm2URL);
     });
-    await this.expectEvents({
-      assert,
-      realm: realm2,
-      expectedNumberOfEvents: 2,
-      onEvents: ([_, event]) => {
-        if (event.data.type === 'incremental') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Pet/${id}`,
-          ]);
-        } else {
-          assert.ok(
-            false,
-            `expected 'index' event, but received ${JSON.stringify(event)}`,
-          );
-        }
-      },
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
-        );
-        assert
-          .dom(`.selected[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
-          .exists('souce card is selected');
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
-        await click('[data-test-copy-button]');
-      },
+
+    let realmEventTimestampStart = Date.now();
+
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
+    );
+    assert
+      .dom(`.selected[data-test-overlay-card="${testRealmURL}Pet/mango"]`)
+      .exists('souce card is selected');
+    assert.strictEqual(
+      document.querySelectorAll(
+        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+      ).length,
+      1,
+      '1 card exists in destination realm',
+    );
+    await click('[data-test-copy-button]');
+
+    let realmSessionRoomId = getRoomIdForRealmAndUser(
+      testRealm2URL,
+      loggedInAs,
+    );
+
+    await waitUntil(async () => {
+      let matrixMessages = await getRealmEventMessagesSince(
+        realmSessionRoomId,
+        realmEventTimestampStart,
+      );
+      console.log(matrixMessages);
+      return matrixMessages.some(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      );
     });
+
+    let realmEventMessages = getRealmEventMessagesSince(
+      realmSessionRoomId,
+      realmEventTimestampStart,
+    );
+
+    let incrementalIndexEvent: IncrementalIndexEventContent | undefined =
+      realmEventMessages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      )?.content as IncrementalIndexEventContent;
+
+    assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
+
+    assert.deepEqual(incrementalIndexEvent?.invalidations, [
+      `${testRealm2URL}Pet/${id}`,
+    ]);
+
     await waitUntil(
       () =>
         document.querySelectorAll(
@@ -746,7 +775,7 @@ module('Integration | card-copy', function (hooks) {
       .exists('copy button with left arrow exists');
   });
 
-  test<TestContextForCopy>('can copy mulitple cards', async function (assert) {
+  test<TestContextWithSave>('can copy multiple cards', async function (assert) {
     assert.expect(7);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
@@ -767,68 +796,85 @@ module('Integration | card-copy', function (hooks) {
       }
       savedCards.push(json);
     });
-    await this.expectEvents({
-      assert,
-      realm: realm2,
-      expectedNumberOfEvents: 4,
-      onEvents: (events) => {
-        assert.deepEqual(
-          events.map((e) => e.data.type),
-          [
-            'incremental-index-initiation',
-            'incremental',
-            'incremental-index-initiation',
-            'incremental',
-          ],
-          'event types are correct',
-        );
-        assert.deepEqual(
-          flatMap(
-            events.filter((e) => e.data.type === 'incremental'),
-            (e) => e.data.invalidations,
-          ),
-          [savedCards[0].data.id, savedCards[1].data.id],
-          'event invalidations are correct',
-        );
-      },
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.actions-item__button`,
-        );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
-        await click('[data-test-copy-button]');
-      },
-    });
+    let realmEventTimestampStart = Date.now();
+
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/mango"] button.actions-item__button`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Pet/vangogh"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Pet/vangogh"] button.actions-item__button`,
+    );
+
+    assert.strictEqual(
+      document.querySelectorAll(
+        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+      ).length,
+      1,
+      '1 card exists in destination realm',
+    );
+    await click('[data-test-copy-button]');
+
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 3,
     );
+
+    let realmSessionRoomId = getRoomIdForRealmAndUser(
+      testRealm2URL,
+      loggedInAs,
+    );
+
+    let realmIndexEventMessages = getRealmEventMessagesSince(
+      realmSessionRoomId,
+      realmEventTimestampStart,
+    )
+      .filter((m) => m.content.eventName === 'index')
+      .map((m) => m.content) as IndexRealmEventContent[];
+
+    assert.deepEqual(
+      realmIndexEventMessages.map((e: IndexRealmEventContent) => e.indexType),
+      [
+        'incremental-index-initiation',
+        'incremental',
+        'incremental-index-initiation',
+        'incremental',
+      ],
+      'event types are correct',
+    );
+
+    let invalidationIds = realmIndexEventMessages.reduce(
+      (invalidationIds: string[], e: IndexRealmEventContent) => {
+        if (e.indexType === 'incremental') {
+          return invalidationIds.concat(e.invalidations);
+        }
+        return invalidationIds;
+      },
+      [],
+    ) as string[];
+
+    assert.deepEqual(
+      invalidationIds,
+      [savedCards[0].data.id, savedCards[1].data.id],
+      'event invalidations are correct',
+    );
+
     assert.strictEqual(savedCards.length, 2, 'correct number of cards saved');
     let cardIds = savedCards.map((c) => c.data.id.split('/').pop()!);
     assert
@@ -847,8 +893,8 @@ module('Integration | card-copy', function (hooks) {
     );
   });
 
-  test<TestContextForCopy>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(15);
+  test<TestContextWithSave>('can copy a card that has a relative link to card in source realm', async function (assert) {
+    assert.expect(16);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -881,6 +927,8 @@ module('Integration | card-copy', function (hooks) {
       },
       { prepend: true },
     );
+
+    let realmEventTimestampStart = Date.now();
 
     let id: string | undefined;
     this.onSave((url, json) => {
@@ -916,53 +964,62 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.deepEqual(included.meta.realmURL, testRealmURL);
     });
-    await this.expectEvents({
-      assert,
-      realm: realm2,
-      expectedNumberOfEvents: 2,
-      onEvents: ([_, event]) => {
-        if (event.data.type === 'incremental') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Person/${id}`,
-          ]);
-        } else {
-          assert.ok(
-            false,
-            `expected 'index' event, but received ${JSON.stringify(event)}`,
-          );
-        }
-      },
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
-        );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
-        await click('[data-test-copy-button]');
-      },
-    });
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Person/hassan"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Person/hassan"] button.actions-item__button`,
+    );
+
+    assert.strictEqual(
+      document.querySelectorAll(
+        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+      ).length,
+      1,
+      '1 card exists in destination realm',
+    );
+    await click('[data-test-copy-button]');
+
     await waitUntil(
       () =>
         document.querySelectorAll(
           `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]`,
         ).length === 2,
     );
+
+    let realmSessionRoomId = getRoomIdForRealmAndUser(
+      testRealm2URL,
+      loggedInAs,
+    );
+
+    let realmEventMessages = getRealmEventMessagesSince(
+      realmSessionRoomId,
+      realmEventTimestampStart,
+    );
+
+    let incrementalIndexEvent: IncrementalIndexEventContent | undefined =
+      realmEventMessages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      )?.content as IncrementalIndexEventContent;
+
+    assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
+
+    assert.deepEqual(
+      (incrementalIndexEvent as IncrementalIndexEventContent).invalidations,
+      [`${testRealm2URL}Person/${id}`],
+    );
+
     if (!id) {
       assert.ok(false, 'new card identifier was undefined');
     }
@@ -979,8 +1036,8 @@ module('Integration | card-copy', function (hooks) {
       .containsText('Hassan');
   });
 
-  test<TestContextForCopy>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(15);
+  test<TestContextWithSave>('can copy a card that has a link to card in destination realm', async function (assert) {
+    assert.expect(16);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -1048,47 +1105,56 @@ module('Integration | card-copy', function (hooks) {
       });
       assert.deepEqual(included.meta.realmURL, testRealm2URL);
     });
-    await this.expectEvents({
-      assert,
-      realm: realm2,
-      expectedNumberOfEvents: 2,
-      onEvents: ([_, event]) => {
-        if (event.data.type === 'incremental') {
-          assert.deepEqual(event.data.invalidations, [
-            `${testRealm2URL}Person/${id}`,
-          ]);
-        } else {
-          assert.ok(
-            false,
-            `expected 'index' event, but received ${JSON.stringify(event)}`,
-          );
-        }
-      },
-      callback: async () => {
-        await click(
-          `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await click(
-          `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
-        );
-        await triggerEvent(
-          `[data-test-cards-grid-item="${testRealmURL}Person/sakura"]`,
-          'mouseenter',
-        );
-        await click(
-          `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.actions-item__button`,
-        );
 
-        assert.strictEqual(
-          document.querySelectorAll(
-            '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
-          ).length,
-          1,
-          '1 card exists in destination realm',
-        );
-        await click('[data-test-copy-button]');
-      },
-    });
+    let realmEventTimestampStart = Date.now();
+
+    await click(
+      `[data-test-operator-mode-stack="0"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await click(
+      `[data-test-operator-mode-stack="1"] [data-test-boxel-filter-list-button="All Cards"]`,
+    );
+    await triggerEvent(
+      `[data-test-cards-grid-item="${testRealmURL}Person/sakura"]`,
+      'mouseenter',
+    );
+    await click(
+      `[data-test-overlay-card="${testRealmURL}Person/sakura"] button.actions-item__button`,
+    );
+
+    assert.strictEqual(
+      document.querySelectorAll(
+        '[data-test-operator-mode-stack="1"] [data-test-cards-grid-item]',
+      ).length,
+      1,
+      '1 card exists in destination realm',
+    );
+    await click('[data-test-copy-button]');
+
+    let realmSessionRoomId = getRoomIdForRealmAndUser(
+      testRealm2URL,
+      loggedInAs,
+    );
+
+    let realmEventMessages = getRealmEventMessagesSince(
+      realmSessionRoomId,
+      realmEventTimestampStart,
+    );
+
+    let incrementalIndexEvent: IncrementalIndexEventContent | undefined =
+      realmEventMessages.find(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      )?.content as IncrementalIndexEventContent;
+
+    assert.ok(incrementalIndexEvent, 'incremental index event was emitted');
+
+    assert.deepEqual(incrementalIndexEvent?.invalidations, [
+      `${testRealm2URL}Person/${id}`,
+    ]);
+
     await waitUntil(
       () =>
         document.querySelectorAll(

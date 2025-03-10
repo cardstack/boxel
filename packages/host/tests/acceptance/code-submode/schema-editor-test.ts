@@ -10,21 +10,17 @@ import { module, test } from 'qunit';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
-import { Realm } from '@cardstack/runtime-common/realm';
-
 import MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupServerSentEvents,
   setupOnSave,
   getMonacoContent,
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
-  type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -212,31 +208,18 @@ const ambiguousDisplayNamesCardSource = `
 
 let matrixRoomId: string;
 module('Acceptance | code submode | schema editor tests', function (hooks) {
-  let realm: Realm;
   let monacoService: MonacoService;
 
-  async function saveField(
-    context: TestContextWithSSE,
-    assert: Assert,
-    expectedEvents: { type: string; data: Record<string, any> }[],
-  ) {
-    await context.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click('[data-test-save-field-button]');
-      },
-    });
-  }
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
-  setupServerSentEvents(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -247,7 +230,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    ({ realm } = await setupAcceptanceTestRealm({
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'index.gts': indexCardSource,
         'empty.gts': ' ',
@@ -333,7 +317,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    }));
+    });
 
     monacoService = this.owner.lookup(
       'service:monaco-service',
@@ -547,29 +531,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-current-module-name]').hasText('card-api.gts');
   });
 
-  test<TestContextWithSSE>('adding a field from schema editor - whole flow test', async function (assert) {
-    assert.expect(18);
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}person.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [
-            `${testRealmURL}person.gts`,
-            `${testRealmURL}Person/1`,
-            `${testRealmURL}employee`,
-          ],
-        },
-      },
-    ];
+  test('adding a field from schema editor - whole flow test', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
@@ -664,7 +626,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .dom('[data-test-save-field-button]')
       .doesNotHaveAttribute('disabled');
 
-    await saveField(this, assert, expectedEvents);
+    await click('[data-test-save-field-button]');
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="birthdate"] [data-test-card-display-name="Date"]',
     );
@@ -678,30 +640,8 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.ok(getMonacoContent().includes('birthdate = contains(DateField)'));
   });
 
-  test<TestContextWithSSE>('adding a field from schema editor - cardinality test', async function (assert) {
-    assert.expect(10);
+  test('adding a field from schema editor - cardinality test', async function (assert) {
     let waitForOpts = { timeout: 2000 }; // Helps mitigating flaky tests since Writing to a file + reflecting that in the UI can be a bit slow
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}person.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [
-            `${testRealmURL}person.gts`,
-            `${testRealmURL}Person/1`,
-            `${testRealmURL}employee`,
-          ],
-        },
-      },
-    ];
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
@@ -726,7 +666,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert
       .dom('.card-chooser-area [data-test-selected-type-display-name]')
       .containsText('BigInteger');
-    await saveField(this, assert, expectedEvents);
+    await click('[data-test-save-field-button]');
 
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="luckyNumbers"] [data-test-card-display-name="BigInteger"]',
@@ -755,7 +695,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await fillIn('[data-test-field-name-input]', 'favPerson');
     await click('[data-test-boxel-radio-option-id="one"]');
 
-    await saveField(this, assert, expectedEvents);
+    await click('[data-test-save-field-button]');
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="favPerson"] [data-test-card-display-name="Person"]',
       waitForOpts,
@@ -783,7 +723,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await click('[data-test-card-catalog-go-button]');
     await fillIn('[data-test-field-name-input]', 'favPeople');
     await click('[data-test-boxel-radio-option-id="many"]');
-    await saveField(this, assert, expectedEvents);
+    await click('[data-test-save-field-button]');
     await waitFor(
       '[data-test-card-schema="Person"] [data-test-field-name="favPeople"] [data-test-card-display-name="Person"]',
       waitForOpts,

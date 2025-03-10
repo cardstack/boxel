@@ -45,6 +45,8 @@ import Captions from '@cardstack/boxel-icons/captions';
 import CardsIcon from '@cardstack/boxel-icons/cards';
 import { registerDestructor } from '@ember/destroyable';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 type IconComponent = typeof Captions;
 interface SortOption {
   displayName: string;
@@ -469,9 +471,8 @@ class Isolated extends Component<typeof CardsGrid> {
       ) ?? this.filters[0];
   });
 
-  private refreshFilterList = (ev: MessageEvent) => {
-    let data = JSON.parse(ev.data);
-    if (ev.type === 'index' && data.type === 'incremental') {
+  private refreshFilterList = (ev: RealmEventContent) => {
+    if (ev.eventName === 'index' && ev.indexType === 'incremental') {
       this.loadFilterList.perform();
     }
   };
