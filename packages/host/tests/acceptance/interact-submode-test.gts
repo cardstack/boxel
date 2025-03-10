@@ -23,6 +23,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
@@ -112,7 +113,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       static isolated = class Isolated extends Component<typeof this> {
         <template>
           <GridContainer class='container'>
-            <h2><@fields.title /></h2>
+            <h2 data-test-pet-title><@fields.title /></h2>
             <div>
               <div>Favorite Treat: <@fields.favoriteTreat /></div>
               <div data-test-editable-meta>
@@ -572,6 +573,56 @@ module('Acceptance | interact submode tests', function (hooks) {
           })!,
         )}`,
       );
+    });
+
+    test<TestContextWithSave>('a realm event with known clientRequestId is ignored', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Pet/vangogh`,
+              format: 'edit',
+            },
+          ],
+        ],
+        codePath: `${testRealmURL}Pet/vangogh.json`,
+      });
+
+      let deferred = new Deferred<void>();
+
+      this.onSave(() => {
+        deferred.fulfill();
+      });
+
+      await fillIn(`[data-test-field="name"] input`, 'Renamed via UI');
+      await deferred.promise;
+      await click('[data-test-edit-button]');
+
+      let knownClientRequestIds = (
+        this.owner.lookup('service:card-service') as CardService
+      ).clientRequestIds.values();
+
+      let knownClientRequestId = knownClientRequestIds.next().value;
+
+      await realm.write(
+        'Pet/vangogh.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Renamed via realm call',
+            },
+            meta: {
+              adoptsFrom: { module: 'http://test-realm/test/pet', name: 'Pet' },
+            },
+          },
+        }),
+        knownClientRequestId,
+      );
+
+      await settled();
+
+      assert.dom('[data-test-pet-title]').containsText('Renamed via UI');
     });
 
     test('restoring the stack from query param when card is in edit format', async function (assert) {
