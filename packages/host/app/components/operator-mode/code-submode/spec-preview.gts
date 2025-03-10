@@ -28,6 +28,7 @@ import {
   type ResolvedCodeRef,
   type Query,
   type LooseSingleCardDocument,
+  type Actions,
   specRef,
   isCardDef,
   isFieldDef,
@@ -57,8 +58,16 @@ import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import {
+  CardContext,
+  CardDef,
+  type Format,
+  type FieldType,
+} from 'https://cardstack.com/base/card-api';
 
 import type { WithBoundArgs } from '@glint/template';
+
+import ElementTracker from '../../../resources/element-tracker';
 
 interface Signature {
   Element: HTMLElement;
@@ -184,6 +193,24 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.initializeCardSelection();
   }
 
+  cardTracker = new ElementTracker<{
+    cardId?: string;
+    card?: CardDef;
+    format: Format | 'data';
+    fieldType: FieldType | undefined;
+    fieldName: string | undefined;
+  }>();
+
+  get cardContext(): Omit<CardContext, 'prerenderedCardSearchComponent'> {
+    return {
+      cardComponentModifier: this.cardTracker.trackElement,
+      actions: {
+        viewCard: (card: CardDef) => this.viewCard(card),
+      } as Actions,
+      commandContext: undefined,
+    };
+  }
+
   get onlyOneInstance() {
     return this.args.cards.length === 1;
   }
@@ -222,6 +249,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   get displayCannotWrite() {
     return !this.args.canWrite && this.args.cards.length === 0;
   }
+
+  viewCard = (card: CardDef): Promise<void> => {
+    if (card) {
+      console.log('card', card);
+    }
+    return Promise.resolve();
+  };
 
   @action viewSpecInstance() {
     if (!this.args.selectedId) {
@@ -291,9 +325,17 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               </BoxelButton>
             </div>
             {{#if this.displayIsolated}}
-              <Preview @card={{@spec}} @format='isolated' />
+              <Preview
+                @card={{@spec}}
+                @format='isolated'
+                @cardContext={{this.cardContext}}
+              />
             {{else}}
-              <Preview @card={{@spec}} @format='edit' />
+              <Preview
+                @card={{@spec}}
+                @format='edit'
+                @cardContext={{this.cardContext}}
+              />
             {{/if}}
           </div>
         {{/if}}
