@@ -1,0 +1,444 @@
+[
+  {
+    "type": "m.room.create",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "room_version": "10",
+      "creator": "@admin:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864362728,
+    "unsigned": {
+      "age": 71431
+    },
+    "event_id": "$BbFv3bQk_6IXS845CttWkNqprc00PaW7egknDPzAb3U",
+    "user_id": "@admin:localhost",
+    "age": 71431
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "admin"
+    },
+    "state_key": "@admin:localhost",
+    "origin_server_ts": 1736864362765,
+    "unsigned": {
+      "age": 71394
+    },
+    "event_id": "$auoMF6x0EHAGAIVbeHjsLdrepN5NWaoXVkWPa_QNZ1o",
+    "user_id": "@admin:localhost",
+    "age": 71394
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864362793,
+    "unsigned": {
+      "age": 71366
+    },
+    "event_id": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
+    "user_id": "@admin:localhost",
+    "age": 71366
+  },
+  {
+    "type": "m.room.canonical_alias",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "alias": "#Weather%20Travel%20Advice%20-%202025-01-14T14%3A19%3A22.706%2B00%3A00%20-%20%40admin%3Alocalhost:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864362807,
+    "unsigned": {
+      "age": 71352
+    },
+    "event_id": "$C7j2gqIzpWOjWp5yabZ2JLVGc5sh_KjuOdrtv7TavNE",
+    "user_id": "@admin:localhost",
+    "age": 71352
+  },
+  {
+    "type": "m.room.join_rules",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "join_rule": "invite"
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864362808,
+    "unsigned": {
+      "age": 71351
+    },
+    "event_id": "$8FT4iaFSox71dX5-Z0xgbiY2isoPL6ybLM37wXSKJOs",
+    "user_id": "@admin:localhost",
+    "age": 71351
+  },
+  {
+    "type": "m.room.history_visibility",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "history_visibility": "shared"
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864362809,
+    "unsigned": {
+      "age": 71350
+    },
+    "event_id": "$cxBIW2re3D1puIfhAyg067GLdW24FXctOqQ8Juma-Hs",
+    "user_id": "@admin:localhost",
+    "age": 71350
+  },
+  {
+    "type": "m.room.guest_access",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "guest_access": "can_join"
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864362809,
+    "unsigned": {
+      "age": 71350
+    },
+    "event_id": "$hSlWgIKf_y_uycz1Ae4USMOa4K17dq7f6VHSrN2nhcU",
+    "user_id": "@admin:localhost",
+    "age": 71350
+  },
+  {
+    "type": "m.room.name",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "name": "Weather Travel Advice"
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864362810,
+    "unsigned": {
+      "age": 71349
+    },
+    "event_id": "$isUAMN-pIaBk9gFFTn6UyyTk9QcG59QwOuWhXbfCEkw",
+    "user_id": "@admin:localhost",
+    "age": 71349
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1736864362916,
+    "unsigned": {
+      "age": 71243
+    },
+    "event_id": "$Odud1s75LuD0WjceV_Y_Ek-OVoH5unWa_-g_NI_D1rc",
+    "user_id": "@admin:localhost",
+    "age": 71243
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100,
+        "@aibot:localhost": 50
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864363018,
+    "unsigned": {
+      "replaces_state": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
+      "prev_content": {
+        "users": {
+          "@admin:localhost": 100
+        },
+        "users_default": 0,
+        "events": {
+          "m.room.name": 50,
+          "m.room.power_levels": 100,
+          "m.room.history_visibility": 100,
+          "m.room.canonical_alias": 50,
+          "m.room.avatar": 50,
+          "m.room.tombstone": 100,
+          "m.room.server_acl": 100,
+          "m.room.encryption": 100
+        },
+        "events_default": 0,
+        "state_default": 50,
+        "ban": 50,
+        "kick": 50,
+        "redact": 50,
+        "invite": 0,
+        "historical": 100
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 71141
+    },
+    "event_id": "$TM9oHBXj1Iaa56XU4WF-yxjREXQNQJE1cWaqOqaWqrQ",
+    "user_id": "@admin:localhost",
+    "age": 71141,
+    "replaces_state": "$XPa4Nfoi-LpJRvCCHMPd088dnrzt-Uc8R0lb-56MCUQ",
+    "prev_content": {
+      "users": {
+        "@admin:localhost": 100
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    }
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "aibot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1736864363054,
+    "unsigned": {
+      "replaces_state": "$Odud1s75LuD0WjceV_Y_Ek-OVoH5unWa_-g_NI_D1rc",
+      "prev_content": {
+        "membership": "invite",
+        "displayname": "aibot"
+      },
+      "prev_sender": "@admin:localhost",
+      "age": 71105
+    },
+    "event_id": "$Mp2uUXS9lIbgx8qKF43zBiqU-B0EXsdWv-IsAs8kz1I",
+    "user_id": "@aibot:localhost",
+    "age": 71105,
+    "replaces_state": "$Odud1s75LuD0WjceV_Y_Ek-OVoH5unWa_-g_NI_D1rc",
+    "prev_content": {
+      "membership": "invite",
+      "displayname": "aibot"
+    }
+  },
+  {
+    "type": "app.boxel.active-llm",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "model": "openai/gpt-4o"
+    },
+    "state_key": "",
+    "origin_server_ts": 1736864363147,
+    "unsigned": {
+      "age": 71012
+    },
+    "event_id": "$fsEdqZdOBurry8ujwLTo38DlybaqGuOtas59BiZedeg",
+    "user_id": "@aibot:localhost",
+    "age": 71012
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/onnx/AiCommandExample/86ed3d35-c97c-4c2c-a7cb-88c3dba6e1ec\\\",\\\"attributes\\\":{\\\"locations\\\":[\\\"New York\\\"],\\\"title\\\":\\\"AI COMMAND TEST\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"AiCommandExample\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1736864363215,
+    "unsigned": {
+      "age": 70944
+    },
+    "event_id": "$YSkK-gX0AH0fT_t23m_BDabQB4f4f6dE0c8JSV-3CXE",
+    "user_id": "@admin:localhost",
+    "age": 70944
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "I'm planning to visit these locations: New York, Beverly Hills. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions",
+      "format": "org.matrix.custom.html",
+      "formatted_body": "<p>I'm planning to visit these locations: New York, Beverly Hills. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions</p>\n",
+      "clientGeneratedId": "4a3d6e7f-f492-48de-b3e5-7ef8c5bda696",
+      "data": "{\"attachedCardsEventIds\":[\"$YSkK-gX0AH0fT_t23m_BDabQB4f4f6dE0c8JSV-3CXE\"],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":false}}"
+    },
+    "origin_server_ts": 1736864363324,
+    "unsigned": {
+      "age": 70835
+    },
+    "event_id": "$FKof2RxEh_MEfR5iSCwXPOyfcC-t961Nnmvn2Hid6_I",
+    "user_id": "@admin:localhost",
+    "age": 70835
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Thinking...",
+      "msgtype": "m.text",
+      "formatted_body": "Thinking...",
+      "format": "org.matrix.custom.html",
+      "m.new_content": {
+        "body": "Thinking...",
+        "msgtype": "m.text",
+        "formatted_body": "Thinking...",
+        "format": "org.matrix.custom.html"
+      }
+    },
+    "origin_server_ts": 1736864365020,
+    "unsigned": {
+      "age": 69139
+    },
+    "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
+    "user_id": "@aibot:localhost",
+    "age": 69139
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "Check the current weather conditions for traveling",
+      "msgtype": "app.boxel.message",
+      "formatted_body": "Check the current weather conditions for traveling",
+      "format": "org.matrix.custom.html",
+      "data": "{\"eventId\":\"$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_or0qFTa8y9Ef8ZVyRDNR2P1T\",\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"arguments\":{\"description\":\"Check the current weather conditions for traveling\",\"attributes\":{\"location\":\"New York\"}}}}",
+      "app.boxel.commandRequests": [
+        {
+          "id": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
+          "name": "GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX",
+          "arguments": {
+            "description": "Check the current weather conditions for traveling",
+            "attributes": { "location": "New York" }
+          }
+        },
+        {
+          "id": "call_or1e5Ta8y9Ef8ZVyRDNRabcd",
+          "name": "GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX",
+          "arguments": {
+            "description": "Check the current weather conditions for traveling",
+            "attributes": { "location": "Beverly Hills" }
+          }
+        }
+      ],
+      "m.relates_to": {
+        "rel_type": "m.replace",
+        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE"
+      }
+    },
+    "origin_server_ts": 1736864370642,
+    "unsigned": {
+      "age": 63517
+    },
+    "event_id": "$V4k751dVMZphpB6P7OJ3Q-vRbTihn5KekUpTNL1LVpE",
+    "user_id": "@aibot:localhost",
+    "age": 63517
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"attributes\\\":{\\\"temperature\\\":\\\"22°C\\\",\\\"conditions\\\":\\\"Cloudy\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"WeatherReport\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1736864370828,
+    "unsigned": {
+      "age": 63331
+    },
+    "event_id": "$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc",
+    "user_id": "@admin:localhost",
+    "age": 63331
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithOutput",
+      "m.relates_to": {
+        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
+        "key": "applied",
+        "rel_type": "app.boxel.commandAnnotation"
+      },
+      "commandRequestId": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
+      "data": "{\"cardEventId\":\"$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc\"}"
+    },
+    "origin_server_ts": 1736864370892,
+    "unsigned": {
+      "age": 63267
+    },
+    "event_id": "$92DJh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOEJTk",
+    "user_id": "@admin:localhost",
+    "age": 63267
+  }
+]

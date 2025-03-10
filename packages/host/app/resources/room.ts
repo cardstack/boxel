@@ -9,17 +9,19 @@ import { TrackedMap } from 'tracked-built-ins';
 
 import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type {
   CardFragmentContent,
-  CommandEvent,
   MatrixEvent as DiscreteMatrixEvent,
   RoomCreateEvent,
   RoomNameEvent,
@@ -78,9 +80,9 @@ export class RoomResource extends Resource<Args> {
   // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
   // that updates immediately after the user selects the LLM.
   @tracked private llmBeingActivated: string | undefined;
-  @service declare private matrixService: MatrixService;
-  @service declare private commandService: CommandService;
-  @service declare private cardService: CardService;
+  @service private declare matrixService: MatrixService;
+  @service private declare commandService: CommandService;
+  @service private declare cardService: CardService;
 
   modify(_positional: never[], named: Args['named']) {
     if (!named.roomId) {
@@ -115,12 +117,15 @@ export class RoomResource extends Resource<Args> {
           case 'm.room.message':
             if (this.isCardFragmentEvent(event)) {
               await this.loadCardFragment(event);
-            } else if (this.isCommandDefinitionsEvent(event)) {
+            } else if (
+              this.isCommandDefinitionsEvent(event) ||
+              this.isRealmServerEvent(event)
+            ) {
               break;
             } else {
               await this.loadRoomMessage({
                 roomId,
-                event: event as MessageEvent | CommandEvent | CardMessageEvent, // this cast can be removed when we add awareness of CommandDefinitionsEvent to this resource
+                event,
                 index,
               });
             }
@@ -321,7 +326,6 @@ export class RoomResource extends Resource<Args> {
   private isCommandDefinitionsEvent(
     event:
       | MessageEvent
-      | CommandEvent
       | CardMessageEvent
       | CommandDefinitionsEvent
       | RealmServerEvent,
@@ -329,10 +333,19 @@ export class RoomResource extends Resource<Args> {
     return event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
   }
 
+  private isRealmServerEvent(
+    event:
+      | MessageEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent
+      | RealmServerEvent,
+  ): event is RealmServerEvent {
+    return event.content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
+  }
+
   private isCardFragmentEvent(
     event:
       | MessageEvent
-      | CommandEvent
       | CardMessageEvent
       | CommandDefinitionsEvent
       | RealmServerEvent,
@@ -385,7 +398,7 @@ export class RoomResource extends Resource<Args> {
     index,
   }: {
     roomId: string;
-    event: MessageEvent | CommandEvent | CardMessageEvent;
+    event: MessageEvent | CardMessageEvent;
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
@@ -426,15 +439,15 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
-    let commandEvent = this.events.find(
+    let messageEventWithCommand = this.events.find(
       (e: any) =>
         e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
+        e.content[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
         (e.event_id === effectiveEventId ||
           e.content['m.relates_to']?.event_id === effectiveEventId),
-    )! as CommandEvent | undefined;
+    )! as CardMessageEvent | undefined;
     let message = this._messageCache.get(effectiveEventId);
-    if (!message || !commandEvent) {
+    if (!message || !messageEventWithCommand) {
       return;
     }
 
@@ -442,24 +455,29 @@ export class RoomResource extends Resource<Args> {
       roomId,
       userId: event.sender,
     });
-    let messageBuilder = new MessageBuilder(commandEvent, getOwner(this)!, {
-      roomId,
-      effectiveEventId,
-      author,
-      index,
-      serializedCardFromFragments: this.serializedCardFromFragments,
-      events: this.events,
-      skills: this.skills,
-      commandResultEvent: event,
-    });
+    let messageBuilder = new MessageBuilder(
+      messageEventWithCommand,
+      getOwner(this)!,
+      {
+        roomId,
+        effectiveEventId,
+        author,
+        index,
+        serializedCardFromFragments: this.serializedCardFromFragments,
+        events: this.events,
+        skills: this.skills,
+        commandResultEvent: event,
+      },
+    );
     messageBuilder.updateMessageCommandResult(message);
   }
 
   private getEffectiveEventId(
-    event: MessageEvent | CommandEvent | CardMessageEvent | CommandResultEvent,
+    event: MessageEvent | CardMessageEvent | CommandResultEvent,
   ) {
     return event.content['m.relates_to']?.rel_type === 'm.replace' ||
-      event.content['m.relates_to']?.rel_type === 'm.annotation'
+      event.content['m.relates_to']?.rel_type ===
+        APP_BOXEL_COMMAND_RESULT_REL_TYPE
       ? event.content['m.relates_to'].event_id
       : event.event_id;
   }
@@ -541,14 +559,14 @@ export class RoomResource extends Resource<Args> {
     return cardDoc;
   };
 
-  public isDisplayingCode(message: Message) {
-    return this._isDisplayingViewCodeMap.get(message.eventId) ?? false;
+  public isDisplayingCode(commandRequest: CommandRequest) {
+    return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
   }
 
-  public toggleViewCode(message: Message) {
+  public toggleViewCode(commandRequest: CommandRequest) {
     this._isDisplayingViewCodeMap.set(
-      message.eventId,
-      !this.isDisplayingCode(message),
+      commandRequest.id,
+      !this.isDisplayingCode(commandRequest),
     );
   }
 }

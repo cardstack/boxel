@@ -1,10 +1,5 @@
 import { setTitle } from './set-title';
-import {
-  sendErrorEvent,
-  sendCommandEvent,
-  sendMessageEvent,
-  MatrixClient,
-} from './matrix';
+import { sendErrorEvent, sendMessageEvent, MatrixClient } from './matrix';
 import OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';
@@ -62,19 +57,16 @@ export async function handleDebugCommands(
         roomId,
         `Error parsing your debug patch, ${error} ${patchMessage}`,
         undefined,
+        {},
+        [
+          {
+            id: 'patchCard-debug',
+            name: 'patchCard',
+            arguments: toolArguments,
+          },
+        ],
       );
     }
-    return await sendCommandEvent(
-      client,
-      roomId,
-      {
-        id: 'patchCard-debug',
-        name: 'patchCard',
-        type: 'function',
-        arguments: toolArguments,
-      },
-      undefined,
-    );
   }
   return;
 }

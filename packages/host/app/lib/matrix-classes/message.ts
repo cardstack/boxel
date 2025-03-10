@@ -3,6 +3,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { EventStatus } from 'matrix-js-sdk';
 
+import { TrackedArray } from 'tracked-built-ins';
+
 import { getCard } from '@cardstack/runtime-common';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -10,7 +12,8 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import { RoomMember } from './member';
-import MessageCommand from './message-command';
+
+import type MessageCommand from './message-command';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
@@ -43,13 +46,12 @@ interface RoomMessageOptional {
   index?: number;
   errorMessage?: string;
   clientGeneratedId?: string | null;
-  command?: MessageCommand | null;
 }
 
 export class Message implements RoomMessageInterface {
   @tracked formattedMessage: string;
   @tracked message: string;
-  @tracked command?: MessageCommand | null;
+  @tracked commands: TrackedArray<MessageCommand>;
   @tracked isStreamingFinished?: boolean;
 
   attachedCardIds?: string[] | null;
@@ -81,6 +83,7 @@ export class Message implements RoomMessageInterface {
     this.status = init.status;
     this.roomId = init.roomId;
     this.attachedFiles = init.attachedFiles;
+    this.commands = new TrackedArray<MessageCommand>();
     this.instanceId = guidFor(this);
   }
   get isRetryable() {

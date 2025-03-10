@@ -1,72 +1,144 @@
 import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import {
-  MatrixClient,
-  sendErrorEvent,
-  sendMessageEvent,
-  sendCommandEvent,
-} from './matrix';
+import { MatrixClient, sendErrorEvent, sendMessageEvent } from './matrix';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
-import debounce from 'lodash/debounce';
+import throttle from 'lodash/throttle';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 import { thinkingMessage } from '../constants';
+import type OpenAI from 'openai';
+import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
+import {
+  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
 
 export class Responder {
-  // internally has a debounced function that will send the text messages
+  static eventMayTriggerResponse(event: DiscreteMatrixEvent) {
+    // If it's a message, we should respond unless it's a card fragment
+    if (event.getType() === 'm.room.message') {
+      if (
+        event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE ||
+        event.getContent().msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE
+      ) {
+        return false;
+      }
+      return true;
+    }
 
-  client: MatrixClient;
-  roomId: string;
+    // If it's a command result with output, we might respond
+    if (
+      event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+      event.getContent().msgtype ===
+        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+    ) {
+      return true;
+    }
+
+    // If it's a different type, or a command result without output, we should not respond
+    return false;
+  }
+
+  static eventWillDefinitelyTriggerResponse(event: DiscreteMatrixEvent) {
+    return (
+      this.eventMayTriggerResponse(event) &&
+      event.getType() !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+    );
+  }
+
+  constructor(
+    readonly client: MatrixClient,
+    readonly roomId: string,
+  ) {}
+
   messagePromises: Promise<ISendEventResponse | void>[] = [];
 
+  initialMessageSent = false;
   responseEventId: string | undefined;
-  initialMessageReplaced = false;
   latestContent = '';
+  toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   isStreamingFinished = false;
+  needsMessageSend = false;
 
-  sendMessageEventWithDebouncing: () => Promise<void>;
+  sendMessageEventWithThrottling = () => {
+    this.needsMessageSend = true;
+    this.sendMessageEventWithThrottlingInternal();
+  };
 
-  constructor(client: MatrixClient, roomId: string) {
-    this.roomId = roomId;
-    this.client = client;
-    this.sendMessageEventWithDebouncing = debounce(
-      async () => {
-        const messagePromise = sendMessageEvent(
-          this.client,
-          this.roomId,
-          this.latestContent,
-          this.responseEventId,
-          {
-            isStreamingFinished: this.isStreamingFinished,
-          },
-        );
-        this.messagePromises.push(messagePromise);
-        await messagePromise;
-      },
-      250,
-      { leading: true, maxWait: 250 },
-    );
-  }
+  sendMessageEventWithThrottlingInternal: () => unknown = throttle(() => {
+    this.needsMessageSend = false;
+    this.sendMessageEvent();
+  }, 250);
 
-  async initialize() {
-    let initialMessage = await sendMessageEvent(
+  sendMessageEvent = async () => {
+    const messagePromise = sendMessageEvent(
       this.client,
       this.roomId,
-      thinkingMessage,
-      undefined,
-      { isStreamingFinished: false },
+      this.latestContent,
+      this.responseEventId,
+      {
+        isStreamingFinished: this.isStreamingFinished,
+      },
+      this.toolCalls.map((toolCall) =>
+        this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
+      ),
     );
-    this.responseEventId = initialMessage.event_id;
+    this.messagePromises.push(messagePromise);
+    await messagePromise;
+  };
+
+  async ensureThinkingMessageSent() {
+    if (!this.initialMessageSent) {
+      let initialMessage = await sendMessageEvent(
+        this.client,
+        this.roomId,
+        thinkingMessage,
+        undefined,
+        { isStreamingFinished: false },
+      );
+      this.responseEventId = initialMessage.event_id;
+      this.initialMessageSent = true;
+    }
   }
 
-  async onChunk(chunk: {
-    usage?: { prompt_tokens: number; completion_tokens: number };
-  }) {
+  async onChunk(
+    chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
+    snapshot: ChatCompletionSnapshot,
+  ) {
+    const toolCallsSnapshot = snapshot.choices[0].message.tool_calls;
+    if (toolCallsSnapshot?.length) {
+      let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
+      if (this.toolCallsJson !== latestToolCallsJson) {
+        this.toolCalls = toolCallsSnapshot;
+        this.toolCallsJson = latestToolCallsJson;
+        await this.sendMessageEventWithThrottling();
+      }
+    }
+
+    let contentSnapshot = snapshot.choices[0].message.content;
+    if (contentSnapshot?.length) {
+      contentSnapshot = cleanContent(contentSnapshot);
+      if (this.latestContent !== contentSnapshot) {
+        this.latestContent = contentSnapshot;
+        await this.sendMessageEventWithThrottling();
+      }
+    }
+
+    if (snapshot.choices[0].finish_reason === 'stop') {
+      if (!this.isStreamingFinished) {
+        this.isStreamingFinished = true;
+        await this.sendMessageEventWithThrottling();
+      }
+    }
+
     // This usage value is set *once* and *only once* at the end of the conversation
     // It will be null at all other times.
     if (chunk.usage) {
@@ -74,21 +146,8 @@ export class Responder {
         `Request used ${chunk.usage.prompt_tokens} prompt tokens and ${chunk.usage.completion_tokens}`,
       );
     }
-  }
 
-  async onContent(snapshot: string) {
-    this.latestContent = cleanContent(snapshot);
-    await this.sendMessageEventWithDebouncing();
-    this.initialMessageReplaced = true;
-  }
-
-  async onMessage(msg: {
-    role: string;
-    tool_calls?: ChatCompletionMessageToolCall[];
-  }) {
-    if (msg.role === 'assistant') {
-      await this.handleFunctionToolCalls(msg);
-    }
+    await Promise.all(this.messagePromises);
   }
 
   deserializeToolCall(
@@ -103,35 +162,28 @@ export class Responder {
     };
   }
 
-  async handleFunctionToolCalls(msg: {
-    role: string;
-    tool_calls?: ChatCompletionMessageToolCall[];
-  }) {
-    for (const toolCall of msg.tool_calls || []) {
-      log.debug('[Room Timeline] Function call', toolCall);
+  toCommandRequest(
+    toolCall: ChatCompletionMessageToolCall,
+  ): Partial<CommandRequest> {
+    let { id, function: f } = toolCall;
+    let result = {} as Partial<CommandRequest>;
+    if (id) {
+      result['id'] = id;
+    }
+    if (f.name) {
+      result['name'] = f.name;
+    }
+    if (f.arguments) {
       try {
-        let commandEventPromise = sendCommandEvent(
-          this.client,
-          this.roomId,
-          this.deserializeToolCall(toolCall),
-          this.initialMessageReplaced ? undefined : this.responseEventId,
-        );
-        this.messagePromises.push(commandEventPromise);
-        await commandEventPromise;
-        this.initialMessageReplaced = true;
+        result['arguments'] = JSON.parse(f.arguments);
       } catch (error) {
-        Sentry.captureException(error);
-        this.initialMessageReplaced = true;
-        let errorPromise = sendErrorEvent(
-          this.client,
-          this.roomId,
-          error,
-          this.responseEventId,
-        );
-        this.messagePromises.push(errorPromise);
-        await errorPromise;
+        // If the arguments are not valid JSON, we'll just return an empty object
+        // This will happen during streaming, when the tool call is not yet complete
+        // and the arguments are not yet available
+        result['arguments'] = {};
       }
     }
+    return result;
   }
 
   async onError(error: OpenAIError | string) {
@@ -144,12 +196,23 @@ export class Responder {
     );
   }
 
-  async finalize(finalContent: string | void | null | undefined) {
-    if (finalContent) {
-      this.latestContent = cleanContent(finalContent);
-      this.isStreamingFinished = true;
-      await this.sendMessageEventWithDebouncing();
+  async flush() {
+    if (this.needsMessageSend) {
+      (
+        this.sendMessageEventWithThrottlingInternal as unknown as {
+          cancel: () => void;
+        }
+      ).cancel();
+      this.sendMessageEvent();
     }
     await Promise.all(this.messagePromises);
+  }
+
+  async finalize() {
+    if (!this.isStreamingFinished) {
+      this.isStreamingFinished = true;
+      await this.sendMessageEventWithThrottling();
+    }
+    await this.flush();
   }
 }
