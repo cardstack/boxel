@@ -383,6 +383,32 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
   });
 
+  test('auto-attached file is not displayed in interact mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+    );
+    await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists();
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom('[data-test-autoattached-card]').doesNotExist();
+  });
+
   test('can open attach file modal', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -395,6 +421,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         ],
       ],
     });
+
     await click('[data-test-open-ai-assistant]');
     assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
 

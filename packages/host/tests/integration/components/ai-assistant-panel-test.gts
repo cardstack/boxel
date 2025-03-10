@@ -18,8 +18,9 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -57,6 +58,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { suspendGlobalErrorHook } from '../../helpers/uncaught-exceptions';
 
 module('Integration | ai-assistant-panel', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -391,11 +393,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -406,8 +408,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: 'patch1',
@@ -447,20 +448,20 @@ module('Integration | ai-assistant-panel', function (hooks) {
       name: 'test room 2',
     });
     simulateRemoteMessage(room2Id, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Incorrect command',
       formatted_body: 'Incorrect command',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'd60582a6-8792-4505-8d38-656c1167f00d',
           name: 'patchCard',
-          argument: {
+          arguments: {
             card_id: `${testRealmURL}Person/fadhlan`,
             relationships: { pet: null }, // this will error
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -468,12 +469,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '444ac6ed-eea2-459b-93f7-56117bf54f50',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -484,8 +486,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -493,12 +494,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Jackie',
       formatted_body: 'Changing first name to Jackie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'cddecff1-8f26-4170-91bf-5a2192fb2459',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -509,8 +511,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -591,10 +592,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     };
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'A patch',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({ toolCall: payload }),
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [payload],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: 'event1',
@@ -649,12 +650,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Fadhlan"]');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Removing pet and changing preferred carrier',
       formatted_body: 'Removing pet and changing preferred carrier',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -670,8 +671,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -691,12 +691,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Link to pet and change preferred carrier',
       formatted_body: 'Link to pet and change preferred carrier',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -714,8 +714,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -759,10 +758,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
     };
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'A patch',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({ toolCall: payload }),
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [payload],
     });
 
     await waitFor('[data-test-view-code-button]');
@@ -814,12 +813,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-tripTitle]').hasText('Summer Vacation');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change tripTitle to Trip to Japan',
       formatted_body: 'Change tripTitle to Trip to Japan',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -834,8 +833,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -856,12 +854,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Fadhlan"]');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change first name to Dave',
       formatted_body: 'Change first name to Dave',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '8c848ebb-3e09-4ba3-b21d-348bdd7bd1ff',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -872,42 +871,40 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
       },
     });
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Incorrect patch command',
       formatted_body: 'Incorrect patch command',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '773c6c9b-a247-4099-8ec0-44f3ea197938',
           name: 'patchCard',
           arguments: {
-            arguments: {
-              card_id: id,
-              relationships: { pet: null },
-            },
+            card_id: id,
+            relationships: { pet: null },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
       },
     });
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
-      body: 'Change first name to Jackie',
-      formatted_body: 'Change first name to Jackie',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Change first name to Jackie and switch to code mode',
+      formatted_body: 'Change first name to Jackie and switch to code mode',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '127538b2-b0d1-4902-bd09-1fdf55063f07',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -918,34 +915,50 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+        {
+          id: '6521d80d-a3e4-4687-b0b3-f5f7ddc85f0c',
+          name: 'switch-submode_dd88',
+          arguments: {
+            attributes: {
+              submode: 'code',
+            },
+          },
+        },
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
       },
     });
 
-    await waitFor('[data-test-command-apply="ready"]', { count: 3 });
+    await waitFor('[data-test-command-apply="ready"]', { count: 4 });
 
-    click('[data-test-message-idx="2"] [data-test-command-apply]');
+    click(
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-command-apply]',
+    );
     await waitFor(
-      '[data-test-message-idx="2"] [data-test-apply-state="applying"]',
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applying"]',
     );
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
+      .dom(
+        '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applying"]',
+      )
       .exists();
 
-    await waitFor('[data-test-message-idx="2"] [data-test-command-card-idle]');
     await waitFor(
-      '[data-test-message-idx="2"] [data-test-apply-state="applied"]',
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-command-card-idle]',
+    );
+    await waitFor(
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applied"]',
     );
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .dom(
+        '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applied"]',
+      )
       .exists();
-    assert.dom('[data-test-command-apply="ready"]').exists({ count: 2 });
+    assert.dom('[data-test-command-apply="ready"]').exists({ count: 3 });
     assert.dom('[data-test-person]').hasText('Jackie');
 
     await click('[data-test-message-idx="1"] [data-test-command-apply]');
@@ -954,7 +967,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
       .exists();
-    assert.dom('[data-test-command-apply="ready"]').exists({ count: 1 });
+    assert.dom('[data-test-command-apply="ready"]').exists({ count: 2 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
       .exists();
@@ -967,12 +980,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Fadhlan"]');
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change first name to Dave',
       formatted_body: 'Change first name to Dave',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -983,8 +996,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -1125,13 +1137,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     let commandEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: `Thinking...`,
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: `Thinking...`,
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {},
-        eventId: '__EVENT_ID__',
-      }),
     });
     setReadReceipt(roomId, messageEventId, '@testuser:localhost');
     setReadReceipt(roomId, commandEventId, '@testuser:localhost');
@@ -1166,14 +1174,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       'm.relates_to': {
         event_id: commandEventId,
         rel_type: 'm.replace',
       },
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -1184,8 +1192,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
     });
     let newInstanceIds = Array.from(
       document.querySelectorAll('[data-test-boxel-message-instance-id]'),
@@ -1195,18 +1202,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
   });
 
   module('suspending global error hook', (hooks) => {
-    let tmp: any;
-    let uncaughtException: any;
-    hooks.before(() => {
-      tmp = QUnit.onUncaughtException;
-      QUnit.onUncaughtException = (err) => {
-        uncaughtException = err;
-      };
-    });
+    let { capturedExceptions } = suspendGlobalErrorHook(hooks);
 
-    hooks.after(() => {
-      QUnit.onUncaughtException = tmp;
-    });
     test('it can handle an error during room creation', async function (assert) {
       await setCardInOperatorModeState();
       await renderComponent(
@@ -1230,7 +1227,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       assert.dom('[data-test-room-error]').exists();
       assert.dom('[data-test-room]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isDisabled();
-      assert.strictEqual(uncaughtException.message, 'Intentional error thrown');
+      assert.strictEqual(
+        capturedExceptions[0].message,
+        'Intentional error thrown',
+      );
       await percySnapshot(
         'Integration | ai-assistant-panel | it can handle an error during room creation | error state',
       );
@@ -1444,11 +1444,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'fb8fef81-2142-4861-a902-d5614b0aea52',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -1459,8 +1460,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: 'patch1',
@@ -1755,6 +1755,36 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.ok(
       isAiAssistantScrolledToBottom(),
       'AI assistant is scrolled to bottom',
+    );
+  });
+
+  test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
+    await setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await openAiAssistant();
+    let element = document.querySelector('#ai-chat-input');
+
+    let initialHeight = element
+      ? parseInt(window.getComputedStyle(element).height)
+      : 0;
+
+    assert.true(initialHeight < 50, 'input box is short');
+    await fillIn('[data-test-message-field]', 'Hello '.repeat(1000));
+
+    let newHeight = element
+      ? parseInt(window.getComputedStyle(element).height)
+      : 0;
+
+    assert.true(
+      newHeight >= 300,
+      'input box grows when entering/pasting lots of text',
     );
   });
 
@@ -2262,12 +2292,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
       name: 'test room 1',
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -2278,8 +2308,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -2288,7 +2317,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
@@ -2312,7 +2342,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     commandResultEvents = await getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
@@ -2339,24 +2370,22 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'searchCardsByTypeAndTitle',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          name: 'patchCard',
           arguments: {
             attributes: {
-              description: 'Searching for card',
-              type: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
               },
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -2396,12 +2425,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(id);
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'search1',
           name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
@@ -2413,8 +2443,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -2425,8 +2454,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-boxel-command-result]');
     await waitFor('.result-list li:nth-child(2)');
     assert
-      .dom('[data-test-command-message]')
+      .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-view-code-button]')
+      .exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
@@ -2443,12 +2475,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(id);
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'search1',
           name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
@@ -2457,8 +2490,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: 'search1',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: 'search1',
@@ -2471,8 +2503,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
     await waitFor('.result-list li:nth-child(1)');
     assert
-      .dom('[data-test-command-message]')
+      .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-view-code-button]')
+      .exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
@@ -2485,12 +2520,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let id = `${testRealmURL}Person/fadhlan.json`;
     let roomId = await renderAiAssistantPanel(id);
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'searchCardsByTypeAndTitle',
           arguments: {
             attributes: {
@@ -2502,8 +2537,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -2552,17 +2586,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
     };
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'searchCardsByTypeAndTitle',
           arguments: toolArgs,
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -2626,17 +2659,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
     };
 
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'searchCardsByTypeAndTitle',
           arguments: toolArgs,
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',
@@ -2710,12 +2742,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -2726,8 +2758,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: '__EVENT_ID__',

@@ -1,15 +1,16 @@
 import { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { EventStatus, MatrixError } from 'matrix-js-sdk';
-import {
-  FunctionToolCall,
-  type AttributesSchema,
-  type ToolChoice,
+import type {
+  AttributesSchema,
+  ToolChoice,
 } from '@cardstack/runtime-common/helpers/ai';
+import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -127,32 +128,6 @@ export interface MessageEvent extends BaseMatrixEvent {
   };
 }
 
-export interface CommandEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
-  content: CommandMessageContent;
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-}
-
-export interface CommandMessageContent {
-  'm.relates_to'?: {
-    rel_type: string;
-    event_id: string;
-  };
-  msgtype: typeof APP_BOXEL_COMMAND_MSGTYPE;
-  format: 'org.matrix.custom.html';
-  body: string;
-  formatted_body: string;
-  data: {
-    toolCall: FunctionToolCall;
-    eventId: string;
-  };
-}
-
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: CardMessageContent | CardFragmentContent;
@@ -194,6 +169,7 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -277,10 +253,11 @@ export interface CommandDefinitionsContent {
 }
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
-    rel_type: 'm.annotation';
+    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
     key: string;
     event_id: string;
   };
+  commandRequestId: string;
   data: {
     cardEventId: string;
     // we materialize this field on the server
@@ -291,11 +268,81 @@ export interface CommandResultWithOutputContent {
 
 export interface CommandResultWithNoOutputContent {
   'm.relates_to': {
-    rel_type: 'm.annotation';
+    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
     key: string;
     event_id: string;
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
+  commandRequestId: string;
+}
+
+export interface RealmServerEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: RealmServerEventContent;
+}
+
+export interface RealmServerEventContent {
+  msgtype: typeof APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
+  body: string;
+}
+
+export interface RealmEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_REALM_EVENT_TYPE;
+  content: RealmEventContent;
+}
+
+export type RealmEventContent =
+  | IndexRealmEventContent
+  | UpdateRealmEventContent;
+
+export type IndexRealmEventContent =
+  | IncrementalIndexEventContent
+  | FullIndexEventContent
+  | CopiedIndexEventContent
+  | IncrementalIndexInitiationContent;
+
+export interface IncrementalIndexEventContent {
+  eventName: 'index';
+  indexType: 'incremental';
+  invalidations: string[];
+  clientRequestId?: string | null;
+}
+
+interface FullIndexEventContent {
+  eventName: 'index';
+  indexType: 'full';
+}
+
+interface CopiedIndexEventContent {
+  eventName: 'index';
+  indexType: 'copy';
+  sourceRealmURL: string;
+}
+
+interface IncrementalIndexInitiationContent {
+  eventName: 'index';
+  indexType: 'incremental-index-initiation';
+  updatedFile: string;
+}
+
+export type UpdateRealmEventContent =
+  | FileAddedEventContent
+  | FileUpdatedEventContent
+  | FileRemovedEventContent;
+
+interface FileAddedEventContent {
+  eventName: 'update';
+  added: string;
+}
+
+interface FileUpdatedEventContent {
+  eventName: 'update';
+  updated: string;
+}
+
+interface FileRemovedEventContent {
+  eventName: 'update';
+  removed: string;
 }
 
 export interface RealmServerEvent extends BaseMatrixEvent {
@@ -372,7 +419,6 @@ export type MatrixEvent =
   | RoomJoinRules
   | RoomPowerLevels
   | MessageEvent
-  | CommandEvent
   | CommandResultEvent
   | CommandDefinitionsEvent
   | CardMessageEvent
