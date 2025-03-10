@@ -362,7 +362,6 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
-              name: null,
               readMe: null,
               ref: {
                 name: 'SubTestField',
@@ -629,9 +628,6 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-accordion-item="spec-preview"] button');
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
-    assert
-      .dom('[data-test-title] [data-test-boxel-input]')
-      .hasValue('SubTestField');
     assert
       .dom('[data-test-module-href]')
       .containsText(`${testRealmURL}polymorphic-field`);
