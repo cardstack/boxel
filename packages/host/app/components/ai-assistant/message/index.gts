@@ -182,6 +182,14 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
 
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
+  get isReasoningExpandedByDefault() {
+    return (
+      this.args.formattedReasoningContent &&
+      this.args.formattedReasoningContent.toString().trim() !== 'Thinking...' &&
+      this.args.isStreaming &&
+      !this.args.formattedMessage
+    );
+  }
 
   <template>
     <div
@@ -230,13 +238,15 @@ export default class AiAssistantMessage extends Component<Signature> {
           </div>
         {{/if}}
 
-        {{#if @formattedReasoningContent}}
-          <div class='reasoning-content'>
-            {{@formattedReasoningContent}}
-          </div>
-        {{/if}}
-
         <div class='content' data-test-ai-message-content>
+          {{#if @formattedReasoningContent}}
+            <div class='reasoning-content'>
+              <details open={{this.isReasoningExpandedByDefault}}>
+                <summary>Thinking...</summary>
+                {{@formattedReasoningContent}}
+              </details>
+            </div>
+          {{/if}}
           {{#if (and @isFromAssistant @isStreaming)}}
             <FormattedMessage
               @renderCodeBlocks={{false}}
@@ -415,9 +425,8 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
 
       .reasoning-content {
-        font-size: var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-xs);
-        color: var(--boxel-450);
+        color: var(--boxel-300);
+        font-style: italic;
       }
 
       .error-container {
