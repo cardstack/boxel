@@ -586,7 +586,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     }
     let instances = (this.card as Spec)?.containedExamples;
     if (!instances?.length) {
-      // TODO: handle case when spec has no instances
       return undefined;
     }
     return instances;
