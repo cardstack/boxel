@@ -224,8 +224,6 @@ export default class CardPreviewPanel extends Component<Signature> {
         flex-grow: 1;
         flex-basis: 0;
         font: 600 var(--boxel-font-sm);
-        background: transparent;
-        color: var(--boxel-dark);
       }
 
       .icon-button {
