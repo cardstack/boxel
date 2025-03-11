@@ -75,6 +75,7 @@ interface Signature {
       errors: { id: string; error: Error }[] | undefined;
     };
     index: number;
+    eventId: string;
     monacoSDK: MonacoSDK;
     registerScroller: (args: {
       index: number;
@@ -200,6 +201,7 @@ function isPresent(val: SafeString | string | null | undefined) {
 
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
+  @service private declare matrixService: MatrixService;
   get isReasoningExpandedByDefault() {
     let result =
       this.args.isStreaming &&
@@ -208,15 +210,18 @@ export default class AiAssistantMessage extends Component<Signature> {
       !isThinkingMessage(this.args.reasoningContent);
     return result;
   }
-  @tracked _explicitlySetReasoningExpanded: boolean | undefined;
   get isReasoningExpanded() {
     return (
-      this._explicitlySetReasoningExpanded ?? this.isReasoningExpandedByDefault
+      this.matrixService.reasoningExpandedState.get(this.args.eventId) ??
+      this.isReasoningExpandedByDefault
     );
   }
   updateReasoningExpanded = (ev: MouseEvent) => {
     ev.preventDefault();
-    this._explicitlySetReasoningExpanded = !this.isReasoningExpanded;
+    this.matrixService.reasoningExpandedState.set(
+      this.args.eventId,
+      !this.isReasoningExpanded,
+    );
   };
 
   <template>

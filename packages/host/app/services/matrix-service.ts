@@ -142,6 +142,7 @@ export default class MatrixService extends Service {
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+  reasoningExpandedState: TrackedMap<string, boolean> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   flushRoomState: Promise<void> | undefined;
