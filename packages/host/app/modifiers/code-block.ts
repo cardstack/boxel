@@ -17,6 +17,11 @@ interface Signature {
       languageAttr: string;
       monacoSDK: typeof MonacoSDK;
       editorDisplayOptions?: MonacoEditorOptions;
+      registerCodeBlockContainer: (
+        fileUrl: string,
+        content: string,
+        containerElement: HTMLDivElement,
+      ) => void;
     };
   };
 }
@@ -35,7 +40,7 @@ export default class CodeBlock extends Modifier<Signature> {
       languageAttr,
       monacoSDK,
       editorDisplayOptions,
-      registerMonacoEditor,
+      registerCodeBlockContainer,
     }: Signature['Args']['Named'],
   ) {
     let codeBlocks = element.querySelectorAll(codeBlockSelector);
@@ -61,7 +66,7 @@ export default class CodeBlock extends Modifier<Signature> {
       // if first line is // File url: http://localhost:4201/jurgen/jurgens/author.gts
       // then parse the file url in a variable and remove the first line
       let fileUrl = undefined;
-      debugger;
+
       if (content.startsWith('// File url: ')) {
         let firstLine = content.split('\n')[0];
         // use regex to extract the file url
@@ -126,13 +131,17 @@ export default class CodeBlock extends Modifier<Signature> {
         let editor = monacoSDK.editor.create(monacoContainer, editorOptions);
         let model = editor.getModel()!;
 
-        let actionsElement = makeActionsDiv();
+        let codeActionsContainer = makeCodeActionsContainerDiv();
         monacoContainer.insertBefore(
-          actionsElement,
+          codeActionsContainer,
           monacoContainer.firstChild,
         );
 
-        registerMonacoEditor(monacoContainer, actionsElement, editor, model);
+        registerCodeBlockContainer(
+          fileUrl,
+          model.getValue(),
+          codeActionsContainer,
+        );
         this.monacoState.push({ editor, model, language });
 
         let copyButton = makeCopyButton();
@@ -166,13 +175,13 @@ export default class CodeBlock extends Modifier<Signature> {
   }
 }
 
-function makeActionsDiv() {
+function makeCodeActionsContainerDiv() {
   let template = document.createElement('template');
   template.innerHTML = `
     <div id=${Math.random().toString(36).substring(2, 15)} class="code-actions">
     </div>
   `.trim();
-  return template.content.firstChild as HTMLButtonElement;
+  return template.content.firstChild as HTMLDivElement;
 }
 
 function makeCopyButton() {

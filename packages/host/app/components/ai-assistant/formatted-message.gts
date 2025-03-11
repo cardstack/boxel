@@ -1,23 +1,23 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
+
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import CodeBlock from '@cardstack/host/modifiers/code-block';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
-import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
-import { tracked } from '@glimmer/tracking';
-import { TrackedArray } from 'tracked-built-ins';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-import ApplyButton from '../ai-assistant/apply-button';
-import { fn } from '@ember/helper';
-
 import type CardService from '@cardstack/host/services/card-service';
-import { service } from '@ember/service';
 import LoaderService from '@cardstack/host/services/loader-service';
-import { task } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
-import { TrackedObject } from 'tracked-built-ins';
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+
+import ApplyButton from '../ai-assistant/apply-button';
 
 interface FormattedMessageSignature {
   sanitizedHtml: SafeString;
@@ -28,27 +28,26 @@ interface FormattedMessageSignature {
 interface CodeAction {
   fileUrl: string;
   code: string;
-  element: HTMLButtonElement;
+  containerElement: HTMLDivElement;
   state: 'ready' | 'applying' | 'applied' | 'failed';
 }
 
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
-  @tracked actionElements: TrackedArray<CodeAction> = new TrackedArray([]);
+  @tracked codeActions: TrackedArray<CodeAction> = new TrackedArray([]);
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
 
-  registerMonacoEditor = (
-    monacoContainer: HTMLElement,
-    actionElement: HTMLButtonElement,
-    editor: MonacoSDK.editor.IStandaloneCodeEditor,
-    model: MonacoSDK.editor.ITextModel,
+  registerCodeBlockContainer = (
+    fileUrl: string,
+    code: string,
+    codeActionContainerElement: HTMLDivElement,
   ) => {
-    this.actionElements.push(
+    this.codeActions.push(
       new TrackedObject({
-        fileUrl: monacoContainer.getAttribute('data-file-url') ?? '',
-        code: model.getValue(),
-        element: actionElement,
-        state: 'ready',
+        fileUrl,
+        code,
+        containerElement: codeActionContainerElement,
+        state: 'ready' as CodeAction['state'],
       }),
     );
   };
@@ -73,18 +72,18 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           languageAttr='data-codeblock'
           monacoSDK=@monacoSDK
           editorDisplayOptions=this.editorDisplayOptions
-          registerMonacoEditor=this.registerMonacoEditor
+          registerCodeBlockContainer=this.registerCodeBlockContainer
         }}
       >
 
         {{@sanitizedHtml}}
 
         {{! todo: only show the button if the code is a code patch }}
-        {{#each this.actionElements as |actionElement|}}
-          {{#in-element actionElement.element}}
+        {{#each this.codeActions as |codeAction|}}
+          {{#in-element codeAction.containerElement}}
             <ApplyButton
-              @state={{actionElement.state}}
-              {{on 'click' (fn (perform this.patchCodeTask) actionElement)}}
+              @state={{codeAction.state}}
+              {{on 'click' (fn (perform this.patchCodeTask) codeAction)}}
             />
           {{/in-element}}
         {{/each}}
