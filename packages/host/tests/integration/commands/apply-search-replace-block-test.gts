@@ -10,7 +10,6 @@ module('Integration | commands | apply-search-replace-block', function (hooks) {
   setupRenderingTest(hooks);
 
   test('handles basic search and replace pattern', async function (assert) {
-    // This test will fail until we implement the actual logic in the command
     let commandService = lookupService<CommandService>('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
