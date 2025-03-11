@@ -36,6 +36,7 @@ import {
   provideConsumeContext,
   lookupLoaderService,
 } from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -47,6 +48,8 @@ module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks);
 
   async function loadCard(url: string): Promise<CardDef> {
     let { createFromSerialized, recompute } = cardApi;
@@ -95,6 +98,7 @@ module('Integration | text-input-validator', function (hooks) {
     }
     ({ realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'sample.gts': { Sample },
         'Sample/1.json': {

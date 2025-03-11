@@ -195,7 +195,11 @@ export class ServerState {
     // duplicate the event fully
     let room = event.room_id && this.#rooms.get(event.room_id);
     if (!room) {
-      throw new Error(`room ${event.room_id} does not exist`);
+      throw new Error(
+        `room ${event.room_id} does not exist, known rooms: ${Array.from(
+          this.#rooms.keys(),
+        ).join(', ')}`,
+      );
     }
     let eventId = overrides?.event_id ?? this.eventId();
     let matrixEvent: IEvent = {
@@ -229,43 +233,6 @@ export class ServerState {
         .set(overrides.state_key, new MatrixSDK.MatrixEvent(matrixEvent));
     }
     return matrixEvent.event_id;
-  }
-
-  addReactionEvent(
-    sender: string,
-    roomId: string,
-    eventId: string,
-    status: string,
-  ) {
-    let room = this.#rooms.get(roomId);
-    if (!room) {
-      throw new Error(`room ${roomId} does not exist`);
-    }
-
-    let content = {
-      'm.relates_to': {
-        event_id: eventId,
-        key: status,
-        rel_type: 'm.annotation' as MatrixSDK.RelationType.Annotation,
-      },
-    };
-
-    let reactionEvent = {
-      event_id: this.eventId(),
-      origin_server_ts: this.#now(),
-      room_id: roomId,
-      type: 'm.reaction' as MatrixSDK.EventType.Reaction,
-      sender,
-      content,
-      state_key: '',
-      unsigned: { age: 0 },
-      status: 'sent' as MatrixSDK.EventStatus.SENT,
-    };
-
-    room.events.push(reactionEvent);
-    this.#listeners.forEach((listener) => listener(reactionEvent));
-
-    return reactionEvent;
   }
 
   addReceiptEvent(

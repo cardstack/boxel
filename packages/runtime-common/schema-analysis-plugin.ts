@@ -44,8 +44,8 @@ export interface Reexport extends BaseDeclaration {
 
 export interface PossibleField {
   card: ClassReference;
-  type: ExternalReference;
-  decorator: ExternalReference;
+  type: ExternalReference | InternalReference;
+  decorator: ExternalReference | InternalReference;
   path: NodePath<t.ClassProperty>;
 }
 
@@ -188,8 +188,12 @@ const coreVisitor = {
     if (!expression.isIdentifier()) {
       return;
     }
+    let isCardApiFile =
+      path.node.loc &&
+      'filename' in path.node.loc &&
+      path.node.loc.filename === 'https://cardstack.com/base/card-api';
     let decoratorInfo = getNamedImportInfo(path.scope, expression.node.name);
-    if (!decoratorInfo) {
+    if (!decoratorInfo && !isCardApiFile) {
       return; // our @field decorator must originate from a named import
     }
 
@@ -218,7 +222,7 @@ const coreVisitor = {
       path.scope,
       maybeFieldTypeFunction.name,
     );
-    if (!fieldTypeInfo) {
+    if (!fieldTypeInfo && !isCardApiFile) {
       return; // our field type function (e.g. contains()) must originate from a named import
     }
 
@@ -245,16 +249,20 @@ const coreVisitor = {
     let possibleField: PossibleField = {
       card: fieldCard,
       path: maybeClassProperty,
-      type: {
-        type: 'external',
-        module: getName(fieldTypeInfo.declaration.node.source),
-        name: getName(fieldTypeInfo.specifier.node.imported),
-      },
-      decorator: {
-        type: 'external',
-        module: getName(decoratorInfo.declaration.node.source),
-        name: getName(decoratorInfo.specifier.node.imported),
-      },
+      type: isCardApiFile
+        ? { type: 'internal' }
+        : {
+            type: 'external',
+            module: getName(fieldTypeInfo!.declaration.node.source),
+            name: getName(fieldTypeInfo!.specifier.node.imported),
+          },
+      decorator: isCardApiFile
+        ? { type: 'internal' }
+        : {
+            type: 'external',
+            module: getName(decoratorInfo!.declaration.node.source),
+            name: getName(decoratorInfo!.specifier.node.imported),
+          },
     };
     // the card that contains this field will always be the last card that
     // was added to possibleCardsOrFields

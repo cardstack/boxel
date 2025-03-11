@@ -19,6 +19,7 @@ import {
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
@@ -36,6 +37,8 @@ module('Integration | commands | switch-submode', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
 
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
     loader = lookupLoaderService().loader;
@@ -44,6 +47,7 @@ module('Integration | commands | switch-submode', function (hooks) {
   hooks.beforeEach(async function () {
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
   });

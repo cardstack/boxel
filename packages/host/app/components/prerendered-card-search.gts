@@ -20,6 +20,8 @@ import {
 
 import { type Format } from 'https://cardstack.com/base/card-api';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import SubscribeToRealms from '../helpers/subscribe-to-realms';
 import { type HTMLComponent, htmlComponent } from '../lib/html-component';
 
@@ -252,8 +254,8 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     }
   }
 
-  private markRealmNeedsRefreshing = (ev: MessageEvent, realm: string) => {
-    if (ev.type === 'index') {
+  private markRealmNeedsRefreshing = (ev: RealmEventContent, realm: string) => {
+    if (ev.eventName === 'index') {
       this.realmsNeedingRefresh.add(realm);
     }
   };

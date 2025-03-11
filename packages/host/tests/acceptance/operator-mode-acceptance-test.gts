@@ -32,7 +32,6 @@ import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys
 import {
   percySnapshot,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -43,7 +42,6 @@ import {
   testRealmSecretSeed,
   setupUserSubscription,
   setupRealmServerEndpoints,
-  TestContextWithSSE,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -53,13 +51,15 @@ module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
   let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL],
-    });
+    mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -288,6 +288,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     }
 
     ({ realm: testRealm } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'address.gts': { Address },
         'boom-field.gts': { BoomField },
@@ -556,7 +557,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
       });
 
-      test<TestContextWithSSE>('can delete a card', async function (assert) {
+      test('can delete a card', async function (assert) {
         await visit('/');
         await click('[data-test-workspace="Test Workspace B"]');
         await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -576,14 +577,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           .dom(`[data-test-delete-modal-container]`)
           .containsText('Delete the card Fadhlan?');
 
-        await this.expectEvents({
-          assert,
-          realm: testRealm,
-          expectedNumberOfEvents: 1,
-          callback: async () => {
-            await click('[data-test-confirm-delete-button]');
-          },
-        });
+        await click('[data-test-confirm-delete-button]');
 
         assert
           .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)

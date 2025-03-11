@@ -70,15 +70,14 @@ export class ModuleSyntax {
       declarations: [],
     };
     let preprocessedSrc = preprocessTemplateTags(src);
-
     let ast: Babel.types.Node = parse(preprocessedSrc, {
       parser: {
-        parse(source: string) {
-          const options =
-            getBabelOptions(/*optionally pass in option overrides*/);
+        parse: (source: string) => {
+          const options = getBabelOptions({ sourceFilename: this.url.href });
           return babelParse(source, options);
         },
       },
+      sourceFileName: this.url.href,
     });
 
     let r = Babel.transformFromAstSync(ast, preprocessedSrc, {
