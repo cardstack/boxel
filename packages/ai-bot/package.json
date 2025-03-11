@@ -30,7 +30,12 @@
     "start:worker": "NODE_NO_WARNINGS=1 ts-node --transpileOnly worker",
     "start:worker:development": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly worker",
     "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",
-    "get-chat": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/get_chat.ts"
+    "get-chat": "NODE_NO_WARNINGS=1 ts-node --transpileOnly scripts/get_chat.ts",
+    "start:test-sender": "NODE_NO_WARNINGS=1 ts-node --transpileOnly sender.ts",
+    "start:test-async-handler": "NODE_NO_WARNINGS=1 ts-node --transpileOnly async_handler.ts",
+    "start:test-sync-handler": "NODE_NO_WARNINGS=1 ts-node --transpileOnly sync_handler.ts",
+    "start:test-queued-handler": "NODE_NO_WARNINGS=1 ts-node --transpileOnly queued_handler.ts",
+    "start:test-throttled-handler": "NODE_NO_WARNINGS=1 ts-node --transpileOnly throttled_handler.ts"
   },
   "volta": {
     "extends": "../../package.json"
