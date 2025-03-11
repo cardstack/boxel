@@ -165,22 +165,30 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     }
 
     // Check if the pattern matches line by line
-    for (let i = 0; i < normalizedSearchLines.length; i++) {
-      const contentLine = contentLines[startIndex + i].trim();
-      const searchLine = normalizedSearchLines[i];
+    let searchLineIndex = 0;
+    let contentLineIndex = startIndex;
+    while (searchLineIndex < normalizedSearchLines.length) {
+      const contentLine = contentLines[contentLineIndex].trim();
+      const searchLine = normalizedSearchLines[searchLineIndex];
 
       // Skip empty lines in the search pattern
+      // as long as there are still lines in the content
       if (!searchLine && contentLine) {
+        searchLineIndex++;
         continue;
       }
-
       // If the trimmed lines don't match, it's not a match
       if (contentLine !== searchLine && searchLine !== '') {
         return { matched: false, matchLength: 0 };
       }
+      searchLineIndex++;
+      contentLineIndex++;
     }
 
-    // All lines matched
-    return { matched: true, matchLength: normalizedSearchLines.length };
+    // All lines matched. The length of the match is the size of the match in
+    // the **content**, not the size of the search pattern.
+    // These are often the same, but are different when the search pattern contains
+    // empty lines that we skip over.
+    return { matched: true, matchLength: contentLineIndex - startIndex };
   }
 }

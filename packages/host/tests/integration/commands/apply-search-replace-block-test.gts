@@ -66,7 +66,7 @@ export class Task extends CardDef {
     assert.strictEqual(result.resultContent, expectedResult);
   });
 
-  test('handles multiple occurrences of the search pattern', async function (assert) {
+  test('handles multiple occurrences of the search pattern, only replacing the first', async function (assert) {
     let commandService = lookupService<CommandService>('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
       commandService.commandContext,
@@ -145,7 +145,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
   @field category = linksTo(ProductCategory);
 }`;
     const codeBlock = `<<<<<<< SEARCH
-  @field category = linksTo(ProductCategory);
+    @field category = linksTo(ProductCategory);
 =======
   @field category = linksTo(ProductCategory);
   @field images = linksToMany(ImageAsset);
@@ -164,60 +164,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
   @field inStock = contains(BooleanField);
   @field category = linksTo(ProductCategory);
   @field images = linksToMany(ImageAsset);
-}`;
-    assert.strictEqual(result.resultContent, expectedResult);
-  });
-
-  test('handles search pattern with line ending differences', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
-      commandService.commandContext,
-    );
-
-    const fileContent = `class IsolatedTemplate extends Component<typeof Pet> {
-  <template>
-    <div class='isolated-template'>
-      <h2><@fields.firstName /></h2>
-      <div class='details'>
-        <div class='detail-item'>
-          <label>Type</label>
-          <span><@fields.type /></span>
-        </div>
-        <div class='detail-item'>
-          <label>Age</label>
-          <span><@fields.age /></span>
-        </div>
-      </div>
-    </div>
-  </template>
-}`;
-    const codeBlock = `<<<<<<< SEARCH
-    <div class='isolated-template'>
-=======
-    <div class='isolated-template pet-card'>
->>>>>>> REPLACE`;
-
-    let result = await applyCommand.execute({
-      fileContent,
-      codeBlock,
-    });
-
-    const expectedResult = `class IsolatedTemplate extends Component<typeof Pet> {
-  <template>
-    <div class='isolated-template pet-card'>
-      <h2><@fields.firstName /></h2>
-      <div class='details'>
-        <div class='detail-item'>
-          <label>Type</label>
-          <span><@fields.type /></span>
-        </div>
-        <div class='detail-item'>
-          <label>Age</label>
-          <span><@fields.age /></span>
-        </div>
-      </div>
-    </div>
-  </template>
 }`;
     assert.strictEqual(result.resultContent, expectedResult);
   });
@@ -257,7 +203,7 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
     assert.strictEqual(result.resultContent, fileContent);
   });
 
-  // Skipping this test for now as we're focusing on the basic functionality
+  // Skipping this test for now as throwing errors causes issues
   skip('handles malformed search/replace block', async function (assert) {
     let commandService = lookupService<CommandService>('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
@@ -293,131 +239,6 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         'Error message should mention malformed or invalid block',
       );
     }
-  });
-
-  test('modifies only the first occurrence when multiple matches are found', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
-      commandService.commandContext,
-    );
-
-    const fileContent = `class TeamMember extends CardDef {
-  static displayName = 'Team Member';
-  @field name = contains(StringField);
-  @field role = contains(StringField);
-  @field skills = containsMany(StringField);
-}
-
-class Team extends CardDef {
-  static displayName = 'Team';
-  @field name = contains(StringField);
-  @field members = linksToMany(TeamMember);
-  @field description = contains(StringField);
-}
-
-class TaskTemplate extends Component<typeof TeamMember> {
-  <template>
-    <div class="team-member-card">
-      <div class="details">
-        <h3><@fields.name /></h3>
-        <div class="role">
-          <span>Role:</span> <@fields.role />
-        </div>
-        <div class="skills">
-          <span>Skills:</span>
-          {{#each @model.skills as |skill|}}
-            <span class="skill">{{skill}}</span>
-          {{/each}}
-        </div>
-      </div>
-    </div>
-  </template>
-}
-
-class TeamTemplate extends Component<typeof Team> {
-  <template>
-    <div class="team-card">
-      <div class="details">
-        <h3><@fields.name /></h3>
-        <div class="description">
-          <@fields.description />
-        </div>
-        <div class="members">
-          <span>Members:</span>
-          {{#each @model.members as |member|}}
-            <TeamMember @model={{member}} />
-          {{/each}}
-        </div>
-      </div>
-    </div>
-  </template>
-}`;
-
-    const codeBlock = `<<<<<<< SEARCH
-<h3><@fields.name /></h3>
-=======
-        <h3 data-test-member-name><@fields.name /></h3>
->>>>>>> REPLACE`;
-
-    let result = await applyCommand.execute({
-      fileContent,
-      codeBlock,
-    });
-
-    // Only the first occurrence should be modified
-    const expectedResult = `class TeamMember extends CardDef {
-  static displayName = 'Team Member';
-  @field name = contains(StringField);
-  @field role = contains(StringField);
-  @field skills = containsMany(StringField);
-}
-
-class Team extends CardDef {
-  static displayName = 'Team';
-  @field name = contains(StringField);
-  @field members = linksToMany(TeamMember);
-  @field description = contains(StringField);
-}
-
-class TaskTemplate extends Component<typeof TeamMember> {
-  <template>
-    <div class="team-member-card">
-      <div class="details">
-        <h3 data-test-member-name><@fields.name /></h3>
-        <div class="role">
-          <span>Role:</span> <@fields.role />
-        </div>
-        <div class="skills">
-          <span>Skills:</span>
-          {{#each @model.skills as |skill|}}
-            <span class="skill">{{skill}}</span>
-          {{/each}}
-        </div>
-      </div>
-    </div>
-  </template>
-}
-
-class TeamTemplate extends Component<typeof Team> {
-  <template>
-    <div class="team-card">
-      <div class="details">
-        <h3><@fields.name /></h3>
-        <div class="description">
-          <@fields.description />
-        </div>
-        <div class="members">
-          <span>Members:</span>
-          {{#each @model.members as |member|}}
-            <TeamMember @model={{member}} />
-          {{/each}}
-        </div>
-      </div>
-    </div>
-  </template>
-}`;
-
-    assert.strictEqual(result.resultContent, expectedResult);
   });
 
   test('handles search with additional context for clarity', async function (assert) {
@@ -697,6 +518,65 @@ class CardTemplate extends Component<typeof ContactCard> {
     assert.strictEqual(result.resultContent, expectedResult);
   });
 
+  test('handles spurious blank lines in the middle of the search pattern', async function (assert) {
+    let commandService = lookupService<CommandService>('command-service');
+    let applyCommand = new ApplySearchReplaceBlockCommand(
+      commandService.commandContext,
+    );
+
+    const fileContent = `class UserProfile extends CardDef {
+  static displayName = 'User Profile';
+  @field username = contains(StringField);
+  @field email = contains(StringField);
+  @field bio = contains(StringField);
+  @field avatar = linksTo(ImageAsset);
+  @field joinDate = contains(DatetimeField, {
+    computeVia: function() {
+      return new Date();
+    }
+  });
+}`;
+
+    // Search pattern has spurious blank
+    const codeBlock = `<<<<<<< SEARCH
+  @field bio = contains(StringField);
+  
+  @field avatar = linksTo(ImageAsset);
+=======
+  @field bio = contains(StringField);
+  @field avatar = linksTo(ImageAsset);
+  @field websiteUrl = contains(StringField, {
+    computeVia: function() {
+      return '';
+    }
+  });
+>>>>>>> REPLACE`;
+
+    let result = await applyCommand.execute({
+      fileContent,
+      codeBlock,
+    });
+
+    const expectedResult = `class UserProfile extends CardDef {
+  static displayName = 'User Profile';
+  @field username = contains(StringField);
+  @field email = contains(StringField);
+  @field bio = contains(StringField);
+  @field avatar = linksTo(ImageAsset);
+  @field websiteUrl = contains(StringField, {
+    computeVia: function() {
+      return '';
+    }
+  });
+  @field joinDate = contains(DatetimeField, {
+    computeVia: function() {
+      return new Date();
+    }
+  });
+}`;
+    assert.strictEqual(result.resultContent, expectedResult);
+  });
+
   test('handles carriage return differences in search pattern', async function (assert) {
     let commandService = lookupService<CommandService>('command-service');
     let applyCommand = new ApplySearchReplaceBlockCommand(
@@ -803,62 +683,6 @@ class CardTemplate extends Component<typeof ContactCard> {
       <button type="submit" class="submit-btn">Book Now</button>
     </form>
   </template>
-}`;
-    assert.strictEqual(result.resultContent, expectedResult);
-  });
-
-  test('handles adding a new field with computed property', async function (assert) {
-    let commandService = lookupService<CommandService>('command-service');
-    let applyCommand = new ApplySearchReplaceBlockCommand(
-      commandService.commandContext,
-    );
-
-    const fileContent = `export class Review extends CardDef {
-  static displayName = 'Review';
-  @field title = contains(StringField);
-  @field content = contains(MarkdownField);
-  @field rating = contains(NumberField, { min: 1, max: 5 });
-  @field product = linksTo(Product);
-  @field reviewer = linksTo(User);
-  @field createdAt = contains(DatetimeField, {
-    computeVia: function () {
-      return new Date();
-    },
-  });
-}`;
-    const codeBlock = `<<<<<<< SEARCH
-  @field reviewer = linksTo(User);
-=======
-  @field reviewer = linksTo(User);
-  @field isVerified = contains(BooleanField, {
-    computeVia: function() {
-      return false;
-    }
-  });
->>>>>>> REPLACE`;
-
-    let result = await applyCommand.execute({
-      fileContent,
-      codeBlock,
-    });
-
-    const expectedResult = `export class Review extends CardDef {
-  static displayName = 'Review';
-  @field title = contains(StringField);
-  @field content = contains(MarkdownField);
-  @field rating = contains(NumberField, { min: 1, max: 5 });
-  @field product = linksTo(Product);
-  @field reviewer = linksTo(User);
-  @field isVerified = contains(BooleanField, {
-    computeVia: function() {
-      return false;
-    }
-  });
-  @field createdAt = contains(DatetimeField, {
-    computeVia: function () {
-      return new Date();
-    },
-  });
 }`;
     assert.strictEqual(result.resultContent, expectedResult);
   });
