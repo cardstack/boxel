@@ -183,12 +183,4 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     // All lines matched
     return { matched: true, matchLength: normalizedSearchLines.length };
   }
-
-  /**
-   * Extract indentation (spaces or tabs) from the beginning of a line
-   */
-  private extractIndentation(line: string): string {
-    const match = line.match(/^(\s*)/);
-    return match ? match[1] : '';
-  }
 }
