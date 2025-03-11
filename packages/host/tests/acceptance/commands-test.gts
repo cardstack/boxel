@@ -950,6 +950,83 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.strictEqual(message.content.commandRequestId, 'abc123');
   });
 
+  test('ShowCard command added from a skill, can be executed when clicked on', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    // open assistant, ShowCard command is part of default CardEditing skill
+    await click('[data-test-open-ai-assistant]');
+
+    // simulate message
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Show the card',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: 'Show the card',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1554f297-e9f2-43fe-8b95-55b29251444d',
+          name: 'show-card_566f',
+          arguments: {
+            description:
+              'Displaying the card with the Latin word for milkweed in the title.',
+            attributes: {
+              title: 'Asclepias',
+            },
+            relationships: {
+              cardToShow: {
+                links: {
+                  self: 'http://test-realm/test/Person/hassan',
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+    // Click on the apply button
+    await waitFor('[data-test-message-idx="0"]');
+    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+
+    assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
+
+    // check we're in interact mode
+    await waitFor('[data-test-submode-switcher=interact]');
+    assert.dom('[data-test-submode-switcher=interact]').exists();
+
+    // verify that the card is opened
+    assert
+      .dom(
+        '[data-test-operator-mode-stack="1"] [data-test-stack-card-index="0"]',
+      )
+      .includesText('Person Hassan');
+
+    // verify that command result event was created correctly
+    await waitUntil(() => getRoomIds().length > 0);
+    let message = getRoomEvents(roomId).pop()!;
+    assert.strictEqual(
+      message.content.msgtype,
+      APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
+    assert.strictEqual(
+      message.content['m.relates_to']?.rel_type,
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    );
+    assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
+    assert.strictEqual(
+      message.content.commandRequestId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    );
+  });
+
   test('multiple commands can be requested in a single aibot message', async function (assert) {
     await visitOperatorMode({
       stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
