@@ -39,7 +39,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   type TestContextWithSave,
   getMonacoContent,
@@ -80,13 +79,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
-  let {
-    createAndJoinRoom,
-    simulateRemoteMessage,
-    getRoomEvents,
-    setReadReceipt,
-  } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
@@ -97,6 +91,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       return () => (clock += 10);
     })(),
   });
+
+  let {
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    getRoomEvents,
+    setReadReceipt,
+  } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -237,6 +238,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },
         'shipping-info.gts': { ShippingInfo },

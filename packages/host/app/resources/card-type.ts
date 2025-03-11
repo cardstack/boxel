@@ -170,6 +170,29 @@ export class CardType extends Resource<Args> {
     return type;
   }
 
+  async isClassInChain(
+    card: typeof BaseDef,
+    codeRef: ResolvedCodeRef | undefined,
+  ): Promise<boolean> {
+    if (!codeRef) {
+      return false;
+    }
+
+    const type = (await this.toType(card)) as Type;
+
+    // check root level is already matching the codeRef
+    if (type.localName === codeRef.name && type.module === codeRef.module) {
+      return true;
+    }
+
+    // else, check if the recursive super class is matching the codeRef
+    let superCard = getAncestor(card);
+    if (superCard && card !== superCard) {
+      return this.isClassInChain(superCard, codeRef);
+    }
+    return false;
+  }
+
   private fetchModuleInfo = async (url: URL) => {
     let response = await this.network.authedFetch(url, {
       headers: { Accept: SupportedMimeType.CardSource },

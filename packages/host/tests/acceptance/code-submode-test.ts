@@ -6,6 +6,7 @@ import {
   waitUntil,
   scrollTo,
   visit,
+  settled,
 } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
@@ -33,10 +34,8 @@ import {
   setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
-  setupServerSentEvents,
   visitOperatorMode,
   waitForCodeEditor,
-  type TestContextWithSSE,
   setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -416,10 +415,12 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
-    setupServerSentEvents(hooks);
-    let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
     });
+
+    let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
 
     async function openNewFileModal(menuSelection: string) {
       await waitFor('[data-test-new-file-button]');
@@ -443,6 +444,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
 
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: personalRealmURL,
         permissions: {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
@@ -457,6 +459,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       });
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: additionalRealmURL,
         permissions: {
           '@testuser:localhost': ['read', 'write', 'realm-owner'],
@@ -471,6 +474,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       });
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: catalogRealmURL,
         permissions: {
           '*': ['read'],
@@ -529,11 +533,13 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
-    setupServerSentEvents(hooks);
-    let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
       loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],
     });
+
+    let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
 
     hooks.beforeEach(async function () {
       matrixRoomId = createAndJoinRoom({
@@ -549,6 +555,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       // this seeds the loader used during index which obtains url mappings
       // from the global loader
       ({ realm } = await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         contents: {
           'index.gts': indexCardSource,
           'pet-person.gts': personCardSource,
@@ -1281,27 +1288,10 @@ module('Acceptance | code submode tests', function (_hooks) {
         .hasText(`${elementName} card`);
     });
 
-    test<TestContextWithSSE>('the monaco cursor position is maintained during an auto-save', async function (assert) {
-      assert.expect(3);
+    test('the monaco cursor position is maintained during an auto-save', async function (assert) {
+      assert.expect(2);
       // we only want to change this for this particular test so we emulate what the non-test env sees
       monacoService.serverEchoDebounceMs = 5000;
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}in-this-file.gts`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}in-this-file.gts`],
-          },
-        },
-      ];
 
       try {
         await visitOperatorMode({
@@ -1312,16 +1302,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         await waitForCodeEditor();
 
         let originalPosition: MonacoSDK.Position | undefined | null;
-        await this.expectEvents({
-          assert,
-          realm,
-          expectedEvents,
-          callback: async () => {
-            setMonacoContent(`// This is a change \n${inThisFileSource}`);
-            monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
-            originalPosition = monacoService.getCursorPosition();
-          },
-        });
+
+        setMonacoContent(`// This is a change \n${inThisFileSource}`);
+        monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
+        originalPosition = monacoService.getCursorPosition();
+
         await waitFor('[data-test-saved]');
         await waitFor('[data-test-save-idle]');
         let currentPosition = monacoService.getCursorPosition();
@@ -1421,24 +1406,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test<TestContextWithSSE>('updates values in preview panel must be represented in editor panel', async function (assert) {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
+    test('updates values in preview panel must be represented in editor panel', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -1448,44 +1416,33 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await click('[data-test-format-chooser-edit]');
 
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          // primitive field
-          await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
+      // primitive field
+      await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
 
-          // compound field with 1 level
-          await fillIn(
-            '[data-test-field="streetAddress"] input',
-            'Unknown Address',
-          );
-          await fillIn('[data-test-field="city"] input', 'Bandung');
+      // compound field with 1 level
+      await fillIn(
+        '[data-test-field="streetAddress"] input',
+        'Unknown Address',
+      );
+      await fillIn('[data-test-field="city"] input', 'Bandung');
 
-          // compound field with 2 level
-          await fillIn(
-            '[data-test-field="fiveDigitPostalCode"] input',
-            '12345',
-          );
-          await fillIn('[data-test-field="fourDigitOptional"] input', '1234');
+      // compound field with 2 level
+      await fillIn('[data-test-field="fiveDigitPostalCode"] input', '12345');
+      await fillIn('[data-test-field="fourDigitOptional"] input', '1234');
 
-          // compound field with linksToMany field
-          await click(
-            '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
-          );
-          await waitFor(
-            `[data-test-select="${testRealmURL}Country/united-states"]`,
-          );
-          await click(
-            `[data-test-select="${testRealmURL}Country/united-states"]`,
-          );
-          await click(`[data-test-card-catalog-go-button]`);
-        },
-        opts: { timeout: 5000 },
-      });
+      // compound field with linksToMany field
+      await click(
+        '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
+      );
+      await waitFor(
+        `[data-test-select="${testRealmURL}Country/united-states"]`,
+      );
+      await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
+      await click(`[data-test-card-catalog-go-button]`);
+
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
+      await settled();
 
       let content = getMonacoContent();
       assert.ok(content.includes('Ridhwanallah'));
@@ -1496,24 +1453,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.ok(content.includes(`${testRealmURL}Country/united-states`));
     });
 
-    test<TestContextWithSSE>('monaco editor live updates when index changes', async function (assert) {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
+    test('monaco editor live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1528,30 +1468,25 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
       await waitForCodeEditor();
       await waitUntil(() => getMonacoContent().includes('Fadhlan'));
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'FadhlanXXX',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'FadhlanXXX',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
       await waitUntil(() => getMonacoContent().includes('FadhlanXXX'));
       assert.true(
         getMonacoContent().includes('FadhlanXXX'),
@@ -1559,24 +1494,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
+    test('card preview live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1590,30 +1508,25 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
       await waitFor('[data-test-card-resource-loaded]');
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'FadhlanXXX',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'FadhlanXXX',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
       await waitUntil(() =>
         document
           .querySelector('[data-test-code-mode-card-preview-body]')
@@ -1624,7 +1537,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .includesText('FadhlanXXX');
     });
 
-    test<TestContextWithSSE>('card preview live updates when there is a change in module', async function (assert) {
+    test('card preview live updates when there is a change in module', async function (assert) {
       const personGts = `
         import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
@@ -1668,23 +1581,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         }
         return window.getComputedStyle(element).color;
       };
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}person.gts`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}person.gts`],
-          },
-        },
-      ];
+
       await visitOperatorMode({
         stacks: [],
         submode: 'code',
@@ -1697,12 +1594,14 @@ module('Acceptance | code submode tests', function (_hooks) {
         'rgb(0, 128, 0)',
       );
 
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => await realm.write('person.gts', personGts),
-      });
+      await realm.write('person.gts', personGts);
+
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-person]')
+          ?.textContent?.includes('Hello'),
+      );
+
       assert.dom('[data-test-person]').includesText('Hello Hassan');
       assert.strictEqual(
         getElementColor('[data-test-person]'),
@@ -1718,24 +1617,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test<TestContextWithSSE>('card preview live updates with error', async function (assert) {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
+    test('card preview live updates with error', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -1744,63 +1626,52 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-card-error]')
         .doesNotExist('card error state is not displayed');
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                relationships: {
-                  'friends.0': {
-                    links: { self: './missing' },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            relationships: {
+              'friends.0': {
+                links: { self: './missing' },
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
       await waitFor('[data-test-card-error]');
       assert
         .dom('[data-test-card-error]')
         .exists('card error state is displayed');
 
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                relationships: {
-                  'friends.0': {
-                    links: { self: null },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            relationships: {
+              'friends.0': {
+                links: { self: null },
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
       await waitFor('[data-test-card-error]', { count: 0 });
       assert
         .dom('[data-test-card-error]')

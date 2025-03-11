@@ -8,24 +8,33 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
+  @tracked listenerCallbacks: Map<string, ((ev: RealmEventContent) => void)[]> =
+    new Map();
   @service declare private network: NetworkService;
 
   register() {
     (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
   }
 
-  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void {
+  subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void {
+    if (!this.listenerCallbacks.has(realmURL)) {
+      this.listenerCallbacks.set(realmURL, []);
+    }
+
+    // TODO might want to consider making separate subscription methods so that
+    // you can subscribe to a specific type of events instead of all of the
+    // events...
+    this.listenerCallbacks.get(realmURL)?.push(cb);
+
     if (isTesting()) {
-      // we don't have a way of dealing with internal testing realm URLs when
-      // creating an EventSource. The EventSource API is a native browser API
-      // that will try to issue a network request for our testing realm URLs
-      // otherwise.
       return () => {};
     }
 
@@ -40,20 +49,24 @@ export default class MessageService extends Service {
         authHeader: 'Bearer ' + token,
       })}`;
       maybeEventSource = this.network.createEventSource(urlWithAuth);
-      maybeEventSource.onerror = () => eventSource.close();
-      this.subscriptions.set(realmURL, maybeEventSource);
+
+      if (maybeEventSource) {
+        maybeEventSource.onerror = () => maybeEventSource?.close();
+        maybeEventSource.onmessage = (ev) => {
+          throw new Error('received unexpected server-sent event: ' + ev);
+        };
+
+        this.subscriptions.set(realmURL, maybeEventSource);
+      }
     }
 
-    let eventSource = maybeEventSource;
-    // TODO might want to consider making separate subscription methods so that
-    // you can subscribe to a specific type of events instead of all of the
-    // events...
-    eventSource.addEventListener('update', cb);
-    eventSource.addEventListener('index', cb);
-    return () => {
-      eventSource.removeEventListener('update', cb);
-      eventSource.removeEventListener('index', cb);
-    };
+    return () => {};
+  }
+
+  relayMatrixSSE(realmURL: string, event: RealmEventContent) {
+    this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
+      cb(event);
+    });
   }
 }
 

@@ -23,8 +23,6 @@ import {
   testRealmInfo,
   setupCardLogs,
   setupLocalIndexing,
-  setupServerSentEvents,
-  type TestContextWithSSE,
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
@@ -36,6 +34,7 @@ import {
   StringField,
   field,
 } from '../helpers/base-realm';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -50,7 +49,8 @@ module('Integration | realm', function (hooks) {
     loader = lookupLoaderService().loader;
   });
 
-  setupServerSentEvents(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
   setupLocalIndexing(hooks);
   setupCardLogs(
     hooks,
@@ -68,6 +68,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve GET card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/empty.json': {
           data: {
@@ -127,6 +128,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve GET card requests with linksTo relationships', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/owner.json': {
           data: {
@@ -257,6 +259,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve GET card requests with linksTo relationships to other realms', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/mango.json': {
           data: {
@@ -360,6 +363,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+              realmUserId: 'test_realm',
               showAsCatalog: null,
               visibility: 'public',
             },
@@ -376,6 +380,7 @@ module('Integration | realm', function (hooks) {
   test("realm can route requests correctly when mounted in the origin's subdir", async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/empty.json': {
           data: {
@@ -433,6 +438,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve create card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
     let response = await handle(
@@ -497,6 +503,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve POST requests that include linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/owner.json': {
           data: {
@@ -672,6 +679,7 @@ module('Integration | realm', function (hooks) {
     }
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
         'person.gts': { Person },
@@ -721,9 +729,10 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 400, '400 server error');
   });
 
-  test<TestContextWithSSE>('realm can serve patch card requests', async function (assert) {
+  test('realm can serve patch card requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/card.json': {
           data: {
@@ -741,59 +750,36 @@ module('Integration | realm', function (hooks) {
         },
       },
     });
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}dir/card`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}dir/card`],
-        },
-      },
-    ];
-    let response = await this.expectEvents({
-      assert,
+
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}dir/card`, {
-            method: 'PATCH',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-            body: JSON.stringify(
-              {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Van Gogh',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: 'http://localhost:4202/test/person',
-                      name: 'Person',
-                    },
-                  },
+      new Request(`${testRealmURL}dir/card`, {
+        method: 'PATCH',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/person',
+                  name: 'Person',
                 },
               },
-              null,
-              2,
-            ),
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 200, 'successful http status');
     let json = await response.json();
     if (isSingleCardDocument(json)) {
@@ -886,6 +872,7 @@ module('Integration | realm', function (hooks) {
   test('realm can remove item from containsMany field via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'ski-trip.json': {
           data: {
@@ -1027,6 +1014,7 @@ module('Integration | realm', function (hooks) {
   test('realm can remove item from linksToMany field via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1246,6 +1234,7 @@ module('Integration | realm', function (hooks) {
   test('realm can add an item to linksToMany relationships via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1388,6 +1377,7 @@ module('Integration | realm', function (hooks) {
   test('realm can add items to null linksToMany relationship via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1503,6 +1493,7 @@ module('Integration | realm', function (hooks) {
   test('realm can remove all items to in a linksToMany relationship via PATCH request', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1609,6 +1600,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve PATCH requests to linksTo field in a card that also has a linksToMany field', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1740,6 +1732,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve PATCH requests to both linksTo and linksToMany fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/van-gogh.json': {
           data: {
@@ -1885,6 +1878,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve PATCH requests that include linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/hassan.json': {
           data: {
@@ -2095,6 +2089,7 @@ module('Integration | realm', function (hooks) {
     }
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
         'person.gts': { Person },
@@ -2259,6 +2254,7 @@ module('Integration | realm', function (hooks) {
     }
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'car.gts': { Car },
@@ -2345,6 +2341,7 @@ module('Integration | realm', function (hooks) {
     }
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'driver.gts': { Driver },
         'person.gts': { Person },
@@ -2449,9 +2446,10 @@ module('Integration | realm', function (hooks) {
     );
   });
 
-  test<TestContextWithSSE>('realm can serve delete card requests', async function (assert) {
+  test('realm can serve delete card requests', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'cards/1.json': {
           data: {
@@ -2495,41 +2493,17 @@ module('Integration | realm', function (hooks) {
       'found card in index',
     );
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}cards/2`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}cards/2`],
-        },
-      },
-    ];
-    let response = await this.expectEvents({
-      assert,
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}cards/2`, {
-            method: 'DELETE',
-            headers: {
-              Accept: 'application/vnd.card+json',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+      new Request(`${testRealmURL}cards/2`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 204, 'status was 204');
 
     result = await queryEngine.cardDocument(new URL(`${testRealmURL}cards/2`));
@@ -2554,6 +2528,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve card source file', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
       },
@@ -2578,6 +2553,7 @@ module('Integration | realm', function (hooks) {
   test('realm provide redirect for card source', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
       },
@@ -2601,6 +2577,7 @@ module('Integration | realm', function (hooks) {
   test('realm returns 404 when no card source can be found', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
     let response = await handle(
@@ -2614,49 +2591,25 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(response.status, 404, '404 HTTP status');
   });
 
-  test<TestContextWithSSE>('realm can serve card source post request', async function (assert) {
+  test('realm can serve card source post request', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
 
     {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}dir/person.gts`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}dir/person.gts`],
-          },
-        },
-      ];
-      let response = await this.expectEvents({
-        assert,
+      let response = await handle(
         realm,
-        expectedEvents,
-        callback: async () => {
-          let response = handle(
-            realm,
-            new Request(`${testRealmURL}dir/person.gts`, {
-              method: 'POST',
-              headers: {
-                Accept: 'application/vnd.card+source',
-              },
-              body: cardSrc,
-            }),
-          );
-          await realm.flushUpdateEvents();
-          return await response;
-        },
-      });
+        new Request(`${testRealmURL}dir/person.gts`, {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.card+source',
+          },
+          body: cardSrc,
+        }),
+      );
+      await realm.flushUpdateEvents();
 
       assert.strictEqual(response.status, 204, 'HTTP status is 204');
       assert.ok(
@@ -2679,7 +2632,7 @@ module('Integration | realm', function (hooks) {
     }
   });
 
-  test<TestContextWithSSE>('realm can serve card source delete request', async function (assert) {
+  test('realm can serve card source delete request', async function (assert) {
     let { field, contains, CardDef } = await loader.import<typeof CardAPI>(
       'https://cardstack.com/base/card-api',
     );
@@ -2694,57 +2647,34 @@ module('Integration | realm', function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
       },
     });
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}person.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}person.gts`],
-        },
-      },
-    ];
-    let response = await this.expectEvents({
-      assert,
+    let response = await handle(
       realm,
-      expectedEvents,
-      callback: async () => {
-        let response = handle(
-          realm,
-          new Request(`${testRealmURL}person`, {
-            headers: {
-              Accept: 'application/vnd.card+source',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        assert.strictEqual((await response).status, 302, 'file exists');
+      new Request(`${testRealmURL}person`, {
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+    assert.strictEqual(response.status, 302, 'file exists');
 
-        response = handle(
-          realm,
-          new Request(`${testRealmURL}person`, {
-            method: 'DELETE',
-            headers: {
-              Accept: 'application/vnd.card+source',
-            },
-          }),
-        );
-        await realm.flushUpdateEvents();
-        return await response;
-      },
-    });
+    response = await handle(
+      realm,
+      new Request(`${testRealmURL}person`, {
+        method: 'DELETE',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+      }),
+    );
+    await realm.flushUpdateEvents();
+
     assert.strictEqual(response.status, 204, 'file is deleted');
 
     response = await handle(
@@ -2761,6 +2691,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve compiled js file when requested without file extension ', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
       },
@@ -2781,6 +2712,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve compiled js file when requested with file extension ', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/person.gts': cardSrc,
       },
@@ -2808,6 +2740,7 @@ module('Integration | realm', function (hooks) {
     `.trim();
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/index.html': html,
       },
@@ -2824,6 +2757,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve search requests', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/empty.json': {
           data: {
@@ -2862,6 +2796,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve search requests whose results have linksTo fields', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/mariko.json': {
           data: {
@@ -3080,6 +3015,7 @@ module('Integration | realm', function (hooks) {
               backgroundURL:
                 'https://i.postimg.cc/tgRHRV8C/pawel-czerwinski-h-Nrd99q5pe-I-unsplash.jpg',
               iconURL: 'https://boxel-images.boxel.ai/icons/cardstack.png',
+              realmUserId: 'test_realm',
               showAsCatalog: null,
               visibility: 'public',
             },
@@ -3096,6 +3032,7 @@ module('Integration | realm', function (hooks) {
   test('realm can serve directory requests', async function (assert) {
     let { realm, adapter } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'dir/empty.json': {
           data: {
@@ -3162,6 +3099,7 @@ module('Integration | realm', function (hooks) {
 
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'sample-post.json': '',
         'posts/1.json': '',
@@ -3228,6 +3166,7 @@ posts/ignore-me.gts
   test('realm can serve info requests by reading .realm.json', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         '.realm.json': `{
           "name": "Example Workspace",
@@ -3255,6 +3194,7 @@ posts/ignore-me.gts
             name: 'Example Workspace',
             backgroundURL: 'https://example-background-url.com',
             iconURL: 'https://example-icon-url.com',
+            realmUserId: '@realm/test-realm-test:localhost',
             showAsCatalog: null,
             visibility: 'public',
           },
@@ -3267,6 +3207,7 @@ posts/ignore-me.gts
   test('realm can serve info requests if .realm.json is missing', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
     let response = await handle(
@@ -3294,6 +3235,7 @@ posts/ignore-me.gts
   test('realm can serve info requests if .realm.json is malformed', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         '.realm.json': `Some example content that is not valid json`,
       },
@@ -3323,6 +3265,7 @@ posts/ignore-me.gts
   test('realm does not crash when indexing a broken instance', async function (assert) {
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'FieldDef/1.json': {
           data: {
