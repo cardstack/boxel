@@ -152,7 +152,7 @@ export default class Room extends Component<Signature> {
                 @autoAttachedCardTooltipMessage={{if
                   (eq this.operatorModeStateService.state.submode Submodes.Code)
                   'Current card is shared automatically'
-                  undefined
+                  'Topmost card is shared automatically'
                 }}
               />
               <LLMSelect
