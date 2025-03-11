@@ -21,6 +21,7 @@ import {
   isCardDef,
   IndexWriter,
   unixTime,
+  jobIdentity,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -135,7 +136,10 @@ export class CurrentRun {
     perfLog.debug(
       `${jobIdentity(current.#jobInfo)} starting from scratch indexing for realm ${current.realmURL.href}`,
     );
-    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+    current.#batch = await current.#indexWriter.createBatch(
+      current.realmURL,
+      current.#jobInfo,
+    );
     let invalidations: URL[] = [];
     let mtimesStart = Date.now();
     let mtimes = await current.batch.getModifiedTimes();
@@ -195,7 +199,10 @@ export class CurrentRun {
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${url.href}`,
     );
 
-    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+    current.#batch = await current.#indexWriter.createBatch(
+      current.realmURL,
+      current.#jobInfo,
+    );
     let invalidations = (await current.batch.invalidate(url)).map(
       (href) => new URL(href),
     );
@@ -837,11 +844,4 @@ function getDisplayName(card: typeof CardDef) {
   } else {
     return card.displayName;
   }
-}
-
-function jobIdentity(jobInfo?: JobInfo): string {
-  if (!jobInfo) {
-    return `[no job identity]`;
-  }
-  return `[job: ${jobInfo.jobId}] [jobReservation: ${jobInfo.reservationId}] [concurrencyGroup: ${jobInfo.concurrencyGroup}]`;
 }
