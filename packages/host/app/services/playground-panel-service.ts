@@ -11,7 +11,7 @@ import { Format } from 'https://cardstack.com/base/card-api';
 export interface PlaygroundSelection {
   cardId: string;
   format: Format;
-  fieldIndex: number | undefined;
+  fieldIndex?: number;
 }
 
 export default class PlaygroundPanelService extends Service {

@@ -648,7 +648,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
     assert.deepEqual(recentFiles[0], [
       testRealmURL,
       'blog-post.gts',
-      { line: 8, column: 38 },
+      { line: 6, column: 42 },
     ]);
     await click('[data-boxel-selector-item-text="BlogPost"]');
     await click('[data-test-accordion-item="playground"] button');
@@ -914,7 +914,6 @@ export class BlogPost extends CardDef {
       {
         cardId: authorId,
         format: 'atom',
-        fieldIndex: undefined,
       },
       'local storage is updated',
     );
@@ -932,7 +931,6 @@ export class BlogPost extends CardDef {
       {
         cardId: categoryId2,
         format: 'embedded',
-        fieldIndex: undefined,
       },
       'local storage is updated',
     );
@@ -945,7 +943,6 @@ export class BlogPost extends CardDef {
     assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
       cardId: blogPostId1,
       format: 'fitted',
-      fieldIndex: undefined,
     });
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]'); // change selected instance
@@ -953,7 +950,6 @@ export class BlogPost extends CardDef {
     assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
       cardId: blogPostId2,
       format: 'fitted',
-      fieldIndex: undefined,
     });
 
     assert.strictEqual(
@@ -1017,6 +1013,7 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="blog-post.gts"]');
+    await click('[data-test-accordion-item="playground"] button');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]');
     assert

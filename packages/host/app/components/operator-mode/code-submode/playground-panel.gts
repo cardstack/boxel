@@ -42,7 +42,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -565,7 +565,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       this.args.moduleId,
     )?.fieldIndex;
     if (index !== undefined && index >= 0) {
-      console.log(index);
       return index;
     }
     return this.args.isFieldDef ? 0 : undefined;

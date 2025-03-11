@@ -8,7 +8,6 @@ import type { Realm } from '@cardstack/runtime-common';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import {
-  percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
   setupOnSave,
@@ -327,7 +326,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
         [testRealmURL, 'blog-post.gts'],
         [testRealmURL, 'author.gts'],
         [testRealmURL, 'BlogPost/remote-work.json'],
-        ,
         [testRealmURL, 'Author/jane-doe.json'],
       ]),
     );

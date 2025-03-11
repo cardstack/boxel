@@ -2,9 +2,8 @@ import { click } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
 
+import type { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
-
-import type { PlaygroundSelection } '@cardstack/host/services/playground-panel-service';
 
 export async function selectDeclaration(name: string) {
   await click(
@@ -12,10 +11,12 @@ export async function selectDeclaration(name: string) {
   );
 }
 
-export function getPlaygroundSelections(): Record<string, PlaygroundSelection> | undefined {
+export function getPlaygroundSelections():
+  | Record<string, PlaygroundSelection>
+  | undefined {
   let selections = window.localStorage.getItem(PlaygroundSelections);
   if (!selections) {
     return;
   }
   return JSON.parse(selections);
-};
+}
