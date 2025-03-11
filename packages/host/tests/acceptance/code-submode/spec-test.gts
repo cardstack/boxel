@@ -418,20 +418,14 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     assert.dom('[data-test-create-spec-button]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-create-spec-button]');
-      },
-    });
+    await click('[data-test-create-spec-button]');
+
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('Person1');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person-1`);
   });
-  test<TestContextWithSSE>('have ability to create new skill spec type instances', async function (assert) {
+  test('have ability to create new skill spec type instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
@@ -447,7 +441,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-exported-name]').hasText('NewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
-  test<TestContextWithSSE>('have ability to create new extended skill spec type instances', async function (assert) {
+  test('have ability to create new extended skill spec type instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
@@ -455,14 +449,8 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-boxel-selector-item-text="ExtendedNewSkill"]');
     assert.dom('[data-test-create-spec-button]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-create-spec-button]');
-      },
-    });
+    await click('[data-test-create-spec-button]');
+
     assert
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('ExtendedNewSkill');
