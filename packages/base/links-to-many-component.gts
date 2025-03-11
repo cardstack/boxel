@@ -203,12 +203,6 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
                 <button
                   type='button'
                   class='card-button'
-                  {{this.cardContext.cardComponentModifier
-                    card=boxedElement.value
-                    format='fitted'
-                    fieldType='linksToMany'
-                    fieldName=@field.name
-                  }}
                   {{on 'click' (fn this.viewCard boxedElement.value)}}
                 >
                   <Item @format='fitted' />

@@ -57,15 +57,8 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 import RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import {
-  CardContext,
-  CardDef,
-  type Format,
-  type FieldType,
-} from 'https://cardstack.com/base/card-api';
+import { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
-
-import ElementTracker from '../../../resources/element-tracker';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -193,21 +186,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.initializeCardSelection();
   }
 
-  cardTracker = new ElementTracker<{
-    cardId?: string;
-    card?: CardDef;
-    format: Format | 'data';
-    fieldType: FieldType | undefined;
-    fieldName: string | undefined;
-  }>();
-
   get cardContext(): Omit<CardContext, 'prerenderedCardSearchComponent'> {
     return {
-      cardComponentModifier: this.cardTracker.trackElement,
       actions: {
         viewCard: (card: CardDef) => this.viewCard(card),
       } as Actions,
-      commandContext: undefined,
     };
   }
 
