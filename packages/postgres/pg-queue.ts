@@ -360,10 +360,7 @@ export class PgQueueRunner implements QueueRunner {
             result = await Promise.race([
               this.runJob(jobToRun.job_type, jobToRun.args, {
                 jobId: jobToRun.id,
-                workerId: this.#workerId,
                 reservationId: jobReservationId,
-                concurrencyGroup: jobToRun.concurrency_group,
-                jobType: jobToRun.job_type,
               }),
               // we race the job so that it doesn't hold this worker hostage if
               // the job's promise never resolves

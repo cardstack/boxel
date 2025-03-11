@@ -13,6 +13,7 @@ import {
   fileContentToText,
   unixTime,
   logger,
+  jobIdentity,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
@@ -42,10 +43,7 @@ export interface Reader {
 
 export interface JobInfo extends JSONTypes.Object {
   jobId: number;
-  workerId: string;
   reservationId: number;
-  concurrencyGroup: string | null;
-  jobType: string;
 }
 
 export type RunnerRegistration = (
@@ -188,7 +186,7 @@ export class Worker {
     await this.#queue.start();
   }
 
-  private async makeAuthedFetch(args: WorkerArgs & { jobInfo?: JobInfo }) {
+  private async makeAuthedFetch(args: WorkerArgs) {
     let matrixClient: MatrixClient;
     if (this.#matrixClientCache.has(args.realmUsername)) {
       matrixClient = this.#matrixClientCache.get(args.realmUsername)!;
@@ -251,7 +249,7 @@ export class Worker {
           // longer usable.
           reportError(e);
           this.#log.error(
-            `Error raised during indexing has likely stopped the indexer`,
+            `${jobIdentity(args.jobInfo)} Error raised during indexing has likely stopped the indexer`,
             e,
           );
           deferred.reject(
@@ -269,7 +267,9 @@ export class Worker {
   }
 
   private copy = async (args: CopyArgs & { jobInfo?: JobInfo }) => {
-    this.#log.debug(`starting copy indexing for job: ${JSON.stringify(args)}`);
+    this.#log.debug(
+      `${jobIdentity(args.jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
+    );
     let authedFetch = await this.makeAuthedFetch(args);
     let realmInfoResponse = await authedFetch(`${args.realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
@@ -282,7 +282,7 @@ export class Worker {
     let result = await batch.done();
     let invalidations = batch.invalidations;
     this.#log.debug(
-      `completed copy indexing for realm ${args.realmURL}:\n${JSON.stringify(
+      `${jobIdentity(args.jobInfo)} completed copy indexing for realm ${args.realmURL}:\n${JSON.stringify(
         result,
         null,
         2,
@@ -295,9 +295,11 @@ export class Worker {
     };
   };
 
-  private fromScratch = async (args: FromScratchArgs) => {
+  private fromScratch = async (
+    args: FromScratchArgs & { jobInfo?: JobInfo },
+  ) => {
     this.#log.debug(
-      `starting from-scratch indexing for job: ${JSON.stringify(args)}`,
+      `${jobIdentity(args.jobInfo)} starting from-scratch indexing for job: ${JSON.stringify(args)}`,
     );
     return await this.prepareAndRunJob<FromScratchResult>(args, async () => {
       if (!this.#fromScratch) {
@@ -307,7 +309,7 @@ export class Worker {
         new URL(args.realmURL),
       );
       this.#log.debug(
-        `completed from-scratch indexing for realm ${
+        `${jobIdentity(args.jobInfo)} completed from-scratch indexing for realm ${
           args.realmURL
         }:\n${JSON.stringify(stats, null, 2)}`,
       );
@@ -318,9 +320,11 @@ export class Worker {
     });
   };
 
-  private incremental = async (args: IncrementalArgs) => {
+  private incremental = async (
+    args: IncrementalArgs & { jobInfo?: JobInfo },
+  ) => {
     this.#log.debug(
-      `starting incremental indexing for job: ${JSON.stringify(args)}`,
+      `${jobIdentity(args.jobInfo)} starting incremental indexing for job: ${JSON.stringify(args)}`,
     );
     return await this.prepareAndRunJob<IncrementalResult>(args, async () => {
       if (!this.#incremental) {
@@ -333,7 +337,7 @@ export class Worker {
         { ...args.ignoreData },
       );
       this.#log.debug(
-        `completed incremental indexing for  ${args.url}:\n${JSON.stringify(
+        `${jobIdentity(args.jobInfo)} completed incremental indexing for  ${args.url}:\n${JSON.stringify(
           { ...stats, invalidations },
           null,
           2,
