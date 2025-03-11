@@ -38,6 +38,7 @@ interface Signature {
     removeFile: (file: FileDef) => void;
     submode: Submode;
     maxNumberOfItemsToAttach?: number;
+    autoAttachedCardTooltipMessage?: string;
   };
 }
 
@@ -59,7 +60,9 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               </:trigger>
 
               <:content>
-                {{#if (this.isAutoAttachedCard item)}}
+                {{#if @autoAttachedCardTooltipMessage}}
+                  {{@autoAttachedCardTooltipMessage}}
+                {{else if (this.isAutoAttachedCard item)}}
                   Topmost card is shared automatically
                 {{/if}}
               </:content>
