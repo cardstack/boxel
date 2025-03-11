@@ -228,7 +228,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
     },
   );
   let workerId = ECS_CONTAINER_METADATA_URI
-    ? `${ECS_CONTAINER_METADATA_URI.split('/').pop()!}-pid-${process.pid}`
+    ? `${ECS_CONTAINER_METADATA_URI.split('/').pop()!}-pid-${worker.pid}`
     : worker.pid;
 
   worker.on('exit', () => {
