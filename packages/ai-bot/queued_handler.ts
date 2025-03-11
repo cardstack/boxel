@@ -40,6 +40,15 @@ function drainQueue() {
   }
 }
 
+function addToQueue(item: {
+  client: MatrixClient;
+  roomId: string;
+  eventBody: string;
+}) {
+  queue.push(item);
+  drainQueue();
+}
+
 async function sendEvents(
   client: MatrixClient,
   roomId: string,
@@ -154,12 +163,11 @@ Common issues are:
       );
 
       log.info(`Starting async operation for message: ${eventBody}`);
-      queue.push({
+      addToQueue({
         client,
         roomId: room.roomId,
         eventBody,
       });
-      drainQueue();
     } catch (e) {
       log.error(`Error handling message: ${e}`);
     }
