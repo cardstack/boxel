@@ -6,8 +6,6 @@ import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
-import { tracked } from '@glimmer/tracking';
-
 import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
@@ -24,6 +22,7 @@ import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -278,6 +277,7 @@ export default class AiAssistantMessage extends Component<Signature> {
                 Thinking...
               {{else}}
                 <details open={{this.isReasoningExpanded}} data-test-reasoning>
+                  {{! template-lint-disable no-invalid-interactive}}
                   <summary
                     {{on 'click' this.updateReasoningExpanded}}
                   >Thinking...</summary>

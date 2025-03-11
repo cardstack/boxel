@@ -14,6 +14,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import AiAssistantMessage, { AiAssistantConversation } from './index';
 export default class AiAssistantMessageUsage extends Component {
   @tracked formattedMessage = 'Hello, world';
+  @tracked reasoningContent = null;
   @tracked datetime = new Date(2024, 0, 3, 12, 30);
   @tracked isFromAssistant = false;
   @tracked isStreaming = false;
@@ -54,9 +55,11 @@ export default class AiAssistantMessageUsage extends Component {
           >
             <AiAssistantMessage
               @formattedMessage={{htmlSafe this.formattedMessage}}
+              @reasoningContent={{this.reasoningContent}}
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
               @index={{0}}
+              @eventId={{'123'}}
               @registerScroller={{this.noop}}
               @profileAvatar={{component
                 Avatar
@@ -98,6 +101,12 @@ export default class AiAssistantMessageUsage extends Component {
           @onInput={{fn (mut this.formattedMessage)}}
           @value={{this.formattedMessage}}
         />
+        <Args.String
+          @name='reasoningContent'
+          @description='The reasoning to display'
+          @onInput={{fn (mut this.reasoningContent)}}
+          @value={{this.reasoningContent}}
+        />
         <Args.Array
           @name='attachedCards'
           @description='Cards attached to the message in pill form.'
@@ -133,6 +142,7 @@ export default class AiAssistantMessageUsage extends Component {
               @datetime={{this.twoMinutesAgo}}
               @isFromAssistant={{false}}
               @index={{0}}
+              @eventId={{'124'}}
               @registerScroller={{this.noop}}
               @monacoSDK={{this.noopMonacoSDK}}
               @profileAvatar={{component
@@ -147,6 +157,7 @@ export default class AiAssistantMessageUsage extends Component {
                 'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
               }}
               @index={{1}}
+              @eventId={{'125'}}
               @monacoSDK={{this.noopMonacoSDK}}
               @registerScroller={{this.noop}}
               @datetime={{this.oneMinutesAgo}}
