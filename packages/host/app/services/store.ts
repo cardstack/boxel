@@ -21,6 +21,8 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import EnvironmentService from './environment-service';
 
 import type CardService from './card-service';
@@ -227,15 +229,15 @@ export default class StoreService extends Service {
     return { url, card, error };
   }
 
-  private handleInvalidations = ({ type, data: dataStr }: MessageEvent) => {
-    if (type !== 'index') {
+  private handleInvalidations = (event: RealmEventContent) => {
+    if (event.eventName !== 'index') {
       return;
     }
-    let data = JSON.parse(dataStr);
-    if (data.type !== 'incremental') {
+
+    if (event.indexType !== 'incremental') {
       return;
     }
-    let invalidations = data.invalidations as string[];
+    let invalidations = event.invalidations as string[];
 
     if (invalidations.find((i) => hasExecutableExtension(i))) {
       // the invalidation included code changes too. in this case we
@@ -256,10 +258,14 @@ export default class StoreService extends Service {
       if (subscriber) {
         let liveCard = this.identityContext.get(invalidation);
         if (liveCard) {
+          // TODO Add test in CS-8015
           // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
           // the inputs with past values. This can happen if the user makes edits in the time between the auto
           // save request and the arrival SSE event.
-          if (!this.cardService.clientRequestIds.has(data.clientRequestId)) {
+          if (
+            !event.clientRequestId ||
+            !this.cardService.clientRequestIds.has(event.clientRequestId)
+          ) {
             this.reload.perform(liveCard);
           }
         } else if (!this.identityContext.get(invalidation)) {

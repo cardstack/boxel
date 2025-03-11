@@ -2,7 +2,7 @@
   "compilerOptions": {
     "target": "es2020",
     "allowJs": true,
-    "lib": ["es2023"],
+    "lib": ["es2023", "DOM"],
     "moduleResolution": "node",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
@@ -26,16 +26,7 @@
     "strict": true,
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
-      "@cardstack/boxel-ui": ["../boxel-ui/addon"],
-      "@cardstack/boxel-ui/*": ["../boxel-ui/addon/*"],
       "*": ["types/*"]
-    },
-    "typeRoots": ["../boxel-ui/types"]
-  },
-  "glint": {
-    "environment": ["ember-loose", "ember-template-imports"],
-    "transform": {
-      "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
     }
   },
   "include": ["../base/**/*", "./**/*"],

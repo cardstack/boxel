@@ -17,7 +17,6 @@ import { primitive as primitiveType } from 'https://cardstack.com/base/card-api'
 
 import {
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   setupCardLogs,
   lookupLoaderService,
@@ -59,7 +58,6 @@ module('Unit | ai-function-generation-test', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
 
   test(`generates a simple compliant schema for basic types`, async function (assert) {
     let { field, contains, CardDef } = cardApi;

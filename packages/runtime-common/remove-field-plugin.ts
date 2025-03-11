@@ -39,7 +39,10 @@ function maybeRemoveFieldDecoratorImport(
   path: NodePath<t.ImportDeclaration>,
   state: State,
 ) {
-  if (path.node.source.value !== state.opts.field.decorator.module) {
+  if (
+    state.opts.field.decorator.type === 'internal' ||
+    path.node.source.value !== state.opts.field.decorator.module
+  ) {
     return;
   }
   let specifier = getImportSpecifier(path, state.opts.field.decorator.name) as
@@ -62,7 +65,10 @@ function maybeRemoveFieldTypeImport(
   path: NodePath<t.ImportDeclaration>,
   state: State,
 ) {
-  if (path.node.source.value !== state.opts.field.type.module) {
+  if (
+    state.opts.field.type.type === 'internal' ||
+    path.node.source.value !== state.opts.field.type.module
+  ) {
     return;
   }
   let specifier = getImportSpecifier(path, state.opts.field.type.name) as

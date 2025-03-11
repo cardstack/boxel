@@ -3100,6 +3100,7 @@ export class Box<T> {
   }
 
   private prevChildren: Box<ElementType<T>>[] = [];
+  private prevValues: ElementType<T>[] = [];
 
   get children(): Box<ElementType<T>>[] {
     if (this.state.type === 'root') {
@@ -3117,10 +3118,10 @@ export class Box<T> {
       );
     }
 
-    let { prevChildren, state } = this;
+    let { prevChildren, prevValues, state } = this;
     let newChildren: Box<ElementType<T>>[] = value.map((element, index) => {
-      let found = prevChildren.find((oldBox, i) =>
-        state.useIndexBasedKeys ? index === i : oldBox.value === element,
+      let found = prevChildren.find((_oldBox, i) =>
+        state.useIndexBasedKeys ? index === i : this.prevValues[i] === element,
       );
       if (found) {
         if (state.useIndexBasedKeys) {
@@ -3129,7 +3130,9 @@ export class Box<T> {
           // mutating a watched array in a rerender will spawn another rerender which
           // infinitely recurses.
         } else {
-          prevChildren.splice(prevChildren.indexOf(found), 1);
+          let toRemoveIndex = prevChildren.indexOf(found);
+          prevChildren.splice(toRemoveIndex, 1);
+          prevValues.splice(toRemoveIndex, 1);
           if (found.state.type === 'root') {
             throw new Error('bug');
           }
@@ -3146,6 +3149,7 @@ export class Box<T> {
       }
     });
     this.prevChildren = newChildren;
+    this.prevValues = newChildren.map((child) => child.value);
     return newChildren;
   }
 }

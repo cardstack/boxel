@@ -38,10 +38,13 @@ class StubRealmService extends RealmService {
 module('Integration | commands | send-ai-assistant-message', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  let { createAndJoinRoom, getRoomEvents } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
+
+  let { createAndJoinRoom, getRoomEvents } = mockMatrixUtils;
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
@@ -51,6 +54,7 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   hooks.beforeEach(async function () {
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
   });

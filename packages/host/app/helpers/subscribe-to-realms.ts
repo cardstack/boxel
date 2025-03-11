@@ -4,11 +4,13 @@ import { isEqual } from 'lodash';
 
 import { subscribeToRealm } from '@cardstack/runtime-common';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 interface Signature {
   Args: {
     Positional: [
       realms: string[],
-      callback: (ev: MessageEvent, realmURL: string) => void,
+      callback: (ev: RealmEventContent, realmURL: string) => void,
     ];
   };
   Return: void;
