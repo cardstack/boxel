@@ -46,6 +46,7 @@ interface RoomMessageOptional {
   index?: number;
   errorMessage?: string;
   clientGeneratedId?: string | null;
+  reasoningContent?: string | null;
 }
 
 export class Message implements RoomMessageInterface {
@@ -53,6 +54,7 @@ export class Message implements RoomMessageInterface {
   @tracked message: string;
   @tracked commands: TrackedArray<MessageCommand>;
   @tracked isStreamingFinished?: boolean;
+  @tracked reasoningContent?: string | null;
 
   attachedCardIds?: string[] | null;
   attachedFiles?: FileDef[];
@@ -83,6 +85,7 @@ export class Message implements RoomMessageInterface {
     this.status = init.status;
     this.roomId = init.roomId;
     this.attachedFiles = init.attachedFiles;
+    this.reasoningContent = init.reasoningContent;
     this.commands = new TrackedArray<MessageCommand>();
     this.instanceId = guidFor(this);
   }

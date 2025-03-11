@@ -6,7 +6,10 @@ import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
-import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
+} from '@cardstack/runtime-common/matrix-constants';
 
 class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
@@ -66,6 +69,26 @@ function snapshotWithContent(content: string): ChatCompletionSnapshot {
       {
         message: {
           content: content,
+        },
+        finish_reason: null,
+        logprobs: null,
+        index: 0,
+      },
+    ],
+    id: '',
+    created: 0,
+    model: 'llm',
+  };
+}
+
+function chunkWithReasoning(
+  reasoning: string,
+): OpenAI.Chat.Completions.ChatCompletionChunk {
+  return {
+    choices: [
+      {
+        delta: {
+          reasoning: reasoning,
         },
         finish_reason: null,
         logprobs: null,
@@ -146,10 +169,11 @@ module('Responding', (hooks) => {
       'Message type should be app.boxel.message',
     );
     assert.equal(
-      sentEvents[0].content.body,
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
       thinkingMessage,
-      'Message body should match',
+      'Reasoning content should be thinking message',
     );
+    assert.equal(sentEvents[0].content.body, '', 'Body should be empty');
 
     await responder.ensureThinkingMessageSent();
     sentEvents = fakeMatrixClient.getSentEvents();
@@ -171,15 +195,25 @@ module('Responding', (hooks) => {
       'Only the initial message and one content message should be sent',
     );
     assert.equal(
-      sentEvents[0].content.body,
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
       thinkingMessage,
-      'Just the thinking message sent',
+      'Just the thinking message sent in reasoning',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      '',
+      'Initial body should be empty',
     );
 
     assert.equal(
       sentEvents[1].content.body,
       'content 0',
       'The first new content message should be sent',
+    );
+    assert.equal(
+      sentEvents[1].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      '',
+      'No reasoning in content message',
     );
     assert.deepEqual(
       sentEvents[1].content['m.relates_to'],
@@ -206,15 +240,25 @@ module('Responding', (hooks) => {
       'Only the initial message and one content message should be sent',
     );
     assert.equal(
-      sentEvents[0].content.body,
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
       thinkingMessage,
-      'Just the thinking message sent',
+      'Just the thinking message sent in reasoning',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      '',
+      'Initial body should be empty',
     );
 
     assert.equal(
       sentEvents[1].content.body,
       'content 0',
       'The first new content message should be sent',
+    );
+    assert.equal(
+      sentEvents[1].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      '',
+      'No reasoning in content message',
     );
     assert.deepEqual(
       sentEvents[1].content['m.relates_to'],
@@ -240,6 +284,11 @@ module('Responding', (hooks) => {
       sentEvents[2].content.body,
       'content 9',
       'The last new content message should be sent',
+    );
+    assert.equal(
+      sentEvents[2].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      '',
+      'No reasoning in content message',
     );
     assert.deepEqual(
       sentEvents[2].content['m.relates_to'],
@@ -282,9 +331,14 @@ module('Responding', (hooks) => {
       'Thinking message and tool call event should be sent',
     );
     assert.equal(
-      sentEvents[0].content.body,
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
       thinkingMessage,
-      'Thinking message should be sent first',
+      'Thinking message should be sent first in reasoning',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      '',
+      'Initial body should be empty',
     );
     assert.deepEqual(
       sentEvents[1].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
@@ -308,6 +362,11 @@ module('Responding', (hooks) => {
       'Tool call event should be sent with correct content',
     );
     assert.deepEqual(sentEvents[1].content.body, '', 'Body text is empty');
+    assert.equal(
+      sentEvents[1].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      '',
+      'No reasoning in tool call message',
+    );
     assert.deepEqual(
       sentEvents[1].content['m.relates_to'],
       {
@@ -362,9 +421,14 @@ module('Responding', (hooks) => {
       'Thinking message, and event with content, event with partial tool call, and event with full tool call should be sent',
     );
     assert.equal(
-      sentEvents[0].content.body,
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
       thinkingMessage,
-      'Thinking message should be sent first',
+      'Thinking message should be sent first in reasoning',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      '',
+      'Initial body should be empty',
     );
     assert.deepEqual(
       sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
@@ -400,9 +464,9 @@ module('Responding', (hooks) => {
       'Tool call event should be sent with correct content',
     );
     assert.equal(
-      sentEvents[0].content.body,
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
       thinkingMessage,
-      'Thinking message should be sent first',
+      'Thinking message should be sent first in reasoning',
     );
     assert.deepEqual(
       sentEvents[1].content['m.relates_to'],
@@ -500,9 +564,14 @@ module('Responding', (hooks) => {
       'Thinking message, and event with content, and event with two tool calls should be sent',
     );
     assert.equal(
-      sentEvents[0].content.body,
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
       thinkingMessage,
-      'Thinking message should be sent first',
+      'Thinking message should be sent first in reasoning',
+    );
+    assert.equal(
+      sentEvents[0].content.body,
+      '',
+      'Initial body should be empty',
     );
     assert.deepEqual(
       sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
@@ -546,5 +615,85 @@ module('Responding', (hooks) => {
       },
       'The replacement event with the tool calls should replace the original message',
     );
+  });
+
+  test('Handles sequence of thinking -> reasoning -> content correctly', async () => {
+    await responder.ensureThinkingMessageSent();
+
+    // Initial state - thinking message
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 1, 'Initial thinking message sent');
+    assert.equal(
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      thinkingMessage,
+      'Initial thinking message in reasoning',
+    );
+    assert.equal(sentEvents[0].content.body, '', 'Initial body empty');
+
+    // First reasoning update
+    await responder.onChunk(chunkWithReasoning('reasoning step 1'), {} as any);
+    sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 2, 'First reasoning update sent');
+    assert.equal(
+      sentEvents[1].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      'reasoning step 1',
+      'First reasoning content',
+    );
+    assert.equal(sentEvents[1].content.body, '', 'Body still empty');
+
+    // Second reasoning update
+    await responder.onChunk(chunkWithReasoning(' and 2'), {} as any);
+    clock.tick(250); // Advance clock to trigger throttled update
+    sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 3, 'Second reasoning update sent');
+    assert.equal(
+      sentEvents[2].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      'reasoning step 1 and 2',
+      'Second reasoning content',
+    );
+    assert.equal(sentEvents[2].content.body, '', 'Body still empty');
+
+    // First content update
+    await responder.onChunk({} as any, snapshotWithContent('content step 1'));
+    sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 4, 'First content update sent');
+    assert.equal(
+      sentEvents[3].content.body,
+      'content step 1',
+      'First content body',
+    );
+    assert.equal(
+      sentEvents[3].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      'reasoning step 1 and 2',
+      'Reasoning preserved with content update',
+    );
+
+    // Second content update
+    await responder.onChunk({} as any, snapshotWithContent('content step 2'));
+    clock.tick(250); // Advance clock to trigger throttled update
+    sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 5, 'Second content update sent');
+    assert.equal(
+      sentEvents[4].content.body,
+      'content step 2',
+      'Second content body',
+    );
+    assert.equal(
+      sentEvents[4].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      'reasoning step 1 and 2',
+      'Reasoning still preserved',
+    );
+
+    // Verify all updates replaced the original message
+    for (let i = 1; i < sentEvents.length; i++) {
+      assert.deepEqual(
+        sentEvents[i].content['m.relates_to'],
+        {
+          rel_type: 'm.replace',
+          event_id: '0',
+        },
+        `Update ${i} replaced original message`,
+      );
+    }
   });
 });
