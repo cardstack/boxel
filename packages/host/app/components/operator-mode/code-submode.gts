@@ -780,6 +780,7 @@ export default class CodeSubmode extends Component<Signature> {
     {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
+      @selectedCardRef={{this.selectedCardRef}}
       as |search|
     >
       <div

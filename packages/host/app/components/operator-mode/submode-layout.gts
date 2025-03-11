@@ -21,6 +21,8 @@ import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
+
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
@@ -50,6 +52,7 @@ interface Signature {
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
     onCardSelectFromSearch: (cardId: string) => void;
+    selectedCardRef?: ResolvedCodeRef | undefined;
   };
   Blocks: {
     default: [
@@ -328,6 +331,7 @@ export default class SubmodeLayout extends Component<Signature> {
             <AiAssistantPanel
               @onClose={{this.operatorModeStateService.toggleAiAssistant}}
               @resizeHandle={{ResizeHandle}}
+              @selectedCardRef={{@selectedCardRef}}
               class='ai-assistant-panel
                 {{if this.workspaceChooserOpened "left-border"}}'
             />

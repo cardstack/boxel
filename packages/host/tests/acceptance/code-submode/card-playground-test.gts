@@ -1,5 +1,7 @@
 import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
+import { triggerEvent } from '@ember/test-helpers';
+
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
@@ -18,12 +20,17 @@ import {
   testRealmURL,
   visitOperatorMode,
   type TestContextWithSave,
+  assertMessages,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import {
+  selectDeclaration,
+  getPlaygroundSelections,
+} from '../../helpers/playground';
 import { setupApplicationTest } from '../../helpers/setup';
 
 let matrixRoomId: string;
-module('Acceptance | code-submode | playground panel', function (hooks) {
+module('Acceptance | code-submode | card playground', function (hooks) {
   let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -39,156 +46,86 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
   setupOnSave(hooks);
 
   const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
-export class CodeRefDriver extends CardDef {
-  static displayName = "Code Ref Driver";
-  @field ref = contains(CodeRefField);
-}`;
+    import { Component } from 'https://cardstack.com/base/card-api';
+    import CodeRefField from 'https://cardstack.com/base/code-ref';
+    export class CodeRefDriver extends CardDef {
+      static displayName = "Code Ref Driver";
+      @field ref = contains(CodeRefField);
+  }`;
 
-  const authorCard = `import { contains, field, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from "https://cardstack.com/base/string";
-export class Author extends CardDef {
-  static displayName = 'Author';
-  @field firstName = contains(StringField);
-  @field lastName = contains(StringField);
-  @field bio = contains(MarkdownField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Author) {
-      return [this.firstName, this.lastName].filter(Boolean).join(' ');
-    },
-  });
-  static isolated = class Isolated extends Component<typeof this> {
-  <template>
-    <article>
-      <header>
-        <h1 data-test-author-title><@fields.title /></h1>
-      </header>
-      <div data-test-author-bio><@fields.bio /></div>
-    </article>
-    <style scoped>
-      article {
-        margin-inline: 20px;
+  const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+    import MarkdownField from 'https://cardstack.com/base/markdown';
+    import StringField from "https://cardstack.com/base/string";
+    export class Author extends CardDef {
+      static displayName = 'Author';
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+      @field bio = contains(MarkdownField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Author) {
+          return [this.firstName, this.lastName].filter(Boolean).join(' ');
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article>
+          <header>
+            <h1 data-test-author-title><@fields.title /></h1>
+          </header>
+          <div data-test-author-bio><@fields.bio /></div>
+        </article>
+        <style scoped>
+          article {
+            margin-inline: 20px;
+          }
+        </style>
+      </template>
       }
-    </style>
-  </template>
-  }
-}
+  }`;
 
-export class Quote extends FieldDef {
-  static displayName = 'Quote';
-  @field quote = contains(StringField);
-  @field attribution = contains(StringField);
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <div data-test-quote-field-embedded>
-        <blockquote data-test-quote>
-          <p><@fields.quote /></p>
-        </blockquote>
-        <p data-test-attribution><@fields.attribution /></p>
-      </div>
-    </template>
-  }
-}
+  const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+    import DatetimeField from 'https://cardstack.com/base/datetime';
+    import MarkdownField from 'https://cardstack.com/base/markdown';
+    import { Author } from './author';
 
-export class FullNameField extends FieldDef {
-  static displayName = 'Full Name';
-  @field firstName = contains(StringField);
-  @field lastName = contains(StringField);
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <div data-test-full-name-embedded>
-        <@fields.firstName /> <@fields.lastName />
-      </div>
-    </template>
-  }
-}`;
-
-  const blogPostCard = `import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from "https://cardstack.com/base/string";
-import { Sparkle } from '@cardstack/boxel-ui/icons';
-import { Author } from './author';
-
-export class Category extends CardDef {
-  static displayName = 'Category';
-  static fitted = class Fitted extends Component<typeof this> {
-  <template>
-    <div data-test-category-fitted><@fields.title /></div>
-  </template>
-  }
-}
-
-class LocalCategoryCard extends Category {}
-
-export class Status extends StringField {
-  static displayName = 'Status';
-}
-
-class LocalStatusField extends Status {}
-
-export class Comment extends FieldDef {
-  static displayName = 'Comment';
-  static icon = Sparkle;
-  @field title = contains(StringField);
-  @field name = contains(StringField);
-  @field message = contains(StringField);
-
-  static embedded = class Embedded extends Component<typeof this> {
-    <template>
-      <div data-test-embedded-comment>
-        <h4 data-test-embedded-comment-title><@fields.title /></h4>
-        <p><@fields.message /> - by <@fields.name /></p>
-      </div>
-    </template>
-  }
-}
-
-class LocalCommentField extends Comment {}
-
-export class RandomClass {}
-
-export class BlogPost extends CardDef {
-  static displayName = 'Blog Post';
-  @field publishDate = contains(DatetimeField);
-  @field author = linksTo(Author);
-  @field categories = linksToMany(Category);
-  @field localCategories = linksToMany(LocalCategoryCard);
-  @field comments = containsMany(Comment);
-  @field localComments = containsMany(LocalCommentField);
-  @field body = contains(MarkdownField);
-  @field status = contains(Status, {
-    computeVia: function (this: BlogPost) {
-      if (!this.publishDate) {
-        return 'Draft';
+    export class Category extends CardDef {
+      static displayName = 'Category';
+      static fitted = class Fitted extends Component<typeof this> {
+      <template>
+        <div data-test-category-fitted><@fields.title /></div>
+      </template>
       }
-      if (Date.now() >= Date.parse(String(this.publishDate))) {
-        return 'Published';
-      }
-      return 'Scheduled';
-    },
-  });
-  @field localStatus = contains(LocalStatusField);
+    }
 
-  static isolated = class Isolated extends Component<typeof this> {
-  <template>
-    <article>
-      <header>
-        <h1 data-test-post-title><@fields.title /></h1>
-      </header>
-      <div data-test-byline><@fields.author /></div>
-      <div data-test-post-body><@fields.body /></div>
-    </article>
-    <style scoped>
-      article {
-        margin-inline: 20px;
+    class LocalCategoryCard extends Category {}
+
+    export class RandomClass {}
+
+    export class BlogPost extends CardDef {
+      static displayName = 'Blog Post';
+      @field publishDate = contains(DatetimeField);
+      @field author = linksTo(Author);
+      @field categories = linksToMany(Category);
+      @field localCategories = linksToMany(LocalCategoryCard);
+      @field body = contains(MarkdownField);
+
+      static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article>
+          <header>
+            <h1 data-test-post-title><@fields.title /></h1>
+          </header>
+          <div data-test-byline><@fields.author /></div>
+          <div data-test-post-body><@fields.body /></div>
+        </article>
+        <style scoped>
+          article {
+            margin-inline: 20px;
+          }
+        </style>
+      </template>
       }
-    </style>
-  </template>
-  }
-}`;
+  }`;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -302,107 +239,6 @@ export class BlogPost extends CardDef {
             },
           },
         },
-        'Spec/comment-1.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              ref: {
-                name: 'Comment',
-                module: '../blog-post',
-              },
-              specType: 'field',
-              containedExamples: [
-                {
-                  title: 'Terrible product',
-                  name: 'Marco',
-                  message: 'I would give 0 stars if I could. Do not buy!',
-                },
-                {
-                  title: 'Needs better packaging',
-                  name: 'Harry',
-                  message: 'Arrived broken',
-                },
-              ],
-              title: 'Comment spec',
-            },
-            meta: {
-              fields: {
-                containedExamples: [
-                  {
-                    adoptsFrom: {
-                      module: '../blog-post',
-                      name: 'Comment',
-                    },
-                  },
-                  {
-                    adoptsFrom: {
-                      module: '../blog-post',
-                      name: 'Comment',
-                    },
-                  },
-                ],
-              },
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'Spec/comment-2.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              ref: {
-                name: 'Comment',
-                module: '../blog-post',
-              },
-              specType: 'field',
-              containedExamples: [
-                {
-                  title: 'Spec 2 Example 1',
-                },
-              ],
-              title: 'Comment spec II',
-            },
-            meta: {
-              fields: {
-                containedExamples: [
-                  {
-                    adoptsFrom: {
-                      module: '../blog-post',
-                      name: 'Comment',
-                    },
-                  },
-                ],
-              },
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
-        },
-        'Spec/full-name.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              ref: {
-                name: 'FullNameField',
-                module: '../author',
-              },
-              specType: 'field',
-              containedExamples: [],
-              title: 'FullNameField spec',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/spec',
-                name: 'Spec',
-              },
-            },
-          },
-        },
       },
     }));
     window.localStorage.setItem(
@@ -418,7 +254,7 @@ export class BlogPost extends CardDef {
         [testRealmURL, 'Author/jane-doe.json'],
       ]),
     );
-    window.localStorage.setItem(PlaygroundSelections, '');
+    window.localStorage.removeItem(PlaygroundSelections);
 
     setActiveRealms([testRealmURL]);
     setRealmPermissions({
@@ -426,20 +262,7 @@ export class BlogPost extends CardDef {
     });
   });
 
-  const selectClass = async (name: string) =>
-    await click(
-      `[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="${name}"]`,
-    );
-
-  const getPersistedPlaygroundSelection = (moduleId: string) => {
-    let selections = window.localStorage.getItem(PlaygroundSelections);
-    if (!selections) {
-      throw new Error('No selections found in mock local storage');
-    }
-    return JSON.parse(selections)[moduleId];
-  };
-
-  test('can render playground panel when an exported card def or exported compound field def is selected', async function (assert) {
+  test('can render playground panel when an exported card def is selected', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}blog-post.gts`,
@@ -448,64 +271,38 @@ export class BlogPost extends CardDef {
       .dom(
         '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="Category"]',
       )
-      .exists(); // pre-selected since it's the first definition
+      .exists();
     assert
       .dom('[data-test-accordion-item="playground"]')
       .exists(
         'playground accordion item exists for Category (exported card def)',
       );
-    await click('[data-test-accordion-item="playground"] button'); // open panel
+    await click('[data-test-accordion-item="playground"] button');
     assert
       .dom('[data-test-playground-panel]')
       .exists('playground panel exists for Category (exported card def)');
 
-    await selectClass('LocalCategoryCard');
+    await selectDeclaration('LocalCategoryCard');
     assert
       .dom('[data-test-accordion-item="playground"]')
       .doesNotExist(
         'playground does not exist for LocalCategory (local card def)',
       );
 
-    await selectClass('Comment');
-    assert
-      .dom('[data-test-playground-panel]')
-      .exists('playground exists for Comment (exported compound field def)');
-
-    await selectClass('LocalCommentField');
-    assert
-      .dom('[data-test-accordion-item="playground"]')
-      .doesNotExist(
-        'does not exist for LocalComment (local compound field def)',
-      );
-
-    // Note: Currently we can not have polymorphism in primitive fields. However, this can be done
-    // after the `.value` refactor when the distinctions in the implementations of primitive
-    // and compound fields will cease to exist. See linear ticket [CS-6689].
-    // TODO: do not display playground panel for primitive fields
-    // await selectClass('Status');
-    // assert
-    //   .dom('[data-test-accordion-item="playground"]')
-    //   .doesNotExist('does not exist for Status (primitive field def)');
-
-    await selectClass('LocalStatusField');
-    assert
-      .dom('[data-test-accordion-item="playground"]')
-      .doesNotExist('does not exist for LocalStatus (primitive field def)');
-
-    await selectClass('RandomClass');
+    await selectDeclaration('RandomClass');
     assert
       .dom('[data-test-accordion-item="playground"]')
       .doesNotExist('does not exist for RandomClass (not a card or field def)');
 
-    await selectClass('BlogPost');
+    await selectDeclaration('BlogPost');
     assert
       .dom('[data-test-playground-panel]')
       .exists('exists for BlogPost (exported card def)');
   });
 
   test('can populate instance chooser dropdown options from recent files', async function (assert) {
-    window.localStorage.setItem('recent-files', '');
-    window.localStorage.setItem(PlaygroundSelections, '');
+    window.localStorage.removeItem('recent-files');
+    window.localStorage.removeItem(PlaygroundSelections);
 
     await visitOperatorMode({
       submode: 'code',
@@ -548,9 +345,7 @@ export class BlogPost extends CardDef {
     await click('[data-option-index="0"]');
     assert.dom('[data-test-selected-item]').containsText('City Design');
 
-    await click(
-      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
-    );
+    await selectDeclaration('BlogPost');
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 3 });
     assert.dom('[data-option-index="0"]').containsText('Mad As a Hatter');
@@ -614,7 +409,7 @@ export class BlogPost extends CardDef {
     assert.dom('[data-test-selected-item]').hasText('City Design');
     assertCardExists('Category/city-design');
 
-    await selectClass('BlogPost');
+    await selectDeclaration('BlogPost');
     assert.dom('[data-test-selected-item]').containsText('Remote Work');
     assertCardExists('BlogPost/remote-work');
   });
@@ -1115,10 +910,11 @@ export class BlogPost extends CardDef {
     await click('[data-test-format-chooser="atom"]'); // change selected format
     assertCorrectFormat(authorId, 'atom');
     assert.deepEqual(
-      getPersistedPlaygroundSelection(authorModuleId),
+      getPlaygroundSelections()?.[authorModuleId],
       {
         cardId: authorId,
         format: 'atom',
+        fieldIndex: undefined,
       },
       'local storage is updated',
     );
@@ -1132,10 +928,11 @@ export class BlogPost extends CardDef {
     await click('[data-option-index="1"]'); // change selected instance
     assertCorrectFormat(categoryId2, 'embedded');
     assert.deepEqual(
-      getPersistedPlaygroundSelection(categoryModuleId),
+      getPlaygroundSelections()?.[categoryModuleId],
       {
         cardId: categoryId2,
         format: 'embedded',
+        fieldIndex: undefined,
       },
       'local storage is updated',
     );
@@ -1144,21 +941,23 @@ export class BlogPost extends CardDef {
     await click('[data-test-boxel-selector-item-text="BlogPost"]'); // change selected module
     assertCorrectFormat(blogPostId1, 'isolated', 'default format is correct');
     await click('[data-test-format-chooser="fitted"]'); // change selected format
-    assert.deepEqual(getPersistedPlaygroundSelection(blogPostModuleId), {
+
+    assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
       cardId: blogPostId1,
       format: 'fitted',
+      fieldIndex: undefined,
     });
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]'); // change selected instance
     assertCorrectFormat(blogPostId2, 'fitted');
-    assert.deepEqual(getPersistedPlaygroundSelection(blogPostModuleId), {
+    assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
       cardId: blogPostId2,
       format: 'fitted',
+      fieldIndex: undefined,
     });
 
-    let selections = window.localStorage.getItem(PlaygroundSelections);
     assert.strictEqual(
-      selections,
+      JSON.stringify(getPlaygroundSelections()),
       JSON.stringify({
         [`${authorModuleId}`]: {
           cardId: authorId,
@@ -1200,411 +999,53 @@ export class BlogPost extends CardDef {
     );
   });
 
-  module('usage with field def', function () {
-    test('can preview compound field instance', async function (assert) {
-      await visitOperatorMode({
-        stacks: [],
-        submode: 'code',
-        codePath: `${testRealmURL}blog-post.gts`,
-      });
-      await click('[data-test-boxel-selector-item-text="Comment"]');
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-selected-item]').hasText('Comment spec');
-      assert.dom('[data-test-field-preview-header]').containsText('Comment');
-      assert
-        .dom('[data-test-playground-format-chooser] button')
-        .exists({ count: 3 });
-      assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText(
-          'Terrible product',
-          'preview defaults to embedded view of first example',
-        );
-
-      await click('[data-test-format-chooser="atom"]');
-      assert
-        .dom(
-          '[data-test-field-preview-card] [data-test-compound-field-format="atom"]',
-        )
-        .exists();
-
-      await click('[data-test-edit-button]');
-      assert
-        .dom(
-          '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
-        )
-        .exists();
-      assert
-        .dom('[data-test-field-preview-card] [data-test-field]')
-        .exists({ count: 3 });
-      assert
-        .dom('[data-test-field-preview-card] [data-test-field="name"] input')
-        .hasValue('Marco');
-
-      await click('[data-test-edit-button]');
-      assert.dom('[data-test-embedded-comment]').exists();
+  test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
     });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    await click('[data-test-open-ai-assistant]');
+    assert.dom(`[data-test-card="${testRealmURL}Author/jane-doe"]`).exists();
+    assert.dom('[data-test-autoattached-card]').hasText('Jane Doe');
+    await triggerEvent(`[data-test-autoattached-card]`, 'mouseenter');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText('Current card is shared automatically');
 
-    test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
-      await visitOperatorMode({
-        stacks: [],
-        submode: 'code',
-        codePath: `${testRealmURL}blog-post.gts`,
-      });
-      await selectClass('Comment');
-      // playground panel
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-selected-item]').hasText('Comment spec');
-      assert.dom('[data-test-field-preview-header]').hasText('Comment');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText('Terrible product');
-      let selection = getPersistedPlaygroundSelection(
-        `${testRealmURL}blog-post/Comment`,
-      );
-      assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
-        format: 'embedded',
-        fieldIndex: 0,
-      });
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="blog-post.gts"]');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="1"]');
+    assert
+      .dom(`[data-test-card="${testRealmURL}Category/future-tech"]`)
+      .exists();
+    assert.dom('[data-test-autoattached-card]').hasText('Future Tech');
+    await click('[data-test-remove-card-btn]');
+    assert.dom('[data-test-autoattached-card]').doesNotExist();
 
-      // spec panel
-      await click('[data-test-accordion-item="spec-preview"] button');
-      assert
-        .dom(
-          `[data-test-card="${testRealmURL}Spec/comment-1"] [data-test-boxel-input-id="spec-title"]`,
-        )
-        .hasValue('Comment spec');
-      assert
-        .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-        .containsText('Spec/comment-1.json');
-      await click('[data-test-spec-selector] > div');
-      assert
-        .dom('[data-option-index="1"] [data-test-spec-selector-item-path]')
-        .hasText('Spec/comment-2.json');
-      await click('[data-option-index="1"]');
-      assert
-        .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-        .containsText('Spec/comment-2.json');
-      assert
-        .dom(
-          `[data-test-card="${testRealmURL}Spec/comment-2"] [data-test-boxel-input-id="spec-title"]`,
-        )
-        .hasValue('Comment spec II');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    assert
+      .dom(`[data-test-card="${testRealmURL}Category/city-design"]`)
+      .exists();
+    assert.dom('[data-test-autoattached-card]').hasText('City Design');
+    await fillIn('[data-test-message-field]', `Message With Card and File`);
+    await click('[data-test-send-message-btn]');
 
-      // playground panel
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-selected-item]').hasText('Comment spec II');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText('Spec 2 Example 1');
-      selection = getPersistedPlaygroundSelection(
-        `${testRealmURL}blog-post/Comment`,
-      );
-      assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-2`,
-        format: 'embedded',
-        fieldIndex: 0,
-      });
-    });
-
-    test("can select a different instance to preview from the spec's containedExamples collection", async function (assert) {
-      await visitOperatorMode({
-        stacks: [],
-        submode: 'code',
-        codePath: `${testRealmURL}blog-post.gts`,
-      });
-      await selectClass('Comment');
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-selected-item]').hasText('Comment spec');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText('Terrible product');
-      let selection = getPersistedPlaygroundSelection(
-        `${testRealmURL}blog-post/Comment`,
-      );
-      assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
-        format: 'embedded',
-        fieldIndex: 0,
-      });
-
-      await click('[data-test-instance-chooser]');
-      await click('[data-test-choose-another-instance]');
-      assert
-        .dom('[data-test-field-chooser] [data-test-boxel-header-title]')
-        .hasText('Choose a Comment Instance');
-      assert.dom('[data-test-field-instance]').exists({ count: 2 });
-      assert.dom('[data-test-field-instance="0"]').hasClass('selected');
-      assert.dom('[data-test-field-instance="1"]').doesNotHaveClass('selected');
-
-      await click('[data-test-field-instance="1"]');
-      assert
-        .dom('[data-test-field-chooser]')
-        .doesNotExist('field chooser modal is closed');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText('Needs better packaging');
-      selection = getPersistedPlaygroundSelection(
-        `${testRealmURL}blog-post/Comment`,
-      );
-      assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
-        format: 'embedded',
-        fieldIndex: 1,
-      });
-    });
-
-    test('preview the next available example if the previously selected one has been deleted', async function (assert) {
-      window.localStorage.setItem(
-        PlaygroundSelections,
-        JSON.stringify({
-          [`${testRealmURL}blog-post/Comment`]: {
-            cardId: `${testRealmURL}Spec/comment-1`,
-            format: 'embedded',
-            fieldIndex: 1,
-          },
-        }),
-      );
-      await visitOperatorMode({
-        stacks: [],
-        submode: 'code',
-        codePath: `${testRealmURL}blog-post.gts`,
-      });
-      await selectClass('Comment');
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-selected-item]').hasText('Comment spec');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText('Needs better packaging');
-
-      await click('[data-test-accordion-item="spec-preview"] button');
-      assert
-        .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="title"] input',
-        )
-        .hasValue('Needs better packaging');
-      await click(
-        '[data-test-contains-many="containedExamples"] [data-test-remove="1"]',
-      );
-      assert
-        .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="1"]',
-        )
-        .doesNotExist();
-      assert
-        .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="0"]',
-        )
-        .exists();
-
-      await click('[data-test-accordion-item="playground"] button');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText('Terrible product');
-
-      await click('[data-test-accordion-item="spec-preview"] button');
-      await click(
-        '[data-test-contains-many="containedExamples"] [data-test-remove="0"]',
-      ); // remove remaining contained example from spec
-      assert
-        .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
-        .doesNotExist();
-
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-embedded-comment]').doesNotExist();
-      assert.dom('[data-test-add-field-instance]').exists();
-    });
-
-    test('can create new field instance (no preexisting Spec)', async function (assert) {
-      await visitOperatorMode({
-        stacks: [],
-        submode: 'code',
-        codePath: `${testRealmURL}author.gts`,
-      });
-      await selectClass('Quote');
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-quote-field-embedded]').doesNotExist();
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-      assert
-        .dom(
-          '[data-test-accordion-item="spec-preview"] [data-test-create-spec-button]',
-        )
-        .exists();
-
-      await click('[data-test-instance-chooser]');
-      await click('[data-test-create-instance]');
-      assert
-        .dom('[data-test-instance-chooser] [data-test-selected-item]')
-        .hasText('Quote');
-      assert
-        .dom(
-          '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
-        )
-        .exists();
-      assert.dom('[data-test-field="quote"] input').hasNoValue();
-
-      assert
-        .dom(
-          '[data-test-accordion-item="spec-preview"] [data-test-create-spec-button]',
-        )
-        .doesNotExist();
-
-      // TODO: spec panel updates when spec is created from playground
-      // await click('[data-test-accordion-item="spec-preview"] button');
-      // assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Quote');
-      // assert
-      //   .dom(
-      //     '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="quote"] input',
-      //   )
-      //   .hasNoValue();
-    });
-
-    test('can create new field instance (has preexisting Spec)', async function (assert) {
-      await visitOperatorMode({
-        stacks: [],
-        submode: 'code',
-        codePath: `${testRealmURL}blog-post.gts`,
-      });
-      await selectClass('Comment');
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-selected-item]').hasText('Comment spec');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText('Terrible product');
-      let selection = getPersistedPlaygroundSelection(
-        `${testRealmURL}blog-post/Comment`,
-      );
-      assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
-        format: 'embedded',
-        fieldIndex: 0,
-      });
-
-      await click('[data-test-instance-chooser]');
-      await click('[data-test-create-instance]');
-      assert
-        .dom('[data-test-field-preview-card] [data-test-field="title"] input')
-        .hasNoValue();
-      selection = getPersistedPlaygroundSelection(
-        `${testRealmURL}blog-post/Comment`,
-      );
-      assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/comment-1`,
-        format: 'edit',
-        fieldIndex: 2,
-      });
-
-      await click('[data-test-accordion-item="spec-preview"] button');
-      assert
-        .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
-        .exists({ count: 3 });
-      assert
-        .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="2"] [data-test-field="title"] input',
-        )
-        .hasNoValue();
-
-      await click('[data-test-accordion-item="playground"] button');
-      await click('[data-test-instance-chooser]');
-      await click('[data-test-choose-another-instance]');
-      assert
-        .dom('[data-test-field-chooser] [data-test-field-instance]')
-        .exists({ count: 3 });
-    });
-
-    test('can create new field instance when spec exists but has no examples', async function (assert) {
-      await visitOperatorMode({
-        stacks: [],
-        submode: 'code',
-        codePath: `${testRealmURL}author.gts`,
-      });
-      await selectClass('FullNameField');
-      await click('[data-test-accordion-item="playground"] button');
-      assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
-      assert.dom('[data-test-field-preview-header]').doesNotExist();
-
-      await click('[data-test-add-field-instance]');
-      assert.dom('[data-test-field-preview-header]').containsText('Full Name');
-      assert
-        .dom(
-          '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
-        )
-        .exists();
-      assert
-        .dom(
-          '[data-test-field-preview-card] [data-test-field="firstName"] input',
-        )
-        .hasNoValue();
-      await fillIn('[data-test-field="firstName"] input', 'Marco');
-      await fillIn('[data-test-field="lastName"] input', 'N.');
-
-      await click('[data-test-instance-chooser]');
-      await click('[data-test-choose-another-instance]');
-      assert
-        .dom('[data-test-field-chooser] [data-test-field-instance]')
-        .exists({ count: 1 });
-      assert
-        .dom('[data-test-field-chooser] [data-test-full-name-embedded]')
-        .hasText('Marco N.');
-      await click('[data-test-field-chooser] [data-test-close-modal]');
-
-      await click('[data-test-accordion-item="spec-preview"] button');
-      assert
-        .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
-        .exists({ count: 1 });
-      assert
-        .dom(
-          '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="firstName"] input',
-        )
-        .hasValue('Marco');
-
-      let selection = getPersistedPlaygroundSelection(
-        `${testRealmURL}author/FullNameField`,
-      );
-      assert.deepEqual(selection, {
-        cardId: `${testRealmURL}Spec/full-name`,
-        format: 'edit',
-        fieldIndex: 0,
-      });
-    });
-
-    test('editing compound field instance live updates the preview', async function (assert) {
-      const updatedCommentField = `import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringField from "https://cardstack.com/base/string";
-
-        export class Comment extends FieldDef {
-          static displayName = 'Comment';
-          @field title = contains(StringField);
-          @field name = contains(StringField);
-          @field message = contains(StringField);
-
-          static embedded = class Embedded extends Component<typeof this> {
-        <template>
-          <div data-test-embedded-comment>
-            <p><@fields.message /> - by <@fields.name /></p>
-          </div>
-        </template>
-          }
-        }`;
-      await visitOperatorMode({
-        stacks: [],
-        submode: 'code',
-        codePath: `${testRealmURL}blog-post.gts`,
-      });
-      await selectClass('Comment');
-      await click('[data-test-accordion-item="playground"] button');
-      assert
-        .dom('[data-test-embedded-comment-title]')
-        .hasText('Terrible product');
-      await realm.write('blog-post.gts', updatedCommentField),
-        await waitUntil(
-          () =>
-            document.querySelector('[data-test-embedded-comment-title]') ===
-            null,
-        );
-      assert.dom('[data-test-embedded-comment-title]').doesNotExist();
-    });
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message With Card and File',
+        files: [
+          { sourceUrl: `${testRealmURL}blog-post.gts`, name: 'blog-post.gts' },
+        ],
+        cards: [
+          { id: `${testRealmURL}Category/city-design`, title: 'City Design' },
+        ],
+      },
+    ]);
   });
 });

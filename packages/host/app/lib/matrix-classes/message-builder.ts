@@ -18,6 +18,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { Skill } from '@cardstack/host/components/ai-assistant/skill-menu';
@@ -79,6 +80,9 @@ export default class MessageBuilder {
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
       attachedFiles: this.attachedFiles,
+      reasoningContent:
+        (this.event.content as CardMessageContent)['app.boxel.reasoning'] ||
+        null,
     });
   }
 
@@ -156,6 +160,10 @@ export default class MessageBuilder {
 
     message.message = this.event.content.body;
     message.formattedMessage = this.event.content.formatted_body;
+    message.reasoningContent =
+      (this.event.content as CardMessageContent)[
+        APP_BOXEL_REASONING_CONTENT_KEY
+      ] || null;
     message.isStreamingFinished =
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished

@@ -45,7 +45,7 @@ jobs:
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
     needs: check-if-requires-preview
-    concurrency: deploy-host-preview-staging
+    concurrency: deploy-host-preview-staging-${{ github.head_ref || github.run_id }}
     steps:
       - uses: actions/checkout@v4
       - name: Configure AWS credentials
@@ -74,7 +74,7 @@ jobs:
     # github.head_ref: the branch that the pull request is from. only appears on pull_request events
     if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref && needs.check-if-requires-preview.outputs.boxel-host-files-changed == 'true'
     needs: check-if-requires-preview
-    concurrency: deploy-host-preview-production
+    concurrency: deploy-host-preview-production-${{ github.head_ref || github.run_id }}
     steps:
       - uses: actions/checkout@v4
       - name: Configure AWS credentials

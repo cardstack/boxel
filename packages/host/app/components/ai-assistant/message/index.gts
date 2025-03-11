@@ -11,15 +11,18 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { and, cn } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance } from '@cardstack/runtime-common';
+
+import { markdownToHtml } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
@@ -60,6 +63,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     formattedMessage: SafeString;
+    reasoningContent?: string | null;
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
@@ -70,6 +74,7 @@ interface Signature {
       errors: { id: string; error: Error }[] | undefined;
     };
     index: number;
+    eventId: string;
     monacoSDK: MonacoSDK;
     registerScroller: (args: {
       index: number;
@@ -179,8 +184,44 @@ class ScrollPosition extends Modifier<ScrollPositionSignature> {
   }
 }
 
+function isThinkingMessage(s: string | null | undefined) {
+  if (!s) {
+    return false;
+  }
+  return s.trim() === 'Thinking...';
+}
+
+function isPresent(val: SafeString | string | null | undefined) {
+  if (val?.toString) {
+    val = val?.toString().trim();
+  }
+  return val ? val !== '' : false;
+}
+
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
+  @service private declare matrixService: MatrixService;
+  get isReasoningExpandedByDefault() {
+    let result =
+      this.args.isStreaming &&
+      !isPresent(this.args.formattedMessage) &&
+      isPresent(this.args.reasoningContent) &&
+      !isThinkingMessage(this.args.reasoningContent);
+    return result;
+  }
+  get isReasoningExpanded() {
+    return (
+      this.matrixService.reasoningExpandedState.get(this.args.eventId) ??
+      this.isReasoningExpandedByDefault
+    );
+  }
+  updateReasoningExpanded = (ev: MouseEvent) => {
+    ev.preventDefault();
+    this.matrixService.reasoningExpandedState.set(
+      this.args.eventId,
+      !this.isReasoningExpanded,
+    );
+  };
 
   <template>
     <div
@@ -230,6 +271,21 @@ export default class AiAssistantMessage extends Component<Signature> {
         {{/if}}
 
         <div class='content' data-test-ai-message-content>
+          {{#if @reasoningContent}}
+            <div class='reasoning-content'>
+              {{#if (eq 'Thinking...' @reasoningContent)}}
+                Thinking...
+              {{else}}
+                <details open={{this.isReasoningExpanded}} data-test-reasoning>
+                  {{! template-lint-disable no-invalid-interactive}}
+                  <summary
+                    {{on 'click' this.updateReasoningExpanded}}
+                  >Thinking...</summary>
+                  {{htmlSafe (markdownToHtml @reasoningContent)}}
+                </details>
+              {{/if}}
+            </div>
+          {{/if}}
           {{#if (and @isFromAssistant @isStreaming)}}
             <FormattedMessage
               @renderCodeBlocks={{false}}
@@ -405,6 +461,15 @@ export default class AiAssistantMessage extends Component<Signature> {
       }
       .content > :deep(* + *) {
         margin-top: var(--boxel-sp);
+      }
+
+      .reasoning-content {
+        color: var(--boxel-300);
+        font-style: italic;
+      }
+
+      .reasoning-content summary {
+        cursor: pointer;
       }
 
       .error-container {

@@ -67,7 +67,10 @@ test.describe('Skills', () => {
   }
 
   const defaultSkillCardForInteractMode = `https://cardstack.com/base/SkillCard/card-editing`;
-  const defaultSkillCardForCodeMode = `https://cardstack.com/base/SkillCard/code-module-editing`;
+  const defaultSkillCardsForCodeMode = [
+    `https://cardstack.com/base/SkillCard/source-code-editing`,
+    `https://cardstack.com/base/SkillCard/boxel-coding`,
+  ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;
   const skillCard3 = `${appURL}/skill-card-title-editing`;
@@ -177,7 +180,7 @@ test.describe('Skills', () => {
     );
   });
 
-  test('it will attach code editing skill in code mode by default', async ({
+  test('it will attach code editing skills in code mode by default', async ({
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
@@ -186,11 +189,19 @@ test.describe('Skills', () => {
     await page.locator('[data-test-boxel-menu-item-text="Code"]').click();
     await page.locator('[data-test-skill-menu]').hover();
     await page.locator('[data-test-pill-menu-header-button]').click();
-    await expect(
-      page.locator(
-        `[data-test-attached-card="${defaultSkillCardForCodeMode}"]`,
-      ),
-    ).toHaveCount(1);
+
+    // Check that each default skill card for code mode is attached
+    for (const skillCardURL of defaultSkillCardsForCodeMode) {
+      await expect(
+        page.locator(`[data-test-pill-menu-item="${skillCardURL}"]`),
+        `Skill card ${skillCardURL} should be attached`,
+      ).toHaveCount(1);
+
+      await expect(
+        page.locator(`[data-test-card-pill-toggle="${skillCardURL}-on"]`),
+        `Skill card ${skillCardURL} should be active`,
+      ).toHaveClass('switch checked');
+    }
   });
 
   test(`room skills state does not leak when switching rooms`, async ({

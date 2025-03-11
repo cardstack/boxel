@@ -4,6 +4,8 @@ import flattenDeep from 'lodash/flattenDeep';
 import {
   type CardResource,
   type RealmInfo,
+  type JobInfo,
+  jobIdentity,
   hasExecutableExtension,
   trimExecutableExtension,
   RealmPaths,
@@ -39,8 +41,8 @@ export class IndexWriter {
     this.#dbAdapter = dbAdapter;
   }
 
-  async createBatch(realmURL: URL) {
-    let batch = new Batch(this.#dbAdapter, realmURL);
+  async createBatch(realmURL: URL, jobInfo?: JobInfo) {
+    let batch = new Batch(this.#dbAdapter, realmURL, jobInfo);
     await batch.ready;
     return batch;
   }
@@ -107,6 +109,7 @@ export class Batch {
   constructor(
     dbAdapter: DBAdapter,
     private realmURL: URL, // this assumes that we only index cards in our own realm...
+    private jobInfo?: JobInfo,
   ) {
     this.#dbAdapter = dbAdapter;
     this.ready = this.setNextRealmVersion();
@@ -168,7 +171,7 @@ export class Batch {
           json = JSON.parse(entry.source);
         } catch (e: any) {
           this.#log.info(
-            `Cannot parse instance source for ${entry.url}: ${e.message}`,
+            `${jobIdentity(this.jobInfo)} Cannot parse instance source for ${entry.url}: ${e.message}`,
           );
         }
         if (json) {
@@ -511,7 +514,7 @@ export class Batch {
   async invalidate(url: URL): Promise<string[]> {
     await this.ready;
     let start = Date.now();
-    this.#perfLog.debug(`starting invalidation of ${url.href}`);
+    this.#perfLog.debug(`${jobIdentity} starting invalidation of ${url.href}`);
     let alias = trimExecutableExtension(url).href;
     let visited = new Set<string>();
 
@@ -557,13 +560,13 @@ export class Batch {
     ]);
 
     this.#perfLog.debug(
-      `inserted invalidated rows for  ${url.href} in ${
+      `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${url.href} in ${
         Date.now() - insertStart
       } ms`,
     );
 
     this.#perfLog.debug(
-      `completed invalidation of ${url.href} in ${Date.now() - start} ms`,
+      `${jobIdentity(this.jobInfo)} completed invalidation of ${url.href} in ${Date.now() - start} ms`,
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);
@@ -619,7 +622,7 @@ export class Batch {
       pageNumber++;
     } while (rows.length === pageSize);
     this.#perfLog.debug(
-      `time to determine items that reference ${resolvedPath} ${
+      `${jobIdentity(this.jobInfo)} time to determine items that reference ${resolvedPath} ${
         Date.now() - start
       } ms (page count=${pageNumber})`,
     );

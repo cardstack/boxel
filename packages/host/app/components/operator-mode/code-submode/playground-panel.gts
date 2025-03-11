@@ -2,7 +2,6 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -10,8 +9,6 @@ import { tracked } from '@glimmer/tracking';
 import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
-import window from 'ember-window-mock';
-import { TrackedObject } from 'tracked-built-ins';
 
 import {
   AddButton,
@@ -45,12 +42,11 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-
-import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type {
   CardDef,
@@ -494,22 +490,10 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @service declare recentFilesService: RecentFilesService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare playgroundPanelService: PlaygroundPanelService;
   @tracked newCardJSON: LooseSingleCardDocument | undefined;
   @tracked fieldChooserIsOpen = false;
-  private playgroundSelections: Record<
-    string, // moduleId
-    { cardId: string; format: Format; fieldIndex: number | undefined }
-  >; // TrackedObject
-
-  constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
-    super(owner, args);
-    let selections = window.localStorage.getItem(PlaygroundSelections);
-
-    this.playgroundSelections = new TrackedObject(
-      selections?.length ? JSON.parse(selections) : {},
-    );
-  }
 
   get recentCardIds() {
     return this.recentFilesService.recentFiles
@@ -551,10 +535,13 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     };
   }
 
+  private get playgroundSelection() {
+    return this.playgroundPanelService.getSelection(this.args.moduleId);
+  }
+
   private cardResource = getCard(
     this,
-    () =>
-      this.newCardJSON ?? this.playgroundSelections[this.args.moduleId]?.cardId,
+    () => this.newCardJSON ?? this.playgroundSelection?.cardId,
     { isAutoSave: () => true },
   );
 
@@ -568,14 +555,18 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   private get format(): Format {
     return (
-      this.playgroundSelections[this.args.moduleId]?.format ??
+      this.playgroundPanelService.getSelection(this.args.moduleId)?.format ??
       this.defaultFormat
     );
   }
 
   private get fieldIndex(): number | undefined {
-    if (this.playgroundSelections[this.args.moduleId]?.fieldIndex) {
-      return this.playgroundSelections[this.args.moduleId].fieldIndex;
+    let index = this.playgroundPanelService.getSelection(
+      this.args.moduleId,
+    )?.fieldIndex;
+    if (index !== undefined && index >= 0) {
+      console.log(index);
+      return index;
     }
     return this.args.isFieldDef ? 0 : undefined;
   }
@@ -651,7 +642,9 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (this.newCardJSON) {
       this.newCardJSON = undefined;
     }
-    let selection = this.playgroundSelections[this.args.moduleId];
+    let selection = this.playgroundPanelService.getSelection(
+      this.args.moduleId,
+    );
     if (selection?.cardId) {
       let { cardId, format, fieldIndex } = selection;
       if (
@@ -662,14 +655,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         return;
       }
     }
-    this.playgroundSelections[this.args.moduleId] = {
-      cardId: selectedCardId,
-      format: selectedFormat,
-      fieldIndex: index,
-    };
-    window.localStorage.setItem(
-      PlaygroundSelections,
-      JSON.stringify(this.playgroundSelections),
+    this.playgroundPanelService.persistSelections(
+      this.args.moduleId,
+      selectedCardId,
+      selectedFormat,
+      index,
     );
   };
 

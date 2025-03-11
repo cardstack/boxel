@@ -22,6 +22,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -1325,6 +1326,196 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-past-sessions]').exists();
     await click('[data-test-message-field]');
     assert.dom('[data-test-past-sessions]').doesNotExist();
+  });
+
+  test('it can render reasoning from ai bot', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+  });
+
+  test('by default reasoning content expands when reasoning starts streaming, then collapses when body starts streaming', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    let eventId = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    assert
+      .dom('[data-test-message-idx="0"] .reasoning-content')
+      .containsText('Thinking...');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotExist();
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await waitUntil(() => {
+      const element = document.querySelector(
+        '[data-test-message-idx="0"] details[data-test-reasoning]',
+      );
+      return element?.textContent?.includes?.(
+        'they want to know what kind of dog to get',
+      );
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: 'You should get a',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a',
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await waitUntil(() => {
+      const element = document.querySelector('[data-test-message-idx="0"]');
+      return element?.textContent?.includes?.('You should get a');
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+  });
+
+  test('if user explicity collapses or expands reasoning content, that state is remembered', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let eventId = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    assert
+      .dom('[data-test-message-idx="0"] .reasoning-content')
+      .containsText('Thinking...');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotExist();
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await waitUntil(() => {
+      const element = document.querySelector(
+        '[data-test-message-idx="0"] details[data-test-reasoning]',
+      );
+      return element?.textContent?.includes?.(
+        'they want to know what kind of dog to get',
+      );
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    await click(
+      '[data-test-message-idx="0"] details[data-test-reasoning] summary',
+    );
+    await waitFor(
+      `[data-test-message-idx="0"] details[data-test-reasoning]:not([open])`,
+    );
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: 'You should get a beagle.',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a beagle.',
+      isStreamingFinished: false,
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+    await click(
+      '[data-test-message-idx="0"] details[data-test-reasoning] summary',
+    );
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: 'You should get a beagle. They are great companions.',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a beagle. They are great companions.',
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
   });
 
   test('it can render a markdown message from ai bot', async function (assert) {

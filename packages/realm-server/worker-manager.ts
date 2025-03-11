@@ -24,6 +24,12 @@ import { Server } from 'http';
 
 let log = logger('worker-manager');
 
+// This is an ENV var we get from ECS that looks like:
+// http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
+// last segment is the "container runtime ID", where the value on the left of
+// the '-' is the task ID.
+const ECS_CONTAINER_METADATA_URI = process.env.ECS_CONTAINER_METADATA_URI;
+
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
   log.error(
@@ -221,25 +227,26 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     },
   );
+  let workerId = ECS_CONTAINER_METADATA_URI
+    ? `${ECS_CONTAINER_METADATA_URI.split('/').pop()!}-pid-${worker.pid}`
+    : worker.pid;
 
   worker.on('exit', () => {
     if (!isExiting) {
-      log.info(`worker ${worker.pid} exited. spawning replacement worker`);
+      log.info(`worker ${workerId} exited. spawning replacement worker`);
       startWorker(priority, urlMappings);
     }
   });
 
   if (worker.stdout) {
     worker.stdout.on('data', (data: Buffer) =>
-      log.info(
-        `[worker ${worker.pid} priority ${priority}]: ${data.toString()}`,
-      ),
+      log.info(`[worker ${workerId} priority ${priority}]: ${data.toString()}`),
     );
   }
   if (worker.stderr) {
     worker.stderr.on('data', (data: Buffer) =>
       log.error(
-        `[worker ${worker.pid} priority ${priority}]: ${data.toString()}`,
+        `[worker ${workerId} priority ${priority}]: ${data.toString()}`,
       ),
     );
   }
@@ -248,7 +255,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
     new Promise<void>((r) => {
       worker.on('message', (message) => {
         if (message === 'ready') {
-          log.info(`[worker ${worker.pid} priority ${priority}]: worker ready`);
+          log.info(`[worker ${workerId} priority ${priority}]: worker ready`);
           r();
         }
       });
@@ -257,7 +264,7 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
   ]);
   if (timeout) {
     console.error(
-      `timed-out waiting for worker pid ${worker.pid} to start. Stopping worker manager`,
+      `timed-out waiting for worker ${workerId} to start. Stopping worker manager`,
     );
     process.exit(-2);
   }
