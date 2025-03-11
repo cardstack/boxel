@@ -215,7 +215,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       contents: files,
     }));
 
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     lookupNetworkService().mount(

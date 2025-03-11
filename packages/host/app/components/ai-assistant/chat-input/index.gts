@@ -63,11 +63,14 @@ export default class AiAssistantChatInput extends Component<Signature> {
       .chat-input {
         height: var(--chat-input-height);
         min-height: var(--chat-input-height);
+        max-height: 300px;
         border-color: transparent;
         font-weight: 500;
         padding: var(--boxel-sp-4xs);
         resize: none;
         outline: 0;
+        transition: height 0.2s ease-in-out;
+        overflow-y: auto;
       }
       .chat-input::placeholder {
         color: var(--boxel-400);
@@ -134,17 +137,22 @@ export default class AiAssistantChatInput extends Component<Signature> {
   get height() {
     const lineHeight = 20;
     const padding = 8;
+    const minLines = 1;
+    const maxLines = 15;
 
-    let lineCount = (this.args.value.match(/\n/g) ?? []).length + 1;
-    let count = 1;
+    // Calculate actual line count from newlines in the content
+    let newlineCount = (this.args.value.match(/\n/g) ?? []).length;
 
-    if (lineCount > 5) {
-      count = 5;
-    } else if (lineCount > 1) {
-      count = lineCount;
-    }
+    // Also consider content length for lines that might wrap
+    // This is a rough estimate that can be adjusted
+    const charsPerLine = 60;
+    let charLineCount = Math.ceil(this.args.value.length / charsPerLine);
 
-    let height = count * lineHeight + 2 * padding;
+    // Use whichever count is higher (newlines or character-based estimate)
+    let estimatedLineCount = Math.max(newlineCount + 1, charLineCount);
+    let lineCount = Math.min(Math.max(estimatedLineCount, minLines), maxLines);
+
+    let height = lineCount * lineHeight + 2 * padding;
     return `${height}px`;
   }
 }
