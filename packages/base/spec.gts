@@ -14,7 +14,6 @@ import StringField from './string';
 import BooleanField from './boolean';
 import CodeRef from './code-ref';
 import MarkdownField from './markdown';
-import { restartableTask } from 'ember-concurrency';
 import {
   FieldContainer,
   Pill,
@@ -39,7 +38,8 @@ import StackIcon from '@cardstack/boxel-icons/stack';
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import Brain from '@cardstack/boxel-icons/brain';
-import { tracked } from '@glimmer/tracking';
+import { use, resource } from 'ember-resources';
+import { TrackedObject } from 'tracked-built-ins';
 
 export type SpecType = 'card' | 'field' | 'app' | 'skill';
 
@@ -48,24 +48,28 @@ class SpecTypeField extends StringField {
 }
 
 class Isolated extends Component<typeof Spec> {
-  @tracked icon: CardOrFieldTypeIcon | undefined;
-
   get defaultIcon() {
     return this.args.model.constructor?.icon;
   }
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.loadCardIcon.perform();
+
+  get icon() {
+    return this.loadCardIcon.value;
   }
 
-  private loadCardIcon = restartableTask(async () => {
-    if (this.args.model.ref && this.args.model.id) {
-      let card = await loadCard(this.args.model.ref, {
-        loader: myLoader(),
-        relativeTo: new URL(this.args.model.id),
-      });
-      this.icon = card.icon;
-    }
+  @use private loadCardIcon = resource(() => {
+    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      if (this.args.model.ref && this.args.model.id) {
+        let card = await loadCard(this.args.model.ref, {
+          loader: myLoader(),
+          relativeTo: new URL(this.args.model.id),
+        });
+        icon.value = card.icon;
+      }
+    })();
+    return icon;
   });
 
   get absoluteRef() {
@@ -270,24 +274,28 @@ class Isolated extends Component<typeof Spec> {
 }
 
 class Fitted extends Component<typeof Spec> {
-  @tracked icon: CardOrFieldTypeIcon | undefined;
-
   get defaultIcon() {
     return this.args.model.constructor?.icon;
   }
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.loadCardIcon.perform();
+
+  get icon() {
+    return this.loadCardIcon.value;
   }
 
-  private loadCardIcon = restartableTask(async () => {
-    if (this.args.model.ref && this.args.model.id) {
-      let card = await loadCard(this.args.model.ref, {
-        loader: myLoader(),
-        relativeTo: new URL(this.args.model.id),
-      });
-      this.icon = card.icon;
-    }
+  @use private loadCardIcon = resource(() => {
+    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      if (this.args.model.ref && this.args.model.id) {
+        let card = await loadCard(this.args.model.ref, {
+          loader: myLoader(),
+          relativeTo: new URL(this.args.model.id),
+        });
+        icon.value = card.icon;
+      }
+    })();
+    return icon;
   });
 
   <template>
@@ -521,24 +529,28 @@ class Fitted extends Component<typeof Spec> {
 }
 
 class Edit extends Component<typeof Spec> {
-  @tracked icon: CardOrFieldTypeIcon | undefined;
-
   get defaultIcon() {
     return this.args.model.constructor?.icon;
   }
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this.loadCardIcon.perform();
+
+  get icon() {
+    return this.loadCardIcon.value;
   }
 
-  private loadCardIcon = restartableTask(async () => {
-    if (this.args.model.ref && this.args.model.id) {
-      let card = await loadCard(this.args.model.ref, {
-        loader: myLoader(),
-        relativeTo: new URL(this.args.model.id),
-      });
-      this.icon = card.icon;
-    }
+  @use private loadCardIcon = resource(() => {
+    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      if (this.args.model.ref && this.args.model.id) {
+        let card = await loadCard(this.args.model.ref, {
+          loader: myLoader(),
+          relativeTo: new URL(this.args.model.id),
+        });
+        icon.value = card.icon;
+      }
+    })();
+    return icon;
   });
 
   get absoluteRef() {
