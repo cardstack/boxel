@@ -478,29 +478,32 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return false;
   }
 
-  isSkill(selectedDeclaration: CardOrFieldDeclaration) {
-    if (selectedDeclaration.exportName === 'SkillCard') {
+  async isSkill(selectedDeclaration: CardOrFieldDeclaration) {
+    const skillCardCodeRef = {
+      name: 'SkillCard',
+      module: 'https://cardstack.com/base/skill-card',
+    };
+    const isInClassChain = await selectedDeclaration.cardType.isClassInChain(
+      selectedDeclaration.cardOrField,
+      skillCardCodeRef,
+    );
+
+    if (isInClassChain) {
       return true;
     }
-    if (
-      selectedDeclaration.super &&
-      selectedDeclaration.super.type === 'external' &&
-      selectedDeclaration.super.name === 'SkillCard' &&
-      selectedDeclaration.super.module ===
-        'https://cardstack.com/base/skill-card'
-    ) {
-      return true;
-    }
+
     return false;
   }
 
-  guessSpecType(selectedDeclaration: ModuleDeclaration): SpecType {
+  async guessSpecType(
+    selectedDeclaration: ModuleDeclaration,
+  ): Promise<SpecType> {
     if (isCardOrFieldDeclaration(selectedDeclaration)) {
       if (isCardDef(selectedDeclaration.cardOrField)) {
         if (this.isApp(selectedDeclaration)) {
           return 'app';
         }
-        if (this.isSkill(selectedDeclaration)) {
+        if (await this.isSkill(selectedDeclaration)) {
           return 'skill';
         }
         return 'card';
@@ -512,7 +515,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     throw new Error('Unidentified spec');
   }
 
-  @action createSpec(event: MouseEvent) {
+  @action async createSpec(event: MouseEvent) {
     event.stopPropagation();
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');
@@ -520,7 +523,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     if (!this.getSelectedDeclarationAsCodeRef) {
       throw new Error('bug: no code ref');
     }
-    let specType = this.guessSpecType(this.args.selectedDeclaration);
+    let specType = await this.guessSpecType(this.args.selectedDeclaration);
     this.createSpecInstance.perform(
       this.getSelectedDeclarationAsCodeRef,
       specType,
