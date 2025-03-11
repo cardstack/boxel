@@ -55,11 +55,13 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });
+
   setupBaseRealm(hooks);
   setupCardLogs(
     hooks,
@@ -452,6 +454,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'currency.gts': { CurrencyCard },
         'tx.gts': { TxCard },
@@ -546,6 +549,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'country.gts': { Country },
         'person.gts': { Person },

@@ -15,6 +15,7 @@ import {
   setupIntegrationTestRealm,
   lookupLoaderService,
 } from '../helpers';
+import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
 let loader: Loader;
@@ -29,6 +30,8 @@ module('Integration | card-prerender', function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks);
+
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
@@ -55,6 +58,7 @@ module('Integration | card-prerender', function (hooks) {
 
     ({ realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },
         'Pet/mango.json': {
