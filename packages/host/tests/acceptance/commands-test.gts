@@ -447,28 +447,28 @@ module('Acceptance | Commands tests', function (hooks) {
                     name: 'default',
                     module: '@cardstack/boxel-host/commands/get-boxel-ui-state',
                   },
-                  executors: [],
+                  requiresApproval: true,
                 },
                 {
                   codeRef: {
                     name: 'SearchCardsByTypeAndTitleCommand',
                     module: '@cardstack/boxel-host/commands/search-cards',
                   },
-                  executors: [],
+                  requiresApproval: true,
                 },
                 {
                   codeRef: {
                     name: 'default',
                     module: '@cardstack/boxel-host/commands/switch-submode',
                   },
-                  executors: [],
+                  requiresApproval: true,
                 },
                 {
                   codeRef: {
                     name: 'default',
                     module: `/test/maybe-boom-command`,
                   },
-                  executors: [],
+                  requiresApproval: true,
                 },
               ],
               title: 'Useful Commands',
@@ -950,7 +950,7 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.strictEqual(message.content.commandRequestId, 'abc123');
   });
 
-  test('ShowCard command added from a skill, can be executed when clicked on', async function (assert) {
+  test('ShowCard command added from a skill, can be automatically executed', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -992,9 +992,13 @@ module('Acceptance | Commands tests', function (hooks) {
         },
       ],
     });
-    // Click on the apply button
     await waitFor('[data-test-message-idx="0"]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+
+    // Note: you don't have to click on apply button, because command on Skill
+    // has requireApproval set to false
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+    );
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
 

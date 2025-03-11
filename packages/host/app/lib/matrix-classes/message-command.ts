@@ -27,6 +27,7 @@ export default class MessageCommand {
     commandRequest: Partial<CommandRequest>,
     public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
+    public requiresApproval: boolean,
     commandStatus: CommandStatus,
     commandResultCardEventId: string | undefined,
     owner: Owner,

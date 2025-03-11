@@ -1479,9 +1479,10 @@ export default class MatrixService extends Service {
 
     if (
       event.type === 'm.room.message' &&
-      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length
+      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
+      event.content?.isStreamingFinished
     ) {
-      this.commandService.executeCommandEventsIfNeeded(event);
+      this.commandService.queueEventForCommandProcessing(event);
     }
 
     if (room.oldState.paginationToken != null) {
