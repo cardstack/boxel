@@ -62,6 +62,15 @@ export class CreateInstanceInput extends CardDef {
   @field realm = contains(StringField);
 }
 
+export class ApplySearchReplaceBlockInput extends CardDef {
+  @field fileContent = contains(StringField);
+  @field codeBlock = contains(StringField);
+}
+
+export class ApplySearchReplaceBlockResult extends CardDef {
+  @field resultContent = contains(StringField);
+}
+
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
 }
