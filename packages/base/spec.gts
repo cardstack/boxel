@@ -61,12 +61,16 @@ class Isolated extends Component<typeof Spec> {
       value: undefined,
     });
     (async () => {
-      if (this.args.model.ref && this.args.model.id) {
-        let card = await loadCard(this.args.model.ref, {
-          loader: myLoader(),
-          relativeTo: new URL(this.args.model.id),
-        });
-        icon.value = card.icon;
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let card = await loadCard(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          icon.value = card.icon;
+        }
+      } catch (e) {
+        icon.value = undefined;
       }
     })();
     return icon;
@@ -287,12 +291,16 @@ class Fitted extends Component<typeof Spec> {
       value: undefined,
     });
     (async () => {
-      if (this.args.model.ref && this.args.model.id) {
-        let card = await loadCard(this.args.model.ref, {
-          loader: myLoader(),
-          relativeTo: new URL(this.args.model.id),
-        });
-        icon.value = card.icon;
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let card = await loadCard(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          icon.value = card.icon;
+        }
+      } catch (e) {
+        icon.value = undefined;
       }
     })();
     return icon;
@@ -542,12 +550,16 @@ class Edit extends Component<typeof Spec> {
       value: undefined,
     });
     (async () => {
-      if (this.args.model.ref && this.args.model.id) {
-        let card = await loadCard(this.args.model.ref, {
-          loader: myLoader(),
-          relativeTo: new URL(this.args.model.id),
-        });
-        icon.value = card.icon;
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let card = await loadCard(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          icon.value = card.icon;
+        }
+      } catch (e) {
+        icon.value = undefined;
       }
     })();
     return icon;
