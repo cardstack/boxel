@@ -895,7 +895,8 @@ export default class MatrixService extends Service {
     let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}SkillCard/code-module-editing`,
+      `${baseRealm.url}SkillCard/boxel-coding`,
+      `${baseRealm.url}SkillCard/source-code-editing`,
     ];
 
     let defaultSkills;
@@ -1461,12 +1462,11 @@ export default class MatrixService extends Service {
           'Ignoring realm event because no realm found',
           event,
         );
-        // TODO CS-8097
-        // } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
-        //   realmEventsLogger.debug(
-        //     `Ignoring realm event because sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
-        //     event,
-        //   );
+      } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
+        realmEventsLogger.debug(
+          `Ignoring realm event because sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
+          event,
+        );
       } else {
         this.messageService.relayMatrixSSE(
           realmResourceForEvent.url,

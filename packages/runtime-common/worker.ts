@@ -40,6 +40,14 @@ export interface Reader {
   mtimes: () => Promise<{ [url: string]: number }>;
 }
 
+export interface JobInfo extends JSONTypes.Object {
+  jobId: number;
+  workerId: string;
+  reservationId: number;
+  concurrencyGroup: string | null;
+  jobType: string;
+}
+
 export type RunnerRegistration = (
   fromScratch: (realmURL: URL) => Promise<IndexResults>,
   incremental: (
@@ -55,6 +63,7 @@ export interface RunnerOpts {
   reader: Reader;
   registerRunner: RunnerRegistration;
   indexWriter: IndexWriter;
+  jobInfo?: JobInfo;
 }
 
 export interface WorkerArgs extends JSONTypes.Object {
@@ -179,7 +188,7 @@ export class Worker {
     await this.#queue.start();
   }
 
-  private async makeAuthedFetch(args: WorkerArgs) {
+  private async makeAuthedFetch(args: WorkerArgs & { jobInfo?: JobInfo }) {
     let matrixClient: MatrixClient;
     if (this.#matrixClientCache.has(args.realmUsername)) {
       matrixClient = this.#matrixClientCache.get(args.realmUsername)!;
@@ -216,13 +225,14 @@ export class Worker {
   }
 
   private async prepareAndRunJob<T>(
-    args: WorkerArgs,
+    args: WorkerArgs & { jobInfo?: JobInfo },
     run: () => Promise<T>,
   ): Promise<T> {
     let deferred = new Deferred<T>();
     let _fetch = await this.makeAuthedFetch(args);
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch,
+      jobInfo: args.jobInfo,
       reader: getReader(_fetch, new URL(args.realmURL)),
       indexWriter: this.#indexWriter,
       registerRunner: async (fromScratch, incremental) => {
@@ -258,7 +268,7 @@ export class Worker {
     return result;
   }
 
-  private copy = async (args: CopyArgs) => {
+  private copy = async (args: CopyArgs & { jobInfo?: JobInfo }) => {
     this.#log.debug(`starting copy indexing for job: ${JSON.stringify(args)}`);
     let authedFetch = await this.makeAuthedFetch(args);
     let realmInfoResponse = await authedFetch(`${args.realmURL}_info`, {

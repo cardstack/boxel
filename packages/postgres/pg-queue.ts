@@ -4,6 +4,7 @@ import {
   type QueueRunner,
   type PgPrimitive,
   type Expression,
+  type JobInfo,
   param,
   separatedByCommas,
   addExplicitParens,
@@ -269,10 +270,19 @@ export class PgQueueRunner implements QueueRunner {
     }
   }
 
-  private async runJob(jobType: string, args: PgPrimitive) {
+  private async runJob(jobType: string, args: PgPrimitive, jobInfo: JobInfo) {
     let handler = this.#handlers.get(jobType);
     if (!handler) {
       throw new Error(`unknown job handler ${jobType}`);
+    }
+
+    if (
+      args &&
+      typeof args === 'object' &&
+      !Array.isArray(args) &&
+      !('jobInfo' in args)
+    ) {
+      args.jobInfo = jobInfo;
     }
     return await handler(args);
   }
@@ -348,7 +358,13 @@ export class PgQueueRunner implements QueueRunner {
           try {
             log.debug(`%s: running %s`, this.#workerId, jobToRun.id);
             result = await Promise.race([
-              this.runJob(jobToRun.job_type, jobToRun.args),
+              this.runJob(jobToRun.job_type, jobToRun.args, {
+                jobId: jobToRun.id,
+                workerId: this.#workerId,
+                reservationId: jobReservationId,
+                concurrencyGroup: jobToRun.concurrency_group,
+                jobType: jobToRun.job_type,
+              }),
               // we race the job so that it doesn't hold this worker hostage if
               // the job's promise never resolves
               new Promise<'timeout'>((r) =>
