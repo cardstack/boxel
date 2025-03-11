@@ -355,7 +355,7 @@
       "m.relates_to": {
         "event_id": "$pZ5t1hj93dVwVcrh60-XFNeSL4ztErK6J0wAYr9hI_0",
         "key": "applied",
-        "rel_type": "m.annotation"
+        "rel_type": "app.boxel.commandAnnotation"
       }
     },
     "origin_server_ts": 1734900014044,
@@ -674,7 +674,7 @@
       "m.relates_to": {
         "event_id": "$BQ3wE7TxtE38oid1xynRFTglU2_2P5jJ8k01uXrHj1U",
         "key": "applied",
-        "rel_type": "m.annotation"
+        "rel_type": "app.boxel.commandAnnotation"
       }
     },
     "origin_server_ts": 1734900100494,

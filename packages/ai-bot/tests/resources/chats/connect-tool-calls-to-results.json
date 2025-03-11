@@ -365,10 +365,20 @@
     "sender": "@aibot:localhost",
     "content": {
       "body": "Check the current weather conditions for traveling",
-      "msgtype": "app.boxel.command",
+      "msgtype": "app.boxel.message",
       "formatted_body": "Check the current weather conditions for traveling",
       "format": "org.matrix.custom.html",
       "data": "{\"eventId\":\"$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_or0qFTa8y9Ef8ZVyRDNR2P1T\",\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"arguments\":{\"description\":\"Check the current weather conditions for traveling\",\"attributes\":{\"location\":\"New York\"}}}}",
+      "app.boxel.commandRequests": [
+        {
+          "id": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
+          "name": "GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX",
+          "arguments": {
+            "description": "Check the current weather conditions for traveling",
+            "attributes": { "location": "New York" }
+          }
+        }
+      ],
       "m.relates_to": {
         "rel_type": "m.replace",
         "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE"
@@ -410,8 +420,9 @@
       "m.relates_to": {
         "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
         "key": "applied",
-        "rel_type": "m.annotation"
+        "rel_type": "app.boxel.commandAnnotation"
       },
+      "commandRequestId": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
       "data": "{\"cardEventId\":\"$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc\"}"
     },
     "origin_server_ts": 1736864370892,

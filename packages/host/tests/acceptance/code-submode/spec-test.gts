@@ -2,17 +2,15 @@ import { click, waitFor, fillIn } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Realm, baseRealm } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupServerSentEvents,
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
-  type TestContextWithSSE,
   type TestContextWithSave,
   setupOnSave,
 } from '../../helpers';
@@ -50,6 +48,15 @@ const personCardSource = `
         </style>
       </template>
     };
+  }
+`;
+
+const person1CardSource = `
+  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+  import StringCard from "https://cardstack.com/base/string";
+
+  export class Person1 extends CardDef {
+    static displayName = 'Person1';
   }
 `;
 
@@ -108,35 +115,44 @@ const newSkillCardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
   import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-  export class NewSkill extends CardDef {
+  export class NewSkill extends SkillCard {
     static displayName = 'NewSkill';
+  }
+
+  export class ExtendedNewSkill extends NewSkill {
+    static displayName = 'ExtendedNewSkill';
   }
 `;
 
 let matrixRoomId: string;
 module('Acceptance | Spec preview', function (hooks) {
-  let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
 
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL, testRealm2URL],
+  });
+
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL, testRealm2URL],
-    });
+    mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
-    ({ realm } = await setupAcceptanceTestRealm({
+    await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
         'person.gts': personCardSource,
+        'person-1.gts': person1CardSource,
         'pet.gts': petCardSource,
         'employee.gts': employeeCardSource,
         'new-skill.gts': newSkillCardSource,
@@ -279,8 +295,9 @@ module('Acceptance | Spec preview', function (hooks) {
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
       },
-    }));
+    });
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {
         'new-skill.gts': newSkillCardSource,
@@ -335,6 +352,8 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
+    await waitFor('[data-test-view-spec-instance]');
+    assert.dom('[data-test-view-spec-instance]').exists();
   });
   test('view when there are multiple spec instances', async function (assert) {
     await visitOperatorMode({
@@ -351,6 +370,8 @@ module('Acceptance | Spec preview', function (hooks) {
     assert
       .dom('[data-test-spec-selector-item-path]')
       .hasText('pet-entry-2.json');
+    await waitFor('[data-test-view-spec-instance]');
+    assert.dom('[data-test-view-spec-instance]').exists();
   });
   test('view when there are no spec instances', async function (assert) {
     await visitOperatorMode({
@@ -390,26 +411,51 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-cannot-write-intent-message]').doesNotExist();
     await percySnapshot(assert);
   });
-  test<TestContextWithSSE>('have ability to create new spec instances', async function (assert) {
+  test('have ability to create new spec instances', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person-1.gts`,
+    });
+    assert.dom('[data-test-create-spec-button]').exists();
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await click('[data-test-create-spec-button]');
+
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
+    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-name]').hasText('Person1');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person-1`);
+  });
+  test('have ability to create new skill spec type instances', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-create-spec-button]');
-      },
-    });
+    await click('[data-test-create-spec-button]');
+
     assert
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('NewSkill');
-    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-type]').hasText('skill');
     assert.dom('[data-test-exported-name]').hasText('NewSkill');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
+  });
+  test('have ability to create new extended skill spec type instances', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}new-skill.gts`,
+    });
+    await click('[data-boxel-selector-item-text="ExtendedNewSkill"]');
+    assert.dom('[data-test-create-spec-button]').exists();
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await click('[data-test-create-spec-button]');
+
+    assert
+      .dom('[data-test-title] [data-test-boxel-input]')
+      .hasValue('ExtendedNewSkill');
+    assert.dom('[data-test-exported-type]').hasText('skill');
+    assert.dom('[data-test-exported-name]').hasText('ExtendedNewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
 
@@ -466,5 +512,33 @@ module('Acceptance | Spec preview', function (hooks) {
       assert.strictEqual(json.data.attributes?.readMe, readMeInput);
     });
     await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
+  });
+
+  test('clicking view instance button correctly navigates to spec file and displays content in editor', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+
+    await waitFor('[data-test-view-spec-instance]');
+    assert.dom('[data-test-view-spec-instance]').exists();
+    await click('[data-test-view-spec-instance]');
+
+    await waitFor('[data-test-card-url-bar-input]');
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(`${testRealmURL}person-entry.json`);
+
+    await waitFor('[data-test-editor]');
+    assert.dom('[data-test-editor]').hasAnyText();
+    assert.dom('[data-test-editor]').containsText('Person');
+    assert.dom('[data-test-editor]').containsText('Spec');
+    assert.dom('[data-test-editor]').containsText('specType');
+
+    assert
+      .dom(
+        `[data-test-card="${testRealmURL}person-entry"][data-test-card-format="isolated"]`,
+      )
+      .exists();
   });
 });

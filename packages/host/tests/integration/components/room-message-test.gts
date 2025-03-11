@@ -13,11 +13,14 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [],
     autostart: true,
   });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
 
   async function setupTestScenario(
     isStreaming: boolean,
@@ -34,13 +37,14 @@ module('Integration | Component | RoomMessage', function (hooks) {
     };
 
     let testScenario = {
-      roomId: await createAndJoinRoom('@testuser:localhost', 'Test Room'),
+      roomId: createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'Test Room',
+      }),
       message,
       messages: [message],
       isStreaming,
       monacoSDK: {},
-      currentEditor: {},
-      setCurrentMonacoContainer: null,
       maybeRetryAction: null,
     } as unknown as RoomResource;
 
@@ -57,10 +61,8 @@ module('Integration | Component | RoomMessage', function (hooks) {
         @roomResource={{testScenario}}
         @monacoSDK={{testScenario.monacoSDK}}
         @isStreaming={{testScenario.isStreaming}}
-        @currentEditor={{testScenario.currentEditor}}
         @registerScroller={{noop}}
         @index={{0}}
-        @setCurrentEditor={{testScenario.setCurrentMonacoContainer}}
         @retryAction={{testScenario.maybeRetryAction}}
         data-test-message-idx='1'
       />

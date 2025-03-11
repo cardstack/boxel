@@ -1,6 +1,7 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { MatrixClient, waitForMatrixMessage } from './matrix-client';
 import { v4 as uuidv4 } from 'uuid';
+import type { MessageEvent } from 'https://cardstack.com/base/matrix-event';
 
 export interface Utils {
   badRequest(message: string): Response;
@@ -74,6 +75,7 @@ export class MatrixBackendAuthentication {
         'boxel.session-rooms',
       )) ?? {};
     let roomId = dmRooms[user];
+
     if (!roomId) {
       roomId = await this.matrixClient.createDM(user);
       dmRooms[user] = roomId;
@@ -198,6 +200,9 @@ export class MatrixBackendAuthentication {
         }),
       );
     }
+
+    latestAuthChallengeMessage = latestAuthChallengeMessage as MessageEvent;
+    latestAuthResponseMessage = latestAuthResponseMessage as MessageEvent;
 
     let lastChallenge = latestAuthChallengeMessage.content.body.replace(
       'auth-challenge: ',

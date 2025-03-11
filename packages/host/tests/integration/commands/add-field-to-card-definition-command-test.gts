@@ -19,6 +19,7 @@ import {
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
@@ -37,6 +38,7 @@ module(
   function (hooks) {
     setupRenderingTest(hooks);
     setupLocalIndexing(hooks);
+    let mockMatrixUtils = setupMockMatrix(hooks);
 
     hooks.beforeEach(function (this: RenderingTestContext) {
       getOwner(this)!.register('service:realm', StubRealmService);
@@ -46,6 +48,7 @@ module(
     hooks.beforeEach(async function () {
       await setupIntegrationTestRealm({
         loader,
+        mockMatrixUtils,
         contents: {
           'person.gts': `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";

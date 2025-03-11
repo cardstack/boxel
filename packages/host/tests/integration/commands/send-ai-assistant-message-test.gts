@@ -38,10 +38,13 @@ class StubRealmService extends RealmService {
 module('Integration | commands | send-ai-assistant-message', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  let { createAndJoinRoom, getRoomEvents } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
+
+  let { createAndJoinRoom, getRoomEvents } = mockMatrixUtils;
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
@@ -51,12 +54,16 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   hooks.beforeEach(async function () {
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {},
     });
   });
 
   test('send an ai assistant message', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
@@ -73,7 +80,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('send an ai assistant message with command call, not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
@@ -96,7 +106,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('send an ai assistant message with command call, explicitly not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
@@ -120,7 +133,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('send an ai assistant message with command call, explicitly required to be called', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(
@@ -144,7 +160,10 @@ module('Integration | commands | send-ai-assistant-message', function (hooks) {
   });
 
   test('multiple commands are allowed if not required to be called', async function (assert) {
-    let roomId = createAndJoinRoom('@testuser:localhost', 'room-test');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     let commandService = lookupService<CommandService>('command-service');
 
     let sendAiAssistantMessageCommand = new SendAiAssistantMessageCommand(

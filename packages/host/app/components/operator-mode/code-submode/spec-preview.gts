@@ -177,6 +177,7 @@ interface ContentSignature {
 
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner, args: ContentSignature['Args']) {
     super(owner, args);
@@ -222,6 +223,15 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return !this.args.canWrite && this.args.cards.length === 0;
   }
 
+  @action viewSpecInstance() {
+    if (!this.args.selectedId) {
+      return;
+    }
+
+    const selectedUrl = new URL(this.args.selectedId);
+    this.operatorModeStateService.updateCodePath(selectedUrl);
+  }
+
   <template>
     <div
       class={{cn
@@ -243,32 +253,42 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
         {{#if @spec}}
           <div class='spec-preview'>
-            <div class='spec-selector' data-test-spec-selector>
-              <BoxelSelect
-                @options={{this.cardIds}}
-                @selected={{@selectedId}}
-                @onChange={{@onSelectCard}}
-                @matchTriggerWidth={{true}}
-                @disabled={{this.onlyOneInstance}}
-                as |id|
+            <div class='spec-selector-container'>
+              <div class='spec-selector' data-test-spec-selector>
+                <BoxelSelect
+                  @options={{this.cardIds}}
+                  @selected={{@selectedId}}
+                  @onChange={{@onSelectCard}}
+                  @matchTriggerWidth={{true}}
+                  @disabled={{this.onlyOneInstance}}
+                  as |id|
+                >
+                  {{#if id}}
+                    {{#let (this.getDropdownData id) as |data|}}
+                      {{#if data}}
+                        <div class='spec-selector-item'>
+                          <RealmIcon
+                            @canAnimate={{true}}
+                            class='url-realm-icon'
+                            @realmInfo={{data.realmInfo}}
+                          />
+                          <span data-test-spec-selector-item-path>
+                            {{data.localPath}}
+                          </span>
+                        </div>
+                      {{/if}}
+                    {{/let}}
+                  {{/if}}
+                </BoxelSelect>
+              </div>
+              <BoxelButton
+                @kind='secondary-light'
+                @size='small'
+                {{on 'click' this.viewSpecInstance}}
+                data-test-view-spec-instance
               >
-                {{#if id}}
-                  {{#let (this.getDropdownData id) as |data|}}
-                    {{#if data}}
-                      <div class='spec-selector-item'>
-                        <RealmIcon
-                          @canAnimate={{true}}
-                          class='url-realm-icon'
-                          @realmInfo={{data.realmInfo}}
-                        />
-                        <span data-test-spec-selector-item-path>
-                          {{data.localPath}}
-                        </span>
-                      </div>
-                    {{/if}}
-                  {{/let}}
-                {{/if}}
-              </BoxelSelect>
+                <span class='view-instance-btn-text'>View Instance</span>
+              </BoxelButton>
             </div>
             {{#if this.displayIsolated}}
               <Preview @card={{@spec}} @format='isolated' />
@@ -306,14 +326,27 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         align-content: center;
         text-align: center;
       }
+      .spec-selector-container {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
       .spec-selector {
-        min-width: 40%;
+        min-width: 50%;
         align-self: flex-start;
       }
       .spec-selector-item {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxxs);
+      }
+      .view-instance-btn-text {
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        word-break: break-word;
       }
     </style>
   </template>
@@ -445,29 +478,32 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return false;
   }
 
-  isSkill(selectedDeclaration: CardOrFieldDeclaration) {
-    if (selectedDeclaration.exportName === 'SkillCard') {
+  async isSkill(selectedDeclaration: CardOrFieldDeclaration) {
+    const skillCardCodeRef = {
+      name: 'SkillCard',
+      module: 'https://cardstack.com/base/skill-card',
+    };
+    const isInClassChain = await selectedDeclaration.cardType.isClassInChain(
+      selectedDeclaration.cardOrField,
+      skillCardCodeRef,
+    );
+
+    if (isInClassChain) {
       return true;
     }
-    if (
-      selectedDeclaration.super &&
-      selectedDeclaration.super.type === 'external' &&
-      selectedDeclaration.super.name === 'SkillCard' &&
-      selectedDeclaration.super.module ===
-        'https://cardstack.com/base/skill-card'
-    ) {
-      return true;
-    }
+
     return false;
   }
 
-  guessSpecType(selectedDeclaration: ModuleDeclaration): SpecType {
+  async guessSpecType(
+    selectedDeclaration: ModuleDeclaration,
+  ): Promise<SpecType> {
     if (isCardOrFieldDeclaration(selectedDeclaration)) {
       if (isCardDef(selectedDeclaration.cardOrField)) {
         if (this.isApp(selectedDeclaration)) {
           return 'app';
         }
-        if (this.isSkill(selectedDeclaration)) {
+        if (await this.isSkill(selectedDeclaration)) {
           return 'skill';
         }
         return 'card';
@@ -479,7 +515,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     throw new Error('Unidentified spec');
   }
 
-  @action createSpec(event: MouseEvent) {
+  @action async createSpec(event: MouseEvent) {
     event.stopPropagation();
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');
@@ -487,7 +523,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     if (!this.getSelectedDeclarationAsCodeRef) {
       throw new Error('bug: no code ref');
     }
-    let specType = this.guessSpecType(this.args.selectedDeclaration);
+    let specType = await this.guessSpecType(this.args.selectedDeclaration);
     this.createSpecInstance.perform(
       this.getSelectedDeclarationAsCodeRef,
       specType,

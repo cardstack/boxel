@@ -282,6 +282,10 @@ jobs:
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
+      # TODO: remove with CS-8104
+      - name: Install watchexec
+        run: cargo install --locked watchexec-cli
+        if: ${{ matrix.testModule == 'realm-endpoints-test.ts' }}
       - name: realm server test suite
         run: pnpm test:wait-for-servers
         working-directory: packages/realm-server

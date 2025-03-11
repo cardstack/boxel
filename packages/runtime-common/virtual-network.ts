@@ -208,7 +208,7 @@ export class VirtualNetwork {
   }
 }
 
-function isUrlLike(moduleIdentifier: string): boolean {
+export function isUrlLike(moduleIdentifier: string): boolean {
   return (
     moduleIdentifier.startsWith('.') ||
     moduleIdentifier.startsWith('/') ||

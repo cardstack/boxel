@@ -1,3 +1,4 @@
+import { on } from '@ember/modifier';
 import type Owner from '@ember/owner';
 import {
   waitUntil,
@@ -8,6 +9,8 @@ import {
   RenderingTestContext,
   triggerEvent,
 } from '@ember/test-helpers';
+
+import { tracked } from '@glimmer/tracking';
 
 import percySnapshot from '@percy/ember';
 import format from 'date-fns/format';
@@ -2032,6 +2035,240 @@ module('Integration | card-basics', function (hooks) {
       assert.dom('[data-test-customer-billAmount]').containsText('100');
     });
 
+    test('re-renders a card with a polymorphic "contains" field when the field instance changes', async function (assert) {
+      class TestField extends FieldDef {
+        static displayName = 'TestField';
+        @field firstName = contains(StringField);
+
+        static fitted = class TestFieldFitted extends Component<typeof this> {
+          <template>
+            <div data-test-baseclass>
+              BaseClass
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+      class SubTestField extends TestField {
+        static displayName = 'SubTestField';
+
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-subclass>
+              SubClass
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = contains(TestField);
+
+        static isolated = class Isolated extends Component<typeof TestCard> {
+          setSubclass = () => {
+            this.args.model.specialField = new SubTestField({
+              firstName: 'New Name',
+            });
+          };
+          <template>
+            <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+              Subclass From Outside</button>
+            <@fields.specialField @format='fitted' />
+          </template>
+        };
+      }
+
+      let card = new TestCard({
+        specialField: new TestField({
+          firstName: 'Old Name',
+        }),
+      });
+
+      await renderCard(loader, card, 'isolated');
+      assert.dom('[data-test-baseclass]').hasText('BaseClass Old Name');
+      assert.dom('[data-test-subclass]').doesNotExist();
+
+      await click('[data-test-set-subclass]');
+
+      assert.dom('[data-test-baseclass]').doesNotExist();
+      assert.dom('[data-test-subclass]').hasText('SubClass New Name');
+
+      assert.ok(true);
+    });
+
+    test('re-renders a card with linked card that has a polymorphic field', async function (assert) {
+      class TestField extends FieldDef {
+        static displayName = 'TestField';
+
+        static fitted = class TestFieldFitted extends Component<typeof this> {
+          <template>
+            <div data-test-baseclass>
+              BaseClass
+            </div>
+          </template>
+        };
+      }
+      class SubTestField extends TestField {
+        static displayName = 'SubTestField';
+
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-subclass>
+              SubClass
+            </div>
+          </template>
+        };
+      }
+
+      class TestCardWithField extends CardDef {
+        static displayName = 'TestCardWithField';
+        @field specialField = contains(TestField);
+
+        static fitted = class Fitted extends Component<typeof this> {
+          setSubclass = () => {
+            this.args.model.specialField = new SubTestField();
+          };
+          <template>
+            <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+              Subclass From Outside</button>
+            <div data-test-subclass>
+              <@fields.specialField @format='fitted' />
+            </div>
+          </template>
+        };
+      }
+
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field cardWithSpecialField = linksToMany(TestCardWithField);
+
+        static isolated = class Isolated extends Component<typeof TestCard> {
+          <template>
+            <@fields.cardWithSpecialField @format='fitted' />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        TestCardWithField,
+        TestCard,
+      });
+      let cardWithField1 = new TestCardWithField({});
+      let cardWithField2 = new TestCardWithField({});
+      await saveCard(
+        cardWithField1,
+        `${testRealmURL}Pet/cardWithField1`,
+        loader,
+      );
+      await saveCard(
+        cardWithField2,
+        `${testRealmURL}Pet/cardWithField2`,
+        loader,
+      );
+      let card = new TestCard({
+        cardWithSpecialField: [cardWithField1, cardWithField2],
+      });
+
+      await renderCard(loader, card, 'isolated');
+      assert
+        .dom('[data-test-plural-view-item="0"] [data-test-baseclass]')
+        .hasText('BaseClass');
+      assert
+        .dom('[data-test-plural-view-item="1"] [data-test-baseclass]')
+        .hasText('BaseClass');
+      await click('[data-test-plural-view-item="1"] [data-test-set-subclass]');
+      assert
+        .dom('[data-test-plural-view-item="0"] [data-test-subclass]')
+        .hasText('BaseClass');
+      assert
+        .dom('[data-test-plural-view-item="1"] [data-test-subclass]')
+        .hasText('SubClass');
+    });
+
+    test('re-renders a card with a polymorphic "containsMany" field when field instance changes', async function (assert) {
+      class TestField extends FieldDef {
+        static displayName = 'TestField';
+        @field firstName = contains(StringField);
+
+        static fitted = class TestFieldFitted extends Component<typeof this> {
+          <template>
+            <div data-test-baseclass>
+              BaseClass
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+      class SubTestField extends TestField {
+        static displayName = 'SubTestField';
+
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-subclass>
+              SubClass
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+
+      class SubTestField2 extends TestField {
+        static displayName = 'SubTestField2';
+
+        static fitted = class Fitted extends Component<typeof this> {
+          <template>
+            <div data-test-subclass2>
+              SubClass2
+              <@fields.firstName />
+            </div>
+          </template>
+        };
+      }
+      class TestCard extends CardDef {
+        static displayName = 'TestCard';
+        @field specialField = containsMany(TestField);
+
+        static isolated = class Isolated extends Component<typeof TestCard> {
+          setSubclass = () => {
+            this.args.model.specialField = [
+              new SubTestField({
+                firstName: 'New Name',
+              }),
+              new SubTestField2({
+                firstName: 'New Name 2',
+              }),
+            ];
+          };
+          <template>
+            <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+              Subclass From Outside</button>
+            <@fields.specialField @format='fitted' />
+          </template>
+        };
+      }
+
+      let card = new TestCard({
+        specialField: [
+          new TestField({
+            firstName: 'Old Name',
+          }),
+        ],
+      });
+
+      await renderCard(loader, card, 'isolated');
+
+      assert.dom('[data-test-baseclass]').hasText('BaseClass Old Name');
+      assert.dom('[data-test-subclass]').doesNotExist();
+      assert.dom('[data-test-subclass2]').doesNotExist();
+
+      await click('[data-test-set-subclass]');
+
+      assert.dom('[data-test-baseclass]').doesNotExist();
+      assert.dom('[data-test-subclass]').hasText('SubClass New Name');
+      assert.dom('[data-test-subclass2]').hasText('SubClass2 New Name 2');
+    });
+
     test('rerender when a primitive field changes', async function (assert) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
@@ -2046,6 +2283,157 @@ module('Integration | card-basics', function (hooks) {
       assert.dom(root.children[0]).containsText('Arthur');
       child.firstName = 'Quint';
       await waitUntil(() => cleanWhiteSpace(root.textContent!) === 'Quint');
+    });
+
+    test('Re-ordering items in a linksToMany field will preserve the template and box component state', async function (assert) {
+      class Fitted extends Component<typeof Pet1> {
+        @tracked counter = 0;
+
+        incrementCounter = () => {
+          this.counter++;
+        };
+        <template>
+          {{@model.name}}
+          <button
+            {{on 'click' this.incrementCounter}}
+            data-test-increment-counter
+          >Increment</button>
+          <div data-test-counter>
+            {{this.counter}}
+          </div>
+        </template>
+      }
+
+      class FittedPrime extends Component<typeof Pet1Prime> {
+        @tracked counter = 0;
+
+        incrementCounter = () => {
+          this.counter++;
+        };
+        <template>
+          <div data-test-different-template>Different Template</div>
+          {{@model.name}}
+          <button
+            {{on 'click' this.incrementCounter}}
+            data-test-increment-counter
+          >Increment</button>
+          <div data-test-counter>
+            {{this.counter}}
+          </div>
+        </template>
+      }
+      class Pet1 extends CardDef {
+        @field name = contains(StringField);
+        static fitted = Fitted;
+      }
+
+      class Pet1Prime extends Pet1 {
+        static fitted = FittedPrime;
+      }
+
+      class Person1 extends CardDef {
+        @field pets = linksToMany(Pet1);
+        static isolated = class Embedded extends Component<typeof this> {
+          reorder = () => {
+            if (
+              this.args.model.pets &&
+              this.args.model.pets[0] &&
+              this.args.model.pets[1]
+            ) {
+              this.args.model.pets = [
+                this.args.model.pets[1],
+                this.args.model.pets[0],
+              ];
+            }
+          };
+          <template>
+            <button
+              {{on 'click' this.reorder}}
+              data-test-reorder
+            >Reorder</button>
+            <@fields.pets @format='fitted' />
+          </template>
+        };
+      }
+
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        Pet1,
+        Pet1Prime,
+        Person1,
+      });
+
+      let pet1 = new Pet1({ name: 'jersey' });
+      let pet2 = new Pet1Prime({ name: 'boboy' });
+      await saveCard(pet1, `${testRealmURL}Pet/pet1`, loader);
+      await saveCard(pet2, `${testRealmURL}Pet/pet2`, loader);
+      let person = new Person1({
+        name: 'Mango',
+        pets: [pet1, pet2],
+      });
+      await renderCard(loader, person, 'isolated');
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-counter]`)
+        .hasText('0');
+      assert
+        .dom(
+          `[data-test-plural-view-item="0"][data-test-card="${testRealmURL}Pet/pet1"]`,
+        )
+        .containsText('jersey');
+
+      await click(
+        `[data-test-plural-view-item="0"] [data-test-increment-counter]`,
+      );
+      await click(
+        `[data-test-plural-view-item="0"] [data-test-increment-counter]`,
+      );
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-counter]`)
+        .hasText('2');
+      assert
+        .dom(
+          `[data-test-plural-view-item="0"][data-test-card="${testRealmURL}Pet/pet1"]`,
+        )
+        .containsText('jersey');
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-different-template]`)
+        .doesNotExist();
+      assert
+        .dom(`[data-test-plural-view-item="1"] [data-test-counter]`)
+        .hasText('0');
+      assert
+        .dom(
+          `[data-test-plural-view-item="1"][data-test-card="${testRealmURL}Pet/pet2"]`,
+        )
+        .containsText('boboy');
+      assert
+        .dom(`[data-test-plural-view-item="1"] [data-test-different-template]`)
+        .exists();
+      await click('[data-test-reorder]'); //Reorder
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-counter]`)
+        .hasText('0');
+      assert
+        .dom(
+          `[data-test-plural-view-item="0"][data-test-card="${testRealmURL}Pet/pet2"]`,
+        )
+        .containsText('boboy');
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-counter]`)
+        .hasText('0');
+      assert
+        .dom(`[data-test-plural-view-item="0"] [data-test-different-template]`)
+        .exists();
+      assert
+        .dom(
+          `[data-test-plural-view-item="1"][data-test-card="${testRealmURL}Pet/pet1"]`,
+        )
+        .containsText('jersey');
+      assert
+        .dom(`[data-test-plural-view-item="1"] [data-test-counter]`)
+        .hasText('2');
+      assert
+        .dom(`[data-test-plural-view-item="1"] [data-test-different-template]`)
+        .doesNotExist();
     });
 
     test('rerender when a containsMany field is fully replaced', async function (assert) {

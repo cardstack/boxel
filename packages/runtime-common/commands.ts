@@ -8,6 +8,12 @@ import {
   generateJsonSchemaForCardType,
 } from './helpers/ai';
 
+export interface CommandRequest {
+  id: string;
+  name: string;
+  arguments: { [key: string]: any };
+}
+
 export const CommandContextStamp = Symbol.for('CommandContext');
 export interface CommandContext {
   [CommandContextStamp]: boolean;

@@ -1,12 +1,11 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked, cached } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import {
   enqueueTask,
@@ -58,6 +57,8 @@ import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
 
+import { Submodes } from '../submode-switcher';
+
 import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
@@ -94,10 +95,6 @@ export default class Room extends Component<Signature> {
               @isPending={{this.isPendingMessage message}}
               @monacoSDK={{@monacoSDK}}
               @isStreaming={{this.isMessageStreaming message}}
-              @isDisplayingCode={{this.isDisplayingCode message}}
-              @onToggleViewCode={{fn this.toggleViewCode message}}
-              @currentEditor={{this.currentMonacoContainer}}
-              @setCurrentEditor={{this.setCurrentMonacoContainer}}
               @retryAction={{this.maybeRetryAction i message}}
               data-test-message-idx={{i}}
             />
@@ -221,7 +218,6 @@ export default class Room extends Component<Signature> {
     () => this.cardsToAttach,
   );
 
-  @tracked private currentMonacoContainer: number | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
@@ -306,7 +302,9 @@ export default class Room extends Component<Signature> {
   }
 
   private get autoAttachedFile() {
-    return this.autoAttachedFileResource.value;
+    return this.operatorModeStateService.state.submode === Submodes.Code
+      ? this.autoAttachedFileResource.value
+      : undefined;
   }
 
   private get removeAutoAttachedFile() {
@@ -500,14 +498,6 @@ export default class Room extends Component<Signature> {
 
   private isMessageStreaming = (message: Message) => {
     return !message.isStreamingFinished;
-  };
-
-  private isDisplayingCode = (message: Message) => {
-    return this.args.roomResource.isDisplayingCode(message);
-  };
-
-  private toggleViewCode = (message: Message) => {
-    this.args.roomResource.toggleViewCode(message);
   };
 
   private doMatrixEventFlush = restartableTask(async () => {
@@ -762,10 +752,6 @@ export default class Room extends Component<Signature> {
   @action
   private isLastMessage(messageIndex: number) {
     return (this.room && messageIndex === this.messages.length - 1) ?? false;
-  }
-
-  @action private setCurrentMonacoContainer(index: number | undefined) {
-    this.currentMonacoContainer = index;
   }
 
   private isPendingMessage(message: Message) {
