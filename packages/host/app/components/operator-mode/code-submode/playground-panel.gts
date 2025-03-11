@@ -2,7 +2,6 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -10,8 +9,6 @@ import { tracked } from '@glimmer/tracking';
 import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import window from 'ember-window-mock';
-import { TrackedObject } from 'tracked-built-ins';
 
 import {
   LoadingIndicator,
@@ -41,12 +38,11 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-
-import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
@@ -418,21 +414,9 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @service declare recentFilesService: RecentFilesService;
+  @service private declare recentFilesService: RecentFilesService;
+  @service private declare playgroundPanelService: PlaygroundPanelService;
   @tracked newCardJSON: LooseSingleCardDocument | undefined;
-  private playgroundSelections: Record<
-    string, // moduleId
-    { cardId: string; format: Format }
-  >; // TrackedObject
-
-  constructor(owner: Owner, args: PlaygroundContentSignature['Args']) {
-    super(owner, args);
-    let selections = window.localStorage.getItem(PlaygroundSelections);
-
-    this.playgroundSelections = new TrackedObject(
-      selections?.length ? JSON.parse(selections) : {},
-    );
-  }
 
   get recentCardIds() {
     return this.recentFilesService.recentFiles
@@ -470,10 +454,13 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     };
   }
 
+  private get playgroundSelection() {
+    return this.playgroundPanelService.getSelection(this.args.moduleId);
+  }
+
   private cardResource = getCard(
     this,
-    () =>
-      this.newCardJSON ?? this.playgroundSelections[this.args.moduleId]?.cardId,
+    () => this.newCardJSON ?? this.playgroundSelection?.cardId,
     { isAutoSave: () => true },
   );
 
@@ -482,7 +469,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private get format(): Format {
-    return this.playgroundSelections[this.args.moduleId]?.format ?? 'isolated';
+    return this.playgroundSelection?.format ?? 'isolated';
   }
 
   private copyToClipboard = task(async (id: string) => {
@@ -526,11 +513,10 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     if (this.card?.id === cardId && this.format === format) {
       return;
     }
-    this.playgroundSelections[this.args.moduleId] = { cardId, format };
-
-    window.localStorage.setItem(
-      PlaygroundSelections,
-      JSON.stringify(this.playgroundSelections),
+    this.playgroundPanelService.persistSelections(
+      this.args.moduleId,
+      cardId,
+      format,
     );
   };
 

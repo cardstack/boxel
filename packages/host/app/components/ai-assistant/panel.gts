@@ -20,7 +20,7 @@ import {
 import { not } from '@cardstack/boxel-ui/helpers';
 import { DropdownArrowFilled, IconX } from '@cardstack/boxel-ui/icons';
 
-import { aiBotUsername } from '@cardstack/runtime-common';
+import { ResolvedCodeRef, aiBotUsername } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -57,6 +57,7 @@ interface Signature {
   Args: {
     onClose: () => void;
     resizeHandle: ResizeHandle;
+    selectedCardRef?: ResolvedCodeRef;
   };
 }
 
@@ -194,6 +195,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 @roomId={{this.matrixService.currentRoomId}}
                 @roomResource={{this.roomResource}}
                 @monacoSDK={{this.monacoSDK}}
+                @selectedCardRef={{@selectedCardRef}}
               />
             {{/if}}
           {{/if}}
