@@ -8,18 +8,22 @@ import { tracked } from '@glimmer/tracking';
 
 import Modifier from 'ember-modifier';
 
-import { eq } from '@cardstack/boxel-ui/helpers';
+import { Button } from '@cardstack/boxel-ui/components';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import { Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
     format: Format;
     setFormat: (format: Format) => void;
     additionalClass?: string;
+    formats?: Format[];
   };
   Element: HTMLElement;
 }
+
+const formats: Format[] = ['isolated', 'embedded', 'fitted', 'atom', 'edit'];
 
 export default class FormatChooser extends Component<Signature> {
   <template>
@@ -29,34 +33,15 @@ export default class FormatChooser extends Component<Signature> {
       ...attributes
     >
       <div class='format-chooser__buttons {{this.footerButtonsClass}}'>
-        <button
-          class='format-chooser__button {{if (eq @format "isolated") "active"}}'
-          {{on 'click' (fn @setFormat 'isolated')}}
-          data-test-format-chooser-isolated
-        >Isolated</button>
-        <button
-          class='format-chooser__button {{if (eq @format "embedded") "active"}}'
-          {{on 'click' (fn @setFormat 'embedded')}}
-          data-test-format-chooser-embedded
-        >
-          Embedded</button>
-        <button
-          class='format-chooser__button {{if (eq @format "fitted") "active"}}'
-          {{on 'click' (fn @setFormat 'fitted')}}
-          data-test-format-chooser-fitted
-        >
-          Fitted</button>
-        <button
-          class='format-chooser__button {{if (eq @format "atom") "active"}}'
-          {{on 'click' (fn @setFormat 'atom')}}
-          data-test-format-chooser-atom
-        >
-          Atom</button>
-        <button
-          class='format-chooser__button {{if (eq @format "edit") "active"}}'
-          {{on 'click' (fn @setFormat 'edit')}}
-          data-test-format-chooser-edit
-        >Edit</button>
+        {{#each this.formats as |format|}}
+          <Button
+            class={{cn 'format-chooser__button' active=(eq @format format)}}
+            {{on 'click' (fn @setFormat format)}}
+            data-test-format-chooser={{format}}
+          >
+            {{format}}
+          </Button>
+        {{/each}}
       </div>
     </div>
     <style scoped>
@@ -93,22 +78,23 @@ export default class FormatChooser extends Component<Signature> {
         border-radius: 0 var(--boxel-border-radius) var(--boxel-border-radius) 0;
       }
       .format-chooser__button {
-        width: var(--boxel-format-chooser-button-width);
-        min-width: var(--boxel-format-chooser-button-min-width);
-        padding: var(--boxel-sp-xs);
-        font: 600 var(--boxel-font-xs);
-        background-color: var(
+        --boxel-button-color: var(
           --boxel-format-chooser-button-bg-color,
           transparent
         );
-        color: var(--boxel-dark);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-min-width: var(--boxel-format-chooser-button-min-width);
+        width: var(--boxel-format-chooser-button-width);
+        padding: var(--boxel-sp-xs);
         border: 1px solid
           var(--boxel-format-chooser-border-color, var(--boxel-700));
         border-left: 0;
+        border-radius: initial;
+        text-transform: capitalize;
       }
       .format-chooser__button.active {
-        background: var(--boxel-700);
-        color: var(--boxel-teal);
+        --boxel-button-color: var(--boxel-700);
+        --boxel-button-text-color: var(--boxel-highlight);
       }
     </style>
   </template>
@@ -117,6 +103,10 @@ export default class FormatChooser extends Component<Signature> {
 
   @action setFormatChooserWidthPx(footerWidthPx: number) {
     this.formatChooserWidthPx = footerWidthPx;
+  }
+
+  private get formats() {
+    return this.args.formats ?? formats;
   }
 
   get footerButtonsClass() {

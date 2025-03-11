@@ -415,6 +415,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           </div>
           <FormatChooser
             class='format-chooser'
+            @formats={{if @isFieldDef this.fieldFormats}}
             @format={{this.format}}
             @setFormat={{this.setFormat}}
             data-test-playground-format-chooser
@@ -477,8 +478,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         margin-top: auto;
 
         --boxel-format-chooser-button-bg-color: var(--boxel-light);
-        --boxel-format-chooser-button-width: 80px;
-        --boxel-format-chooser-button-min-width: 80px;
+        --boxel-format-chooser-button-width: 85px;
+        --boxel-format-chooser-button-min-width: 85px;
       }
       .add-field-button {
         max-width: 500px;
@@ -487,6 +488,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     </style>
   </template>
 
+  fieldFormats: Format[] = ['embedded', 'atom', 'edit'];
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;

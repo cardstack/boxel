@@ -701,11 +701,11 @@ export class BlogPost extends CardDef {
     assert
       .dom('[data-test-author-bio]')
       .containsText('Jane Doe is the Senior Managing Editor');
-    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+    assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
 
-    await click('[data-test-format-chooser-embedded]');
-    assert.dom('[data-test-format-chooser-isolated]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-embedded]').hasClass('active');
+    await click('[data-test-format-chooser="embedded"]');
+    assert.dom('[data-test-format-chooser="isolated"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .doesNotExist();
@@ -715,9 +715,9 @@ export class BlogPost extends CardDef {
       )
       .exists();
 
-    await click('[data-test-format-chooser-edit]');
-    assert.dom('[data-test-format-chooser-embedded]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-edit]').hasClass('active');
+    await click('[data-test-format-chooser="edit"]');
+    assert.dom('[data-test-format-chooser="embedded"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .hasText('Author');
@@ -727,9 +727,9 @@ export class BlogPost extends CardDef {
       )
       .exists();
 
-    await click('[data-test-format-chooser-atom]');
-    assert.dom('[data-test-format-chooser-edit]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-atom]').hasClass('active');
+    await click('[data-test-format-chooser="atom"]');
+    assert.dom('[data-test-format-chooser="edit"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="atom"]').hasClass('active');
 
     assert
       .dom('[data-test-atom-preview]')
@@ -737,9 +737,9 @@ export class BlogPost extends CardDef {
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do Jane Doe tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
       );
 
-    await click('[data-test-format-chooser-fitted]');
-    assert.dom('[data-test-format-chooser-atom]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-fitted]').hasClass('active');
+    await click('[data-test-format-chooser="fitted"]');
+    assert.dom('[data-test-format-chooser="atom"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="fitted"]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-card-format="fitted"]')
       .exists({ count: 16 });
@@ -759,23 +759,23 @@ export class BlogPost extends CardDef {
       .hasText('Author');
     assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
     assert.dom('[data-test-author-title]').hasText('Jane Doe');
-    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+    assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
     await click(
       '[data-test-boxel-card-header-actions] [data-test-edit-button]',
     );
 
     assert.dom(`${playgroundCard}[data-test-card-format="edit"]`).exists();
     assert.dom('[data-test-card-header]').hasClass('is-editing');
-    assert.dom('[data-test-format-chooser-isolated]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-edit]').hasClass('active');
+    assert.dom('[data-test-format-chooser="isolated"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
     await click(
       '[data-test-boxel-card-header-actions] [data-test-edit-button]',
     );
 
     assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
     assert.dom('[data-test-card-header]').hasNoClass('is-editing');
-    assert.dom('[data-test-format-chooser-edit]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+    assert.dom('[data-test-format-chooser="edit"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
   });
 
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
@@ -786,7 +786,7 @@ export class BlogPost extends CardDef {
     await click('[data-test-accordion-item="playground"] button');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
-    await click('[data-test-format-chooser-edit]');
+    await click('[data-test-format-chooser="edit"]');
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
     assert
@@ -1112,7 +1112,7 @@ export class BlogPost extends CardDef {
     });
     await click('[data-test-accordion-item="playground"] button');
     assertCorrectFormat(authorId, 'edit');
-    await click('[data-test-format-chooser-atom]'); // change selected format
+    await click('[data-test-format-chooser="atom"]'); // change selected format
     assertCorrectFormat(authorId, 'atom');
     assert.deepEqual(
       getPersistedPlaygroundSelection(authorModuleId),
@@ -1143,7 +1143,7 @@ export class BlogPost extends CardDef {
     await click('[data-test-inspector-toggle]');
     await click('[data-test-boxel-selector-item-text="BlogPost"]'); // change selected module
     assertCorrectFormat(blogPostId1, 'isolated', 'default format is correct');
-    await click('[data-test-format-chooser-fitted]'); // change selected format
+    await click('[data-test-format-chooser="fitted"]'); // change selected format
     assert.deepEqual(getPersistedPlaygroundSelection(blogPostModuleId), {
       cardId: blogPostId1,
       format: 'fitted',
@@ -1212,7 +1212,7 @@ export class BlogPost extends CardDef {
       assert.dom('[data-test-selected-item]').hasText('Comment spec');
       assert.dom('[data-test-field-preview-header]').containsText('Comment');
       // assert.dom('[data-test-playground-format-chooser] button').exists({ count: 3 }); // TODO
-      assert.dom('[data-test-format-chooser-embedded]').hasClass('active');
+      assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
       assert
         .dom('[data-test-embedded-comment-title]')
         .hasText(
@@ -1220,7 +1220,7 @@ export class BlogPost extends CardDef {
           'preview defaults to embedded view of first example',
         );
 
-      await click('[data-test-format-chooser-atom]');
+      await click('[data-test-format-chooser="atom"]');
       assert
         .dom(
           '[data-test-field-preview-card] [data-test-compound-field-format="atom"]',
