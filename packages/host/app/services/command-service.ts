@@ -17,6 +17,7 @@ import {
   ResolvedCodeRef,
   isResolvedCodeRef,
   getClass,
+  identifyCard,
 } from '@cardstack/runtime-common';
 
 import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
@@ -89,20 +90,11 @@ export default class CommandService extends Service {
     }
     this.currentlyExecutingCommandRequestIds.add(commandRequest.id);
     try {
-      // Get the input type and validate/construct the payload
-      let InputType = await command.getInputType();
-
-      // Construct a new instance of the input type with the
-      // The input is undefined if the command has no input type
-      let typedInput;
-      if (InputType) {
-        typedInput = new InputType({
-          ...commandRequest.arguments.attributes,
-          ...commandRequest.arguments.relationships,
-        });
-      } else {
-        typedInput = undefined;
-      }
+      let typedInput = await this.instantiateCommandInput(
+        command,
+        commandRequest.arguments.attributes,
+        commandRequest.arguments.relationships,
+      );
       let resultCard = await command.execute(typedInput as any);
       await this.matrixService.sendCommandResultEvent(
         event.room_id!,
@@ -158,19 +150,11 @@ export default class CommandService extends Service {
       }
 
       if (commandToRun) {
-        // Get the input type and validate/construct the payload
-        let InputType = await commandToRun.getInputType();
-        // Construct a new instance of the input type with the payload
-        // The input is undefined if the command has no input type
-        let typedInput;
-        if (InputType) {
-          typedInput = new InputType({
-            ...payload!.attributes,
-            ...payload!.relationships,
-          });
-        } else {
-          typedInput = undefined;
-        }
+        let typedInput = await this.instantiateCommandInput(
+          commandToRun,
+          payload?.attributes,
+          payload?.relationships,
+        );
         [resultCard] = await all([
           await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
@@ -226,6 +210,44 @@ export default class CommandService extends Service {
       this.currentlyExecutingCommandRequestIds.delete(commandRequestId!);
     }
   });
+
+  // Construct a new instance of the input type with the
+  // The input is undefined if the command has no input type
+  private async instantiateCommandInput(
+    command: GenericCommand,
+    attributes: Record<string, any> | undefined,
+    relationships: Record<string, any> | undefined,
+  ) {
+    // Get the input type and validate/construct the payload
+    let typedInput;
+    let InputType = await command.getInputType();
+    if (InputType) {
+      let adoptsFrom = identifyCard(InputType);
+      if (adoptsFrom) {
+        let inputDoc = {
+          type: 'card',
+          data: {
+            meta: {
+              adoptsFrom,
+            },
+            attributes: attributes ?? {},
+            relationships: relationships ?? {},
+          },
+        };
+        typedInput = await this.cardService.createFromSerialized(
+          inputDoc.data,
+          inputDoc,
+        );
+      } else {
+        // identifyCard can fail in some circumstances where the input type is not exported
+        // in that case, we'll fall back to this less reliable method of constructing the input type
+        typedInput = new InputType({ ...attributes, ...relationships });
+      }
+    } else {
+      typedInput = undefined;
+    }
+    return typedInput;
+  }
 }
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
