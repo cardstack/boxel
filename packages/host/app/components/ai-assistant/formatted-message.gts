@@ -15,6 +15,10 @@ import { fn } from '@ember/helper';
 import type CardService from '@cardstack/host/services/card-service';
 import { service } from '@ember/service';
 import LoaderService from '@cardstack/host/services/loader-service';
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { TrackedObject } from 'tracked-built-ins';
+
 interface FormattedMessageSignature {
   sanitizedHtml: SafeString;
   monacoSDK: MonacoSDK;
@@ -25,6 +29,7 @@ interface CodeAction {
   fileUrl: string;
   code: string;
   element: HTMLButtonElement;
+  state: 'ready' | 'applying' | 'applied' | 'failed';
 }
 
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
@@ -38,22 +43,26 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     editor: MonacoSDK.editor.IStandaloneCodeEditor,
     model: MonacoSDK.editor.ITextModel,
   ) => {
-    this.actionElements.push({
-      fileUrl: monacoContainer.getAttribute('data-file-url') ?? '',
-      code: model.getValue(),
-      element: actionElement,
-    });
+    this.actionElements.push(
+      new TrackedObject({
+        fileUrl: monacoContainer.getAttribute('data-file-url') ?? '',
+        code: model.getValue(),
+        element: actionElement,
+        state: 'ready',
+      }),
+    );
   };
 
-  // todo ec task
-  @action async patchCode(codeAction: CodeAction) {
-    debugger;
-
+  private patchCodeTask = task(async (codeAction: CodeAction) => {
+    // TODO: handle error state
+    codeAction.state = 'applying';
     let source = await this.cardService.getSource(new URL(codeAction.fileUrl));
-    let patched = applyPatch(source, codeAction.code);
+    let patched = applyPatch(source, codeAction.code); // TODO: Replace this with a command
     await this.cardService.saveSource(new URL(codeAction.fileUrl), patched);
     this.loaderService.reset();
-  }
+
+    codeAction.state = 'applied';
+  });
 
   <template>
     {{#if @renderCodeBlocks}}
@@ -70,11 +79,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
         {{@sanitizedHtml}}
 
-        {{#each this.actionElements as |actionElement index|}}
+        {{! todo: only show the button if the code is a code patch }}
+        {{#each this.actionElements as |actionElement|}}
           {{#in-element actionElement.element}}
             <ApplyButton
-              @state='ready'
-              {{on 'click' (fn this.patchCode actionElement)}}
+              @state={{actionElement.state}}
+              {{on 'click' (fn (perform this.patchCodeTask) actionElement)}}
             />
           {{/in-element}}
         {{/each}}
