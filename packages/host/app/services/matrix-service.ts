@@ -895,7 +895,8 @@ export default class MatrixService extends Service {
     let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}SkillCard/code-module-editing`,
+      `${baseRealm.url}SkillCard/boxel-coding`,
+      `${baseRealm.url}SkillCard/source-code-editing`,
     ];
 
     let defaultSkills;
