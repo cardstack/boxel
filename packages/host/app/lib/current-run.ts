@@ -843,5 +843,5 @@ function jobIdentity(jobInfo?: JobInfo): string {
   if (!jobInfo) {
     return `[no job identity]`;
   }
-  return `[job: ${jobInfo.jobId}] [jobReservation: ${jobInfo.reservationId}]`;
+  return `[job: ${jobInfo.jobId}] [jobReservation: ${jobInfo.reservationId}] [concurrencyGroup: ${jobInfo.concurrencyGroup}]`;
 }

@@ -44,6 +44,8 @@ export interface JobInfo extends JSONTypes.Object {
   jobId: number;
   workerId: string;
   reservationId: number;
+  concurrencyGroup: string | null;
+  jobType: string;
 }
 
 export type RunnerRegistration = (

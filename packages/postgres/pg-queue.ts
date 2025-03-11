@@ -362,6 +362,8 @@ export class PgQueueRunner implements QueueRunner {
                 jobId: jobToRun.id,
                 workerId: this.#workerId,
                 reservationId: jobReservationId,
+                concurrencyGroup: jobToRun.concurrency_group,
+                jobType: jobToRun.job_type,
               }),
               // we race the job so that it doesn't hold this worker hostage if
               // the job's promise never resolves
