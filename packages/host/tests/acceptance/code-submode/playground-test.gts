@@ -1,5 +1,7 @@
 import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
+import { triggerEvent } from '@ember/test-helpers';
+
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
@@ -1008,6 +1010,10 @@ export class BlogPost extends CardDef {
     await click('[data-test-open-ai-assistant]');
     assert.dom(`[data-test-card="${testRealmURL}Author/jane-doe"]`).exists();
     assert.dom('[data-test-autoattached-card]').hasText('Jane Doe');
+    await triggerEvent(`[data-test-autoattached-card]`, 'mouseenter');
+    assert
+      .dom('[data-test-tooltip-content]')
+      .hasText('Current card is shared automatically');
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="blog-post.gts"]');

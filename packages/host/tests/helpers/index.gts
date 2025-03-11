@@ -772,7 +772,6 @@ export async function assertMessages(
               `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
             );
           }
-          // note: attached cards are in atom format (which display the title by default)
           assert
             .dom(
               `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,

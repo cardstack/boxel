@@ -28,7 +28,7 @@ import { TrackedObject, TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { ResolvedCodeRef, internalKeyFor } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
@@ -149,6 +149,11 @@ export default class Room extends Component<Signature> {
                 @submode={{this.operatorModeStateService.state.submode}}
                 @autoAttachedFile={{this.autoAttachedFile}}
                 @filesToAttach={{this.filesToAttach}}
+                @autoAttachedCardTooltipMessage={{if
+                  (eq this.operatorModeStateService.state.submode Submodes.Code)
+                  'Current card is shared automatically'
+                  undefined
+                }}
               />
               <LLMSelect
                 @selected={{@roomResource.activeLLM}}
@@ -763,11 +768,10 @@ export default class Room extends Component<Signature> {
   }
 
   private get autoAttachedCards() {
-    if (
-      this.operatorModeStateService.state.submode === Submodes.Code &&
-      this.playgroundPanelCard
-    ) {
-      return new TrackedSet([this.playgroundPanelCard]);
+    if (this.operatorModeStateService.state.submode === Submodes.Code) {
+      return this.playgroundPanelCard
+        ? new TrackedSet([this.playgroundPanelCard])
+        : new TrackedSet<CardDef>();
     }
 
     return this.autoAttachmentResource.cards;
