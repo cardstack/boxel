@@ -20,6 +20,7 @@ import {
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  assertMessages,
 } from '../helpers';
 
 import {
@@ -41,83 +42,6 @@ async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-choose-card-btn]');
   await click(`[data-test-select="${cardId}"]`);
   await click('[data-test-card-catalog-go-button]');
-}
-
-async function assertMessages(
-  assert: Assert,
-  messages: {
-    from: string;
-    message?: string;
-    cards?: { id: string; title?: string; realmIconUrl?: string }[];
-    files?: { name: string; sourceUrl: string }[];
-  }[],
-) {
-  assert.dom('[data-test-message-idx]').exists({ count: messages.length });
-  for (let [index, { from, message, cards, files }] of messages.entries()) {
-    assert
-      .dom(
-        `[data-test-message-idx="${index}"][data-test-boxel-message-from="${from}"]`,
-      )
-      .exists({ count: 1 });
-    if (message != null) {
-      assert
-        .dom(`[data-test-message-idx="${index}"] .content`)
-        .containsText(message);
-    }
-    if (cards?.length) {
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-items]`)
-        .exists({ count: 1 });
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
-        .exists({ count: cards.length });
-      cards.map(async (card) => {
-        if (card.title) {
-          if (message != null && card.title.includes(message)) {
-            throw new Error(
-              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
-            );
-          }
-          // note: attached cards are in atom format (which display the title by default)
-          assert
-            .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
-            )
-            .containsText(card.title);
-        }
-
-        if (card.realmIconUrl) {
-          assert
-            .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
-            )
-            .exists({ count: 1 });
-        }
-      });
-    }
-
-    if (files?.length) {
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-items]`)
-        .exists({ count: 1 });
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-attached-file]`)
-        .exists({ count: files.length });
-      files.map(async (file) => {
-        assert
-          .dom(
-            `[data-test-message-idx="${index}"] [data-test-attached-file="${file.sourceUrl}"]`,
-          )
-          .containsText(file.name);
-      });
-    }
-
-    if (!files?.length && !cards?.length) {
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-items]`)
-        .doesNotExist();
-    }
-  }
 }
 
 let matrixRoomId: string;

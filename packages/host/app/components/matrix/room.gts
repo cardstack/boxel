@@ -23,13 +23,14 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject } from 'tracked-built-ins';
+import { TrackedObject, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 
+import { ResolvedCodeRef, internalKeyFor } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
@@ -37,6 +38,7 @@ import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
+import { getCard } from '@cardstack/host/resources/card-resource';
 import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -45,6 +47,8 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -69,6 +73,7 @@ interface Signature {
     roomId: string;
     roomResource: RoomResource;
     monacoSDK: MonacoSDK;
+    selectedCardRef?: ResolvedCodeRef;
   };
 }
 
@@ -211,6 +216,7 @@ export default class Room extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare loaderService: LoaderService;
+  @service private declare playgroundPanelService: PlaygroundPanelService;
 
   private autoAttachmentResource = getAutoAttachment(
     this,
@@ -313,6 +319,40 @@ export default class Room extends Component<Signature> {
 
   private get filesToAttach() {
     return this.matrixService.filesToSend.get(this.args.roomId) ?? [];
+  }
+
+  @use private playgroundPanelCardResource = resource(() => {
+    let state = new TrackedObject<{
+      value: CardDef | undefined;
+      remove: () => void;
+    }>({
+      value: undefined,
+      remove: () => {
+        state.value = undefined;
+      },
+    });
+
+    (async () => {
+      let cardResource = getCard(this, () => {
+        if (!this.args.selectedCardRef) {
+          return;
+        }
+        let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
+        return this.playgroundPanelService.getSelection(moduleId)?.cardId;
+      });
+      await cardResource.loaded;
+      state.value = cardResource.card;
+    })();
+
+    return state;
+  });
+
+  private get playgroundPanelCard() {
+    return this.playgroundPanelCardResource.value;
+  }
+
+  private get removePlaygroundPanelCard() {
+    return this.playgroundPanelCardResource.remove;
   }
 
   private get isScrolledToBottom() {
@@ -621,7 +661,9 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeCard(card: CardDef) {
-    if (this.isAutoAttachedCard(card)) {
+    if (this.playgroundPanelCard?.id === card.id) {
+      this.removePlaygroundPanelCard();
+    } else if (this.isAutoAttachedCard(card)) {
       this.autoAttachmentResource.onCardRemoval(card);
     } else {
       const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
@@ -721,6 +763,13 @@ export default class Room extends Component<Signature> {
   }
 
   private get autoAttachedCards() {
+    if (
+      this.operatorModeStateService.state.submode === Submodes.Code &&
+      this.playgroundPanelCard
+    ) {
+      return new TrackedSet([this.playgroundPanelCard]);
+    }
+
     return this.autoAttachmentResource.cards;
   }
 

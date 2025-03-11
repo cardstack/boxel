@@ -38,6 +38,7 @@ import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
@@ -53,7 +54,6 @@ import Preview from '../../preview';
 import FittedFormatGallery from '../card-preview-panel/fitted-format-gallery';
 
 import FormatChooser from './format-chooser';
-import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 
 const getItemTitle = (item: CardDef) => {
   if (!item) {

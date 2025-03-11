@@ -20,6 +20,7 @@ import {
   visitOperatorMode,
   type TestContextWithSSE,
   type TestContextWithSave,
+  assertMessages,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
@@ -1027,5 +1028,51 @@ export class BlogPost extends CardDef {
       '[data-test-field="firstName"] [data-test-boxel-input]',
       newFirstName,
     );
+  });
+
+  test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}author.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    await click('[data-test-open-ai-assistant]');
+    assert.dom(`[data-test-card="${testRealmURL}Author/jane-doe"]`).exists();
+    assert.dom('[data-test-autoattached-card]').hasText('Jane Doe');
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="blog-post.gts"]');
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="1"]');
+    assert
+      .dom(`[data-test-card="${testRealmURL}Category/future-tech"]`)
+      .exists();
+    assert.dom('[data-test-autoattached-card]').hasText('Future Tech');
+    await click('[data-test-remove-card-btn]');
+    assert.dom('[data-test-autoattached-card]').doesNotExist();
+
+    await click('[data-test-instance-chooser]');
+    await click('[data-option-index="0"]');
+    assert
+      .dom(`[data-test-card="${testRealmURL}Category/city-design"]`)
+      .exists();
+    assert.dom('[data-test-autoattached-card]').hasText('City Design');
+    await fillIn('[data-test-message-field]', `Message With Card and File`);
+    await click('[data-test-send-message-btn]');
+
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message With Card and File',
+        files: [
+          { sourceUrl: `${testRealmURL}blog-post.gts`, name: 'blog-post.gts' },
+        ],
+        cards: [
+          { id: `${testRealmURL}Category/city-design`, title: 'City Design' },
+        ],
+      },
+    ]);
   });
 });

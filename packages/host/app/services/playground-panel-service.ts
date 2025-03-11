@@ -1,8 +1,11 @@
 import Owner from '@ember/owner';
 import Service from '@ember/service';
-import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
-import { TrackedObject } from 'tracked-built-ins';
+
 import window from 'ember-window-mock';
+import { TrackedObject } from 'tracked-built-ins';
+
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+
 import { Format } from 'https://cardstack.com/base/card-api';
 
 export default class PlaygroundPanelService extends Service {
