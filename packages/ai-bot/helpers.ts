@@ -425,15 +425,21 @@ export async function loadCurrentlyAttachedFiles(
         try {
           let content: string | undefined;
           let error: string | undefined;
-          if (attachedFile.contentType?.startsWith('text/')) {
-            let response = await (globalThis as any).fetch(attachedFile.url);
-            if (!response.ok) {
-              throw new Error(`HTTP error. Status: ${response.status}`);
-            }
-            content = await response.text();
-          } else {
-            error = `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`;
-          }
+          let response = await (globalThis as any).fetch(attachedFile.url);
+          content = await response.text();
+
+          // TODO: when card is in error state, the contentType will be 'application/octet-stream'
+
+          // if (attachedFile.contentType?.startsWith('text/')) {
+          //   let response = await (globalThis as any).fetch(attachedFile.url);
+          //   content = await response.text();
+          //   if (!response.ok) {
+          //     throw new Error(`HTTP error. Status: ${response.status}`);
+          //   }
+          // } else {
+          //   // TODO: file can be in an error state
+          //   error = `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`;
+          // }
 
           return {
             url: attachedFile.url,
