@@ -35,7 +35,6 @@ import {
 import {
   basicMappings,
   generateJsonSchemaForCardType,
-  getSearchTool,
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
@@ -741,7 +740,7 @@ export default class MatrixService extends Service {
   ): Promise<void> {
     let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
 
-    let tools: Tool[] = [getSearchTool()];
+    let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
