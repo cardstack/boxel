@@ -20,10 +20,14 @@ import {
   Kind,
   RequestContext,
   TokenClaims,
-  UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  FileAddedEventContent,
+  FileUpdatedEventContent,
+  RealmEventContent,
+  UpdateRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
 
@@ -57,7 +61,7 @@ export class TestRealmAdapter implements RealmAdapter {
   #lastModified: Map<string, number> = new Map();
   #resourceCreatedAt: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #subscriber: ((message: UpdateEventData) => void) | undefined;
+  #subscriber: ((message: UpdateRealmEventContent) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
@@ -316,7 +320,25 @@ export class TestRealmAdapter implements RealmAdapter {
       );
     }
 
-    let type = dir.contents[name] ? 'updated' : 'added';
+    let updateEvent: FileAddedEventContent | FileUpdatedEventContent;
+
+    let lastModified = unixTime(Date.now());
+    this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
+
+    if (dir.contents[name]) {
+      updateEvent = {
+        eventName: 'update',
+        updated: path,
+      };
+    } else {
+      updateEvent = {
+        eventName: 'update',
+        added: path,
+      };
+
+      this.#resourceCreatedAt.set(this.#paths.fileURL(path).href, lastModified);
+    }
+
     dir.contents[name] = {
       kind: 'file',
       content:
@@ -324,20 +346,13 @@ export class TestRealmAdapter implements RealmAdapter {
           ? contents
           : JSON.stringify(contents, null, 2),
     };
-    let lastModified = unixTime(Date.now());
-    this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
-    if (type === 'added') {
-      this.#resourceCreatedAt.set(this.#paths.fileURL(path).href, lastModified);
-    }
 
-    this.postUpdateEvent({ [type]: path } as
-      | { added: string }
-      | { updated: string });
+    this.postUpdateEvent(updateEvent);
 
     return { lastModified };
   }
 
-  postUpdateEvent(data: UpdateEventData) {
+  postUpdateEvent(data: UpdateRealmEventContent) {
     this.#subscriber?.(data);
   }
 
@@ -349,7 +364,11 @@ export class TestRealmAdapter implements RealmAdapter {
       throw new Error(`tried to use file as directory`);
     }
     delete dir.contents[name];
-    this.postUpdateEvent({ removed: path });
+
+    this.postUpdateEvent({
+      eventName: 'update',
+      removed: path,
+    });
   }
 
   #traverse(
@@ -399,7 +418,9 @@ export class TestRealmAdapter implements RealmAdapter {
     return { response, writable: s.writable };
   }
 
-  async subscribe(cb: (message: UpdateEventData) => void): Promise<void> {
+  async subscribe(
+    cb: (message: UpdateRealmEventContent) => void,
+  ): Promise<void> {
     this.#subscriber = cb;
   }
 

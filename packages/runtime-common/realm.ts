@@ -81,7 +81,10 @@ import {
   Utils,
 } from './matrix-backend-authentication';
 
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  RealmEventContent,
+  UpdateRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -160,7 +163,7 @@ export interface RealmAdapter {
   };
 
   subscribe(
-    cb: (message: UpdateEventData) => void,
+    cb: (message: UpdateRealmEventContent) => void,
     options?: {
       watcher?: string;
     },
@@ -186,73 +189,9 @@ interface UpdateItem {
   url: URL;
 }
 
-// TODO remove in CS-8096
-export type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
-
-interface UpdateEvent {
-  type: 'update';
-  data: UpdateEventData;
-  id?: string;
-}
-
 export interface MatrixConfig {
   url: URL;
   username: string;
-}
-
-export type UpdateEventData =
-  | FileAddedEventData
-  | FileUpdatedEventData
-  | FileRemovedEventData;
-
-interface FileAddedEventData {
-  added: string;
-}
-interface FileUpdatedEventData {
-  updated: string;
-}
-interface FileRemovedEventData {
-  removed: string;
-}
-
-export type IndexEventData =
-  | IncrementalIndexInitiation
-  | IncrementalIndexEventData
-  | FullIndexEventData
-  | CopiedIndexEventData;
-
-interface IndexEvent {
-  type: 'index';
-  data: IndexEventData;
-  id?: string;
-  clientRequestId?: string | null;
-}
-interface IncrementalIndexEventData {
-  type: 'incremental';
-  realmURL: string;
-  invalidations: string[];
-  clientRequestId?: string | null;
-}
-interface FullIndexEventData {
-  type: 'full';
-  realmURL: string;
-}
-interface CopiedIndexEventData {
-  type: 'copy';
-  sourceRealmURL: string;
-  destRealmURL: string;
-}
-
-interface IncrementalIndexInitiation {
-  type: 'incremental-index-initiation';
-  realmURL: string;
-  updatedFile: string;
-}
-
-interface MessageEvent {
-  type: 'message';
-  data: Record<string, string>;
-  id?: string;
 }
 
 interface WriteResult {
@@ -549,7 +488,7 @@ export class Realm {
   }
 
   private getTrackedWrite(
-    data: UpdateEventData,
+    data: UpdateRealmEventContent,
   ): { isTracked: boolean; url: URL } | undefined {
     let file: string | undefined;
     let type: string | undefined;
@@ -1964,10 +1903,7 @@ export class Realm {
         if (!tracked || tracked.isTracked) {
           return;
         }
-        this.broadcastRealmEvent({
-          eventName: 'update',
-          ...data,
-        });
+        this.broadcastRealmEvent(data);
         this.#updateItems.push({
           operation: ('added' in data
             ? 'add'

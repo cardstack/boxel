@@ -26,12 +26,12 @@ import {
 } from 'fs-extra';
 import { join } from 'path';
 import { Duplex } from 'node:stream';
-import type {
-  RequestContext,
-  UpdateEventData,
-} from '@cardstack/runtime-common/realm';
+import type { RequestContext } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
-import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  RealmEventContent,
+  UpdateRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 const realmEventsLog = logger('realm:events');
@@ -66,7 +66,7 @@ export class NodeAdapter implements RealmAdapter {
   private watcher: Watcher | undefined = undefined;
 
   async subscribe(
-    cb: (message: UpdateEventData) => void,
+    cb: (message: UpdateRealmEventContent) => void,
     options: { watcher?: string },
   ): Promise<void> {
     if (this.watcher) {
@@ -79,15 +79,26 @@ export class NodeAdapter implements RealmAdapter {
     this.watcher = sane(join(this.realmDir, '/'), watcherOptions);
     this.watcher.on('change', (path, _root, stat) => {
       if (stat.isFile()) {
-        cb({ updated: path });
+        cb({
+          eventName: 'update',
+          updated: path,
+        });
       }
     });
     this.watcher.on('add', (path, _root, stat) => {
       if (stat.isFile()) {
-        cb({ added: path });
+        cb({
+          eventName: 'update',
+          added: path,
+        });
       }
     });
-    this.watcher.on('delete', (path) => cb({ removed: path }));
+    this.watcher.on('delete', (path) =>
+      cb({
+        eventName: 'update',
+        removed: path,
+      }),
+    );
     this.watcher.on('error', (err) => {
       throw new Error(`watcher error: ${err}`);
     });

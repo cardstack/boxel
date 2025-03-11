@@ -332,17 +332,17 @@ export type UpdateRealmEventContent =
   | FileUpdatedEventContent
   | FileRemovedEventContent;
 
-interface FileAddedEventContent {
+export interface FileAddedEventContent {
   eventName: 'update';
   added: string;
 }
 
-interface FileUpdatedEventContent {
+export interface FileUpdatedEventContent {
   eventName: 'update';
   updated: string;
 }
 
-interface FileRemovedEventContent {
+export interface FileRemovedEventContent {
   eventName: 'update';
   removed: string;
 }
