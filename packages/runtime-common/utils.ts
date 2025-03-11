@@ -1,3 +1,5 @@
+import type { JobInfo } from './worker';
+
 export async function retry<T>(
   fn: () => Promise<T | null>,
   { retries, delayMs }: { retries: number; delayMs: number },
@@ -71,4 +73,11 @@ export function simpleHash(str: string) {
     h = (h * 33) ^ str.charCodeAt(i);
   }
   return (h >>> 0).toString(16);
+}
+
+export function jobIdentity(jobInfo?: JobInfo): string {
+  if (!jobInfo) {
+    return `[no job identity]`;
+  }
+  return `[job: ${jobInfo.jobId}.${jobInfo.reservationId}]`;
 }

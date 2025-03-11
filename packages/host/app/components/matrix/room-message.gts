@@ -105,8 +105,10 @@ export default class RoomMessage extends Component<Signature> {
         @formattedMessage={{htmlSafe
           (markdownToHtml this.message.formattedMessage)
         }}
+        @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
+        @eventId={{this.message.eventId}}
         @index={{@index}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}

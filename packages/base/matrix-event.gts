@@ -6,19 +6,20 @@ import type {
 } from '@cardstack/runtime-common/helpers/ai';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { type SerializedFile } from './file-api';
 
@@ -169,6 +170,7 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
+  [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
   [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
