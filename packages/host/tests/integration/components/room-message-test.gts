@@ -13,11 +13,14 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [],
     autostart: true,
   });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
 
   async function setupTestScenario(
     isStreaming: boolean,

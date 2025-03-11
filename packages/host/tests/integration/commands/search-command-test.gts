@@ -12,7 +12,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   lookupLoaderService,
 } from '../../helpers';
@@ -35,8 +34,8 @@ module('Integration | commands | search', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
-  setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
@@ -65,6 +64,7 @@ module('Integration | commands | search', function (hooks) {
     }
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'author.gts': { Author },
         'Author/r2.json': new Author({ firstName: 'R2-D2' }),

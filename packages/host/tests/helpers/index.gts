@@ -15,7 +15,6 @@ import {
   LooseSingleCardDocument,
   baseRealm,
   RealmPermissions,
-  Deferred,
   Worker,
   RunnerOptionsManager,
   type RealmInfo,
@@ -31,6 +30,7 @@ import {
 import {
   testRealmInfo,
   testRealmURL,
+  testRealmURLToUsername,
 } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -44,7 +44,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
-import type MessageService from '@cardstack/host/services/message-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
@@ -63,6 +62,8 @@ import percySnapshot from './percy-snapshot';
 import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
+import type { MockUtils } from './mock-matrix/_utils';
+
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
 export * from '@cardstack/runtime-common/helpers/indexer';
@@ -70,7 +71,8 @@ export * from '@cardstack/runtime-common/helpers/indexer';
 const { sqlSchema } = ENV;
 
 type CardAPI = typeof import('https://cardstack.com/base/card-api');
-const testMatrix = {
+
+const baseTestMatrix = {
   url: new URL(`http://localhost:8008`),
   username: 'test_realm',
   password: 'password',
@@ -170,19 +172,6 @@ export interface TestContextWithSave extends TestContext {
   unregisterOnSave: () => void;
 }
 
-export interface TestContextWithSSE extends TestContext {
-  expectEvents: (args: {
-    assert: Assert;
-    realm: Realm;
-    expectedEvents?: { type: string; data: Record<string, any> }[];
-    expectedNumberOfEvents?: number;
-    onEvents?: (events: { type: string; data: Record<string, any> }[]) => void;
-    callback: () => Promise<any>;
-    opts?: { timeout?: number };
-  }) => Promise<any>;
-  subscribers: ((e: { type: string; data: string }) => void)[];
-}
-
 async function makeRenderer() {
   // This emulates the application.hbs
   await renderComponent(
@@ -267,13 +256,6 @@ export function setupLocalIndexing(hooks: NestedHooks) {
   });
 }
 
-class MockMessageService extends Service {
-  subscribe() {
-    return () => {};
-  }
-  register() {}
-}
-
 export function setupOnSave(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSave>(function () {
     let cardService = this.owner.lookup('service:card-service') as CardService;
@@ -281,142 +263,6 @@ export function setupOnSave(hooks: NestedHooks) {
     this.unregisterOnSave =
       cardService.unregisterSaveSubscriber.bind(cardService);
   });
-}
-
-export function setupMockMessageService(hooks: NestedHooks) {
-  hooks.beforeEach(function () {
-    this.owner.register('service:message-service', MockMessageService);
-  });
-}
-
-export function setupServerSentEvents(hooks: NestedHooks) {
-  hooks.beforeEach<TestContextWithSSE>(function () {
-    this.subscribers = [];
-    let self = this;
-
-    class MockMessageService extends Service {
-      register() {
-        (globalThis as any)._CARDSTACK_REALM_SUBSCRIBE = this;
-      }
-      subscribe(_: never, cb: (e: { type: string; data: string }) => void) {
-        self.subscribers.push(cb);
-        return () => {};
-      }
-    }
-    this.owner.register('service:message-service', MockMessageService);
-    let messageService = this.owner.lookup(
-      'service:message-service',
-    ) as MessageService;
-    messageService.register();
-
-    this.expectEvents = async <T,>({
-      assert,
-      realm,
-      expectedEvents,
-      expectedNumberOfEvents,
-      onEvents,
-      callback,
-      opts,
-    }: {
-      assert: Assert;
-      realm: Realm;
-      expectedEvents?: { type: string; data: Record<string, any> }[];
-      expectedNumberOfEvents?: number;
-      onEvents?: (
-        events: { type: string; data: Record<string, any> }[],
-      ) => void;
-      callback: () => Promise<T>;
-      opts?: { timeout?: number };
-    }): Promise<T> => {
-      let defer = new Deferred();
-      let events: { type: string; data: Record<string, any> }[] = [];
-      let numOfEvents = expectedEvents?.length ?? expectedNumberOfEvents;
-      if (numOfEvents == null) {
-        throw new Error(
-          `expectEvents() must specify either 'expectedEvents' or 'expectedNumberOfEvents'`,
-        );
-      }
-      let response = await realm.handle(
-        new Request(`${realm.url}_message`, {
-          method: 'GET',
-          headers: {
-            Accept: 'text/event-stream',
-          },
-        }),
-      );
-      if (!response?.ok) {
-        throw new Error(`failed to connect to realm: ${response?.status}`);
-      }
-      let reader = response.body!.getReader();
-      let timeout = setTimeout(
-        () =>
-          defer.reject(
-            new Error(
-              `expectEvent timed out, saw events ${JSON.stringify(events)}`,
-            ),
-          ),
-        opts?.timeout ?? 10000,
-      );
-      let result = await callback();
-      let decoder = new TextDecoder();
-      while (events.length < numOfEvents) {
-        let { done, value } = await Promise.race([
-          reader.read(),
-          defer.promise as any, // this one always throws so type is not important
-        ]);
-        if (done) {
-          throw new Error(
-            `expected ${numOfEvents} events, saw ${events.length} events`,
-          );
-        }
-        if (value) {
-          let ev = getEventData(decoder.decode(value, { stream: true }));
-          if (ev) {
-            events.push(ev);
-            for (let subscriber of this.subscribers) {
-              let evWireFormat = {
-                type: ev.type,
-                data: JSON.stringify(ev.data),
-              };
-              subscriber(evWireFormat);
-            }
-          }
-        }
-      }
-      if (expectedEvents) {
-        let eventsWithoutClientRequestId = events.map((e) => {
-          delete e.data.clientRequestId;
-          return e;
-        });
-        assert.deepEqual(
-          eventsWithoutClientRequestId.forEach((e) =>
-            e.data.invalidations?.sort(),
-          ),
-          expectedEvents.forEach((e) => e.data.invalidations?.sort()),
-          'sse response is correct',
-        );
-      }
-      if (onEvents) {
-        onEvents(events);
-      }
-      clearTimeout(timeout);
-      realm.unsubscribe();
-      await settled();
-      return result;
-    };
-  });
-}
-
-function getEventData(message: string) {
-  let [rawType, data] = message.split('\n');
-  let type = rawType.trim().split(':')[1].trim();
-  if (['index', 'update'].includes(type)) {
-    return {
-      type,
-      data: JSON.parse(data.split('data:')[1].trim()),
-    };
-  }
-  return;
 }
 
 let runnerOptsMgr = new RunnerOptionsManager();
@@ -434,31 +280,37 @@ export async function setupAcceptanceTestRealm({
   contents,
   realmURL,
   permissions,
+  mockMatrixUtils,
 }: {
   contents: RealmContents;
   realmURL?: string;
   permissions?: RealmPermissions;
+  mockMatrixUtils: MockUtils;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: true,
     permissions,
+    mockMatrixUtils,
   });
 }
 
 export async function setupIntegrationTestRealm({
   contents,
   realmURL,
+  mockMatrixUtils,
 }: {
   loader: Loader;
   contents: RealmContents;
   realmURL?: string;
+  mockMatrixUtils: MockUtils;
 }) {
   return await setupTestRealm({
     contents,
     realmURL,
     isAcceptanceTest: false,
+    mockMatrixUtils,
   });
 }
 
@@ -483,11 +335,13 @@ async function setupTestRealm({
   realmURL,
   isAcceptanceTest,
   permissions = { '*': ['read', 'write'] },
+  mockMatrixUtils,
 }: {
   contents: RealmContents;
   realmURL?: string;
   isAcceptanceTest?: boolean;
   permissions?: RealmPermissions;
+  mockMatrixUtils: MockUtils;
 }) {
   let owner = (getContext() as TestContext).owner;
   let { virtualNetwork } = lookupNetworkService();
@@ -514,7 +368,12 @@ async function setupTestRealm({
   ) as unknown as MockLocalIndexer;
   let realm: Realm;
 
-  let adapter = new TestRealmAdapter(contents, new URL(realmURL));
+  let adapter = new TestRealmAdapter(
+    contents,
+    new URL(realmURL),
+    mockMatrixUtils,
+    owner,
+  );
   let indexRunner: IndexRunner = async (optsId) => {
     let { registerRunner, indexWriter } = runnerOptsMgr.getOptions(optsId);
     await localIndexer.configureRunner(registerRunner, adapter, indexWriter);
@@ -528,18 +387,23 @@ async function setupTestRealm({
     runnerOptsManager: runnerOptsMgr,
     indexRunner,
     virtualNetwork,
-    matrixURL: testMatrix.url,
+    matrixURL: baseTestMatrix.url,
     secretSeed: testRealmSecretSeed,
   });
+
   realm = new Realm({
     url: realmURL,
     adapter,
-    matrix: testMatrix,
+    matrix: {
+      ...baseTestMatrix,
+      username: testRealmURLToUsername(realmURL),
+    },
     secretSeed: testRealmSecretSeed,
     virtualNetwork,
     dbAdapter,
     queue,
   });
+
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
   await adapter.ready;

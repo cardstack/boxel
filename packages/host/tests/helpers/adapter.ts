@@ -1,3 +1,5 @@
+import type Owner from '@ember/owner';
+
 import {
   Loader,
   LocalPath,
@@ -10,6 +12,9 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+
 import {
   FileRef,
   Kind,
@@ -18,9 +23,13 @@ import {
   UpdateEventData,
 } from '@cardstack/runtime-common/realm';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import { WebMessageStream, messageCloseHandler } from './stream';
 
 import { createJWT, testRealmURL } from '.';
+
+import type { MockUtils } from './mock-matrix/_utils';
 
 interface Dir {
   kind: 'directory';
@@ -52,9 +61,20 @@ export class TestRealmAdapter implements RealmAdapter {
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
+  #mockMatrixUtils: MockUtils;
 
-  constructor(contents: TestAdapterContents, realmURL = new URL(testRealmURL)) {
+  owner?: Owner;
+
+  constructor(
+    contents: TestAdapterContents,
+    realmURL = new URL(testRealmURL),
+    mockMatrixUtils: MockUtils,
+    owner?: Owner,
+  ) {
+    this.owner = owner;
     this.#paths = new RealmPaths(realmURL);
+    this.#mockMatrixUtils = mockMatrixUtils;
+
     let now = unixTime(Date.now());
 
     for (let [path, content] of Object.entries(contents)) {
@@ -80,6 +100,27 @@ export class TestRealmAdapter implements RealmAdapter {
 
   get ready() {
     return this.#ready.promise;
+  }
+
+  async broadcastRealmEvent(
+    event: RealmEventContent,
+    matrixClient: MatrixClient,
+  ) {
+    if (!this.owner) {
+      return;
+    }
+
+    let { getRoomIds, simulateRemoteMessage } = this.#mockMatrixUtils;
+
+    let realmMatrixUsername = matrixClient.username;
+
+    for (let roomId of getRoomIds()) {
+      if (roomId.startsWith('test-session-room-realm-')) {
+        simulateRemoteMessage(roomId, realmMatrixUsername, event, {
+          type: APP_BOXEL_REALM_EVENT_TYPE,
+        });
+      }
+    }
   }
 
   // We are eagerly establishing shims and preparing instances to be able to be
