@@ -1,4 +1,4 @@
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
@@ -13,12 +13,10 @@ import {
   percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
-  type TestContextWithSSE,
   type TestContextWithSave,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -29,12 +27,15 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
   let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:localhost',
-      activeRealms: [testRealmURL],
-    });
+    mockMatrixUtils;
+
   setupOnSave(hooks);
 
   const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
@@ -138,6 +139,7 @@ export class BlogPost extends CardDef {
     setupUserSubscription(matrixRoomId);
 
     ({ realm } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {
         'author.gts': authorCard,
@@ -632,7 +634,7 @@ export class BlogPost extends CardDef {
     ]);
   });
 
-  test<TestContextWithSSE>('can create new instance', async function (assert) {
+  test('can create new instance', async function (assert) {
     window.localStorage.removeItem('recent-files');
     await visitOperatorMode({
       submode: 'code',
@@ -651,14 +653,8 @@ export class BlogPost extends CardDef {
       .doesNotExist();
 
     await click('[data-test-instance-chooser]');
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        await click('[data-test-create-instance]');
-      },
-    });
+    await click('[data-test-create-instance]');
+
     recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
     assert.strictEqual(recentFiles.length, 2, 'recent file count is correct');
     let newCardId = `${recentFiles[0][0]}${recentFiles[0][1]}`.replace(
@@ -735,7 +731,7 @@ export class BlogPost extends CardDef {
       .exists('code ref is valid');
   });
 
-  test<TestContextWithSSE>('playground preview for card with contained fields can live update when module changes', async function (assert) {
+  test('playground preview for card with contained fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
 import MarkdownField from 'https://cardstack.com/base/markdown';
@@ -766,23 +762,6 @@ export class Author extends CardDef {
 </template>
   }
 }`;
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}author.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}author.gts`],
-        },
-      },
-    ];
     await visitOperatorMode({
       stacks: [],
       submode: 'code',
@@ -793,16 +772,18 @@ export class Author extends CardDef {
     await click('[data-option-index="0"]');
     assert.dom('[data-test-author-title]').containsText('Jane Doe');
 
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => await realm.write('author.gts', authorCard),
-    });
+    await realm.write('author.gts', authorCard);
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-author-title]')
+        ?.textContent?.includes('Hello'),
+    );
+
     assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
   });
 
-  test<TestContextWithSSE>('playground preview for card with linked fields can live update when module changes', async function (assert) {
+  test('playground preview for card with linked fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
 import DatetimeField from 'https://cardstack.com/base/datetime';
@@ -858,23 +839,7 @@ export class BlogPost extends CardDef {
   </template>
   }
 }`;
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}blog-post.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}blog-post.gts`],
-        },
-      },
-    ];
+
     await visitOperatorMode({
       stacks: [],
       submode: 'code',
@@ -886,12 +851,14 @@ export class BlogPost extends CardDef {
     await click('[data-option-index="0"]');
     assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
 
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => await realm.write('blog-post.gts', blogPostCard),
-    });
+    await realm.write('blog-post.gts', blogPostCard);
+
+    await waitUntil(() =>
+      document
+        .querySelector('[data-test-post-title]')
+        ?.textContent?.includes('Hello'),
+    );
+
     assert.dom('[data-test-post-title]').includesText('Hello Mad As a Hatter');
   });
 

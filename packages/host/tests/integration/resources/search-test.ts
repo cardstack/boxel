@@ -1,5 +1,5 @@
 import { getOwner } from '@ember/owner';
-import { RenderingTestContext } from '@ember/test-helpers';
+import { settled, RenderingTestContext, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -23,10 +23,9 @@ import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
-  setupServerSentEvents,
-  type TestContextWithSSE,
 } from '../../helpers';
 import { setupBaseRealm } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 class StubRealmService extends RealmService {
@@ -50,7 +49,12 @@ module(`Integration | search resource`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
     cardApi = await loader.import(`${baseRealm.url}card-api`);
@@ -267,6 +271,7 @@ module(`Integration | search resource`, function (hooks) {
 
     ({ realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'article.gts': { Article },
         'blog-post.gts': { BlogPost },
@@ -300,7 +305,7 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[0].constructor.name, 'Book');
   });
 
-  test<TestContextWithSSE>(`can perform a live search for cards`, async function (assert) {
+  test(`can perform a live search for cards`, async function (assert) {
     let query: Query = {
       filter: {
         on: {
@@ -324,61 +329,38 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
     assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
 
-    let expectedEvents = [
-      {
-        type: 'index',
+    await realm.write(
+      'books/3.json',
+      JSON.stringify({
         data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}book/3`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}book/3`],
-        },
-      },
-    ];
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await realm.write(
-          'books/3.json',
-          JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                author: {
-                  firstName: 'Paper',
-                  lastName: 'Abdel-Rahman',
-                },
-                editions: 0,
-                pubDate: '2023-08-01',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}book`,
-                  name: 'Book',
-                },
-              },
+          type: 'card',
+          attributes: {
+            author: {
+              firstName: 'Paper',
+              lastName: 'Abdel-Rahman',
             },
-          } as LooseSingleCardDocument),
-        );
-      },
-    });
+            editions: 0,
+            pubDate: '2023-08-01',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}book`,
+              name: 'Book',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
 
-    await search.loaded;
+    await waitUntil(() => search.instances.length === 3);
+
     assert.strictEqual(search.instances.length, 3);
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
     assert.strictEqual(search.instances[1].id, `${testRealmURL}books/2`);
     assert.strictEqual(search.instances[2].id, `${testRealmURL}books/3`);
   });
 
-  test<TestContextWithSSE>(`cards in search results live update`, async function (assert) {
+  test(`cards in search results live update`, async function (assert) {
     let query: Query = {
       filter: {
         on: {
@@ -401,54 +383,32 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual((search.instances[0] as any).author.firstName, `Mango`);
 
-    let expectedEvents = [
-      {
-        type: 'index',
+    await realm.write(
+      'books/1.json',
+      JSON.stringify({
         data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}book/1`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}book/1`],
-        },
-      },
-    ];
-
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await realm.write(
-          'books/1.json',
-          JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                author: {
-                  firstName: 'Mang Mang',
-                  lastName: 'Abdel-Rahman',
-                },
-                editions: 0,
-                pubDate: '2023-08-01',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}book`,
-                  name: 'Book',
-                },
-              },
+          type: 'card',
+          attributes: {
+            author: {
+              firstName: 'Mang Mang',
+              lastName: 'Abdel-Rahman',
             },
-          } as LooseSingleCardDocument),
-        );
-      },
-    });
+            editions: 0,
+            pubDate: '2023-08-01',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}book`,
+              name: 'Book',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
     await search.loaded;
+    await settled();
+
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual(
       (search.instances[0] as any).author.firstName,

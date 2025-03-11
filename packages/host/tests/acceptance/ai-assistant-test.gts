@@ -14,7 +14,6 @@ import {
 
 import {
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
@@ -124,12 +123,15 @@ let matrixRoomId: string;
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { createAndJoinRoom, getRoomState } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
+
+  let { createAndJoinRoom, getRoomState } = mockMatrixUtils;
+
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
@@ -216,6 +218,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     let mangoPet = new Pet({ name: 'Mango' });
 
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'pet.gts': { Pet },

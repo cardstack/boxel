@@ -16,6 +16,7 @@ import {
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -31,6 +32,7 @@ import type {
   MessageEvent,
   CommandDefinitionsEvent,
   CommandResultEvent,
+  RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -115,7 +117,10 @@ export class RoomResource extends Resource<Args> {
           case 'm.room.message':
             if (this.isCardFragmentEvent(event)) {
               await this.loadCardFragment(event);
-            } else if (this.isCommandDefinitionsEvent(event)) {
+            } else if (
+              this.isCommandDefinitionsEvent(event) ||
+              this.isRealmServerEvent(event)
+            ) {
               break;
             } else {
               await this.loadRoomMessage({
@@ -319,13 +324,31 @@ export class RoomResource extends Resource<Args> {
   }
 
   private isCommandDefinitionsEvent(
-    event: MessageEvent | CardMessageEvent | CommandDefinitionsEvent,
+    event:
+      | MessageEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent
+      | RealmServerEvent,
   ): event is CommandDefinitionsEvent {
     return event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
   }
 
+  private isRealmServerEvent(
+    event:
+      | MessageEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent
+      | RealmServerEvent,
+  ): event is RealmServerEvent {
+    return event.content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
+  }
+
   private isCardFragmentEvent(
-    event: MessageEvent | CardMessageEvent | CommandDefinitionsEvent,
+    event:
+      | MessageEvent
+      | CardMessageEvent
+      | CommandDefinitionsEvent
+      | RealmServerEvent,
   ): event is CardMessageEvent & {
     content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
   } {

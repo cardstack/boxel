@@ -17,8 +17,6 @@ import stringify from 'safe-stable-stringify';
 
 import { baseRealm, Deferred } from '@cardstack/runtime-common';
 
-import { Realm } from '@cardstack/runtime-common/realm';
-
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -31,12 +29,10 @@ import {
   setupLocalIndexing,
   testRealmURL,
   setupAcceptanceTestRealm,
-  setupServerSentEvents,
   setupOnSave,
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
-  type TestContextWithSSE,
   type TestContextWithSave,
   setMonacoContent,
 } from '../../helpers';
@@ -394,19 +390,21 @@ const localInheritSource = `
 `;
 
 module('Acceptance | code submode | inspector tests', function (hooks) {
-  let realm: Realm;
   let adapter: TestRealmAdapter;
   let monacoService: MonacoService;
   let matrixRoomId: string;
 
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL, testRealmURL2],
+    autostart: true,
   });
+
+  let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     setRealmPermissions({
@@ -423,10 +421,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: realmAFiles,
       realmURL: testRealmURL2,
     });
-    ({ realm, adapter } = await setupAcceptanceTestRealm({
+    ({ adapter } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
@@ -965,26 +965,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
 
-  test<TestContextWithSSE>('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
-    let done = assert.async();
-
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/vangogh`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/vangogh`],
-        },
-      },
-    ];
+  test('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
     window.localStorage.setItem(
       'recent-cards',
       JSON.stringify([`${testRealmURL}Pet/vangogh`, `${testRealmURL}Person/1`]),
@@ -1028,15 +1009,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom('[data-test-delete-msg]')
       .includesText('Delete the card Van Gogh?');
     await percySnapshot(assert);
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click('[data-test-confirm-delete-button]');
-        done();
-      },
-    });
+
+    await click('[data-test-confirm-delete-button]');
 
     await waitFor('[data-test-empty-code-mode]');
     await percySnapshot(
@@ -1065,24 +1039,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
-  test<TestContextWithSSE>('Can delete a card instance from code submode and fall back to recent file', async function (assert) {
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}Pet/vangogh`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}Pet/vangogh`],
-        },
-      },
-    ];
+  test('Can delete a card instance from code submode and fall back to recent file', async function (assert) {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
@@ -1125,16 +1082,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-action-button="Delete"]`);
     await click('[data-test-action-button="Delete"]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}Pet/vangogh"]`);
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
 
+    await click('[data-test-confirm-delete-button]');
     await waitForCodeEditor();
+
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
@@ -1166,28 +1117,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     );
   });
 
-  test<TestContextWithSSE>('can delete a card definition and fallback to recent file', async function (assert) {
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}pet.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [
-            `${testRealmURL}pet.gts`,
-            `${testRealmURL}Pet/mango`,
-            `${testRealmURL}Pet/vangogh`,
-          ],
-        },
-      },
-    ];
+  test('can delete a card definition and fallback to recent file', async function (assert) {
     window.localStorage.setItem(
       'recent-files',
       JSON.stringify([
@@ -1212,15 +1142,10 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-delete-module-button]`);
     await click('[data-test-delete-module-button]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}pet.gts"]`);
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await click('[data-test-confirm-delete-button]');
     await waitForCodeEditor();
+
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}Pet/mango.json`);
@@ -1236,28 +1161,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
   });
 
-  test<TestContextWithSSE>('can delete a card definition with no recent files to fall back on', async function (assert) {
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}pet.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [
-            `${testRealmURL}pet.gts`,
-            `${testRealmURL}Pet/mango`,
-            `${testRealmURL}Pet/vangogh`,
-          ],
-        },
-      },
-    ];
+  test('can delete a card definition with no recent files to fall back on', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
@@ -1276,14 +1180,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor(`[data-test-delete-module-button]`);
     await click('[data-test-delete-module-button]');
     await waitFor(`[data-test-delete-modal="${testRealmURL}pet.gts"]`);
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        await click('[data-test-confirm-delete-button]');
-      },
-    });
+
+    await click('[data-test-confirm-delete-button]');
     await waitFor('[data-test-empty-code-mode]');
 
     assert.deepEqual(
@@ -1698,7 +1596,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.true(monacoService.getLineCursorOn()?.includes('Activity'));
   });
 
-  test<TestContextWithSSE>('"in-this-file" panel maintains selection after editing name of declaration', async function (assert) {
+  test('"in-this-file" panel maintains selection after editing name of declaration', async function (assert) {
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -1768,32 +1666,8 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       renamedElementName,
     );
 
-    let expectedEvents = [
-      {
-        type: 'index',
-        data: {
-          type: 'incremental-index-initiation',
-          realmURL: testRealmURL,
-          updatedFile: `${testRealmURL}in-this-file.gts`,
-        },
-      },
-      {
-        type: 'index',
-        data: {
-          type: 'incremental',
-          invalidations: [`${testRealmURL}in-this-file.gts`],
-        },
-      },
-    ];
-    await this.expectEvents({
-      assert,
-      realm,
-      expectedEvents,
-      callback: async () => {
-        setMonacoContent(editedInThisFileSource);
-        await waitFor(`[data-test-boxel-selector-item]:nth-of-type(4)`);
-      },
-    });
+    setMonacoContent(editedInThisFileSource);
+    await waitFor(`[data-test-boxel-selector-item]:nth-of-type(4)`);
     await waitFor('[data-test-code-mode][data-test-save-idle]');
     await waitFor(`[data-test-boxel-selector-item]:nth-of-type(4)`);
     await waitUntil(() => {

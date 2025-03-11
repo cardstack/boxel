@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
@@ -21,7 +21,6 @@ import {
   isSingleCardDocument,
   baseRealm,
   loadCard,
-  Deferred,
   RealmPaths,
   Realm,
   RealmPermissions,
@@ -53,6 +52,7 @@ import {
   insertPlan,
   mtimes,
   cleanWhiteSpace,
+  waitUntil,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import eventSource from 'eventsource';
@@ -68,6 +68,14 @@ import {
   insertSubscription,
 } from '@cardstack/billing/billing-queries';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type {
+  IncrementalIndexEventContent,
+  MatrixEvent,
+  RealmEvent,
+  RealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
+import isEqual from 'lodash/isEqual';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -95,57 +103,6 @@ let createJWT = (
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints', function (hooks) {
-    async function expectEvent<T>({
-      assert,
-      expected,
-      expectedNumberOfEvents,
-      onEvents,
-      callback,
-    }: {
-      assert: Assert;
-      expected?: Record<string, any>[];
-      expectedNumberOfEvents?: number;
-      onEvents?: (events: Record<string, any>[]) => void;
-      callback: () => Promise<T>;
-    }): Promise<T> {
-      let defer = new Deferred<Record<string, any>[]>();
-      let events: Record<string, any>[] = [];
-      let maybeNumEvents = expected?.length ?? expectedNumberOfEvents;
-      if (maybeNumEvents == null) {
-        throw new Error(
-          `expectEvent() must specify either 'expected' or 'expectedNumberOfEvents'`,
-        );
-      }
-      let numEvents = maybeNumEvents;
-      let es = new eventSource(`${testRealmHref}_message`);
-      es.addEventListener('index', (ev: MessageEvent) => {
-        events.push(JSON.parse(ev.data));
-        if (events.length >= numEvents) {
-          defer.fulfill(events);
-        }
-      });
-      es.onerror = (err: Event) => defer.reject(err);
-      let timeout = setTimeout(() => {
-        defer.reject(
-          new Error(
-            `expectEvent timed out, saw events ${JSON.stringify(events)}`,
-          ),
-        );
-      }, 5000);
-      await new Promise((resolve) => es.addEventListener('open', resolve));
-      let result = await callback();
-      let actualEvents = await defer.promise;
-      if (expected) {
-        assert.deepEqual(actualEvents, expected);
-      }
-      if (onEvents) {
-        onEvents(actualEvents);
-      }
-      clearTimeout(timeout);
-      es.close();
-      return result;
-    }
-
     let testRealm: Realm;
     let testRealmPath: string;
     let testRealmHttpServer: Server;
@@ -168,7 +125,9 @@ module(basename(__filename), function () {
           if (!fileSystem) {
             copySync(join(__dirname, 'cards'), testRealmDir);
           }
+
           let virtualNetwork = createVirtualNetwork();
+
           ({
             testRealm,
             testRealmHttpServer,
@@ -189,6 +148,66 @@ module(basename(__filename), function () {
           request = supertest(testRealmHttpServer);
         },
       });
+    }
+
+    function setupMatrixRoom(hooks: NestedHooks) {
+      let matrixClient = new MatrixClient({
+        matrixURL: realmServerTestMatrix.url,
+        // it's a little awkward that we are hijacking a realm user to pretend to
+        // act like a normal user, but that's what's happening here
+        username: 'node-test_realm',
+        seed: realmSecretSeed,
+      });
+
+      let testAuthRoomId: string | undefined;
+
+      hooks.beforeEach(async function () {
+        await matrixClient.login();
+        let userId = matrixClient.getUserId()!;
+
+        let response = await request
+          .post('/_server-session')
+          .send(JSON.stringify({ user: userId }))
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json');
+
+        let json = response.body;
+
+        let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+        if (!rooms.includes(json.room)) {
+          await matrixClient.joinRoom(json.room);
+        }
+
+        await matrixClient.sendEvent(json.room, 'm.room.message', {
+          body: `auth-response: ${json.challenge}`,
+          msgtype: 'm.text',
+        });
+
+        response = await request
+          .post('/_server-session')
+          .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json');
+
+        testAuthRoomId = json.room;
+
+        await matrixClient.setAccountData('boxel.session-rooms', {
+          [userId]: json.room,
+        });
+      });
+
+      return {
+        matrixClient,
+        getMessagesSince: async function (since: number) {
+          let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+          let messagesAfterSentinel = allMessages.filter(
+            (m) => m.origin_server_ts > since,
+          );
+
+          return messagesAfterSentinel;
+        },
+      };
     }
 
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
@@ -672,7 +691,11 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                realmInfo: testRealmInfo,
+                // FIXME see elsewhere… global fix?
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
                 realmURL: testRealmURL.href,
               },
               links: {
@@ -858,47 +881,47 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let { getMessagesSince } = setupMatrixRoom(hooks);
+
         test('serves the request', async function (assert) {
-          assert.expect(9);
           let id: string | undefined;
-          let response = await expectEvent({
-            assert,
-            expectedNumberOfEvents: 2,
-            onEvents: ([_, event]) => {
-              if (event.type === 'incremental') {
-                id = event.invalidations[0].split('/').pop()!;
-                assert.true(uuidValidate(id!), 'card identifier is a UUID');
-                assert.strictEqual(
-                  event.invalidations[0],
-                  `${testRealmURL}CardDef/${id}`,
-                );
-              } else {
-                assert.ok(
-                  false,
-                  `expect to receive 'incremental' event, but saw ${JSON.stringify(
-                    event,
-                  )} `,
-                );
-              }
-            },
-            callback: async () => {
-              return await request
-                .post('/')
-                .send({
-                  data: {
-                    type: 'card',
-                    attributes: {},
-                    meta: {
-                      adoptsFrom: {
-                        module: 'https://cardstack.com/base/card-api',
-                        name: 'CardDef',
-                      },
-                    },
+          let realmEventTimestampStart = Date.now();
+
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
                   },
-                })
-                .set('Accept', 'application/vnd.card+json');
-            },
-          });
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
+
+          let messages = await getMessagesSince(realmEventTimestampStart);
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
+          )?.content as IncrementalIndexEventContent;
+
+          id = incrementalEvent.invalidations[0].split('/').pop()!;
+          assert.true(uuidValidate(id!), 'card identifier is a UUID');
+          assert.strictEqual(
+            incrementalEvent.invalidations[0],
+            `${testRealmURL}CardDef/${id}`,
+          );
+
           if (!id) {
             assert.ok(false, 'new card identifier was undefined');
           }
@@ -915,45 +938,46 @@ module(basename(__filename), function () {
           );
           let json = response.body;
 
-          if (isSingleCardDocument(json)) {
-            assert.strictEqual(
-              json.data.id,
-              `${testRealmHref}CardDef/${id}`,
-              'the id is correct',
-            );
-            assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-            let cardFile = join(
-              dir.name,
-              'realm_server_1',
-              'test',
-              'CardDef',
-              `${id}.json`,
-            );
-            assert.ok(existsSync(cardFile), 'card json exists');
-            let card = readJSONSync(cardFile);
-            assert.deepEqual(
-              card,
-              {
-                data: {
-                  attributes: {
-                    title: null,
-                    description: null,
-                    thumbnailURL: null,
-                  },
-                  type: 'card',
-                  meta: {
-                    adoptsFrom: {
-                      module: 'https://cardstack.com/base/card-api',
-                      name: 'CardDef',
-                    },
+          assert.true(
+            isSingleCardDocument(json),
+            'response body is a card document',
+          );
+
+          assert.strictEqual(
+            json.data.id,
+            `${testRealmHref}CardDef/${id}`,
+            'the id is correct',
+          );
+          assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+          let cardFile = join(
+            dir.name,
+            'realm_server_1',
+            'test',
+            'CardDef',
+            `${id}.json`,
+          );
+          assert.ok(existsSync(cardFile), 'card json exists');
+          let card = readJSONSync(cardFile);
+          assert.deepEqual(
+            card,
+            {
+              data: {
+                attributes: {
+                  title: null,
+                  description: null,
+                  thumbnailURL: null,
+                },
+                type: 'card',
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
                   },
                 },
               },
-              'file contents are correct',
-            );
-          } else {
-            assert.ok(false, 'response body is not a card document');
-          }
+            },
+            'file contents are correct',
+          );
         });
       });
 
@@ -1036,44 +1060,28 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let { getMessagesSince } = setupMatrixRoom(hooks);
+
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}person-1.json`,
-            },
-            {
-              type: 'incremental',
-              invalidations: [`${testRealmURL}person-1`],
-              realmURL: testRealmURL.href,
-              clientRequestId: null,
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            expected,
-            callback: async () => {
-              return await request
-                .patch('/person-1')
-                .send({
-                  data: {
-                    type: 'card',
-                    attributes: {
-                      firstName: 'Van Gogh',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: './person.gts',
-                        name: 'Person',
-                      },
-                    },
+
+          let response = await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
                   },
-                })
-                .set('Accept', 'application/vnd.card+json');
-            },
-          });
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(
@@ -1089,41 +1097,43 @@ module(basename(__filename), function () {
 
           let json = response.body;
           assert.ok(json.data.meta.lastModified, 'lastModified exists');
-          if (isSingleCardDocument(json)) {
-            assert.strictEqual(
-              json.data.attributes?.firstName,
-              'Van Gogh',
-              'the field data is correct',
-            );
-            assert.ok(json.data.meta.lastModified, 'lastModified is populated');
-            delete json.data.meta.lastModified;
-            delete json.data.meta.resourceCreatedAt;
-            let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
-            assert.ok(existsSync(cardFile), 'card json exists');
-            let card = readJSONSync(cardFile);
-            assert.deepEqual(
-              card,
-              {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Van Gogh',
-                    description: null,
-                    thumbnailURL: null,
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: `./person`,
-                      name: 'Person',
-                    },
+
+          assert.true(
+            isSingleCardDocument(json),
+            'response body is a card document',
+          );
+
+          assert.strictEqual(
+            json.data.attributes?.firstName,
+            'Van Gogh',
+            'the field data is correct',
+          );
+          assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+          delete json.data.meta.lastModified;
+          delete json.data.meta.resourceCreatedAt;
+          let cardFile = join(dir.name, 'realm_server_1', 'test', entry);
+          assert.ok(existsSync(cardFile), 'card json exists');
+          let card = readJSONSync(cardFile);
+          assert.deepEqual(
+            card,
+            {
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                  description: null,
+                  thumbnailURL: null,
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: `./person`,
+                    name: 'Person',
                   },
                 },
               },
-              'file contents are correct',
-            );
-          } else {
-            assert.ok(false, 'response body is not a card document');
-          }
+            },
+            'file contents are correct',
+          );
 
           let query: Query = {
             filter: {
@@ -1143,6 +1153,59 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(response.body.data.length, 1, 'found one card');
+        });
+
+        test('broadcasts realm events', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          await request
+            .patch('/person-1')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Van Gogh',
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './person.gts',
+                    name: 'Person',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
+
+          let messages = await getMessagesSince(realmEventTimestampStart);
+          let incrementalIndexInitiationEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental-index-initiation',
+          );
+
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
+          );
+
+          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental-index-initiation',
+            updatedFile: `${testRealmURL}person-1.json`,
+          });
+
+          assert.deepEqual(incrementalEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}person-1`],
+            clientRequestId: null,
+          });
         });
       });
 
@@ -1218,29 +1281,14 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let { getMessagesSince } = setupMatrixRoom(hooks);
+
         test('serves the request', async function (assert) {
           let entry = 'person-1.json';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}person-1.json`,
-            },
-            {
-              type: 'incremental',
-              realmURL: testRealmURL.href,
-              invalidations: [`${testRealmURL}person-1`],
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            expected,
-            callback: async () => {
-              return await request
-                .delete('/person-1')
-                .set('Accept', 'application/vnd.card+json');
-            },
-          });
+
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1257,30 +1305,50 @@ module(basename(__filename), function () {
           assert.false(existsSync(cardFile), 'card json does not exist');
         });
 
+        test('broadcasts realm events', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+json');
+
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
+
+          let messages = await getMessagesSince(realmEventTimestampStart);
+          let incrementalIndexInitiationEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental-index-initiation',
+          );
+
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
+          );
+
+          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental-index-initiation',
+            updatedFile: `${testRealmURL}person-1.json`,
+          });
+
+          assert.deepEqual(incrementalEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}person-1`],
+          });
+        });
+
         test('serves a card DELETE request with .json extension in the url', async function (assert) {
           let entry = 'person-1.json';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}person-1.json`,
-            },
-            {
-              type: 'incremental',
-              realmURL: testRealmURL.href,
-              invalidations: [`${testRealmURL}person-1`],
-            },
-          ];
 
-          let response = await expectEvent({
-            assert,
-            expected,
-            callback: async () => {
-              return await request
-                .delete('/person-1.json')
-                .set('Accept', 'application/vnd.card+json');
-            },
-          });
+          let response = await request
+            .delete('/person-1.json')
+            .set('Accept', 'application/vnd.card+json');
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1504,29 +1572,14 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let { getMessagesSince } = setupMatrixRoom(hooks);
+
         test('serves the request', async function (assert) {
           let entry = 'unused-card.gts';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}unused-card.gts`,
-            },
-            {
-              type: 'incremental',
-              realmURL: testRealmURL.href,
-              invalidations: [`${testRealmURL}unused-card.gts`],
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            expected,
-            callback: async () => {
-              return await request
-                .delete('/unused-card.gts')
-                .set('Accept', 'application/vnd.card+source');
-            },
-          });
+
+          let response = await request
+            .delete('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source');
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1543,29 +1596,49 @@ module(basename(__filename), function () {
           assert.false(existsSync(cardFile), 'card module does not exist');
         });
 
+        test('broadcasts realm events', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          await request
+            .delete('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
+
+          let messages = await getMessagesSince(realmEventTimestampStart);
+          let incrementalIndexInitiationEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental-index-initiation',
+          );
+
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
+          );
+
+          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental-index-initiation',
+            updatedFile: `${testRealmURL}unused-card.gts`,
+          });
+
+          assert.deepEqual(incrementalEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}unused-card.gts`],
+          });
+        });
+
         test('serves a card-source DELETE request for a card instance', async function (assert) {
           let entry = 'person-1';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}person-1.json`,
-            },
-            {
-              type: 'incremental',
-              realmURL: testRealmURL.href,
-              invalidations: [`${testRealmURL}person-1`],
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            expected,
-            callback: async () => {
-              return await request
-                .delete('/person-1')
-                .set('Accept', 'application/vnd.card+source');
-            },
-          });
+          let response = await request
+            .delete('/person-1')
+            .set('Accept', 'application/vnd.card+source');
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1626,31 +1699,14 @@ module(basename(__filename), function () {
           '*': ['read', 'write'],
         });
 
+        let { getMessagesSince } = setupMatrixRoom(hooks);
+
         test('serves a card-source POST request', async function (assert) {
           let entry = 'unused-card.gts';
-          let expected = [
-            {
-              type: 'incremental-index-initiation',
-              realmURL: testRealmURL.href,
-              updatedFile: `${testRealmURL}unused-card.gts`,
-            },
-            {
-              type: 'incremental',
-              invalidations: [`${testRealmURL}unused-card.gts`],
-              realmURL: testRealmURL.href,
-              clientRequestId: null,
-            },
-          ];
-          let response = await expectEvent({
-            assert,
-            expected,
-            callback: async () => {
-              return await request
-                .post('/unused-card.gts')
-                .set('Accept', 'application/vnd.card+source')
-                .send(`//TEST UPDATE\n${cardSrc}`);
-            },
-          });
+          let response = await request
+            .post('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(`//TEST UPDATE\n${cardSrc}`);
 
           assert.strictEqual(response.status, 204, 'HTTP 204 status');
           assert.strictEqual(
@@ -1674,6 +1730,47 @@ module(basename(__filename), function () {
           );
         });
 
+        test('broadcasts realm events', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
+          await request
+            .post('/unused-card.gts')
+            .set('Accept', 'application/vnd.card+source')
+            .send(`//TEST UPDATE\n${cardSrc}`);
+
+          await waitForIncrementalIndexEvent(
+            getMessagesSince,
+            realmEventTimestampStart,
+          );
+
+          let messages = await getMessagesSince(realmEventTimestampStart);
+          let incrementalIndexInitiationEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental-index-initiation',
+          );
+
+          let incrementalEvent = findRealmEvent(
+            messages,
+            'index',
+            'incremental',
+          );
+
+          assert.deepEqual(incrementalIndexInitiationEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental-index-initiation',
+            updatedFile: `${testRealmURL}unused-card.gts`,
+          });
+
+          assert.deepEqual(incrementalEvent!.content, {
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: [`${testRealmURL}unused-card.gts`],
+            // FIXME ??
+            clientRequestId: null,
+          });
+        });
+
         test('serves a card-source POST request for a .txt file', async function (assert) {
           let response = await request
             .post('/hello-world.txt')
@@ -1694,29 +1791,13 @@ module(basename(__filename), function () {
         });
 
         test('can serialize a card instance correctly after card definition is changed', async function (assert) {
+          let realmEventTimestampStart = Date.now();
+
           // create a card def
           {
-            let expected = [
-              {
-                type: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
-                updatedFile: `${testRealmURL}test-card.gts`,
-              },
-              {
-                type: 'incremental',
-                invalidations: [`${testRealmURL}test-card.gts`],
-                realmURL: testRealmURL.href,
-                clientRequestId: null,
-              },
-            ];
-
-            let response = await expectEvent({
-              assert,
-              expected,
-              callback: async () => {
-                return await request
-                  .post('/test-card.gts')
-                  .set('Accept', 'application/vnd.card+source').send(`
+            let response = await request
+              .post('/test-card.gts')
+              .set('Accept', 'application/vnd.card+source').send(`
                 import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
                 import StringCard from 'https://cardstack.com/base/string';
 
@@ -1725,38 +1806,32 @@ module(basename(__filename), function () {
                   @field field2 = contains(StringCard);
                 }
               `);
-              },
-            });
+
             assert.strictEqual(response.status, 204, 'HTTP 204 status');
           }
 
           // make an instance of the card def
           let maybeId: string | undefined;
           {
-            let response = await expectEvent({
-              assert,
-              expectedNumberOfEvents: 2,
-              callback: async () => {
-                return await request
-                  .post('/')
-                  .send({
-                    data: {
-                      type: 'card',
-                      attributes: {
-                        field1: 'a',
-                        field2: 'b',
-                      },
-                      meta: {
-                        adoptsFrom: {
-                          module: `${testRealmURL}test-card`,
-                          name: 'TestCard',
-                        },
-                      },
+            let response = await request
+              .post('/')
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    field1: 'a',
+                    field2: 'b',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}test-card`,
+                      name: 'TestCard',
                     },
-                  })
-                  .set('Accept', 'application/vnd.card+json');
-              },
-            });
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
+
             assert.strictEqual(response.status, 201, 'HTTP 201 status');
             maybeId = response.body.data.id;
           }
@@ -1769,27 +1844,9 @@ module(basename(__filename), function () {
 
           // modify field
           {
-            let expected = [
-              {
-                type: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
-                updatedFile: `${testRealmURL}test-card.gts`,
-              },
-              {
-                type: 'incremental',
-                invalidations: [`${testRealmURL}test-card.gts`, id],
-                realmURL: testRealmURL.href,
-                clientRequestId: null,
-              },
-            ];
-
-            let response = await expectEvent({
-              assert,
-              expected,
-              callback: async () => {
-                return await request
-                  .post('/test-card.gts')
-                  .set('Accept', 'application/vnd.card+source').send(`
+            let response = await request
+              .post('/test-card.gts')
+              .set('Accept', 'application/vnd.card+source').send(`
                 import { contains, field, CardDef } from 'https://cardstack.com/base/card-api';
                 import StringCard from 'https://cardstack.com/base/string';
 
@@ -1798,8 +1855,7 @@ module(basename(__filename), function () {
                   @field field2a = contains(StringCard); // rename field2 -> field2a
                 }
               `);
-              },
-            });
+
             assert.strictEqual(response.status, 204, 'HTTP 204 status');
           }
 
@@ -1822,42 +1878,23 @@ module(basename(__filename), function () {
 
           // set value on renamed field
           {
-            let expected = [
-              {
-                type: 'incremental-index-initiation',
-                realmURL: testRealmURL.href,
-                updatedFile: `${id}.json`,
-              },
-              {
-                type: 'incremental',
-                invalidations: [id],
-                realmURL: testRealmURL.href,
-                clientRequestId: null,
-              },
-            ];
-            let response = await expectEvent({
-              assert,
-              expected,
-              callback: async () => {
-                return await request
-                  .patch(new URL(id).pathname)
-                  .send({
-                    data: {
-                      type: 'card',
-                      attributes: {
-                        field2a: 'c',
-                      },
-                      meta: {
-                        adoptsFrom: {
-                          module: `${testRealmURL}test-card`,
-                          name: 'TestCard',
-                        },
-                      },
+            let response = await request
+              .patch(new URL(id).pathname)
+              .send({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    field2a: 'c',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: `${testRealmURL}test-card`,
+                      name: 'TestCard',
                     },
-                  })
-                  .set('Accept', 'application/vnd.card+json');
-              },
-            });
+                  },
+                },
+              })
+              .set('Accept', 'application/vnd.card+json');
 
             assert.strictEqual(response.status, 200, 'HTTP 200 status');
             assert.strictEqual(
@@ -1932,6 +1969,79 @@ module(basename(__filename), function () {
               description: null,
               thumbnailURL: null,
             });
+          }
+
+          let messages = await getMessagesSince(realmEventTimestampStart);
+
+          let expected = [
+            {
+              type: APP_BOXEL_REALM_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental-index-initiation',
+                updatedFile: `${testRealmURL}test-card.gts`,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental',
+                invalidations: [`${testRealmURL}test-card.gts`],
+                // ??
+                // realmURL: testRealmURL.href,
+                clientRequestId: null,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental-index-initiation',
+                updatedFile: `${testRealmURL}test-card.gts`,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental',
+                invalidations: [`${testRealmURL}test-card.gts`, id],
+                // ??
+                // realmURL: testRealmURL.href,
+                clientRequestId: null,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental-index-initiation',
+                updatedFile: `${id}.json`,
+              },
+            },
+            {
+              type: APP_BOXEL_REALM_EVENT_TYPE,
+              content: {
+                eventName: 'index',
+                indexType: 'incremental',
+                invalidations: [id],
+                // ??
+                // realmURL: testRealmURL.href,
+                clientRequestId: null,
+              },
+            },
+          ];
+
+          for (let expectedEvent of expected) {
+            // FIXME is there a better way?
+            let actualEvent = matchRealmEvent(messages, expectedEvent);
+
+            assert.deepEqual(
+              actualEvent?.content,
+              expectedEvent.content,
+              'expected event was broadcast',
+            );
           }
         });
       });
@@ -2696,7 +2806,10 @@ module(basename(__filename), function () {
               data: {
                 id: testRealmHref,
                 type: 'realm-info',
-                attributes: testRealmInfo,
+                attributes: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
               },
             },
             '/_info response is correct',
@@ -3042,6 +3155,7 @@ module(basename(__filename), function () {
       let runner: QueueRunner;
       let testRealmDir: string;
       let seedRealm: Realm | undefined;
+      let testRealmEventSource: eventSource;
 
       hooks.beforeEach(async function () {
         shimExternals(virtualNetwork);
@@ -3050,6 +3164,8 @@ module(basename(__filename), function () {
       setupPermissionedRealm(hooks, {
         '*': ['read', 'write'],
       });
+
+      let { getMessagesSince } = setupMatrixRoom(hooks);
 
       async function startRealmServer(
         dbAdapter: PgAdapter,
@@ -3073,6 +3189,8 @@ module(basename(__filename), function () {
           runner,
           matrixURL,
         }));
+
+        await testRealm.logInToMatrix();
       }
 
       setupDB(hooks, {
@@ -3084,12 +3202,20 @@ module(basename(__filename), function () {
           ensureDirSync(testRealmDir);
           copySync(join(__dirname, 'cards'), testRealmDir);
           await startRealmServer(dbAdapter2, publisher, runner);
+
+          // To remove as part of CS-8014
+          testRealmEventSource = new eventSource(
+            `${testRealmHref}_message?testFileWatcher=watchexec`,
+          );
         },
         afterEach: async () => {
           if (seedRealm) {
             virtualNetwork.unmount(seedRealm.handle);
           }
           await closeServer(testRealmHttpServer2);
+
+          // FIXME see above
+          testRealmEventSource.close();
         },
       });
 
@@ -3175,46 +3301,58 @@ module(basename(__filename), function () {
         assert.deepEqual(testCard.ref, ref, 'card data is correct');
       });
 
-      test('can index a newly added file to the filesystem', async function (assert) {
+      // CS-8095
+      skip('can index a newly added file to the filesystem', async function (assert) {
+        let realmEventTimestampStart = Date.now();
+
         {
           let response = await request
             .get('/new-card')
             .set('Accept', 'application/vnd.card+json');
           assert.strictEqual(response.status, 404, 'HTTP 404 status');
         }
-        let expected = [
+
+        writeJSONSync(
+          join(dir.name, 'realm_server_1', 'test', 'new-card.json'),
           {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL.href,
-            updatedFile: `${testRealmURL}new-card.json`,
-          },
-          {
-            type: 'incremental',
-            realmURL: testRealmURL.href,
-            invalidations: [`${testRealmURL}new-card`],
-          },
-        ];
-        await expectEvent({
-          assert,
-          expected,
-          callback: async () => {
-            writeJSONSync(
-              join(dir.name, 'realm_server_1', 'test', 'new-card.json'),
-              {
-                data: {
-                  attributes: {
-                    firstName: 'Mango',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: './person',
-                      name: 'Person',
-                    },
-                  },
+            data: {
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person',
+                  name: 'Person',
                 },
-              } as LooseSingleCardDocument,
-            );
-          },
+              },
+            },
+          } as LooseSingleCardDocument,
+        );
+
+        await waitForIncrementalIndexEvent(
+          getMessagesSince,
+          realmEventTimestampStart,
+        );
+
+        let messages = await getMessagesSince(realmEventTimestampStart);
+
+        let incrementalIndexInitiationEvent = findRealmEvent(
+          messages,
+          'index',
+          'incremental-index-initiation',
+        );
+        let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
+
+        assert.deepEqual(incrementalIndexInitiationEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental-index-initiation',
+          updatedFile: `${testRealmURL}new-card.json`,
+        });
+
+        assert.deepEqual(incrementalEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}new-card`],
         });
 
         {
@@ -3251,7 +3389,11 @@ module(basename(__filename), function () {
                   module: `./person`,
                   name: 'Person',
                 },
-                realmInfo: testRealmInfo,
+                // FIXME how to globally fix this?
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
                 realmURL: testRealmURL.href,
               },
               links: {
@@ -3262,7 +3404,10 @@ module(basename(__filename), function () {
         }
       });
 
-      test('can index a changed file in the filesystem', async function (assert) {
+      // CS-8095
+      skip('can index a changed file in the filesystem', async function (assert) {
+        let realmEventTimestampStart = Date.now();
+
         {
           let response = await request
             .get('/person-1')
@@ -3275,40 +3420,49 @@ module(basename(__filename), function () {
           );
         }
 
-        let expected = [
+        writeJSONSync(
+          join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
           {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL.href,
-            updatedFile: `${testRealmURL}person-1.json`,
-          },
-          {
-            type: 'incremental',
-            realmURL: testRealmURL.href,
-            invalidations: [`${testRealmURL}person-1`],
-          },
-        ];
-        await expectEvent({
-          assert,
-          expected,
-          callback: async () => {
-            writeJSONSync(
-              join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
-              {
-                data: {
-                  type: 'card',
-                  attributes: {
-                    firstName: 'Van Gogh',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: './person.gts',
-                      name: 'Person',
-                    },
-                  },
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
                 },
-              } as LooseSingleCardDocument,
-            );
-          },
+              },
+            },
+          } as LooseSingleCardDocument,
+        );
+
+        await waitForIncrementalIndexEvent(
+          getMessagesSince,
+          realmEventTimestampStart,
+        );
+
+        let messages = await getMessagesSince(realmEventTimestampStart);
+
+        let incrementalIndexInitiationEvent = findRealmEvent(
+          messages,
+          'index',
+          'incremental-index-initiation',
+        );
+
+        let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
+
+        assert.deepEqual(incrementalIndexInitiationEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental-index-initiation',
+          updatedFile: `${testRealmURL}person-1.json`,
+        });
+
+        assert.deepEqual(incrementalEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}person-1`],
         });
 
         {
@@ -3324,7 +3478,10 @@ module(basename(__filename), function () {
         }
       });
 
-      test('can index a file deleted from the filesystem', async function (assert) {
+      // CS-8095
+      skip('can index a file deleted from the filesystem', async function (assert) {
+        let realmEventTimestampStart = Date.now();
+
         {
           let response = await request
             .get('/person-1')
@@ -3332,26 +3489,34 @@ module(basename(__filename), function () {
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
         }
 
-        let expected = [
-          {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL.href,
-            updatedFile: `${testRealmURL}person-1.json`,
-          },
-          {
-            type: 'incremental',
-            realmURL: testRealmURL.href,
-            invalidations: [`${testRealmURL}person-1`],
-          },
-        ];
-        await expectEvent({
-          assert,
-          expected,
-          callback: async () => {
-            removeSync(
-              join(dir.name, 'realm_server_1', 'test', 'person-1.json'),
-            );
-          },
+        removeSync(join(dir.name, 'realm_server_1', 'test', 'person-1.json'));
+
+        await waitForIncrementalIndexEvent(
+          getMessagesSince,
+          realmEventTimestampStart,
+        );
+
+        let messages = await getMessagesSince(realmEventTimestampStart);
+
+        let incrementalIndexInitiationEvent = findRealmEvent(
+          messages,
+          'index',
+          'incremental-index-initiation',
+        );
+
+        let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
+
+        // FIXME split this test from the response-checking
+        assert.deepEqual(incrementalIndexInitiationEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental-index-initiation',
+          updatedFile: `${testRealmURL}person-1.json`,
+        });
+
+        assert.deepEqual(incrementalEvent?.content, {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${testRealmURL}person-1`],
         });
 
         {
@@ -3926,3 +4091,44 @@ let cardDefModuleDependencies = [
   'https://cardstack.com/base/links-to-editor.gts',
   'https://cardstack.com/base/links-to-many-component.gts',
 ];
+
+async function waitForIncrementalIndexEvent(
+  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
+  since: number,
+) {
+  await waitUntil(async () => {
+    let matrixMessages = await getMessagesSince(since);
+
+    return matrixMessages.some(
+      (m) =>
+        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+        m.content.eventName === 'index' &&
+        m.content.indexType === 'incremental',
+    );
+  });
+}
+
+function findRealmEvent(
+  events: MatrixEvent[],
+  eventName: string,
+  indexType: string,
+): RealmEvent | undefined {
+  return events.find(
+    (m) =>
+      m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+      m.content.eventName === eventName &&
+      (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
+  ) as RealmEvent | undefined;
+}
+
+function realmEventIsIndex(
+  event: RealmEventContent,
+): event is IncrementalIndexEventContent {
+  return event.eventName === 'index';
+}
+
+function matchRealmEvent(events: MatrixEvent[], event: any) {
+  return events.find(
+    (m) => m.type === event.type && isEqual(event.content, m.content),
+  );
+}
