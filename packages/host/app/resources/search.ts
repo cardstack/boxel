@@ -36,7 +36,9 @@ interface Args {
   named: {
     query: Query | undefined;
     realms: string[] | undefined;
-    opts: SearchOpts;
+    isLive?: true;
+    isAutoSave?: true;
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
   };
 }
 
@@ -51,8 +53,7 @@ export class Search extends Resource<Args> {
   private currentResults = new TrackedMap<string, CardResource>();
 
   modify(_positional: never[], named: Args['named']) {
-    let { query, realms, opts } = named;
-    let { isLive, doWhileRefreshing } = opts;
+    let { query, realms, isLive, doWhileRefreshing, isAutoSave } = named;
     if (query === undefined) {
       return;
     }
@@ -61,7 +62,7 @@ export class Search extends Resource<Args> {
         ? this.realmServer.availableRealmURLs
         : realms;
 
-    this.loaded = this.search.perform(query, opts);
+    this.loaded = this.search.perform(query, { isAutoSave });
 
     if (isLive) {
       this.subscriptions = this.realmsToSearch.map((realm) => ({
@@ -77,7 +78,7 @@ export class Search extends Resource<Args> {
           ) {
             return;
           }
-          this.search.perform(query, opts);
+          this.search.perform(query);
           if (doWhileRefreshing) {
             this.doWhileRefreshing.perform(doWhileRefreshing);
           }
@@ -133,7 +134,7 @@ export class Search extends Resource<Args> {
 
   private getOrCreateCardResource(
     urlOrDoc: string | SingleCardDocument,
-    opts: SearchOpts,
+    opts?: { isAutoSave?: true },
   ): CardResource {
     let url = asURL(urlOrDoc);
     if (!url) {
@@ -151,7 +152,7 @@ export class Search extends Resource<Args> {
     if (!resource) {
       resource = getCard(this, () => urlOrDoc, {
         isLive: () => true,
-        isAutoSave: () => opts.isAutoSave,
+        isAutoSave: () => opts?.isAutoSave ?? false,
       });
       this.cardResources.set(url, resource);
       // only after the set has happened can we safely do the tracked read to
@@ -161,66 +162,68 @@ export class Search extends Resource<Args> {
     return resource;
   }
 
-  private search = restartableTask(async (query: Query, opts: SearchOpts) => {
-    // we cannot use the `waitForPromise` test waiter helper as that will cast
-    // the Task instance to a promise which makes it uncancellable. When this is
-    // uncancellable it results in a flaky test.
-    let token = waiter.beginAsync();
-    try {
-      let results = flatMap(
-        await Promise.all(
-          this.realmsToSearch.map(async (realm) => {
-            let json = await this.cardService.fetchJSON(
-              `${realm}_search?${stringify(query, {
-                strictNullHandling: true,
-              })}`,
-            );
-            if (!isCardCollectionDocument(json)) {
-              throw new Error(
-                `The realm search response was not a card collection document:
-        ${JSON.stringify(json, null, 2)}`,
+  private search = restartableTask(
+    async (query: Query, opts: { isAutoSave?: true }) => {
+      // we cannot use the `waitForPromise` test waiter helper as that will cast
+      // the Task instance to a promise which makes it uncancellable. When this is
+      // uncancellable it results in a flaky test.
+      let token = waiter.beginAsync();
+      try {
+        let results = flatMap(
+          await Promise.all(
+            this.realmsToSearch.map(async (realm) => {
+              let json = await this.cardService.fetchJSON(
+                `${realm}_search?${stringify(query, {
+                  strictNullHandling: true,
+                })}`,
               );
-            }
-            let collectionDoc = json;
-            return (
-              // use Promise.allSettled so that if one particular realm is
-              // misbehaving it doesn't effect results from other realms
-              (
+              if (!isCardCollectionDocument(json)) {
+                throw new Error(
+                  `The realm search response was not a card collection document:
+        ${JSON.stringify(json, null, 2)}`,
+                );
+              }
+              let collectionDoc = json;
+              return (
+                // use Promise.allSettled so that if one particular realm is
+                // misbehaving it doesn't effect results from other realms
                 (
-                  await Promise.allSettled(
-                    collectionDoc.data.map(async (doc) =>
-                      this.getOrCreateCardResource({ data: doc }, opts),
-                    ),
-                  )
-                ).filter(
-                  (p) => p.status === 'fulfilled',
-                ) as PromiseFulfilledResult<CardResource>[]
-              ).map((p) => p.value)
-            );
-          }),
-        ),
-      );
+                  (
+                    await Promise.allSettled(
+                      collectionDoc.data.map(async (doc) =>
+                        this.getOrCreateCardResource({ data: doc }, opts),
+                      ),
+                    )
+                  ).filter(
+                    (p) => p.status === 'fulfilled',
+                  ) as PromiseFulfilledResult<CardResource>[]
+                ).map((p) => p.value)
+              );
+            }),
+          ),
+        );
 
-      await Promise.all(results.map((r) => r.loaded));
-      let resultsWithoutErrors = results.filter((r) => r.card && r.url);
-      let resultMap = new Map<string, CardResource>();
-      for (let resource of resultsWithoutErrors) {
-        resultMap.set(resource.url!, resource);
-      }
-      for (let url of this.currentResults.keys()) {
-        if (!resultMap.has(url)) {
-          this.currentResults.delete(url);
+        await Promise.all(results.map((r) => r.loaded));
+        let resultsWithoutErrors = results.filter((r) => r.card && r.url);
+        let resultMap = new Map<string, CardResource>();
+        for (let resource of resultsWithoutErrors) {
+          resultMap.set(resource.url!, resource);
         }
-      }
-      for (let [url, resource] of resultMap) {
-        if (!this.currentResults.has(url)) {
-          this.currentResults.set(url, resource);
+        for (let url of this.currentResults.keys()) {
+          if (!resultMap.has(url)) {
+            this.currentResults.delete(url);
+          }
         }
+        for (let [url, resource] of resultMap) {
+          if (!this.currentResults.has(url)) {
+            this.currentResults.set(url, resource);
+          }
+        }
+      } finally {
+        waiter.endAsync(token);
       }
-    } finally {
-      waiter.endAsync(token);
-    }
-  });
+    },
+  );
 
   get isLoading() {
     return this.search.isRunning;
@@ -233,23 +236,23 @@ export interface SearchQuery {
   loaded: Promise<void>;
 }
 
-interface SearchOpts {
-  isLive?: true;
-  isAutoSave?: true;
-  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-}
-
 export function getSearch(
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
-  opts?: SearchOpts,
+  opts?: {
+    isLive?: true;
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    isAutoSave?: true;
+  },
 ) {
   return Search.from(parent, () => ({
     named: {
       query: getQuery(),
       realms: getRealms ? getRealms() : undefined,
-      opts: opts ?? {},
+      isLive: opts?.isLive,
+      doWhileRefreshing: opts?.doWhileRefreshing,
+      isAutoSave: opts?.isAutoSave,
     },
   })) as SearchQuery;
 }

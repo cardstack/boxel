@@ -22,11 +22,7 @@ import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import {
-  getSearch,
-  type SearchQuery,
-  type SearchOpts,
-} from '@cardstack/host/resources/search';
+import { getSearch, type SearchQuery } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
 
@@ -74,7 +70,11 @@ export default class OperatorModeContainer extends Component<Signature> {
   getCards(
     getQuery: () => Query | undefined,
     getRealms: () => string[] | undefined,
-    opts: SearchOpts,
+    opts: {
+      isLive?: true;
+      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+      isAutoSave?: true;
+    },
   ): SearchQuery {
     return getSearch(this, getQuery, getRealms, opts);
   }
