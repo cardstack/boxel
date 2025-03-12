@@ -60,7 +60,19 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
+import {
+  CardContext,
+  CardDef,
+  Format,
+  FieldType,
+} from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+
+import ElementTracker from '../../../resources/element-tracker';
+import { RenderedCardForOverlayActions } from '../base-overlays';
+import BaseOverlays from '../base-overlays';
+
+import { CardDefOrId } from '../stack-item';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -188,6 +200,14 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.initializeCardSelection();
   }
 
+  cardTracker = new ElementTracker<{
+    cardId?: string;
+    card?: CardDef;
+    format: Format | 'data';
+    fieldType: FieldType | undefined;
+    fieldName: string | undefined;
+  }>();
+
   get onlyOneInstance() {
     return this.args.cards.length === 1;
   }
@@ -198,6 +218,33 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   get cardIds() {
     return this.args.cards.map((card) => card.url);
+  }
+
+  private get cardContext(): Omit<
+    CardContext,
+    'prerenderedCardSearchComponent'
+  > {
+    return {
+      cardComponentModifier: this.cardTracker.trackElement,
+    };
+  }
+
+  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
+    return this.cardTracker.elements
+      .filter((entry) => {
+        return (
+          entry.meta.format === 'data' ||
+          entry.meta.fieldType === 'linksTo' ||
+          entry.meta.fieldType === 'linksToMany'
+        );
+      })
+      .map((entry) => ({
+        element: entry.element,
+        cardDefOrId: entry.meta.card || entry.meta.cardId!,
+        fieldType: entry.meta.fieldType,
+        fieldName: entry.meta.fieldName,
+        format: entry.meta.format,
+      }));
   }
 
   @action initializeCardSelection() {
@@ -234,6 +281,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
     const selectedUrl = new URL(this.args.selectedId);
     this.operatorModeStateService.updateCodePath(selectedUrl);
+  }
+
+  @action viewCardInPlayground(cardDefOrId: CardDefOrId) {
+    // TODO: Implement redirect to playground
+    console.log('viewCardInPlayground', cardDefOrId);
   }
 
   <template>
@@ -294,10 +346,22 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 <span class='view-instance-btn-text'>View Instance</span>
               </BoxelButton>
             </div>
+            <BaseOverlays
+              @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+              @onSelectCard={{this.viewCardInPlayground}}
+            />
             {{#if this.displayIsolated}}
-              <Preview @card={{@spec}} @format='isolated' />
+              <Preview
+                @card={{@spec}}
+                @format='isolated'
+                @cardContext={{this.cardContext}}
+              />
             {{else}}
-              <Preview @card={{@spec}} @format='edit' />
+              <Preview
+                @card={{@spec}}
+                @format='edit'
+                @cardContext={{this.cardContext}}
+              />
             {{/if}}
           </div>
         {{/if}}

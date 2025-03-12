@@ -82,7 +82,6 @@ export default class BaseOverlays extends Component<BaseOverlaySignature> {
       .base-overlay {
         position: absolute;
         pointer-events: none;
-        background-color: red;
         width: 100%;
         height: 100%;
       }
@@ -198,8 +197,10 @@ export default class BaseOverlays extends Component<BaseOverlaySignature> {
   }
 
   @action protected isSelected(cardDefOrId: CardDefOrId) {
-    return this.args.selectedCards?.some(
-      (card: CardDefOrId) => card === cardDefOrId,
+    return (
+      this.args.selectedCards?.some(
+        (card: CardDefOrId) => card === cardDefOrId,
+      ) ?? false
     );
   }
 
