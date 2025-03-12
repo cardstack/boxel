@@ -467,11 +467,12 @@ export function attachedFilesToPrompt(
   }
   return attachedFiles
     .map((f) => {
+      let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
       if (f.error) {
-        return `${f.name}: ${f.error}`;
+        return `${hyperlink}: ${f.error}`;
       }
 
-      return `${f.name}: ${f.content}`;
+      return `${hyperlink}: ${f.content}`;
     })
     .join('\n');
 }
