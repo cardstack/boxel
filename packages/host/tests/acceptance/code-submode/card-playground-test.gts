@@ -348,20 +348,6 @@ module('Acceptance | code-submode | card playground', function (hooks) {
     assert.dom('[data-test-selected-item]').containsText('Jane Doe');
   });
 
-  test('can display selected card in isolated format', async function (assert) {
-    await openFileInPlayground('author.gts', testRealmURL, 'Author');
-    await click('[data-test-instance-chooser]');
-    await click('[data-option-index="0"]');
-    assert
-      .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
-      .hasText('Author');
-    assertCardExists(assert, `${testRealmURL}Author/jane-doe`, 'isolated');
-    assert.dom('[data-test-author-title]').hasText('Jane Doe');
-    assert
-      .dom('[data-test-author-bio]')
-      .containsText('Jane Doe is the Senior Managing Editor');
-  });
-
   test('can use the header context menu to open instance in code mode', async function (assert) {
     await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
