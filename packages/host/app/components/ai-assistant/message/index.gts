@@ -294,7 +294,7 @@ export default class AiAssistantMessage extends Component<Signature> {
                 @formattedMessage
               }}
             />
-          {{else}}
+          {{else if @formattedMessage}}
             <FormattedMessage
               @renderCodeBlocks={{true}}
               @monacoSDK={{@monacoSDK}}
