@@ -1,4 +1,4 @@
-import { click, waitFor, fillIn } from '@ember/test-helpers';
+import { click, waitFor, fillIn, find } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -522,7 +522,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-exported-name]').containsText('default');
   });
 
-  test<TestContextWithSave>('spec auto saved', async function (assert) {
+  test<TestContextWithSave>('spec auto saved (but with stability)', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
@@ -536,7 +536,14 @@ module('Acceptance | Spec preview', function (hooks) {
       }
       assert.strictEqual(json.data.attributes?.readMe, readMeInput);
     });
+    let cardComponentId = find(
+      `[data-test-card='${testRealmURL}person-entry']`,
+    )?.id;
     await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
+    let cardComponentIdAfter = find(
+      `[data-test-card='${testRealmURL}person-entry']`,
+    )?.id;
+    assert.strictEqual(cardComponentIdAfter, cardComponentId);
   });
 
   test('clicking view instance button correctly navigates to spec file and displays content in editor', async function (assert) {

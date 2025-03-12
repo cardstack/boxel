@@ -63,6 +63,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     selectedDeclaration?: ModuleDeclaration;
+    isLoadingNewModule?: boolean;
   };
   Blocks: {
     default: [
@@ -600,12 +601,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   };
 
-  get isLoading() {
-    return this.search.isLoading;
-  }
-
   <template>
-    {{#if this.isLoading}}
+    {{#if @isLoadingNewModule}}
       {{yield
         (component
           SpecPreviewTitle
