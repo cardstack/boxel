@@ -22,6 +22,17 @@ export const assertCardExists = (
   assert.dom(selector).exists(message);
 };
 
+export const assertFieldExists = (
+  assert: Assert,
+  format: Format,
+  message?: string,
+) =>
+  assert
+    .dom(
+      `[data-test-field-preview-card] [data-test-compound-field-format="${format}"]`,
+    )
+    .exists(message);
+
 export const chooseAnotherInstance = async () => {
   await click('[data-test-instance-chooser]');
   await click('[data-test-choose-another-instance]');

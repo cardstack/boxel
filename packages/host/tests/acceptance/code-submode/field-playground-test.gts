@@ -13,6 +13,7 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
+  assertFieldExists,
   chooseAnotherInstance,
   createNewInstance,
   getPlaygroundSelections,
@@ -127,6 +128,12 @@ module('Acceptance | code-submode | field playground', function (hooks) {
             <h4 data-test-embedded-comment-title><@fields.title /></h4>
             <p><@fields.message /> - by <@fields.name /></p>
           </div>
+        </template>
+      }
+
+      static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <div data-test-fitted-comment><@fields.title /> - by <@fields.name /></div>
         </template>
       }
     }
@@ -343,10 +350,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
     assert.dom('[data-test-field-preview-header]').containsText('Comment');
     assert
-      .dom('[data-test-playground-format-chooser] button')
-      .exists({ count: 3 });
-    assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
-    assert
       .dom('[data-test-embedded-comment-title]')
       .hasText(
         'Terrible product',
@@ -354,18 +357,10 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       );
 
     await selectFormat('atom');
-    assert
-      .dom(
-        '[data-test-field-preview-card] [data-test-compound-field-format="atom"]',
-      )
-      .exists();
+    assertFieldExists(assert, 'atom');
 
-    await click('[data-test-edit-button]');
-    assert
-      .dom(
-        '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
-      )
-      .exists();
+    await click('[data-test-edit-button]'); // toggle via header button
+    assertFieldExists(assert, 'edit');
     assert
       .dom('[data-test-field-preview-card] [data-test-field]')
       .exists({ count: 3 });
@@ -373,8 +368,36 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .dom('[data-test-field-preview-card] [data-test-field="name"] input')
       .hasValue('Marco');
 
-    await click('[data-test-edit-button]');
+    await click('[data-test-edit-button]'); // toggle via header button
     assert.dom('[data-test-embedded-comment]').exists();
+  });
+
+  test('can display selected field in the chosen format', async function (assert) {
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+    assert
+      .dom('[data-test-playground-format-chooser] button')
+      .exists({ count: 4 });
+    assert.dom('[data-test-format-chooser="isolated"]').doesNotExist();
+    assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
+    assert
+      .dom('[data-test-embedded-comment-title]')
+      .hasText('Terrible product');
+    assert.dom('[data-test-embedded-comment]').containsText('0 stars');
+
+    await selectFormat('atom');
+    assert.dom('[data-test-format-chooser="embedded"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="atom"]').hasClass('active');
+    assertFieldExists(assert, 'atom');
+
+    await selectFormat('edit');
+    assertFieldExists(assert, 'edit');
+    assert
+      .dom('[data-test-field-preview-card] [data-test-field="name"] input')
+      .hasValue('Marco');
+
+    await selectFormat('fitted');
+    assertFieldExists(assert, 'fitted');
+    assert.dom('[data-test-fitted-comment]').containsText('by Marco');
   });
 
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
@@ -521,11 +544,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
     await createNewInstance();
     assert.dom('[data-test-selected-item]').hasText('Quote');
-    assert
-      .dom(
-        '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
-      )
-      .exists();
+    assertFieldExists(assert, 'edit');
     assert.dom('[data-test-field="quote"] input').hasNoValue();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
 
@@ -588,11 +607,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
     await click('[data-test-add-field-instance]');
     assert.dom('[data-test-field-preview-header]').containsText('Full Name');
-    assert
-      .dom(
-        '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
-      )
-      .exists();
+    assertFieldExists(assert, 'edit');
     assert
       .dom('[data-test-field-preview-card] [data-test-field="firstName"] input')
       .hasNoValue();
