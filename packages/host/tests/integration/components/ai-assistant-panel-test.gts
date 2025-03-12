@@ -2620,10 +2620,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'search1',
-          name: 'searchCardsByTypeAndTitle',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
             attributes: {
               description: 'Searching for card',
@@ -2635,10 +2636,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
@@ -2670,22 +2667,19 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'search1',
-          name: 'searchCardsByTypeAndTitle',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               title: 'Mango',
             },
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: 'search1',
-      },
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
@@ -2715,9 +2709,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'searchCardsByTypeAndTitle',
+          id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
             attributes: {
               description: 'Searching for card',
@@ -2729,10 +2725,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
@@ -2781,16 +2773,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'searchCardsByTypeAndTitle',
+          id: 'fd4515fb-ed4d-4005-9782-4e844d7d4d9c',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: toolArgs,
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
 
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
@@ -2854,16 +2844,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'searchCardsByTypeAndTitle',
+          id: 'ffd1a3d0-0bd4-491a-a907-b96ec9d8902c',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: toolArgs,
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card

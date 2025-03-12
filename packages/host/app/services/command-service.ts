@@ -14,8 +14,6 @@ import {
   type PatchData,
   CommandContext,
   CommandContextStamp,
-  ResolvedCodeRef,
-  isResolvedCodeRef,
   getClass,
   identifyCard,
 } from '@cardstack/runtime-common';
@@ -28,7 +26,6 @@ import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { SearchCardsByTypeAndTitleCommand } from '../commands/search-cards';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 

@@ -1445,12 +1445,22 @@ module('Acceptance | code submode tests', function (_hooks) {
       await settled();
 
       let content = getMonacoContent();
-      assert.ok(content.includes('Ridhwanallah'));
-      assert.ok(content.includes('Unknown Address'));
-      assert.ok(content.includes('Bandung'));
-      assert.ok(content.includes('12345'));
-      assert.ok(content.includes('1234'));
-      assert.ok(content.includes(`${testRealmURL}Country/united-states`));
+      await waitUntil(() => content.includes('Ridhwanallah'));
+      assert.ok(
+        content.includes('Ridhwanallah'),
+        'content includes Ridhwanallah',
+      );
+      assert.ok(
+        content.includes('Unknown Address'),
+        'content includes Unknown Address',
+      );
+      assert.ok(content.includes('Bandung'), 'content includes Bandung');
+      assert.ok(content.includes('12345'), 'content includes 12345');
+      assert.ok(content.includes('1234'), 'content includes 1234');
+      assert.ok(
+        content.includes(`${testRealmURL}Country/united-states`),
+        'content includes Country/united-states',
+      );
     });
 
     test('monaco editor live updates when index changes', async function (assert) {
