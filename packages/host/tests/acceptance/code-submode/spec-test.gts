@@ -21,7 +21,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 const testRealm2URL = `http://test-realm/test2/`;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksTo, linksToMany, CardDef, FieldDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
 
   export class Person extends CardDef {
@@ -48,6 +48,9 @@ const personCardSource = `
         </style>
       </template>
     };
+  }
+  export class PersonField extends FieldDef {
+    static displayName = 'PersonField';
   }
 `;
 
@@ -176,6 +179,26 @@ module('Acceptance | Spec preview', function (hooks) {
             },
           },
         },
+        'person-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'PersonField',
+              description: 'Spec',
+              specType: 'field',
+              ref: {
+                module: `./person`,
+                name: 'PersonField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
         'employee-entry.json': {
           data: {
             type: 'card',
@@ -198,6 +221,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
+              title: 'Pet',
               specType: 'card',
               ref: {
                 module: `./pet`,
@@ -216,6 +240,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
+              title: 'Pet2',
               specType: 'card',
               ref: {
                 module: `./pet`,
@@ -540,5 +565,25 @@ module('Acceptance | Spec preview', function (hooks) {
         `[data-test-card="${testRealmURL}person-entry"][data-test-card-format="isolated"]`,
       )
       .exists();
+  });
+
+  test('navigation: spec preview updates when changing between different declarations inside inspector', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person');
+    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-name]').hasText('Person');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person`);
+    await click('[data-test-boxel-selector-item-text="PersonField"]');
+    assert
+      .dom('[data-test-title] [data-test-boxel-input]')
+      .hasValue('PersonField');
+    assert.dom('[data-test-exported-type]').hasText('field');
+    assert.dom('[data-test-exported-name]').hasText('PersonField');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person`);
   });
 });
