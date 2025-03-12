@@ -1,6 +1,7 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -437,11 +438,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         console.log('Error saving', e);
       }
       if (this.card) {
-        this._selectedCard = this.cards.find((card) => card.id === card.id);
+        this._selectedCard = this.cards.find(
+          (card) => card.id === this.card.id,
+        );
         this.updateFieldSpecForPlayground(this.card.id);
       }
     },
   );
+
+  initializeFieldSpecForPlayground = () => {
+    this.updateFieldSpecForPlayground(this.cards[0].id);
+  };
 
   get realms() {
     return this.realmServer.availableRealmURLs;
@@ -555,6 +562,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.search.instances as Spec[];
   }
 
+  get hasMoreThanOneCard() {
+    return this.cards.length > 1;
+  }
+
   get card() {
     if (this._selectedCard) {
       return this._selectedCard;
@@ -615,6 +626,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         (component SpecPreviewLoading)
       }}
     {{else}}
+      {{#if this.hasMoreThanOneCard}}
+        {{this.initializeFieldSpecForPlayground}}
+      {{/if}}
       {{#let (this.getSpecIntent this.cards) as |showCreateSpecIntent|}}
         {{yield
           (component
