@@ -23,9 +23,10 @@ import type { MiddlewareState } from '@floating-ui/dom';
 interface BaseOverlaySignature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
-    publicAPI: Actions;
+    publicAPI?: Actions;
+    onSelectCard?: (cardDefOrId: CardDefOrId) => void;
     toggleSelect?: (cardDefOrId: CardDefOrId) => void;
-    selectedCards: TrackedArray<CardDefOrId>;
+    selectedCards?: TrackedArray<CardDefOrId>;
   };
   Element: HTMLElement;
   Blocks: {
@@ -81,6 +82,7 @@ export default class BaseOverlays extends Component<BaseOverlaySignature> {
       .base-overlay {
         position: absolute;
         pointer-events: none;
+        background-color: red;
         width: 100%;
         height: 100%;
       }
@@ -188,6 +190,8 @@ export default class BaseOverlays extends Component<BaseOverlaySignature> {
   ) {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(cardDefOrId);
+    } else if (this.args.onSelectCard) {
+      this.args.onSelectCard(cardDefOrId);
     } else {
       this.viewCard.perform(cardDefOrId, format, fieldType, fieldName);
     }
@@ -222,10 +226,12 @@ export default class BaseOverlays extends Component<BaseOverlaySignature> {
         typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
       let canWrite = this.realm.canWrite(cardId);
       format = canWrite ? format : 'isolated';
-      await this.args.publicAPI.viewCard(new URL(cardId), format, {
-        fieldType,
-        fieldName,
-      });
+      if (this.args.publicAPI) {
+        await this.args.publicAPI.viewCard(new URL(cardId), format, {
+          fieldType,
+          fieldName,
+        });
+      }
     },
   );
 

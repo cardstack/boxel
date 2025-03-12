@@ -156,7 +156,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     });
   }
 
-  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
+  private get renderedCardsForOverlayActions(): StackItemRenderedCardForOverlayActions[] {
     return this.cardTracker.elements
       .filter((entry) => {
         return (

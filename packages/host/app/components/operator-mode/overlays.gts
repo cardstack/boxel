@@ -31,6 +31,8 @@ import { removeFileExtension } from '../search-sheet/utils';
 import BaseOverlays from './base-overlays';
 import { StackItemRenderedCardForOverlayActions } from './stack-item';
 
+import type { CardDefOrId } from './stack-item';
+
 export default class OperatorModeOverlays extends BaseOverlays {
   get renderedCardsForOverlayActionsWithEvents() {
     return super
@@ -145,9 +147,7 @@ export default class OperatorModeOverlays extends BaseOverlays {
                                   )
                                   (menuItem
                                     'Copy Card URL'
-                                    (fn
-                                      @publicAPI.copyURLToClipboard cardDefOrId
-                                    )
+                                    (fn this.copyCardUrl cardDefOrId)
                                     icon=IconLink
                                   )
                                 )
@@ -155,7 +155,7 @@ export default class OperatorModeOverlays extends BaseOverlays {
                                   (this.isMenuDisplayed 'delete' renderedCard)
                                   (menuItem
                                     'Delete'
-                                    (fn @publicAPI.delete cardDefOrId)
+                                    (fn this.deleteCard cardDefOrId)
                                     icon=IconTrash
                                     dangerous=true
                                   )
@@ -422,5 +422,21 @@ export default class OperatorModeOverlays extends BaseOverlays {
     renderedCard: StackItemRenderedCardForOverlayActions,
   ): Format {
     return renderedCard.stackItem.format as Format;
+  }
+
+  @action
+  private copyCardUrl(cardDefOrId: CardDefOrId) {
+    if (this.args.publicAPI?.copyURLToClipboard) {
+      return this.args.publicAPI.copyURLToClipboard(cardDefOrId);
+    }
+    return;
+  }
+
+  @action
+  private deleteCard(cardDefOrId: CardDefOrId) {
+    if (this.args.publicAPI?.delete) {
+      return this.args.publicAPI.delete(cardDefOrId);
+    }
+    return;
   }
 }
