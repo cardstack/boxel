@@ -1,7 +1,6 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -27,7 +26,6 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 import {
   type ResolvedCodeRef,
   type Query,
-  type LooseSingleCardDocument,
   specRef,
   isCardDef,
   isFieldDef,
@@ -41,13 +39,12 @@ import {
 
 import Preview from '@cardstack/host/components/preview';
 
-import { getSearch } from '@cardstack/host/resources/search';
-
 import {
   CardOrFieldDeclaration,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
+import { getSearch } from '@cardstack/host/resources/search';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
@@ -550,7 +547,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     this,
     () => this.specQuery,
     () => this.realms,
-    { isLive: true },
+    { isLive: true, isAutoSave: true },
   );
 
   get cards() {

@@ -36,8 +36,7 @@ interface Args {
   named: {
     query: Query | undefined;
     realms: string[] | undefined;
-    isLive?: true;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    opts: SearchOpts;
   };
 }
 
@@ -52,7 +51,8 @@ export class Search extends Resource<Args> {
   private currentResults = new TrackedMap<string, CardResource>();
 
   modify(_positional: never[], named: Args['named']) {
-    let { query, realms, isLive, doWhileRefreshing } = named;
+    let { query, realms, opts } = named;
+    let { isLive, doWhileRefreshing } = opts;
     if (query === undefined) {
       return;
     }
@@ -61,7 +61,7 @@ export class Search extends Resource<Args> {
         ? this.realmServer.availableRealmURLs
         : realms;
 
-    this.loaded = this.search.perform(query);
+    this.loaded = this.search.perform(query, opts);
 
     if (isLive) {
       this.subscriptions = this.realmsToSearch.map((realm) => ({
@@ -77,7 +77,7 @@ export class Search extends Resource<Args> {
           ) {
             return;
           }
-          this.search.perform(query);
+          this.search.perform(query, opts);
           if (doWhileRefreshing) {
             this.doWhileRefreshing.perform(doWhileRefreshing);
           }
@@ -133,6 +133,7 @@ export class Search extends Resource<Args> {
 
   private getOrCreateCardResource(
     urlOrDoc: string | SingleCardDocument,
+    opts: SearchOpts,
   ): CardResource {
     let url = asURL(urlOrDoc);
     if (!url) {
@@ -150,6 +151,7 @@ export class Search extends Resource<Args> {
     if (!resource) {
       resource = getCard(this, () => urlOrDoc, {
         isLive: () => true,
+        isAutoSave: () => opts.isAutoSave,
       });
       this.cardResources.set(url, resource);
       // only after the set has happened can we safely do the tracked read to
@@ -159,7 +161,7 @@ export class Search extends Resource<Args> {
     return resource;
   }
 
-  private search = restartableTask(async (query: Query) => {
+  private search = restartableTask(async (query: Query, opts: SearchOpts) => {
     // we cannot use the `waitForPromise` test waiter helper as that will cast
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
@@ -187,7 +189,7 @@ export class Search extends Resource<Args> {
                 (
                   await Promise.allSettled(
                     collectionDoc.data.map(async (doc) =>
-                      this.getOrCreateCardResource({ data: doc }),
+                      this.getOrCreateCardResource({ data: doc }, opts),
                     ),
                   )
                 ).filter(
@@ -231,21 +233,23 @@ export interface SearchQuery {
   loaded: Promise<void>;
 }
 
+interface SearchOpts {
+  isLive?: true;
+  isAutoSave?: true;
+  doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+}
+
 export function getSearch(
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
-  opts?: {
-    isLive?: true;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-  },
+  opts?: SearchOpts,
 ) {
   return Search.from(parent, () => ({
     named: {
       query: getQuery(),
       realms: getRealms ? getRealms() : undefined,
-      isLive: opts?.isLive,
-      doWhileRefreshing: opts?.doWhileRefreshing,
+      opts: opts ?? {},
     },
   })) as SearchQuery;
 }
