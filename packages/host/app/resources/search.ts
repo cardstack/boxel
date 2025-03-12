@@ -78,7 +78,7 @@ export class Search extends Resource<Args> {
           ) {
             return;
           }
-          this.search.perform(query);
+          this.search.perform(query, { isAutoSave });
           if (doWhileRefreshing) {
             this.doWhileRefreshing.perform(doWhileRefreshing);
           }

@@ -1,7 +1,6 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
