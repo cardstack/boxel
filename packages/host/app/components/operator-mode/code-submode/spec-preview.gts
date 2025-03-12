@@ -69,8 +69,7 @@ import {
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker from '../../../resources/element-tracker';
-import { RenderedCardForOverlayActions } from '../base-overlays';
-import BaseOverlays from '../base-overlays';
+import Overlays, { RenderedCardForOverlayActions } from '../overlays';
 
 import { CardDefOrId } from '../stack-item';
 
@@ -346,7 +345,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 <span class='view-instance-btn-text'>View Instance</span>
               </BoxelButton>
             </div>
-            <BaseOverlays
+            <Overlays
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @onSelectCard={{this.viewCardInPlayground}}
             />

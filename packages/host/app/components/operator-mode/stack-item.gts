@@ -62,9 +62,9 @@ import Preview from '../preview';
 import CardError from './card-error';
 import CardErrorDetail from './card-error-detail';
 
-import OperatorModeOverlays from './overlays';
+import OperatorModeOverlays from './operator-mode-overlays';
 
-import type { RenderedCardForOverlayActions } from './base-overlays';
+import type { RenderedCardForOverlayActions } from './overlays';
 import type CardService from '../../services/card-service';
 import type EnvironmentService from '../../services/environment-service';
 import type LoaderService from '../../services/loader-service';
