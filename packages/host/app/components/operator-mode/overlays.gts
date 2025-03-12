@@ -2,7 +2,7 @@ import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
-import { type Format } from 'https://cardstack.com/base/card-api';
+import { velcro } from 'ember-velcro';
 
 import {
   BoxelDropdown,
@@ -11,6 +11,7 @@ import {
   Tooltip,
   BoxelDropdownAPI,
 } from '@cardstack/boxel-ui/components';
+
 import { compact, cn, menuItem, or } from '@cardstack/boxel-ui/helpers';
 
 import {
@@ -23,10 +24,11 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
-import { velcro } from 'ember-velcro';
+import { type Format } from 'https://cardstack.com/base/card-api';
+
+import { removeFileExtension } from '../search-sheet/utils';
 
 import BaseOverlays from './base-overlays';
-import { removeFileExtension } from '../search-sheet/utils';
 import { StackItemRenderedCardForOverlayActions } from './stack-item';
 
 export default class OperatorModeOverlays extends BaseOverlays {

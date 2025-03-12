@@ -64,13 +64,12 @@ import CardErrorDetail from './card-error-detail';
 
 import OperatorModeOverlays from './overlays';
 
+import type { RenderedCardForOverlayActions } from './base-overlays';
 import type CardService from '../../services/card-service';
 import type EnvironmentService from '../../services/environment-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
-
-import type { RenderedCardForOverlayActions } from './base-overlays';
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;
