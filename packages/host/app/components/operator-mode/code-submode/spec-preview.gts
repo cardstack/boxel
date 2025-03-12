@@ -172,10 +172,12 @@ interface ContentSignature {
     showCreateSpecIntent: boolean;
     canWrite: boolean;
     onSelectCard: (cardId: string) => void;
-    selectedId: string;
+    selectedId: string; // this is the id from dropdown
     cards: PrerenderedCard[];
     spec: Spec | undefined;
     isLoading: boolean;
+    cardIds: string[];
+    getCardIds: (idFromChild: string[]) => string[]; // this is the first trigger id from card array (card selection)
   };
 }
 
@@ -196,13 +198,14 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.cards.length > 0 && !this.args.spec;
   }
 
-  get cardIds() {
+  get cardIdOptions() {
     return this.args.cards.map((card) => card.url);
   }
 
-  @action initializeCardSelection() {
-    if (this.shouldSelectFirstCard) {
-      this.args.onSelectCard(this.cardIds[0]);
+  @action async initializeCardSelection() {
+    if (this.cardIdOptions.length > 0) {
+      this.args.getCardIds(this.cardIdOptions);
+      this.args.onSelectCard(this.cardIdOptions[0]);
     }
   }
 
@@ -254,13 +257,12 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         </div>
 
       {{else}}
-
         {{#if @spec}}
           <div class='spec-preview'>
             <div class='spec-selector-container'>
               <div class='spec-selector' data-test-spec-selector>
                 <BoxelSelect
-                  @options={{this.cardIds}}
+                  @options={{this.cardIdOptions}}
                   @selected={{@selectedId}}
                   @onChange={{@onSelectCard}}
                   @matchTriggerWidth={{true}}
@@ -397,8 +399,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @tracked private _selectedCardId?: string;
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
+  @tracked private cardIds: string[] = [];
 
-  private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
+  get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
       return {
         name: '',
@@ -439,7 +442,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       if (this.card) {
         this._selectedCardId = this.card.id;
         this.updateFieldSpecForPlayground(this.card.id);
-        this.newCardJSON = undefined;
       }
     },
   );
@@ -536,6 +538,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
+  @action getCardIds(idsFromChild: string[]): string[] {
+    this.cardIds = idsFromChild;
+    this._selectedCardId = idsFromChild[0];
+  }
   @action onSelectCard(cardId: string): void {
     this._selectedCardId = cardId;
     this.updateFieldSpecForPlayground(cardId);
@@ -547,7 +553,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   private cardResource = getCard(
     this,
-    () => this.newCardJSON ?? this._selectedCardId,
+    () => {
+      if (this.newCardJSON) {
+        return this.newCardJSON;
+      }
+
+      if (this.cardIds.length > 0) {
+        return this.cardIds[0];
+      }
+
+      return this._selectedCardId;
+    },
     {
       isAutoSave: () => true,
     },
@@ -557,6 +573,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     if (!this.cardResource.card) {
       return undefined;
     }
+
     return this.cardResource.card as Spec;
   }
 
@@ -625,6 +642,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
               spec=this.card
               isLoading=false
               cards=cards
+              cardIds=this.cardIds
+              getCardIds=this.getCardIds
             )
           }}
         {{/let}}
