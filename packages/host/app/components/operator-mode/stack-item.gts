@@ -70,6 +70,8 @@ import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 
+import type { RenderedCardForOverlayActions } from './base-overlays';
+
 export interface StackItemComponentAPI {
   clearSelections: () => void;
   doWithStableScroll: (
@@ -102,14 +104,9 @@ interface Signature {
 
 export type CardDefOrId = CardDef | string;
 
-export interface RenderedCardForOverlayActions {
-  element: HTMLElement;
-  cardDefOrId: CardDefOrId;
-  fieldType: FieldType | undefined;
-  fieldName: string | undefined;
-  format: Format | 'data';
+export interface StackItemRenderedCardForOverlayActions
+  extends RenderedCardForOverlayActions {
   stackItem: StackItem;
-  overlayZIndexStyle?: SafeString;
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {

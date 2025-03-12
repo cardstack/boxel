@@ -1,14 +1,8 @@
-import { fn, array } from '@ember/helper';
+import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
-import { dropTask } from 'ember-concurrency';
-import { velcro } from 'ember-velcro';
-import { type TrackedArray } from 'tracked-built-ins';
+import { type Format } from 'https://cardstack.com/base/card-api';
 
 import {
   BoxelDropdown,
@@ -29,33 +23,18 @@ import {
   ThreeDotsHorizontal,
 } from '@cardstack/boxel-ui/icons';
 
-import { type Actions } from '@cardstack/runtime-common';
+import { velcro } from 'ember-velcro';
 
-import type CardService from '@cardstack/host/services/card-service';
-
-import RealmService from '@cardstack/host/services/realm';
-
-import type { Format } from 'https://cardstack.com/base/card-api';
-
+import BaseOverlays from './base-overlays';
 import { removeFileExtension } from '../search-sheet/utils';
+import { StackItemRenderedCardForOverlayActions } from './stack-item';
 
-import { CardDefOrId, RenderedCardForOverlayActions } from './stack-item';
+export default class OperatorModeOverlays extends BaseOverlays {
+  get renderedCardsForOverlayActionsWithEvents() {
+    return super
+      .renderedCardsForOverlayActionsWithEvents as StackItemRenderedCardForOverlayActions[];
+  }
 
-import type { MiddlewareState } from '@floating-ui/dom';
-
-interface Signature {
-  Args: {
-    renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
-    publicAPI: Actions;
-    toggleSelect?: (cardDefOrId: CardDefOrId) => void;
-    selectedCards: TrackedArray<CardDefOrId>;
-  };
-  Element: HTMLElement;
-}
-
-let boundRenderedCardElement = new WeakSet<HTMLElement>();
-
-export default class OperatorModeOverlays extends Component<Signature> {
   <template>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
@@ -350,90 +329,15 @@ export default class OperatorModeOverlays extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare cardService: CardService;
-  @service private declare realm: RealmService;
-
-  @tracked private currentlyHoveredCard: RenderedCardForOverlayActions | null =
-    null;
-
-  private offset = {
-    name: 'offset',
-    fn: (state: MiddlewareState) => {
-      let { elements, rects } = state;
-      let { floating, reference } = elements;
-      let { width, height } = reference.getBoundingClientRect();
-
-      floating.style.width = width + 'px';
-      floating.style.height = height + 'px';
-      floating.style.position = 'absolute';
-      return {
-        x: rects.reference.x,
-        y: rects.reference.y,
-      };
-    },
-  };
-
   private dropdownAPIs: WeakMap<
-    RenderedCardForOverlayActions,
+    StackItemRenderedCardForOverlayActions,
     BoxelDropdownAPI
   > = new Map();
-
-  // Since we put absolutely positined overlays containing operator mode actions on top of the rendered cards,
-  // we are running into a problem where the overlays are interfering with scrolling of the container that holds the rendered cards.
-  // That means scrolling stops when the cursor gets over the overlay, which is a bug. We solved this problem by disabling pointer
-  // events on the overlay. However, that prevents the browser from detecting hover state, which is needed to show the operator mode actions, and
-  // click event, needed to open the card. To solve this, we add event listeners to the rendered cards underneath the overlay, and use those to
-  // detect hover state and click event.
-  private get renderedCardsForOverlayActionsWithEvents() {
-    let renderedCards = this.args.renderedCardsForOverlayActions;
-    for (const renderedCard of renderedCards) {
-      if (boundRenderedCardElement.has(renderedCard.element)) {
-        continue;
-      }
-      boundRenderedCardElement.add(renderedCard.element);
-      renderedCard.element.addEventListener(
-        'mouseenter',
-        // eslint-disable-next-line ember/no-side-effects
-        (_ev: MouseEvent) => {
-          if (this.currentlyHoveredCard === renderedCard) {
-            return;
-          }
-          this.setCurrentlyHoveredCard(renderedCard);
-        },
-      );
-      renderedCard.element.addEventListener(
-        'mouseleave',
-        // eslint-disable-next-line ember/no-side-effects
-        (ev: MouseEvent) => {
-          let relatedTarget = ev.relatedTarget as HTMLElement;
-          if (relatedTarget?.closest?.('.actions-overlay')) {
-            return;
-          }
-          this.setCurrentlyHoveredCard(null);
-        },
-      );
-      renderedCard.element.addEventListener('click', (e: MouseEvent) => {
-        // prevent outer nested contains fields from triggering when inner most
-        // contained field was clicked
-        e.stopPropagation();
-        this.openOrSelectCard(
-          renderedCard.cardDefOrId,
-          renderedCard.stackItem.format,
-          renderedCard.fieldType,
-          renderedCard.fieldName,
-        );
-      });
-      renderedCard.element.style.cursor = 'pointer';
-      renderedCard.overlayZIndexStyle = this.zIndexStyle(renderedCard.element);
-    }
-
-    return renderedCards;
-  }
 
   @action
   private isButtonDisplayed(
     type: string,
-    renderedCard: RenderedCardForOverlayActions,
+    renderedCard: StackItemRenderedCardForOverlayActions,
   ): boolean {
     switch (type) {
       case 'select':
@@ -454,7 +358,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
   @action
   private isMenuDisplayed(
     type: string,
-    renderedCard: RenderedCardForOverlayActions,
+    renderedCard: StackItemRenderedCardForOverlayActions,
   ) {
     switch (type) {
       case 'view':
@@ -470,24 +374,27 @@ export default class OperatorModeOverlays extends Component<Signature> {
     }
   }
 
-  private isField(renderedCard: RenderedCardForOverlayActions) {
-    return (
-      renderedCard.fieldType === 'contains' ||
-      renderedCard.fieldType === 'linksTo' ||
-      renderedCard.fieldType === 'linksToMany'
-    );
+  @action
+  private registerDropdownAPI(
+    renderedCard: StackItemRenderedCardForOverlayActions,
+  ) {
+    return (dropdownAPI: BoxelDropdownAPI) => {
+      if (this.dropdownAPIs.has(renderedCard)) {
+        return;
+      }
+
+      this.dropdownAPIs.set(renderedCard, dropdownAPI);
+    };
   }
 
-  @action getCardId(cardDefOrId: CardDefOrId) {
-    return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
-  }
-
-  private setCurrentlyHoveredCard = (
-    renderedCard: RenderedCardForOverlayActions | null,
-  ) => {
+  @action
+  protected override setCurrentlyHoveredCard(
+    renderedCard: StackItemRenderedCardForOverlayActions | null,
+  ) {
     // Hide the dropdown content when the overlay is not hovered.
     // Make it visible again when it is hovered.
-    let hoveredCard = this.currentlyHoveredCard ?? renderedCard;
+    let hoveredCard = (this.currentlyHoveredCard ??
+      renderedCard) as StackItemRenderedCardForOverlayActions;
     if (hoveredCard) {
       let dropdownContentElement = document.querySelector(
         `#ember-basic-dropdown-content-${
@@ -501,70 +408,17 @@ export default class OperatorModeOverlays extends Component<Signature> {
           dropdownElement.style.visibility === 'hidden' ? 'visible' : 'hidden';
       }
     }
-    this.currentlyHoveredCard = renderedCard;
-  };
 
+    super.setCurrentlyHoveredCard(renderedCard);
+  }
+
+  /**
+   * OperatorModeOverlays specifically needs stackItem.format
+   */
   @action
-  private registerDropdownAPI(renderedCard: RenderedCardForOverlayActions) {
-    return (dropdownAPI: BoxelDropdownAPI) => {
-      if (this.dropdownAPIs.has(renderedCard)) {
-        return;
-      }
-
-      this.dropdownAPIs.set(renderedCard, dropdownAPI);
-    };
-  }
-
-  @action private openOrSelectCard(
-    cardDefOrId: CardDefOrId,
-    format: Format = 'isolated',
-    fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-    fieldName?: string,
-  ) {
-    if (this.args.toggleSelect && this.args.selectedCards?.length) {
-      this.args.toggleSelect(cardDefOrId);
-    } else {
-      this.viewCard.perform(cardDefOrId, format, fieldType, fieldName);
-    }
-  }
-
-  @action private isSelected(cardDefOrId: CardDefOrId) {
-    return this.args.selectedCards?.some(
-      (card: CardDefOrId) => card === cardDefOrId,
-    );
-  }
-
-  @action private isHovered(renderedCard: RenderedCardForOverlayActions) {
-    return this.currentlyHoveredCard === renderedCard;
-  }
-
-  private viewCard = dropTask(
-    async (
-      cardDefOrId: CardDefOrId,
-      format: Format = 'isolated',
-      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
-      fieldName?: string,
-    ) => {
-      let cardId =
-        typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
-      let canWrite = this.realm.canWrite(cardId);
-      format = canWrite ? format : 'isolated';
-      await this.args.publicAPI.viewCard(new URL(cardId), format, {
-        fieldType,
-        fieldName,
-      });
-    },
-  );
-
-  private zIndexStyle(element: HTMLElement) {
-    let parentElement = element.parentElement!;
-    let zIndexParentElement = window
-      .getComputedStyle(parentElement)
-      .getPropertyValue('z-index');
-    let zIndex =
-      zIndexParentElement === 'auto'
-        ? zIndexParentElement
-        : String(Number(zIndexParentElement) + 1);
-    return htmlSafe(`z-index: ${zIndex}`);
+  protected override getFormatForCard(
+    renderedCard: StackItemRenderedCardForOverlayActions,
+  ): Format {
+    return renderedCard.stackItem.format as Format;
   }
 }
