@@ -10,10 +10,12 @@ import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
 import CodeBlock from '@cardstack/host/modifiers/code-block';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import type CardService from '@cardstack/host/services/card-service';
+import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
@@ -36,6 +38,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   @tracked codeActions: TrackedArray<CodeAction> = new TrackedArray([]);
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
+  @service private declare commandService: CommandService;
 
   registerCodeBlockContainer = (
     fileUrl: string,
@@ -56,8 +59,19 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     // TODO: handle error state
     codeAction.state = 'applying';
     let source = await this.cardService.getSource(new URL(codeAction.fileUrl));
-    let patched = applyPatch(source, codeAction.code); // TODO: Replace this with a command
-    await this.cardService.saveSource(new URL(codeAction.fileUrl), patched);
+
+    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+      this.commandService.commandContext,
+    );
+
+    debugger;
+    let { resultContent: patchedCode } =
+      await applySearchReplaceBlockCommand.execute({
+        fileContent: source,
+        codeBlock: codeAction.code,
+      });
+
+    await this.cardService.saveSource(new URL(codeAction.fileUrl), patchedCode);
     this.loaderService.reset();
 
     codeAction.state = 'applied';
@@ -195,60 +209,4 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     },
     lineNumbers: 'off',
   };
-}
-
-/**
- * Applies a search/replace patch to a file's content
- * @param {string} fileContent - The content of the file to be patched
- * @param {string} patchText - The patch text in the specified format
- * @returns {string} Updated file content with patch applied
- */
-export function applyPatch(fileContent, patchText) {
-  // Parse the patch text to extract search and replace content
-  const { searchText, replaceText } = parsePatch(patchText);
-
-  // Check if search text exists in the file content
-  if (!fileContent.includes(searchText)) {
-    throw new Error('Search text not found in file content');
-  }
-
-  // Apply the patch by replacing the search text with the replace text
-  return fileContent.replace(searchText, replaceText);
-}
-
-/**
- * Parses a search/replace block to extract search and replace text
- * @param {string} patchText - The patch text in the specified format
- * @returns {Object} Object containing searchText and replaceText
- */
-function parsePatch(patchText) {
-  const lines = patchText.split('\n');
-
-  // Find the start of the search block
-  const searchStartIndex = lines.findIndex(
-    (line) => line.trim() === '<<<<<<< SEARCH',
-  );
-  if (searchStartIndex === -1) {
-    throw new Error('Search marker not found');
-  }
-
-  // Find the divider
-  const dividerIndex = lines.findIndex((line) => line.trim() === '=======');
-  if (dividerIndex === -1) {
-    throw new Error('Divider marker not found');
-  }
-
-  // Find the end of the replace block
-  const replaceEndIndex = lines.findIndex(
-    (line) => line.trim() === '>>>>>>> REPLACE',
-  );
-  if (replaceEndIndex === -1) {
-    throw new Error('Replace marker not found');
-  }
-
-  // Extract the search and replace text
-  const searchText = lines.slice(searchStartIndex + 1, dividerIndex).join('\n');
-  const replaceText = lines.slice(dividerIndex + 1, replaceEndIndex).join('\n');
-
-  return { searchText, replaceText };
 }

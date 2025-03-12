@@ -63,20 +63,13 @@ export default class CodeBlock extends Modifier<Signature> {
       }
       let content = maybeContent;
       let lines = content.split('\n').length;
-      // if first line is // File url: http://localhost:4201/jurgen/jurgens/author.gts
-      // then parse the file url in a variable and remove the first line
-      let fileUrl = undefined;
 
-      if (content.startsWith('// File url: ')) {
-        let firstLine = content.split('\n')[0];
-        // use regex to extract the file url
-        let fileUrlRegex = /File url: (.*)/;
-        let fileUrlMatch = firstLine.match(fileUrlRegex);
-        if (fileUrlMatch) {
-          fileUrl = fileUrlMatch[1];
-        }
-        content = content.slice(firstLine.length).trimStart();
-      }
+      // When the model responds with a code patch block, the source code editing skill
+      // will demand the first comment is a file url comment, like this: // File url: http://localhost:4201/user/realn/card.gts
+      // We need this url so that we can apply the code patch to the file
+      let fileUrl = undefined;
+      ({ content, fileUrl } = extractFileUrlAndOverrideContent(content));
+
       let language = codeBlock.getAttribute(languageAttr) ?? undefined;
       let state = this.monacoState[index];
       if (state) {
@@ -126,7 +119,7 @@ export default class CodeBlock extends Modifier<Signature> {
           'preview-code monaco-container code-block',
         );
         monacoContainer.setAttribute('style', `height: ${lines + 4}rem`);
-        monacoContainer.setAttribute('data-file-url', fileUrl ?? '');
+
         codeBlock.replaceWith(monacoContainer);
         let editor = monacoSDK.editor.create(monacoContainer, editorOptions);
         let model = editor.getModel()!;
@@ -138,7 +131,7 @@ export default class CodeBlock extends Modifier<Signature> {
         );
 
         registerCodeBlockContainer(
-          fileUrl,
+          fileUrl ?? '',
           model.getValue(),
           codeActionsContainer,
         );
@@ -210,4 +203,19 @@ function makeCopyButton() {
     </button>
   `.trim();
   return template.content.firstChild as HTMLButtonElement;
+}
+
+function extractFileUrlAndOverrideContent(content: string) {
+  let fileUrl = undefined;
+  if (content.startsWith('// File url: ')) {
+    let firstLine = content.split('\n')[0];
+    let fileUrlRegex = /File url: (.*)/;
+    let fileUrlMatch = firstLine.match(fileUrlRegex);
+    if (fileUrlMatch) {
+      fileUrl = fileUrlMatch[1];
+    }
+    content = content.slice(firstLine.length).trimStart();
+  }
+
+  return { content, fileUrl };
 }
