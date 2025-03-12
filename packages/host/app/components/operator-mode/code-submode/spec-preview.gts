@@ -562,8 +562,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.search.instances as Spec[];
   }
 
-  get hasMoreThanOneCard() {
-    return this.cards.length > 1;
+  get shouldInitializeFieldSpecForPlayground() {
+    return (
+      !this.search.isLoading && !this._selectedCard && this.cards.length > 1
+    );
   }
 
   get card() {
@@ -626,7 +628,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         (component SpecPreviewLoading)
       }}
     {{else}}
-      {{#if this.hasMoreThanOneCard}}
+      {{#if this.shouldInitializeFieldSpecForPlayground}}
         {{this.initializeFieldSpecForPlayground}}
       {{/if}}
       {{#let (this.getSpecIntent this.cards) as |showCreateSpecIntent|}}
