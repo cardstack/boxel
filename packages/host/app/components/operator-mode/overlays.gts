@@ -27,6 +27,7 @@ interface OverlaySignature {
     onSelectCard?: (cardDefOrId: CardDefOrId) => void;
     toggleSelect?: (cardDefOrId: CardDefOrId) => void;
     selectedCards?: TrackedArray<CardDefOrId>;
+    overlayClassName?: string;
   };
   Element: HTMLElement;
   Blocks: {
@@ -52,6 +53,8 @@ export interface RenderedCardForOverlayActions {
 let boundRenderedCardElement = new WeakSet<HTMLElement>();
 
 export default class Overlays extends Component<OverlaySignature> {
+  @tracked overlayClassName = this.args.overlayClassName ?? 'base-overlay';
+
   <template>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
@@ -80,8 +83,6 @@ export default class Overlays extends Component<OverlaySignature> {
     {{/each}}
     <style scoped>
       .base-overlay {
-        position: absolute;
-        pointer-events: none;
         width: 100%;
         height: 100%;
       }
@@ -139,7 +140,7 @@ export default class Overlays extends Component<OverlaySignature> {
         // eslint-disable-next-line ember/no-side-effects
         (ev: MouseEvent) => {
           let relatedTarget = ev.relatedTarget as HTMLElement;
-          if (relatedTarget?.closest?.('.actions-overlay')) {
+          if (relatedTarget?.closest?.(`.${this.overlayClassName}`)) {
             return;
           }
           this.setCurrentlyHoveredCard(null);
