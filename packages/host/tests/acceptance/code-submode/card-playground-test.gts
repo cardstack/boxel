@@ -348,35 +348,6 @@ module('Acceptance | code-submode | card playground', function (hooks) {
     assert.dom('[data-test-selected-item]').containsText('Jane Doe');
   });
 
-  test('can populate playground preview with previous choices saved in local storage', async function (assert) {
-    setPlaygroundSelections({
-      [`${testRealmURL}author/Author`]: {
-        cardId: `${testRealmURL}Author/jane-doe`,
-        format: 'isolated',
-      },
-      [`${testRealmURL}blog-post/BlogPost`]: {
-        cardId: `${testRealmURL}BlogPost/remote-work`,
-        format: 'isolated',
-      },
-      [`${testRealmURL}blog-post/Category`]: {
-        cardId: `${testRealmURL}Category/city-design`,
-        format: 'isolated',
-      },
-    });
-    await openFileInPlayground('author.gts', testRealmURL, 'Author');
-    assert.dom('[data-test-selected-item]').hasText('Jane Doe');
-    assertCardExists(assert, `${testRealmURL}Author/jane-doe`);
-
-    await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`);
-    await togglePlaygroundPanel();
-    assert.dom('[data-test-selected-item]').hasText('City Design');
-    assertCardExists(assert, `${testRealmURL}Category/city-design`);
-
-    await selectDeclaration('BlogPost');
-    assert.dom('[data-test-selected-item]').containsText('Remote Work');
-    assertCardExists(assert, `${testRealmURL}BlogPost/remote-work`);
-  });
-
   test('can display selected card in isolated format', async function (assert) {
     await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
@@ -762,7 +733,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
     assert.dom('[data-test-post-title]').includesText('Hello Mad As a Hatter');
   });
 
-  test('can remember format choice via local storage', async function (assert) {
+  test('can remember playground selections and format choices via local storage', async function (assert) {
     const authorModuleId = `${testRealmURL}author/Author`;
     const categoryModuleId = `${testRealmURL}blog-post/Category`;
     const blogPostModuleId = `${testRealmURL}blog-post/BlogPost`;
@@ -788,6 +759,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
     });
 
     await openFileInPlayground('author.gts', testRealmURL, 'Author');
+    assert.dom('[data-test-selected-item]').hasText('Jane Doe');
     assertCardExists(assert, authorId, 'edit');
     await selectFormat('atom'); // change selected format
     assertCardExists(assert, authorId, 'atom');
@@ -800,13 +772,14 @@ module('Acceptance | code-submode | card playground', function (hooks) {
       'local storage is updated',
     );
 
-    await click('[data-test-file-browser-toggle]');
-    await click('[data-test-file="blog-post.gts"]'); // change open file
+    await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`); // change open file
     await togglePlaygroundPanel();
+    assert.dom('[data-test-selected-item]').hasText('City Design');
     assertCardExists(assert, categoryId1, 'embedded');
 
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]'); // change selected instance
+    assert.dom('[data-test-selected-item]').hasText('Future Tech');
     assertCardExists(assert, categoryId2, 'embedded');
     assert.deepEqual(
       getPlaygroundSelections()?.[categoryModuleId],
