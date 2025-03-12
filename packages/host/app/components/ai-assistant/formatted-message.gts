@@ -110,6 +110,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         {{#each this.codeActions as |codeAction|}}
           {{#in-element codeAction.containerElement}}
             <ApplyButton
+              data-test-apply-code-button
               @state={{codeAction.state}}
               {{on 'click' (fn (perform this.patchCodeTask) codeAction)}}
             />
