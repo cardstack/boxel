@@ -366,9 +366,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-accordion-item="spec-preview"] button');
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
-    assert
-      .dom('[data-test-spec-selector-item-path]')
-      .hasText('person-entry.json');
+    assert.dom('[data-test-spec-selector-item-path]').hasText('person-entry');
     await percySnapshot(assert);
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person');
     assert
@@ -392,9 +390,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
-    assert
-      .dom('[data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2.json');
+    assert.dom('[data-test-spec-selector-item-path]').hasText('pet-entry-2');
     await waitFor('[data-test-view-spec-instance]');
     assert.dom('[data-test-view-spec-instance]').exists();
   });
@@ -559,7 +555,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await waitFor('[data-test-card-url-bar-input]');
     assert
       .dom('[data-test-card-url-bar-input]')
-      .hasValue(`${testRealmURL}person-entry.json`);
+      .hasValue(`${testRealmURL}person-entry`);
 
     await waitFor('[data-test-editor]');
     assert.dom('[data-test-editor]').hasAnyText();
