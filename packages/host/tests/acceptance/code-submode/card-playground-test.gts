@@ -2,14 +2,9 @@ import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
 
-import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
-
-import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
-
-import type { Format } from 'https://cardstack.com/base/card-api';
 
 import {
   percySnapshot,
@@ -24,8 +19,19 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
-  selectDeclaration,
+  assertCardExists,
+  chooseAnotherInstance,
+  createNewInstance,
   getPlaygroundSelections,
+  getRecentFiles,
+  openFileInPlayground,
+  removePlaygroundSelections,
+  removeRecentFiles,
+  selectDeclaration,
+  selectFormat,
+  setPlaygroundSelections,
+  setRecentFiles,
+  togglePlaygroundPanel,
 } from '../../helpers/playground';
 import { setupApplicationTest } from '../../helpers/setup';
 
@@ -241,20 +247,17 @@ module('Acceptance | code-submode | card playground', function (hooks) {
         },
       },
     }));
-    window.localStorage.setItem(
-      'recent-files',
-      JSON.stringify([
-        [testRealmURL, 'blog-post.gts'],
-        [testRealmURL, 'author.gts'],
-        [testRealmURL, 'BlogPost/mad-hatter.json'],
-        [testRealmURL, 'Category/city-design.json'],
-        [testRealmURL, 'Category/future-tech.json'],
-        [testRealmURL, 'BlogPost/remote-work.json'],
-        [testRealmURL, 'BlogPost/urban-living.json'],
-        [testRealmURL, 'Author/jane-doe.json'],
-      ]),
-    );
-    window.localStorage.removeItem(PlaygroundSelections);
+    setRecentFiles([
+      [testRealmURL, 'blog-post.gts'],
+      [testRealmURL, 'author.gts'],
+      [testRealmURL, 'BlogPost/mad-hatter.json'],
+      [testRealmURL, 'Category/city-design.json'],
+      [testRealmURL, 'Category/future-tech.json'],
+      [testRealmURL, 'BlogPost/remote-work.json'],
+      [testRealmURL, 'BlogPost/urban-living.json'],
+      [testRealmURL, 'Author/jane-doe.json'],
+    ]);
+    removePlaygroundSelections();
 
     setActiveRealms([testRealmURL]);
     setRealmPermissions({
@@ -263,21 +266,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can render playground panel when an exported card def is selected', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    assert
-      .dom(
-        '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="Category"]',
-      )
-      .exists();
-    assert
-      .dom('[data-test-accordion-item="playground"]')
-      .exists(
-        'playground accordion item exists for Category (exported card def)',
-      );
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
     assert
       .dom('[data-test-playground-panel]')
       .exists('playground panel exists for Category (exported card def)');
@@ -301,27 +290,18 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can populate instance chooser dropdown options from recent files', async function (assert) {
-    window.localStorage.removeItem('recent-files');
-    window.localStorage.removeItem(PlaygroundSelections);
-
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    removeRecentFiles();
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
     assert.dom('[data-test-instance-chooser]').hasText('Please Select');
 
-    window.localStorage.setItem(
-      'recent-files',
-      JSON.stringify([
-        [testRealmURL, 'BlogPost/mad-hatter.json'],
-        [testRealmURL, 'Category/future-tech.json'],
-        [testRealmURL, 'Category/city-design.json'],
-        [testRealmURL, 'BlogPost/remote-work.json'],
-        [testRealmURL, 'BlogPost/urban-living.json'],
-        [testRealmURL, 'Author/jane-doe.json'],
-      ]),
-    );
+    setRecentFiles([
+      [testRealmURL, 'BlogPost/mad-hatter.json'],
+      [testRealmURL, 'Category/future-tech.json'],
+      [testRealmURL, 'Category/city-design.json'],
+      [testRealmURL, 'BlogPost/remote-work.json'],
+      [testRealmURL, 'BlogPost/urban-living.json'],
+      [testRealmURL, 'Author/jane-doe.json'],
+    ]);
     await click('[data-test-instance-chooser]');
     assert
       .dom('[data-option-index] [data-test-category-fitted]')
@@ -334,11 +314,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can update the instance chooser when selected card def changes (same file)', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 2 });
     assert.dom('[data-option-index="0"]').containsText('City Design');
@@ -354,11 +330,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can update the instance chooser when a different file is opened', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 2 });
     assert.dom('[data-option-index="0"]').containsText('City Design');
@@ -367,7 +339,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="author.gts"]');
-    await click('[data-test-accordion-item="playground"] button');
+    await togglePlaygroundPanel();
     assert.dom('[data-test-instance-chooser]').hasText('Please Select');
     await click('[data-test-instance-chooser]');
     assert.dom('li.ember-power-select-option').exists({ count: 1 });
@@ -377,59 +349,42 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can populate playground preview with previous choices saved in local storage', async function (assert) {
-    let selections = {
+    setPlaygroundSelections({
       [`${testRealmURL}author/Author`]: {
         cardId: `${testRealmURL}Author/jane-doe`,
+        format: 'isolated',
       },
       [`${testRealmURL}blog-post/BlogPost`]: {
         cardId: `${testRealmURL}BlogPost/remote-work`,
+        format: 'isolated',
       },
       [`${testRealmURL}blog-post/Category`]: {
         cardId: `${testRealmURL}Category/city-design`,
+        format: 'isolated',
       },
-    };
-    window.localStorage.setItem(
-      PlaygroundSelections,
-      JSON.stringify(selections),
-    );
-    const assertCardExists = (fileName: string) => {
-      const dataAttr = `[data-test-playground-panel] [data-test-card="${testRealmURL}${fileName}"]`;
-      assert.dom(dataAttr).exists();
-    };
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
     });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     assert.dom('[data-test-selected-item]').hasText('Jane Doe');
-    assertCardExists('Author/jane-doe');
+    assertCardExists(assert, `${testRealmURL}Author/jane-doe`);
 
     await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`);
-    await click('[data-test-accordion-item="playground"] button');
+    await togglePlaygroundPanel();
     assert.dom('[data-test-selected-item]').hasText('City Design');
-    assertCardExists('Category/city-design');
+    assertCardExists(assert, `${testRealmURL}Category/city-design`);
 
     await selectDeclaration('BlogPost');
     assert.dom('[data-test-selected-item]').containsText('Remote Work');
-    assertCardExists('BlogPost/remote-work');
+    assertCardExists(assert, `${testRealmURL}BlogPost/remote-work`);
   });
 
   test('can display selected card in isolated format', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .hasText('Author');
-    assert
-      .dom(
-        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="isolated"]`,
-      )
-      .exists();
+    assertCardExists(assert, `${testRealmURL}Author/jane-doe`, 'isolated');
     assert.dom('[data-test-author-title]').hasText('Jane Doe');
     assert
       .dom('[data-test-author-bio]')
@@ -437,11 +392,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can use the header context menu to open instance in code mode', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     await click('[data-test-more-options-button]');
@@ -459,11 +410,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can use the header context menu to open instance in interact mode', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     await click('[data-test-more-options-button]');
@@ -477,52 +424,37 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can display selected card in the chosen format', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    const cardId = `${testRealmURL}Author/jane-doe`;
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .hasText('Author');
-    assert
-      .dom(
-        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="isolated"]`,
-      )
-      .exists();
+    assertCardExists(assert, cardId, 'isolated');
     assert.dom('[data-test-author-title]').hasText('Jane Doe');
     assert
       .dom('[data-test-author-bio]')
       .containsText('Jane Doe is the Senior Managing Editor');
     assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
 
-    await click('[data-test-format-chooser="embedded"]');
+    await selectFormat('embedded');
     assert.dom('[data-test-format-chooser="isolated"]').hasNoClass('active');
     assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .doesNotExist();
-    assert
-      .dom(
-        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="embedded"]`,
-      )
-      .exists();
+    assertCardExists(assert, cardId, 'embedded');
 
-    await click('[data-test-format-chooser="edit"]');
+    await selectFormat('edit');
     assert.dom('[data-test-format-chooser="embedded"]').hasNoClass('active');
     assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .hasText('Author');
-    assert
-      .dom(
-        `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"][data-test-card-format="edit"]`,
-      )
-      .exists();
+    assertCardExists(assert, cardId, 'edit');
 
-    await click('[data-test-format-chooser="atom"]');
+    await selectFormat('atom');
     assert.dom('[data-test-format-chooser="edit"]').hasNoClass('active');
     assert.dom('[data-test-format-chooser="atom"]').hasClass('active');
 
@@ -532,7 +464,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do Jane Doe tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
       );
 
-    await click('[data-test-format-chooser="fitted"]');
+    await selectFormat('fitted');
     assert.dom('[data-test-format-chooser="atom"]').hasNoClass('active');
     assert.dom('[data-test-format-chooser="fitted"]').hasClass('active');
     assert
@@ -541,47 +473,39 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can toggle edit format via button on card header', async function (assert) {
-    const playgroundCard = `[data-test-playground-panel] [data-test-card="${testRealmURL}Author/jane-doe"]`;
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    const cardId = `${testRealmURL}Author/jane-doe`;
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .hasText('Author');
-    assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
+    assertCardExists(assert, cardId, 'isolated');
     assert.dom('[data-test-author-title]').hasText('Jane Doe');
     assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
+
     await click(
       '[data-test-boxel-card-header-actions] [data-test-edit-button]',
     );
-
-    assert.dom(`${playgroundCard}[data-test-card-format="edit"]`).exists();
+    assertCardExists(assert, cardId, 'edit');
     assert.dom('[data-test-card-header]').hasClass('is-editing');
     assert.dom('[data-test-format-chooser="isolated"]').hasNoClass('active');
     assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
+
     await click(
       '[data-test-boxel-card-header-actions] [data-test-edit-button]',
     );
-
-    assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
+    assertCardExists(assert, cardId, 'isolated');
     assert.dom('[data-test-card-header]').hasNoClass('is-editing');
     assert.dom('[data-test-format-chooser="edit"]').hasNoClass('active');
     assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
   });
 
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
-    await click('[data-test-format-chooser="edit"]');
+    await selectFormat('edit');
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
     assert
@@ -595,16 +519,9 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can choose another instance to be opened in playground panel', async function (assert) {
-    window.localStorage.removeItem('recent-files');
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-
-    await click('[data-boxel-selector-item-text="BlogPost"]');
-    await click('[data-test-accordion-item="playground"] button');
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-choose-another-instance]');
+    removeRecentFiles();
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
+    await chooseAnotherInstance();
     assert.dom('[data-test-card-catalog-modal]').exists();
     assert.dom('[data-test-card-catalog-item]').exists({ count: 3 });
     assert
@@ -625,13 +542,8 @@ module('Acceptance | code-submode | card playground', function (hooks) {
       `[data-test-card-catalog-item="${testRealmURL}BlogPost/mad-hatter"]`,
     );
     await click('[data-test-card-catalog-go-button]');
-    assert
-      .dom(
-        `[data-test-playground-panel] [data-test-card="${testRealmURL}BlogPost/mad-hatter"][data-test-card-format="isolated"]`,
-      )
-      .exists();
-    let recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
-    assert.deepEqual(recentFiles[0], [
+    assertCardExists(assert, `${testRealmURL}BlogPost/mad-hatter`, 'isolated');
+    assert.deepEqual(getRecentFiles()?.[0], [
       testRealmURL,
       'BlogPost/mad-hatter.json',
       null,
@@ -639,40 +551,39 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can create new instance', async function (assert) {
-    window.localStorage.removeItem('recent-files');
+    removeRecentFiles();
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}blog-post.gts`,
     });
-    let recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
-    assert.deepEqual(recentFiles[0], [
+    assert.deepEqual(getRecentFiles()?.[0], [
       testRealmURL,
       'blog-post.gts',
       { line: 6, column: 42 },
     ]);
     await click('[data-boxel-selector-item-text="BlogPost"]');
-    await click('[data-test-accordion-item="playground"] button');
+    await togglePlaygroundPanel();
     assert
       .dom('[data-test-instance-chooser] [data-test-selected-item]')
       .doesNotExist();
 
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-create-instance]');
+    await createNewInstance();
 
-    recentFiles = JSON.parse(window.localStorage.getItem('recent-files')!);
-    assert.strictEqual(recentFiles.length, 2, 'recent file count is correct');
-    let newCardId = `${recentFiles[0][0]}${recentFiles[0][1]}`.replace(
+    let recentFiles = getRecentFiles();
+    assert.strictEqual(recentFiles?.length, 2, 'recent file count is correct');
+    let newCardId = `${recentFiles?.[0][0]}${recentFiles?.[0][1]}`.replace(
       '.json',
       '',
     );
     assert
       .dom('[data-test-instance-chooser] [data-test-selected-item]')
       .hasText('Untitled Blog Post', 'created instance is selected');
-    assert
-      .dom(
-        `[data-test-playground-panel] [data-test-card="${newCardId}"][data-test-card-format="edit"]`,
-      )
-      .exists('new card is rendered in edit format');
+    assertCardExists(
+      assert,
+      newCardId,
+      'edit',
+      'new card is rendered in edit format',
+    );
 
     await click('[data-test-instance-chooser]');
     assert
@@ -682,14 +593,12 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can create new instance with CodeRef field', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}code-ref-driver.gts`,
-    });
-    await click('[data-boxel-selector-item-text="CodeRefDriver"]');
-    await click('[data-test-accordion-item="playground"] button');
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-create-instance]');
+    await openFileInPlayground(
+      'code-ref-driver.gts',
+      testRealmURL,
+      'CodeRefDriver',
+    );
+    await createNewInstance();
 
     assert
       .dom('[data-test-instance-chooser] [data-test-selected-item]')
@@ -707,14 +616,12 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can set relative CodeRef field', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}code-ref-driver.gts`,
-    });
-    await click('[data-boxel-selector-item-text="CodeRefDriver"]');
-    await click('[data-test-accordion-item="playground"] button');
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-create-instance]');
+    await openFileInPlayground(
+      'code-ref-driver.gts',
+      testRealmURL,
+      'CodeRefDriver',
+    );
+    await createNewInstance();
 
     assert
       .dom(
@@ -766,12 +673,7 @@ module('Acceptance | code-submode | card playground', function (hooks) {
       </template>
         }
       }`;
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     assert.dom('[data-test-author-title]').containsText('Jane Doe');
@@ -790,67 +692,61 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   test('playground preview for card with linked fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from "https://cardstack.com/base/string";
-import { Author } from './author';
+      import DatetimeField from 'https://cardstack.com/base/datetime';
+      import MarkdownField from 'https://cardstack.com/base/markdown';
+      import StringField from "https://cardstack.com/base/string";
+      import { Author } from './author';
 
-export class Category extends CardDef {
-  static displayName = 'Category';
-  static fitted = class Fitted extends Component<typeof this> {
-  <template>
-    <div data-test-category-fitted><@fields.title /></div>
-  </template>
-  }
-}
-
-class Status extends StringField {
-  static displayName = 'Status';
-}
-
-export class BlogPost extends CardDef {
-  static displayName = 'Blog Post';
-  @field publishDate = contains(DatetimeField);
-  @field author = linksTo(Author);
-  @field categories = linksToMany(Category);
-  @field body = contains(MarkdownField);
-  @field status = contains(Status, {
-    computeVia: function (this: BlogPost) {
-      if (!this.publishDate) {
-        return 'Draft';
+      export class Category extends CardDef {
+        static displayName = 'Category';
+        static fitted = class Fitted extends Component<typeof this> {
+        <template>
+          <div data-test-category-fitted><@fields.title /></div>
+        </template>
+        }
       }
-      if (Date.now() >= Date.parse(String(this.publishDate))) {
-        return 'Published';
-      }
-      return 'Scheduled';
-    },
-  });
 
-  static isolated = class Isolated extends Component<typeof this> {
-  <template>
-    <article>
-      <header>
-        <h1 data-test-post-title>Hello <@fields.title /></h1>
-      </header>
-      <div data-test-byline><@fields.author /></div>
-      <div data-test-post-body><@fields.body /></div>
-    </article>
-    <style scoped>
-      article {
-        margin-inline: 20px;
+      class Status extends StringField {
+        static displayName = 'Status';
       }
-    </style>
-  </template>
-  }
-}`;
 
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await click('[data-test-boxel-selector-item-text="BlogPost"]');
-    await click('[data-test-accordion-item="playground"] button');
+      export class BlogPost extends CardDef {
+        static displayName = 'Blog Post';
+        @field publishDate = contains(DatetimeField);
+        @field author = linksTo(Author);
+        @field categories = linksToMany(Category);
+        @field body = contains(MarkdownField);
+        @field status = contains(Status, {
+          computeVia: function (this: BlogPost) {
+            if (!this.publishDate) {
+              return 'Draft';
+            }
+            if (Date.now() >= Date.parse(String(this.publishDate))) {
+              return 'Published';
+            }
+            return 'Scheduled';
+          },
+        });
+
+        static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <article>
+            <header>
+              <h1 data-test-post-title>Hello <@fields.title /></h1>
+            </header>
+            <div data-test-byline><@fields.author /></div>
+            <div data-test-post-body><@fields.body /></div>
+          </article>
+          <style scoped>
+            article {
+              margin-inline: 20px;
+            }
+          </style>
+        </template>
+        }
+    }`;
+
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
@@ -876,39 +772,25 @@ export class BlogPost extends CardDef {
     const blogPostId1 = `${testRealmURL}BlogPost/mad-hatter`;
     const blogPostId2 = `${testRealmURL}BlogPost/remote-work`;
 
-    window.localStorage.setItem(
-      PlaygroundSelections,
-      JSON.stringify({
-        [`${authorModuleId}`]: {
-          cardId: authorId,
-          format: 'edit',
-        },
-        [`${categoryModuleId}`]: {
-          cardId: categoryId1,
-          format: 'embedded',
-        },
-        [`${blogPostModuleId}`]: {
-          cardId: blogPostId1,
-        },
-      }),
-    );
-    const assertCorrectFormat = (
-      cardId: string,
-      format: Format,
-      message?: string,
-    ) => {
-      const dataAttr = `[data-test-playground-panel] [data-test-card="${cardId}"][data-test-card-format="${format}"]`;
-      assert.dom(dataAttr).exists(message);
-    };
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
+    setPlaygroundSelections({
+      [`${authorModuleId}`]: {
+        cardId: authorId,
+        format: 'edit',
+      },
+      [`${categoryModuleId}`]: {
+        cardId: categoryId1,
+        format: 'embedded',
+      },
+      [`${blogPostModuleId}`]: {
+        cardId: blogPostId1,
+        format: 'isolated',
+      },
     });
-    await click('[data-test-accordion-item="playground"] button');
-    assertCorrectFormat(authorId, 'edit');
-    await click('[data-test-format-chooser="atom"]'); // change selected format
-    assertCorrectFormat(authorId, 'atom');
+
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
+    assertCardExists(assert, authorId, 'edit');
+    await selectFormat('atom'); // change selected format
+    assertCardExists(assert, authorId, 'atom');
     assert.deepEqual(
       getPlaygroundSelections()?.[authorModuleId],
       {
@@ -920,12 +802,12 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="blog-post.gts"]'); // change open file
-    await click('[data-test-accordion-item="playground"] button');
-    assertCorrectFormat(categoryId1, 'embedded');
+    await togglePlaygroundPanel();
+    assertCardExists(assert, categoryId1, 'embedded');
 
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]'); // change selected instance
-    assertCorrectFormat(categoryId2, 'embedded');
+    assertCardExists(assert, categoryId2, 'embedded');
     assert.deepEqual(
       getPlaygroundSelections()?.[categoryModuleId],
       {
@@ -937,16 +819,15 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-inspector-toggle]');
     await click('[data-test-boxel-selector-item-text="BlogPost"]'); // change selected module
-    assertCorrectFormat(blogPostId1, 'isolated', 'default format is correct');
-    await click('[data-test-format-chooser="fitted"]'); // change selected format
-
+    assertCardExists(assert, blogPostId1, 'isolated');
+    await selectFormat('fitted'); // change selected format
     assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
       cardId: blogPostId1,
       format: 'fitted',
     });
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]'); // change selected instance
-    assertCorrectFormat(blogPostId2, 'fitted');
+    assertCardExists(assert, blogPostId2, 'fitted');
     assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
       cardId: blogPostId2,
       format: 'fitted',
@@ -972,11 +853,7 @@ export class BlogPost extends CardDef {
   });
 
   test<TestContextWithSave>('trigger auto saved in edit format', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     await click('[data-test-edit-button]');
@@ -996,11 +873,7 @@ export class BlogPost extends CardDef {
   });
 
   test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
     await click('[data-test-open-ai-assistant]');

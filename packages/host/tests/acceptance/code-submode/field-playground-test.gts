@@ -1,11 +1,8 @@
 import { click, fillIn, waitUntil } from '@ember/test-helpers';
 
-import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
-
-import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   setupAcceptanceTestRealm,
@@ -13,12 +10,19 @@ import {
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
-  visitOperatorMode,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
-  selectDeclaration,
+  chooseAnotherInstance,
+  createNewInstance,
   getPlaygroundSelections,
+  openFileInPlayground,
+  removePlaygroundSelections,
+  selectFormat,
+  setPlaygroundSelections,
+  setRecentFiles,
+  togglePlaygroundPanel,
+  toggleSpecPanel,
 } from '../../helpers/playground';
 import { setupApplicationTest } from '../../helpers/setup';
 
@@ -320,16 +324,13 @@ module('Acceptance | code-submode | field playground', function (hooks) {
         },
       },
     }));
-    window.localStorage.setItem(
-      'recent-files',
-      JSON.stringify([
-        [testRealmURL, 'blog-post.gts'],
-        [testRealmURL, 'author.gts'],
-        [testRealmURL, 'BlogPost/remote-work.json'],
-        [testRealmURL, 'Author/jane-doe.json'],
-      ]),
-    );
-    window.localStorage.removeItem(PlaygroundSelections);
+    setRecentFiles([
+      [testRealmURL, 'blog-post.gts'],
+      [testRealmURL, 'author.gts'],
+      [testRealmURL, 'BlogPost/remote-work.json'],
+      [testRealmURL, 'Author/jane-doe.json'],
+    ]);
+    removePlaygroundSelections();
 
     setActiveRealms([testRealmURL]);
     setRealmPermissions({
@@ -338,13 +339,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
   });
 
   test('can preview compound field instance', async function (assert) {
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await click('[data-test-boxel-selector-item-text="Comment"]');
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
     assert.dom('[data-test-field-preview-header]').containsText('Comment');
     assert
@@ -358,7 +353,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
         'preview defaults to embedded view of first example',
       );
 
-    await click('[data-test-format-chooser="atom"]');
+    await selectFormat('atom');
     assert
       .dom(
         '[data-test-field-preview-card] [data-test-compound-field-format="atom"]',
@@ -383,14 +378,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
   });
 
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await selectDeclaration('Comment');
-    // playground panel
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
     assert.dom('[data-test-field-preview-header]').hasText('Comment');
     assert
@@ -404,8 +392,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       fieldIndex: 0,
     });
 
-    // spec panel
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await toggleSpecPanel();
     assert
       .dom(
         `[data-test-card="${testRealmURL}Spec/comment-1"] [data-test-boxel-input-id="spec-title"]`,
@@ -428,8 +415,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       )
       .hasValue('Comment spec II');
 
-    // playground panel
-    await click('[data-test-accordion-item="playground"] button');
+    await togglePlaygroundPanel();
     assert.dom('[data-test-selected-item]').hasText('Comment spec II');
     assert
       .dom('[data-test-embedded-comment-title]')
@@ -443,13 +429,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
   });
 
   test("can select a different instance to preview from the spec's containedExamples collection", async function (assert) {
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await selectDeclaration('Comment');
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
     assert
       .dom('[data-test-embedded-comment-title]')
@@ -462,8 +442,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       fieldIndex: 0,
     });
 
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-choose-another-instance]');
+    await chooseAnotherInstance();
     assert
       .dom('[data-test-field-chooser] [data-test-boxel-header-title]')
       .hasText('Choose a Comment Instance');
@@ -487,29 +466,20 @@ module('Acceptance | code-submode | field playground', function (hooks) {
   });
 
   test('preview the next available example if the previously selected one has been deleted', async function (assert) {
-    window.localStorage.setItem(
-      PlaygroundSelections,
-      JSON.stringify({
-        [`${testRealmURL}blog-post/Comment`]: {
-          cardId: `${testRealmURL}Spec/comment-1`,
-          format: 'embedded',
-          fieldIndex: 1,
-        },
-      }),
-    );
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
+    setPlaygroundSelections({
+      [`${testRealmURL}blog-post/Comment`]: {
+        cardId: `${testRealmURL}Spec/comment-1`,
+        format: 'embedded',
+        fieldIndex: 1,
+      },
     });
-    await selectDeclaration('Comment');
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Needs better packaging');
 
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await toggleSpecPanel();
     assert
       .dom(
         '[data-test-contains-many="containedExamples"] [data-test-item="1"] [data-test-field="title"] input',
@@ -525,12 +495,12 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .dom('[data-test-contains-many="containedExamples"] [data-test-item="0"]')
       .exists();
 
-    await click('[data-test-accordion-item="playground"] button');
+    await togglePlaygroundPanel();
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
 
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await toggleSpecPanel();
     await click(
       '[data-test-contains-many="containedExamples"] [data-test-remove="0"]',
     ); // remove remaining contained example from spec
@@ -538,47 +508,29 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
       .doesNotExist();
 
-    await click('[data-test-accordion-item="playground"] button');
+    await togglePlaygroundPanel();
     assert.dom('[data-test-embedded-comment]').doesNotExist();
     assert.dom('[data-test-add-field-instance]').exists();
   });
 
   test('can create new field instance (no preexisting Spec)', async function (assert) {
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await selectDeclaration('Quote');
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'Quote');
     assert.dom('[data-test-quote-field-embedded]').doesNotExist();
     assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-    assert
-      .dom(
-        '[data-test-accordion-item="spec-preview"] [data-test-create-spec-button]',
-      )
-      .exists();
+    assert.dom('[data-test-create-spec-button]').exists();
 
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-create-instance]');
-    assert
-      .dom('[data-test-instance-chooser] [data-test-selected-item]')
-      .hasText('Quote');
+    await createNewInstance();
+    assert.dom('[data-test-selected-item]').hasText('Quote');
     assert
       .dom(
         '[data-test-field-preview-card] [data-test-compound-field-format="edit"]',
       )
       .exists();
     assert.dom('[data-test-field="quote"] input').hasNoValue();
-
-    assert
-      .dom(
-        '[data-test-accordion-item="spec-preview"] [data-test-create-spec-button]',
-      )
-      .doesNotExist();
+    assert.dom('[data-test-create-spec-button]').doesNotExist();
 
     // TODO: spec panel updates when spec is created from playground
-    // await click('[data-test-accordion-item="spec-preview"] button');
+    // await toggleAccordionPanel('spec-preview');
     // assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Quote');
     // assert
     //   .dom(
@@ -588,13 +540,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
   });
 
   test('can create new field instance (has preexisting Spec)', async function (assert) {
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await selectDeclaration('Comment');
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
     assert
       .dom('[data-test-embedded-comment-title]')
@@ -607,8 +553,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       fieldIndex: 0,
     });
 
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-create-instance]');
+    await createNewInstance();
     assert
       .dom('[data-test-field-preview-card] [data-test-field="title"] input')
       .hasNoValue();
@@ -619,7 +564,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       fieldIndex: 2,
     });
 
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await toggleSpecPanel();
     assert
       .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
       .exists({ count: 3 });
@@ -629,22 +574,15 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       )
       .hasNoValue();
 
-    await click('[data-test-accordion-item="playground"] button');
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-choose-another-instance]');
+    await togglePlaygroundPanel();
+    await chooseAnotherInstance();
     assert
       .dom('[data-test-field-chooser] [data-test-field-instance]')
       .exists({ count: 3 });
   });
 
   test('can create new field instance when spec exists but has no examples', async function (assert) {
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}author.gts`,
-    });
-    await selectDeclaration('FullNameField');
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
     assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
     assert.dom('[data-test-field-preview-header]').doesNotExist();
 
@@ -661,8 +599,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     await fillIn('[data-test-field="firstName"] input', 'Marco');
     await fillIn('[data-test-field="lastName"] input', 'N.');
 
-    await click('[data-test-instance-chooser]');
-    await click('[data-test-choose-another-instance]');
+    await chooseAnotherInstance();
     assert
       .dom('[data-test-field-chooser] [data-test-field-instance]')
       .exists({ count: 1 });
@@ -671,7 +608,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .hasText('Marco N.');
     await click('[data-test-field-chooser] [data-test-close-modal]');
 
-    await click('[data-test-accordion-item="spec-preview"] button');
+    await toggleSpecPanel();
     assert
       .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
       .exists({ count: 1 });
@@ -708,13 +645,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       </template>
       }
     }`;
-    await visitOperatorMode({
-      stacks: [],
-      submode: 'code',
-      codePath: `${testRealmURL}blog-post.gts`,
-    });
-    await selectDeclaration('Comment');
-    await click('[data-test-accordion-item="playground"] button');
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
