@@ -50,7 +50,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     let codeIsSearchReplaceBlock = searchReplaceRegex.test(code);
 
     if (!codeIsSearchReplaceBlock) {
-      return; // only allow applying search/replace blocks
+      return; // only show apply button for search/replace code blocks
     }
 
     this.codeActions.push(
