@@ -39,11 +39,9 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import PrerenderedCardSearch, {
-  PrerenderedCard,
-} from '@cardstack/host/components/prerendered-card-search';
 import Preview from '@cardstack/host/components/preview';
-import { getCard } from '@cardstack/host/resources/card-resource';
+
+import { getSearch } from '@cardstack/host/resources/search';
 
 import {
   CardOrFieldDeclaration,
@@ -85,7 +83,6 @@ interface Signature {
             | 'showCreateSpecIntent'
             | 'canWrite'
             | 'onSelectCard'
-            | 'selectedId'
             | 'spec'
             | 'isLoading'
             | 'cards'
@@ -172,8 +169,7 @@ interface ContentSignature {
     showCreateSpecIntent: boolean;
     canWrite: boolean;
     onSelectCard: (cardId: string) => void;
-    selectedId: string;
-    cards: PrerenderedCard[];
+    cards: Spec[];
     spec: Spec | undefined;
     isLoading: boolean;
   };
@@ -182,11 +178,6 @@ interface ContentSignature {
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-
-  constructor(owner: Owner, args: ContentSignature['Args']) {
-    super(owner, args);
-    this.initializeCardSelection();
-  }
 
   get onlyOneInstance() {
     return this.args.cards.length === 1;
@@ -197,13 +188,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   get cardIds() {
-    return this.args.cards.map((card) => card.url);
-  }
-
-  @action initializeCardSelection() {
-    if (this.shouldSelectFirstCard) {
-      this.args.onSelectCard(this.cardIds[0]);
-    }
+    return this.args.cards.map((card) => card.id);
   }
 
   getDropdownData = (id: string) => {
@@ -227,13 +212,21 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return !this.args.canWrite && this.args.cards.length === 0;
   }
 
+  get selectedId() {
+    return this.args.spec?.id;
+  }
+
   @action viewSpecInstance() {
-    if (!this.args.selectedId) {
+    if (!this.selectedId) {
       return;
     }
 
-    const selectedUrl = new URL(this.args.selectedId);
+    const selectedUrl = new URL(this.selectedId);
     this.operatorModeStateService.updateCodePath(selectedUrl);
+  }
+
+  get hasCardId() {
+    return this.args.spec && this.args.spec.id;
   }
 
   <template>
@@ -255,13 +248,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
       {{else}}
 
-        {{#if @spec}}
+        {{#if this.hasCardId}}
           <div class='spec-preview'>
             <div class='spec-selector-container'>
               <div class='spec-selector' data-test-spec-selector>
                 <BoxelSelect
                   @options={{this.cardIds}}
-                  @selected={{@selectedId}}
+                  @selected={{this.selectedId}}
                   @onChange={{@onSelectCard}}
                   @matchTriggerWidth={{true}}
                   @disabled={{this.onlyOneInstance}}
@@ -396,7 +389,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare cardService: CardService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @tracked private _selectedCardId?: string;
-  @tracked private newCardJSON: LooseSingleCardDocument | undefined;
+  // @tracked private newCardJSON: LooseSingleCardDocument | undefined;
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -422,7 +415,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       if (isResolvedCodeRef(maybeRef)) {
         ref = maybeRef;
       }
-      this.newCardJSON = {
+      let doc = {
         data: {
           attributes: {
             specType,
@@ -435,11 +428,21 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           },
         },
       };
-      await this.cardResource.loaded;
+      try {
+        let card = await this.cardService.createFromSerialized(doc.data, doc);
+        if (!card) {
+          throw new Error(
+            `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+          );
+        }
+        await this.cardService.saveModel(card);
+      } catch (e: any) {
+        console.log('Error saving', e);
+      }
       if (this.card) {
         this._selectedCardId = this.card.id;
         this.updateFieldSpecForPlayground(this.card.id);
-        this.newCardJSON = undefined;
+        // this.newCardJSON = undefined;
       }
     },
   );
@@ -545,26 +548,34 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private cardResource = getCard(
+  search = getSearch(
     this,
-    () => this.newCardJSON ?? this._selectedCardId,
-    {
-      isAutoSave: () => true,
-    },
+    () => this.specQuery,
+    () => this.realms,
+    { isLive: true },
   );
 
+  get cards() {
+    return this.search.instances as Spec[];
+  }
+
   get card() {
-    if (!this.cardResource.card) {
-      return undefined;
+    if (this._selectedCardId) {
+      let selectedCard = this.cards.find(
+        (card) => card.id === this._selectedCardId,
+      );
+      if (selectedCard) {
+        return selectedCard as Spec;
+      }
     }
-    return this.cardResource.card as Spec;
+    return this.cards?.[0] as Spec;
   }
 
   get specType() {
     return this.card?.specType as SpecType;
   }
 
-  getSpecIntent = (cards: PrerenderedCard[]) => {
+  getSpecIntent = (cards: any[]) => {
     return cards.length === 0 && this.canWrite;
   };
 
@@ -600,49 +611,41 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
-    <PrerenderedCardSearch
-      @query={{this.specQuery}}
-      @format='fitted'
-      @realms={{this.realms}}
-    >
-      <:response as |cards|>
-        {{#let (this.getSpecIntent cards) as |showCreateSpecIntent|}}
-          {{yield
-            (component
-              SpecPreviewTitle
-              showCreateSpecIntent=showCreateSpecIntent
-              createSpec=this.createSpec
-              isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-              specType=this.specType
-              numberOfInstances=cards.length
-            )
-            (component
-              SpecPreviewContent
-              showCreateSpecIntent=showCreateSpecIntent
-              canWrite=this.canWrite
-              onSelectCard=this.onSelectCard
-              selectedId=this._selectedCardId
-              spec=this.card
-              isLoading=false
-              cards=cards
-            )
-          }}
-        {{/let}}
-      </:response>
-      <:loading>
-        {{yield
-          (component
-            SpecPreviewTitle
-            showCreateSpecIntent=false
-            createSpec=this.createSpec
-            isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-            specType=this.specType
-            numberOfInstances=0
-          )
-          (component SpecPreviewLoading)
-        }}
-      </:loading>
-    </PrerenderedCardSearch>
+    {{#let (this.getSpecIntent this.cards) as |showCreateSpecIntent|}}
+      {{yield
+        (component
+          SpecPreviewTitle
+          showCreateSpecIntent=showCreateSpecIntent
+          createSpec=this.createSpec
+          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+          specType=this.specType
+          numberOfInstances=this.cards.length
+        )
+        (component
+          SpecPreviewContent
+          showCreateSpecIntent=showCreateSpecIntent
+          canWrite=this.canWrite
+          onSelectCard=this.onSelectCard
+          spec=this.card
+          isLoading=false
+          cards=this.cards
+        )
+      }}
+    {{/let}}
+
+    {{!-- <:loading>
+      {{yield
+        (component
+          SpecPreviewTitle
+          showCreateSpecIntent=false
+          createSpec=this.createSpec
+          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+          specType=this.specType
+          numberOfInstances=0
+        )
+        (component SpecPreviewLoading)
+      }}
+    </:loading> --}}
   </template>
 }
 
