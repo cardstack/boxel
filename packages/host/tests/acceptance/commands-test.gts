@@ -579,25 +579,23 @@ module('Acceptance | Commands tests', function (hooks) {
       required: ['attributes', 'description'],
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Switching to code submode',
+      body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Switching to code submode',
+      formatted_body: '',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
           name: toolName,
           arguments: {
+            description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await waitFor('[data-test-submode-switcher=code]');
     assert.dom('[data-test-submode-switcher=code]').exists();
@@ -643,23 +641,21 @@ module('Acceptance | Commands tests', function (hooks) {
     let boxelMessageData = JSON.parse(message.content.data);
     let toolName = boxelMessageData.context.tools[0].function.name;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Delaying 1 second',
+      body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Delaying 1 second',
+      formatted_body: '',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
           name: toolName,
           arguments: {
+            description: 'Delaying 1 second',
             attributes: {},
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await waitFor(
       '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
@@ -847,14 +843,17 @@ module('Acceptance | Commands tests', function (hooks) {
     let meetingCardId = parsedCard.data.id;
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Update card',
+      body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Update card',
+      formatted_body: '',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
           arguments: {
+            description:
+              'Change the topic of the meeting to "Meeting with Hassan"',
             attributes: {
               cardId: meetingCardId,
               patch: {
@@ -866,10 +865,6 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
 
     await waitUntil(
@@ -976,6 +971,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Show the card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
@@ -1138,6 +1134,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Inspecting the current UI state',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
@@ -1146,10 +1143,6 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await settled();
     assert
@@ -1197,6 +1190,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Getting weather information for London',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
@@ -1207,10 +1201,6 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
 
     await settled();
@@ -1257,6 +1247,7 @@ module('Acceptance | Commands tests', function (hooks) {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         formatted_body: 'Will it boom?',
         format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
         [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
           {
             id: '8406a6eb-a3d5-494f-a7f3-ae9880115756',
