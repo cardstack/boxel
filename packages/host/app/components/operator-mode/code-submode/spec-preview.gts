@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -243,6 +244,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         fieldType: entry.meta.fieldType,
         fieldName: entry.meta.fieldName,
         format: entry.meta.format,
+        overlayZIndexStyle: htmlSafe(`z-index: 100`),
       }));
   }
 
@@ -346,6 +348,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               </BoxelButton>
             </div>
             <Overlays
+              @overlayClassName='spec-preview-overlay'
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @onSelectCard={{this.viewCardInPlayground}}
             />
@@ -392,6 +395,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         width: 100%;
         align-content: center;
         text-align: center;
+      }
+      .spec-preview-overlay {
+        pointer-events: none;
+        border-radius: var(--boxel-border-radius);
+        box-shadow: 0 0 0 1px var(--boxel-dark);
       }
       .spec-selector-container {
         display: flex;

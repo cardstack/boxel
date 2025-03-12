@@ -65,7 +65,7 @@ export default class Overlays extends Component<OverlaySignature> {
       }}
         {{#if (this.shouldRenderOverlay renderedCard isSelected)}}
           <div
-            class='base-overlay'
+            class={{this.overlayClassName}}
             {{velcro renderedCard.element middleware=(array this.offset)}}
             style={{renderedCard.overlayZIndexStyle}}
             ...attributes
@@ -158,7 +158,10 @@ export default class Overlays extends Component<OverlaySignature> {
         );
       });
       renderedCard.element.style.cursor = 'pointer';
-      renderedCard.overlayZIndexStyle = this.zIndexStyle(renderedCard.element);
+      renderedCard.overlayZIndexStyle = this.zIndexStyle(
+        renderedCard.element,
+        renderedCard.overlayZIndexStyle,
+      );
     }
 
     return renderedCards;
@@ -237,7 +240,11 @@ export default class Overlays extends Component<OverlaySignature> {
     },
   );
 
-  protected zIndexStyle(element: HTMLElement) {
+  protected zIndexStyle(element: HTMLElement, overlayZIndexStyle?: SafeString) {
+    if (overlayZIndexStyle) {
+      return overlayZIndexStyle;
+    }
+
     let parentElement = element.parentElement!;
     let zIndexParentElement = window
       .getComputedStyle(parentElement)
