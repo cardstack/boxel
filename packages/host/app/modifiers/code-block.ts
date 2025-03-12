@@ -65,8 +65,9 @@ export default class CodeBlock extends Modifier<Signature> {
       let lines = content.split('\n').length;
 
       // When the model responds with a code patch block, the source code editing skill
-      // will demand the first comment is a file url comment, like this: // File url: http://localhost:4201/user/realn/card.gts
-      // We need this url so that we can apply the code patch to the file
+      // will dictate that the first comment in the search/replace file block
+      // is a file url comment, like this: // File url: http://localhost:4201/user/realm/card.gts
+      // We need this url so that we know which file the code patch applies to
       let fileUrl = undefined;
       ({ content, fileUrl } = extractFileUrlAndOverrideContent(content));
 
