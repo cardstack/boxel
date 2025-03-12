@@ -1,10 +1,25 @@
+import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 
+import { tracked } from '@glimmer/tracking';
+
+import { task } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
 import CodeBlock from '@cardstack/host/modifiers/code-block';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
+import type CardService from '@cardstack/host/services/card-service';
+import CommandService from '@cardstack/host/services/command-service';
+import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+
+import ApplyButton from '../ai-assistant/apply-button';
 
 interface FormattedMessageSignature {
   sanitizedHtml: SafeString;
@@ -12,7 +27,72 @@ interface FormattedMessageSignature {
   renderCodeBlocks: boolean;
 }
 
+interface CodeAction {
+  fileUrl: string;
+  code: string;
+  containerElement: HTMLDivElement;
+  state: 'ready' | 'applying' | 'applied' | 'failed';
+}
+
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
+  @tracked codeActions: TrackedArray<CodeAction> = new TrackedArray([]);
+  @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
+  @service private declare commandService: CommandService;
+
+  registerCodeBlockContainer = (
+    fileUrl: string,
+    code: string,
+    codeActionContainerElement: HTMLDivElement,
+  ) => {
+    let searchReplaceRegex =
+      /<<<<<<< SEARCH\n(.*)\n=======\n(.*)\n>>>>>>> REPLACE/s;
+    let codeIsSearchReplaceBlock = searchReplaceRegex.test(code);
+
+    if (!codeIsSearchReplaceBlock) {
+      return; // only allow applying search/replace blocks
+    }
+
+    this.codeActions.push(
+      new TrackedObject({
+        fileUrl,
+        code,
+        containerElement: codeActionContainerElement,
+        state: 'ready' as CodeAction['state'],
+      }),
+    );
+  };
+
+  private patchCodeTask = task(async (codeAction: CodeAction) => {
+    codeAction.state = 'applying';
+    try {
+      let source = await this.cardService.getSource(
+        new URL(codeAction.fileUrl),
+      );
+
+      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+        this.commandService.commandContext,
+      );
+
+      let { resultContent: patchedCode } =
+        await applySearchReplaceBlockCommand.execute({
+          fileContent: source,
+          codeBlock: codeAction.code,
+        });
+
+      await this.cardService.saveSource(
+        new URL(codeAction.fileUrl),
+        patchedCode,
+      );
+      this.loaderService.reset();
+
+      codeAction.state = 'applied';
+    } catch (error) {
+      console.error(error);
+      codeAction.state = 'failed';
+    }
+  });
+
   <template>
     {{#if @renderCodeBlocks}}
       <div
@@ -22,9 +102,19 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           languageAttr='data-codeblock'
           monacoSDK=@monacoSDK
           editorDisplayOptions=this.editorDisplayOptions
+          registerCodeBlockContainer=this.registerCodeBlockContainer
         }}
       >
         {{@sanitizedHtml}}
+
+        {{#each this.codeActions as |codeAction|}}
+          {{#in-element codeAction.containerElement}}
+            <ApplyButton
+              @state={{codeAction.state}}
+              {{on 'click' (fn (perform this.patchCodeTask) codeAction)}}
+            />
+          {{/in-element}}
+        {{/each}}
       </div>
     {{else}}
       <div class='message'>
@@ -33,7 +123,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     {{/if}}
 
     <style scoped>
-      /* code blocks can be rendered inline and as blocks, 
+      /* code blocks can be rendered inline and as blocks,
          this is the styling for when it is rendered as a block */
       .message > :deep(.preview-code.code-block) {
         width: calc(100% + 2 * var(--boxel-sp));
@@ -84,7 +174,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
       }
 
-      /* we are cribbing the boxel-ui style here as we have a rather 
+      /* we are cribbing the boxel-ui style here as we have a rather
       awkward way that we insert the copy button */
       :deep(.code-copy-button) {
         --spacing: calc(1rem / 1.333);
@@ -114,6 +204,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       }
       :deep(.code-copy-button:hover .copy-text) {
         color: var(--boxel-highlight);
+      }
+
+      :deep(.code-actions) {
+        position: absolute;
+        top: 10px;
+        right: 10px;
       }
     </style>
   </template>
