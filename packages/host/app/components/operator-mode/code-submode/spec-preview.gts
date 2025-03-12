@@ -4,16 +4,16 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
-
 import { tracked } from '@glimmer/tracking';
 
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import Brain from '@cardstack/boxel-icons/brain';
 import DotIcon from '@cardstack/boxel-icons/dot';
-
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
+
 import { task } from 'ember-concurrency';
+import window from 'ember-window-mock';
 
 import {
   BoxelButton,
@@ -31,6 +31,7 @@ import {
   specRef,
   isCardDef,
   isFieldDef,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import {
@@ -50,11 +51,14 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
-import CardService from '@cardstack/host/services/card-service';
+import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import RealmService from '@cardstack/host/services/realm';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
@@ -390,6 +394,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
+  @service private declare playgroundPanelService: PlaygroundPanelService;
   @tracked private _selectedCardId?: string;
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
 
@@ -433,6 +438,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       await this.cardResource.loaded;
       if (this.card) {
         this._selectedCardId = this.card.id;
+        this.updateFieldSpecForPlayground(this.card.id);
         this.newCardJSON = undefined;
       }
     },
@@ -532,6 +538,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   @action onSelectCard(cardId: string): void {
     this._selectedCardId = cardId;
+    this.updateFieldSpecForPlayground(cardId);
   }
 
   get canWrite() {
@@ -559,6 +566,37 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   getSpecIntent = (cards: PrerenderedCard[]) => {
     return cards.length === 0 && this.canWrite;
+  };
+
+  // When previewing a field spec, changing the spec in Spec panel should
+  // change the selected spec in Playground panel
+  private updateFieldSpecForPlayground = (id: string) => {
+    let declaration = this.args.selectedDeclaration;
+    if (
+      !declaration?.exportName ||
+      !isCardOrFieldDeclaration(declaration) ||
+      !isFieldDef(declaration.cardOrField)
+    ) {
+      return;
+    }
+    let moduleId = internalKeyFor(
+      this.getSelectedDeclarationAsCodeRef,
+      undefined,
+    );
+    let cardId = id.replace(/\.json$/, '');
+    let selections = window.localStorage.getItem(PlaygroundSelections);
+    if (selections) {
+      let selection = JSON.parse(selections)[moduleId];
+      if (selection?.cardId === cardId) {
+        return;
+      }
+    }
+    this.playgroundPanelService.persistSelections(
+      moduleId,
+      cardId,
+      'embedded',
+      0,
+    );
   };
 
   <template>

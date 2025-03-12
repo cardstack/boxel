@@ -23,10 +23,14 @@ import {
   assertMessages,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import {
+  selectDeclaration,
+  getPlaygroundSelections,
+} from '../../helpers/playground';
 import { setupApplicationTest } from '../../helpers/setup';
 
 let matrixRoomId: string;
-module('Acceptance | code-submode | playground panel', function (hooks) {
+module('Acceptance | code-submode | card playground', function (hooks) {
   let realm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
@@ -42,97 +46,86 @@ module('Acceptance | code-submode | playground panel', function (hooks) {
   setupOnSave(hooks);
 
   const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-import { Component } from 'https://cardstack.com/base/card-api';
-import CodeRefField from 'https://cardstack.com/base/code-ref';
-export class CodeRefDriver extends CardDef {
-  static displayName = "Code Ref Driver";
-  @field ref = contains(CodeRefField);
-}`;
+    import { Component } from 'https://cardstack.com/base/card-api';
+    import CodeRefField from 'https://cardstack.com/base/code-ref';
+    export class CodeRefDriver extends CardDef {
+      static displayName = "Code Ref Driver";
+      @field ref = contains(CodeRefField);
+  }`;
 
   const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from "https://cardstack.com/base/string";
-export class Author extends CardDef {
-  static displayName = 'Author';
-  @field firstName = contains(StringField);
-  @field lastName = contains(StringField);
-  @field bio = contains(MarkdownField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Author) {
-      return [this.firstName, this.lastName].filter(Boolean).join(' ');
-    },
-  });
-  static isolated = class Isolated extends Component<typeof this> {
-  <template>
-    <article>
-      <header>
-        <h1 data-test-author-title><@fields.title /></h1>
-      </header>
-      <div data-test-author-bio><@fields.bio /></div>
-    </article>
-    <style scoped>
-      article {
-        margin-inline: 20px;
+    import MarkdownField from 'https://cardstack.com/base/markdown';
+    import StringField from "https://cardstack.com/base/string";
+    export class Author extends CardDef {
+      static displayName = 'Author';
+      @field firstName = contains(StringField);
+      @field lastName = contains(StringField);
+      @field bio = contains(MarkdownField);
+      @field title = contains(StringField, {
+        computeVia: function (this: Author) {
+          return [this.firstName, this.lastName].filter(Boolean).join(' ');
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article>
+          <header>
+            <h1 data-test-author-title><@fields.title /></h1>
+          </header>
+          <div data-test-author-bio><@fields.bio /></div>
+        </article>
+        <style scoped>
+          article {
+            margin-inline: 20px;
+          }
+        </style>
+      </template>
       }
-    </style>
-  </template>
-  }
-}`;
+  }`;
 
   const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-import DatetimeField from 'https://cardstack.com/base/datetime';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from "https://cardstack.com/base/string";
-import { Author } from './author';
+    import DatetimeField from 'https://cardstack.com/base/datetime';
+    import MarkdownField from 'https://cardstack.com/base/markdown';
+    import { Author } from './author';
 
-export class Category extends CardDef {
-  static displayName = 'Category';
-  static fitted = class Fitted extends Component<typeof this> {
-  <template>
-    <div data-test-category-fitted><@fields.title /></div>
-  </template>
-  }
-}
-
-class Status extends StringField {
-  static displayName = 'Status';
-}
-
-export class BlogPost extends CardDef {
-  static displayName = 'Blog Post';
-  @field publishDate = contains(DatetimeField);
-  @field author = linksTo(Author);
-  @field categories = linksToMany(Category);
-  @field body = contains(MarkdownField);
-  @field status = contains(Status, {
-    computeVia: function (this: BlogPost) {
-      if (!this.publishDate) {
-        return 'Draft';
+    export class Category extends CardDef {
+      static displayName = 'Category';
+      static fitted = class Fitted extends Component<typeof this> {
+      <template>
+        <div data-test-category-fitted><@fields.title /></div>
+      </template>
       }
-      if (Date.now() >= Date.parse(String(this.publishDate))) {
-        return 'Published';
-      }
-      return 'Scheduled';
-    },
-  });
+    }
 
-  static isolated = class Isolated extends Component<typeof this> {
-  <template>
-    <article>
-      <header>
-        <h1 data-test-post-title><@fields.title /></h1>
-      </header>
-      <div data-test-byline><@fields.author /></div>
-      <div data-test-post-body><@fields.body /></div>
-    </article>
-    <style scoped>
-      article {
-        margin-inline: 20px;
+    class LocalCategoryCard extends Category {}
+
+    export class RandomClass {}
+
+    export class BlogPost extends CardDef {
+      static displayName = 'Blog Post';
+      @field publishDate = contains(DatetimeField);
+      @field author = linksTo(Author);
+      @field categories = linksToMany(Category);
+      @field localCategories = linksToMany(LocalCategoryCard);
+      @field body = contains(MarkdownField);
+
+      static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article>
+          <header>
+            <h1 data-test-post-title><@fields.title /></h1>
+          </header>
+          <div data-test-byline><@fields.author /></div>
+          <div data-test-post-body><@fields.body /></div>
+        </article>
+        <style scoped>
+          article {
+            margin-inline: 20px;
+          }
+        </style>
+      </template>
       }
-    </style>
-  </template>
-  }
-}`;
+  }`;
 
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
@@ -261,7 +254,7 @@ export class BlogPost extends CardDef {
         [testRealmURL, 'Author/jane-doe.json'],
       ]),
     );
-    window.localStorage.setItem(PlaygroundSelections, '');
+    window.localStorage.removeItem(PlaygroundSelections);
 
     setActiveRealms([testRealmURL]);
     setRealmPermissions({
@@ -269,7 +262,7 @@ export class BlogPost extends CardDef {
     });
   });
 
-  test('can render playground panel when a card def is selected', async function (assert) {
+  test('can render playground panel when an exported card def is selected', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}blog-post.gts`,
@@ -279,26 +272,37 @@ export class BlogPost extends CardDef {
         '[data-test-in-this-file-selector] [data-test-boxel-selector-item-selected] [data-test-boxel-selector-item-text="Category"]',
       )
       .exists();
-    assert.dom('[data-test-accordion-item="playground"]').exists();
-
-    // TODO: extend playground to field defs and test that it only works for field and card defs
-    await click(
-      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="Status"]',
-    );
     assert
       .dom('[data-test-accordion-item="playground"]')
-      .doesNotExist('playground panel currently only exists for card defs');
-
-    await click(
-      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
-    );
+      .exists(
+        'playground accordion item exists for Category (exported card def)',
+      );
     await click('[data-test-accordion-item="playground"] button');
-    assert.dom('[data-test-playground-panel]').exists();
+    assert
+      .dom('[data-test-playground-panel]')
+      .exists('playground panel exists for Category (exported card def)');
+
+    await selectDeclaration('LocalCategoryCard');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist(
+        'playground does not exist for LocalCategory (local card def)',
+      );
+
+    await selectDeclaration('RandomClass');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist('does not exist for RandomClass (not a card or field def)');
+
+    await selectDeclaration('BlogPost');
+    assert
+      .dom('[data-test-playground-panel]')
+      .exists('exists for BlogPost (exported card def)');
   });
 
   test('can populate instance chooser dropdown options from recent files', async function (assert) {
-    window.localStorage.setItem('recent-files', '');
-    window.localStorage.setItem(PlaygroundSelections, '');
+    window.localStorage.removeItem('recent-files');
+    window.localStorage.removeItem(PlaygroundSelections);
 
     await visitOperatorMode({
       submode: 'code',
@@ -341,9 +345,7 @@ export class BlogPost extends CardDef {
     await click('[data-option-index="0"]');
     assert.dom('[data-test-selected-item]').containsText('City Design');
 
-    await click(
-      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
-    );
+    await selectDeclaration('BlogPost');
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 3 });
     assert.dom('[data-option-index="0"]').containsText('Mad As a Hatter');
@@ -403,12 +405,11 @@ export class BlogPost extends CardDef {
     assertCardExists('Author/jane-doe');
 
     await click(`[data-test-recent-file="${testRealmURL}blog-post.gts"]`);
+    await click('[data-test-accordion-item="playground"] button');
     assert.dom('[data-test-selected-item]').hasText('City Design');
     assertCardExists('Category/city-design');
 
-    await click(
-      '[data-test-in-this-file-selector] [data-test-boxel-selector-item-text="BlogPost"]',
-    );
+    await selectDeclaration('BlogPost');
     assert.dom('[data-test-selected-item]').containsText('Remote Work');
     assertCardExists('BlogPost/remote-work');
   });
@@ -495,11 +496,11 @@ export class BlogPost extends CardDef {
     assert
       .dom('[data-test-author-bio]')
       .containsText('Jane Doe is the Senior Managing Editor');
-    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+    assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
 
-    await click('[data-test-format-chooser-embedded]');
-    assert.dom('[data-test-format-chooser-isolated]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-embedded]').hasClass('active');
+    await click('[data-test-format-chooser="embedded"]');
+    assert.dom('[data-test-format-chooser="isolated"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .doesNotExist();
@@ -509,9 +510,9 @@ export class BlogPost extends CardDef {
       )
       .exists();
 
-    await click('[data-test-format-chooser-edit]');
-    assert.dom('[data-test-format-chooser-embedded]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-edit]').hasClass('active');
+    await click('[data-test-format-chooser="edit"]');
+    assert.dom('[data-test-format-chooser="embedded"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-boxel-card-header-title]')
       .hasText('Author');
@@ -521,9 +522,9 @@ export class BlogPost extends CardDef {
       )
       .exists();
 
-    await click('[data-test-format-chooser-atom]');
-    assert.dom('[data-test-format-chooser-edit]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-atom]').hasClass('active');
+    await click('[data-test-format-chooser="atom"]');
+    assert.dom('[data-test-format-chooser="edit"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="atom"]').hasClass('active');
 
     assert
       .dom('[data-test-atom-preview]')
@@ -531,9 +532,9 @@ export class BlogPost extends CardDef {
         'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do Jane Doe tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.',
       );
 
-    await click('[data-test-format-chooser-fitted]');
-    assert.dom('[data-test-format-chooser-atom]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-fitted]').hasClass('active');
+    await click('[data-test-format-chooser="fitted"]');
+    assert.dom('[data-test-format-chooser="atom"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="fitted"]').hasClass('active');
     assert
       .dom('[data-test-playground-panel] [data-test-card-format="fitted"]')
       .exists({ count: 16 });
@@ -553,23 +554,23 @@ export class BlogPost extends CardDef {
       .hasText('Author');
     assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
     assert.dom('[data-test-author-title]').hasText('Jane Doe');
-    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+    assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
     await click(
       '[data-test-boxel-card-header-actions] [data-test-edit-button]',
     );
 
     assert.dom(`${playgroundCard}[data-test-card-format="edit"]`).exists();
     assert.dom('[data-test-card-header]').hasClass('is-editing');
-    assert.dom('[data-test-format-chooser-isolated]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-edit]').hasClass('active');
+    assert.dom('[data-test-format-chooser="isolated"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
     await click(
       '[data-test-boxel-card-header-actions] [data-test-edit-button]',
     );
 
     assert.dom(`${playgroundCard}[data-test-card-format="isolated"]`).exists();
     assert.dom('[data-test-card-header]').hasNoClass('is-editing');
-    assert.dom('[data-test-format-chooser-edit]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser-isolated]').hasClass('active');
+    assert.dom('[data-test-format-chooser="edit"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
   });
 
   test('can use the header context menu to open instance in edit format in interact mode', async function (assert) {
@@ -580,7 +581,7 @@ export class BlogPost extends CardDef {
     await click('[data-test-accordion-item="playground"] button');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="0"]');
-    await click('[data-test-format-chooser-edit]');
+    await click('[data-test-format-chooser="edit"]');
     await click('[data-test-more-options-button]');
     await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
     assert
@@ -647,7 +648,7 @@ export class BlogPost extends CardDef {
     assert.deepEqual(recentFiles[0], [
       testRealmURL,
       'blog-post.gts',
-      { column: 38, line: 7 },
+      { line: 6, column: 42 },
     ]);
     await click('[data-boxel-selector-item-text="BlogPost"]');
     await click('[data-test-accordion-item="playground"] button');
@@ -737,34 +738,34 @@ export class BlogPost extends CardDef {
   test('playground preview for card with contained fields can live update when module changes', async function (assert) {
     // change: added "Hello" before rendering title on the template
     const authorCard = `import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import StringField from "https://cardstack.com/base/string";
-export class Author extends CardDef {
-  static displayName = 'Author';
-  @field firstName = contains(StringField);
-  @field lastName = contains(StringField);
-  @field bio = contains(MarkdownField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Author) {
-      return [this.firstName, this.lastName].filter(Boolean).join(' ');
-    },
-  });
-  static isolated = class Isolated extends Component<typeof this> {
-<template>
-  <article>
-    <header>
-      <h1 data-test-author-title>Hello <@fields.title /></h1>
-    </header>
-    <div data-test-author-bio><@fields.bio /></div>
-  </article>
-  <style scoped>
-    article {
-      margin-inline: 20px;
-    }
-  </style>
-</template>
-  }
-}`;
+      import MarkdownField from 'https://cardstack.com/base/markdown';
+      import StringField from "https://cardstack.com/base/string";
+      export class Author extends CardDef {
+        static displayName = 'Author';
+        @field firstName = contains(StringField);
+        @field lastName = contains(StringField);
+        @field bio = contains(MarkdownField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Author) {
+            return [this.firstName, this.lastName].filter(Boolean).join(' ');
+          },
+        });
+        static isolated = class Isolated extends Component<typeof this> {
+      <template>
+        <article>
+          <header>
+            <h1 data-test-author-title>Hello <@fields.title /></h1>
+          </header>
+          <div data-test-author-bio><@fields.bio /></div>
+        </article>
+        <style scoped>
+          article {
+            margin-inline: 20px;
+          }
+        </style>
+      </template>
+        }
+      }`;
     await visitOperatorMode({
       stacks: [],
       submode: 'code',
@@ -891,13 +892,6 @@ export class BlogPost extends CardDef {
         },
       }),
     );
-    const getSelection = (moduleId: string) => {
-      let selections = window.localStorage.getItem(PlaygroundSelections);
-      if (!selections) {
-        throw new Error('No selections found in mock local storage');
-      }
-      return JSON.parse(selections)[moduleId];
-    };
     const assertCorrectFormat = (
       cardId: string,
       format: Format,
@@ -911,11 +905,12 @@ export class BlogPost extends CardDef {
       submode: 'code',
       codePath: `${testRealmURL}author.gts`,
     });
+    await click('[data-test-accordion-item="playground"] button');
     assertCorrectFormat(authorId, 'edit');
-    await click('[data-test-format-chooser-atom]'); // change selected format
+    await click('[data-test-format-chooser="atom"]'); // change selected format
     assertCorrectFormat(authorId, 'atom');
     assert.deepEqual(
-      getSelection(authorModuleId),
+      getPlaygroundSelections()?.[authorModuleId],
       {
         cardId: authorId,
         format: 'atom',
@@ -925,13 +920,14 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="blog-post.gts"]'); // change open file
+    await click('[data-test-accordion-item="playground"] button');
     assertCorrectFormat(categoryId1, 'embedded');
 
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]'); // change selected instance
     assertCorrectFormat(categoryId2, 'embedded');
     assert.deepEqual(
-      getSelection(categoryModuleId),
+      getPlaygroundSelections()?.[categoryModuleId],
       {
         cardId: categoryId2,
         format: 'embedded',
@@ -942,22 +938,22 @@ export class BlogPost extends CardDef {
     await click('[data-test-inspector-toggle]');
     await click('[data-test-boxel-selector-item-text="BlogPost"]'); // change selected module
     assertCorrectFormat(blogPostId1, 'isolated', 'default format is correct');
-    await click('[data-test-format-chooser-fitted]'); // change selected format
-    assert.deepEqual(getSelection(blogPostModuleId), {
+    await click('[data-test-format-chooser="fitted"]'); // change selected format
+
+    assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
       cardId: blogPostId1,
       format: 'fitted',
     });
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]'); // change selected instance
     assertCorrectFormat(blogPostId2, 'fitted');
-    assert.deepEqual(getSelection(blogPostModuleId), {
+    assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
       cardId: blogPostId2,
       format: 'fitted',
     });
 
-    let selections = window.localStorage.getItem(PlaygroundSelections);
     assert.strictEqual(
-      selections,
+      JSON.stringify(getPlaygroundSelections()),
       JSON.stringify({
         [`${authorModuleId}`]: {
           cardId: authorId,
@@ -1017,6 +1013,7 @@ export class BlogPost extends CardDef {
 
     await click('[data-test-file-browser-toggle]');
     await click('[data-test-file="blog-post.gts"]');
+    await click('[data-test-accordion-item="playground"] button');
     await click('[data-test-instance-chooser]');
     await click('[data-option-index="1"]');
     assert

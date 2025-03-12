@@ -1,4 +1,5 @@
 import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
 import {
   CardDef,
   FieldDef,
@@ -11,7 +12,6 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import { CardContainer, FieldContainer } from '@cardstack/boxel-ui/components';
 import { Country } from './country';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
-import NumberField from '../base/number';
 
 class TravelGoal extends FieldDef {
   static displayName = 'Travel Goal';

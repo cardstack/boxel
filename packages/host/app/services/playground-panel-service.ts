@@ -8,11 +8,14 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import { Format } from 'https://cardstack.com/base/card-api';
 
+export interface PlaygroundSelection {
+  cardId: string;
+  format: Format;
+  fieldIndex?: number;
+}
+
 export default class PlaygroundPanelService extends Service {
-  private playgroundSelections: Record<
-    string, // moduleId
-    { cardId: string; format: Format }
-  >;
+  private playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
 
   constructor(owner: Owner) {
     super(owner);
@@ -23,8 +26,13 @@ export default class PlaygroundPanelService extends Service {
     );
   }
 
-  persistSelections = (moduleId: string, cardId: string, format: Format) => {
-    this.playgroundSelections[moduleId] = { cardId, format };
+  persistSelections = (
+    moduleId: string,
+    cardId: string,
+    format: Format,
+    fieldIndex: number | undefined,
+  ) => {
+    this.playgroundSelections[moduleId] = { cardId, format, fieldIndex };
     window.localStorage.setItem(
       PlaygroundSelections,
       JSON.stringify(this.playgroundSelections),
