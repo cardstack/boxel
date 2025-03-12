@@ -555,7 +555,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await waitFor('[data-test-card-url-bar-input]');
     assert
       .dom('[data-test-card-url-bar-input]')
-      .hasValue(`${testRealmURL}person-entry`);
+      .hasValue(`${testRealmURL}person-entry.json`);
 
     await waitFor('[data-test-editor]');
     assert.dom('[data-test-editor]').hasAnyText();
