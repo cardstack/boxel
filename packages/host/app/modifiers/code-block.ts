@@ -171,8 +171,9 @@ export default class CodeBlock extends Modifier<Signature> {
 
 function makeCodeActionsContainerDiv() {
   let template = document.createElement('template');
+  let randomId = Math.random().toString(36).substring(2, 15);
   template.innerHTML = `
-    <div id=${Math.random().toString(36).substring(2, 15)} class="code-actions">
+    <div id=${randomId} class="code-actions">
     </div>
   `.trim();
   return template.content.firstChild as HTMLDivElement;
