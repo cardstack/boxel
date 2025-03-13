@@ -1,7 +1,6 @@
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { tracked } from '@glimmer/tracking';
 
 import { velcro } from 'ember-velcro';
 
@@ -35,7 +34,7 @@ import { StackItemRenderedCardForOverlayActions } from './stack-item';
 import type { CardDefOrId } from './stack-item';
 
 export default class OperatorModeOverlays extends Overlays {
-  @tracked overlayClassName = this.args.overlayClassName ?? 'actions-overlay';
+  overlayClassName = 'actions-overlay';
 
   get renderedCardsForOverlayActionsWithEvents() {
     return super

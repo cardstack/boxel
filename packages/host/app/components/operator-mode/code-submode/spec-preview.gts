@@ -72,8 +72,6 @@ import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import ElementTracker from '../../../resources/element-tracker';
 import Overlays, { RenderedCardForOverlayActions } from '../overlays';
 
-import { CardDefOrId } from '../stack-item';
-
 import type { WithBoundArgs } from '@glint/template';
 
 interface Signature {
@@ -232,11 +230,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
     return this.cardTracker.elements
       .filter((entry) => {
-        return (
-          entry.meta.format === 'data' ||
-          entry.meta.fieldType === 'linksTo' ||
-          entry.meta.fieldType === 'linksToMany'
-        );
+        return entry.meta.fieldType === 'linksToMany';
       })
       .map((entry) => ({
         element: entry.element,
@@ -284,9 +278,9 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
-  @action viewCardInPlayground(cardDefOrId: CardDefOrId) {
+  @action viewCardInPlayground(card: CardDef | string) {
     // TODO: Implement redirect to playground
-    console.log('viewCardInPlayground', cardDefOrId);
+    console.log('viewCardInPlayground', card);
   }
 
   <template>
