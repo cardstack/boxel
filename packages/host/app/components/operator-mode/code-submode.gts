@@ -28,6 +28,7 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
+  primitive,
   identifyCard,
   isFieldDef,
   isCardDocumentString,
@@ -471,6 +472,9 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
     let baseDefType = this.selectedCardOrField?.cardOrField;
+    if (!baseDefType || primitive in baseDefType) {
+      return undefined;
+    }
     let codeRef = identifyCard(baseDefType);
     if (!isResolvedCodeRef(codeRef)) {
       return undefined;

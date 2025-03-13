@@ -19,6 +19,7 @@ import {
   getPlaygroundSelections,
   openFileInPlayground,
   removePlaygroundSelections,
+  selectDeclaration,
   selectFormat,
   setPlaygroundSelections,
   setRecentFiles,
@@ -370,6 +371,26 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
     await click('[data-test-edit-button]'); // toggle via header button
     assert.dom('[data-test-embedded-comment]').exists();
+  });
+
+  test('it is not available for non-exports or primitive fields', async function (assert) {
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+    assert.dom('[data-test-playground-panel]').exists();
+
+    await selectDeclaration('Status');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist('primitive field');
+
+    await selectDeclaration('LocalStatusField');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist('local primitive field');
+
+    await selectDeclaration('LocalCommentField');
+    assert
+      .dom('[data-test-accordion-item="playground"]')
+      .doesNotExist('local compound field');
   });
 
   test('can display selected field in the chosen format', async function (assert) {
