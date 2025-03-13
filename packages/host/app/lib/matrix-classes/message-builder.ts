@@ -244,11 +244,13 @@ export default class MessageBuilder {
       }) as CommandResultEvent | undefined);
 
     // Find command in skills
-    let commandCodeRef: ResolvedCodeRef | undefined;
+    let skillCommand:
+      | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
+      | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      for (let skillCommand of skill.card.commands) {
-        if (commandRequest.name === skillCommand.functionName) {
-          commandCodeRef = skillCommand.codeRef;
+      for (let candidateSkillCommand of skill.card.commands) {
+        if (commandRequest.name === candidateSkillCommand.functionName) {
+          skillCommand = candidateSkillCommand;
           break findCommand;
         }
       }
@@ -256,8 +258,9 @@ export default class MessageBuilder {
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
-      commandCodeRef,
+      skillCommand?.codeRef,
       this.builderContext.effectiveEventId,
+      skillCommand?.requiresApproval ?? true,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
       commandResultEvent?.content.msgtype ===
