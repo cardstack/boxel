@@ -15,10 +15,11 @@ import { type Actions } from '@cardstack/runtime-common';
 import type CardService from '@cardstack/host/services/card-service';
 import RealmService from '@cardstack/host/services/realm';
 
-import type { FieldType, Format } from 'https://cardstack.com/base/card-api';
+import type { Format } from 'https://cardstack.com/base/card-api';
 
 import { CardDefOrId } from './stack-item';
 
+import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { MiddlewareState } from '@floating-ui/dom';
 
 interface OverlaySignature {
@@ -40,15 +41,6 @@ interface OverlaySignature {
       isHovered: boolean,
     ];
   };
-}
-
-export interface RenderedCardForOverlayActions {
-  element: HTMLElement;
-  cardDefOrId: CardDefOrId;
-  fieldType: FieldType | undefined;
-  fieldName: string | undefined;
-  format: Format | 'data';
-  overlayZIndexStyle?: SafeString;
 }
 
 let boundRenderedCardElement = new WeakSet<HTMLElement>();

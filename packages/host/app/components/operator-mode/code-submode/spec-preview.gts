@@ -61,16 +61,13 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import {
-  CardContext,
-  CardDef,
-  Format,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
+import { CardContext } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
-import ElementTracker from '../../../resources/element-tracker';
-import Overlays, { RenderedCardForOverlayActions } from '../overlays';
+import ElementTracker, {
+  type RenderedCardForOverlayActions,
+} from '../../../resources/element-tracker';
+import Overlays from '../overlays';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -189,14 +186,6 @@ interface ContentSignature {
   };
 }
 
-interface CardMeta {
-  cardId?: string;
-  card?: CardDef;
-  format: Format | 'data';
-  fieldType: FieldType | undefined;
-  fieldName: string | undefined;
-}
-
 type SpecPreviewCardContext = Omit<
   CardContext,
   'prerenderedCardSearchComponent'
@@ -211,7 +200,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.initializeCardSelection();
   }
 
-  cardTracker = new ElementTracker<CardMeta>();
+  cardTracker = new ElementTracker();
 
   get onlyOneInstance() {
     return this.args.cards.length === 1;
@@ -232,16 +221,10 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
-    return this.cardTracker.elements
-      .filter((entry) => {
-        return entry.meta.fieldType === 'linksToMany';
-      })
+    return this.cardTracker
+      .filter([{ fieldType: 'linksToMany' }])
       .map((entry) => ({
-        element: entry.element,
-        cardDefOrId: entry.meta.card || entry.meta.cardId!,
-        fieldType: entry.meta.fieldType,
-        fieldName: entry.meta.fieldName,
-        format: entry.meta.format,
+        ...entry,
         overlayZIndexStyle: htmlSafe(`z-index: 1`),
       }));
   }
