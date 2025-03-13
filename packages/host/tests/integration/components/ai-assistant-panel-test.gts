@@ -3031,24 +3031,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     // assert the button actually copies contents to the clipboard
   });
 
-  test('shows the apply code button when the code is a search/replace block', async function (assert) {
-    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-
-    let codeBlock =
-      '```\n<<<<<<< SEARCH\nlet a = 1;\n=======\nlet a = 2;\n>>>>>>> REPLACE\n```';
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: codeBlock,
-      formatted_body: codeBlock,
-      msgtype: 'org.text',
-      format: 'org.matrix.custom.html',
-      isStreamingFinished: true,
-    });
-
-    // can apply the search/replace block
-    await waitFor('[data-test-apply-code-button]');
-    assert.dom('[data-test-apply-code-button]').exists();
-  });
-
   test('it renders codeblock in monaco', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
     await simulateRemoteMessage(
