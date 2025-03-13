@@ -238,7 +238,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         fieldType: entry.meta.fieldType,
         fieldName: entry.meta.fieldName,
         format: entry.meta.format,
-        overlayZIndexStyle: htmlSafe(`z-index: 100`),
+        overlayZIndexStyle: htmlSafe(`z-index: 1`),
       }));
   }
 
