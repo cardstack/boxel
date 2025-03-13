@@ -189,6 +189,19 @@ interface ContentSignature {
   };
 }
 
+interface CardMeta {
+  cardId?: string;
+  card?: CardDef;
+  format: Format | 'data';
+  fieldType: FieldType | undefined;
+  fieldName: string | undefined;
+}
+
+type SpecPreviewCardContext = Omit<
+  CardContext,
+  'prerenderedCardSearchComponent'
+>;
+
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -198,13 +211,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.initializeCardSelection();
   }
 
-  cardTracker = new ElementTracker<{
-    cardId?: string;
-    card?: CardDef;
-    format: Format | 'data';
-    fieldType: FieldType | undefined;
-    fieldName: string | undefined;
-  }>();
+  cardTracker = new ElementTracker<CardMeta>();
 
   get onlyOneInstance() {
     return this.args.cards.length === 1;
@@ -218,10 +225,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.cards.map((card) => card.url);
   }
 
-  private get cardContext(): Omit<
-    CardContext,
-    'prerenderedCardSearchComponent'
-  > {
+  private get cardContext(): SpecPreviewCardContext {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
     };
@@ -276,11 +280,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
     const selectedUrl = new URL(this.args.selectedId);
     this.operatorModeStateService.updateCodePath(selectedUrl);
-  }
-
-  @action viewCardInPlayground(card: CardDef | string) {
-    // TODO: Implement redirect to playground
-    console.log('viewCardInPlayground', card);
   }
 
   <template>
@@ -344,7 +343,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             <Overlays
               @overlayClassName='spec-preview-overlay'
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-              @onSelectCard={{this.viewCardInPlayground}}
             />
             {{#if this.displayIsolated}}
               <Preview
