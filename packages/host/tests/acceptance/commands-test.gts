@@ -911,15 +911,16 @@ module('Acceptance | Commands tests', function (hooks) {
     // simulate message
     let roomId = getRoomIds().pop()!;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Switching to code submode',
+      body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Switching to code submode',
+      formatted_body: '',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'switch-submode_dd88',
           arguments: {
+            description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
@@ -929,6 +930,10 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     // Click on the apply button
     await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-message-idx="0"] .command-description')
+      .containsText('Switching to code submode');
+
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
 
     // check we're in code mode
