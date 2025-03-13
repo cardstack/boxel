@@ -44,6 +44,7 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   delay,
+  getMonacoContent,
 } from '../helpers';
 
 import {
@@ -490,6 +491,7 @@ module('Acceptance | Commands tests', function (hooks) {
             'https://i.postimg.cc/VNvHH93M/pawel-czerwinski-Ly-ZLa-A5jti-Y-unsplash.jpg',
           iconURL: 'https://i.postimg.cc/L8yXRvws/icon.png',
         },
+        'hello.txt': 'Hello, world!',
       },
     });
   });
@@ -686,6 +688,30 @@ module('Acceptance | Commands tests', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists();
+  });
+
+  test('can patch code', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    let codeBlock =
+      '```\n// File url: http://test-realm/test/hello.txt \n<<<<<<< SEARCH\nHello, world!\n=======\nHi, world!\n>>>>>>> REPLACE\n```';
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      formatted_body: codeBlock,
+      msgtype: 'org.text',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    let originalContent = getMonacoContent();
+    assert.strictEqual(originalContent, 'Hello, world!');
+    await waitFor('[data-test-apply-code-button]');
+    await click('[data-test-apply-code-button]');
+    await waitUntil(() => getMonacoContent() === 'Hi, world!');
   });
 
   test('a command sent via SendAiAssistantMessageCommand without autoExecute flag is not automatically executed by the bot', async function (assert) {
