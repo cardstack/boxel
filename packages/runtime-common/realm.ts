@@ -36,7 +36,6 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
-  type ResolvedCodeRef,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -318,6 +317,11 @@ export class Realm {
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .query('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
+        '/_search-prerendered',
+        SupportedMimeType.CardJson,
+        this.searchPrerendered.bind(this),
+      )
+      .query(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
@@ -666,6 +670,18 @@ export class Realm {
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
       return redirectResponse;
+    }
+
+    if (
+      request.method === 'POST' &&
+      request.headers.get('X-HTTP-Method-Override') === 'QUERY'
+    ) {
+      request = new Request(request.url, {
+        method: 'QUERY',
+        headers: request.headers,
+        body: await request.clone().text(),
+      });
+      request.headers.delete('X-HTTP-Method-Override');
     }
 
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
@@ -1617,29 +1633,76 @@ export class Realm {
       request.headers.get('X-Boxel-Building-Index'),
     );
 
-    let href = new URL(request.url).search.slice(1);
-    let parsedQueryString = parseQuery(href);
-    let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
-    let cardUrls = parsedQueryString.cardUrls as string[];
-    let renderType = parsedQueryString.renderType as ResolvedCodeRef;
+    let payload;
+    let htmlFormat;
+    let cardUrls;
+    let renderType;
+
+    // Handle QUERY method
+    if (request.method === 'QUERY') {
+      payload = await request.json();
+      htmlFormat = payload.prerenderedHtmlFormat;
+      cardUrls = payload.cardUrls;
+      renderType = payload.renderType;
+    } else {
+      // Handle GET method (existing logic)
+      let href = new URL(request.url).search.slice(1);
+      payload = parseQuery(href);
+      htmlFormat = payload.prerenderedHtmlFormat;
+      cardUrls = payload.cardUrls;
+      renderType = payload.renderType;
+    }
 
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
-      return badRequest(
-        JSON.stringify({
+      return createResponse({
+        body: JSON.stringify({
           errors: [
-            `Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint.`,
+            {
+              status: '400',
+              title: 'Bad Request',
+              message:
+                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+            },
           ],
         }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
         requestContext,
-      );
+      });
     }
-    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
-    delete parsedQueryString.prerenderedHtmlFormat;
-    delete parsedQueryString.cardUrls;
-    delete parsedQueryString.renderType;
 
-    let cardsQuery = parsedQueryString;
-    assertQuery(parsedQueryString);
+    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
+    delete payload.prerenderedHtmlFormat;
+    delete payload.cardUrls;
+    delete payload.renderType;
+
+    let cardsQuery = payload;
+
+    try {
+      assertQuery(cardsQuery);
+    } catch (e) {
+      if (e instanceof InvalidQueryError) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '400',
+                title: 'Invalid Query',
+                message: `Invalid query: ${e.message}`,
+              },
+            ],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      throw e;
+    }
 
     let results = await this.#realmIndexQueryEngine.searchPrerendered(
       cardsQuery,
