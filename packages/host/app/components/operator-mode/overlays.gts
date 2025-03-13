@@ -69,6 +69,7 @@ export default class Overlays extends Component<OverlaySignature> {
             class={{this.overlayClassName}}
             {{velcro renderedCard.element middleware=(array this.offset)}}
             style={{renderedCard.overlayZIndexStyle}}
+            data-test-card-overlay
             ...attributes
           >
             {{yield

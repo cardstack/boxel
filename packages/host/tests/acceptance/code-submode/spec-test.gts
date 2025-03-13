@@ -17,6 +17,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
+import { triggerEvent } from '@ember/test-helpers';
 
 const testRealm2URL = `http://test-realm/test2/`;
 
@@ -166,6 +167,38 @@ module('Acceptance | Spec preview', function (hooks) {
               ref: {
                 module: `./person`,
                 name: 'Person',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'person-entry-2.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'Person',
+              description: 'Spec',
+              specType: 'card',
+              ref: {
+                module: `./person`,
+                name: 'Person',
+              },
+            },
+            relationships: {
+              'linkedExamples.0': {
+                links: {
+                  self: `${testRealmURL}Person/1`,
+                },
+              },
+              'linkedExamples.1': {
+                links: {
+                  self: `${testRealmURL}Person/fadhlan`,
+                },
               },
             },
             meta: {
@@ -540,5 +573,42 @@ module('Acceptance | Spec preview', function (hooks) {
         `[data-test-card="${testRealmURL}person-entry"][data-test-card-format="isolated"]`,
       )
       .exists();
+  });
+
+  test('show overlay on examples card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    await click('[data-test-accordion-item="spec-preview"] button');
+
+    await waitFor('[data-test-spec-selector]');
+    assert.dom('[data-test-spec-selector]').exists();
+
+    await click('[data-test-spec-selector] > div');
+
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('person-entry-2.json');
+    await click('[data-option-index="0"]');
+
+    assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();
+    assert.dom(`[data-test-card="${testRealmURL}Person/1"]`).exists();
+
+    await triggerEvent(
+      `[data-test-card="${testRealmURL}Person/1"]`,
+      'mouseenter',
+    );
+
+    assert.dom('[data-test-card-overlay]').exists();
+
+    await triggerEvent(
+      `[data-test-card="${testRealmURL}Person/1"]`,
+      'mouseleave',
+    );
+
+    assert.dom('[data-test-card-overlay]').doesNotExist();
   });
 });
