@@ -1,4 +1,4 @@
-import { click, waitFor, fillIn } from '@ember/test-helpers';
+import { click, waitFor, fillIn, triggerEvent } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -16,8 +16,8 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { triggerEvent } from '@ember/test-helpers';
 
 const testRealm2URL = `http://test-realm/test2/`;
 
@@ -177,38 +177,6 @@ module('Acceptance | Spec preview', function (hooks) {
             },
           },
         },
-        'person-entry-2.json': {
-          data: {
-            type: 'card',
-            attributes: {
-              title: 'Person',
-              description: 'Spec',
-              specType: 'card',
-              ref: {
-                module: `./person`,
-                name: 'Person',
-              },
-            },
-            relationships: {
-              'linkedExamples.0': {
-                links: {
-                  self: `${testRealmURL}Person/1`,
-                },
-              },
-              'linkedExamples.1': {
-                links: {
-                  self: `${testRealmURL}Person/fadhlan`,
-                },
-              },
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${baseRealm.url}spec`,
-                name: 'Spec',
-              },
-            },
-          },
-        },
         'employee-entry.json': {
           data: {
             type: 'card',
@@ -253,6 +221,18 @@ module('Acceptance | Spec preview', function (hooks) {
               ref: {
                 module: `./pet`,
                 name: 'Pet',
+              },
+            },
+            relationships: {
+              'linkedExamples.0': {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+              'linkedExamples.1': {
+                links: {
+                  self: `${testRealmURL}Pet/pudding`,
+                },
               },
             },
             meta: {
@@ -312,6 +292,19 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             attributes: {
               name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/pudding.json': {
+          data: {
+            attributes: {
+              name: 'Pudding',
             },
             meta: {
               adoptsFrom: {
@@ -578,7 +571,7 @@ module('Acceptance | Spec preview', function (hooks) {
   test('show overlay on examples card', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
-      codePath: `${testRealmURL}person.gts`,
+      codePath: `${testRealmURL}pet.gts`,
     });
     await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
@@ -591,21 +584,21 @@ module('Acceptance | Spec preview', function (hooks) {
 
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('person-entry-2.json');
+      .hasText('pet-entry-2.json');
     await click('[data-option-index="0"]');
 
     assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();
-    assert.dom(`[data-test-card="${testRealmURL}Person/1"]`).exists();
+    assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
 
     await triggerEvent(
-      `[data-test-card="${testRealmURL}Person/1"]`,
+      `[data-test-card="${testRealmURL}Pet/mango"]`,
       'mouseenter',
     );
 
     assert.dom('[data-test-card-overlay]').exists();
 
     await triggerEvent(
-      `[data-test-card="${testRealmURL}Person/1"]`,
+      `[data-test-card="${testRealmURL}Pet/mango"]`,
       'mouseleave',
     );
 
