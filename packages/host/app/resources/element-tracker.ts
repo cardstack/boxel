@@ -101,25 +101,22 @@ export default class ElementTracker {
         return entry.meta[key as keyof Meta] === condition[key as keyof Meta];
       });
     };
+    const filteredElements = this.elements.filter((entry) => {
+      if (operator === 'and') {
+        return conditions.every((condition) =>
+          checkCondition(entry, condition),
+        );
+      } else {
+        return conditions.some((condition) => checkCondition(entry, condition));
+      }
+    });
 
-    return this.elements
-      .filter((entry) => {
-        if (operator === 'and') {
-          return conditions.every((condition) =>
-            checkCondition(entry, condition),
-          );
-        } else {
-          return conditions.some((condition) =>
-            checkCondition(entry, condition),
-          );
-        }
-      })
-      .map((entry) => ({
-        element: entry.element,
-        cardDefOrId: entry.meta.card || entry.meta.cardId!,
-        fieldType: entry.meta.fieldType,
-        fieldName: entry.meta.fieldName,
-        format: entry.meta.format,
-      }));
+    return filteredElements.map((entry) => ({
+      element: entry.element,
+      cardDefOrId: entry.meta.card || entry.meta.cardId!,
+      fieldType: entry.meta.fieldType,
+      fieldName: entry.meta.fieldName,
+      format: entry.meta.format,
+    }));
   }
 }
