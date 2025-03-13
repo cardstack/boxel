@@ -8,7 +8,6 @@ import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 import { didCancel, restartableTask } from 'ember-concurrency';
 import { trackedFunction } from 'ember-resources/util/function';
 import { flatMap, isEqual } from 'lodash';
-import { stringify } from 'qs';
 
 import { TrackedSet } from 'tracked-built-ins';
 
@@ -135,15 +134,20 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     realmURL: string,
   ): Promise<PrerenderedCard[]> {
     let json = (await this.cardService.fetchJSON(
-      `${realmURL}_search-prerendered?${stringify(
-        {
+      `${realmURL}_search-prerendered`,
+      {
+        method: 'QUERY',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           ...query,
           prerenderedHtmlFormat: format,
           cardUrls,
-        },
-        { strictNullHandling: true },
-      )}`,
+        }),
+      },
     )) as unknown as PrerenderedCardCollectionDocument;
+
     if (!isPrerenderedCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a prerendered-card collection document:
