@@ -12,7 +12,6 @@ import {
   sendMessage,
   registerRealmUsers,
   getRoomEvents,
-  getSearchTool,
   showAllCards,
   waitUntil,
   setupUserSubscribed,
@@ -44,7 +43,7 @@ test.describe('Commands', () => {
     await realmServer.stop();
   });
 
-  test(`it does include command tools (patch, search) in message event when top-most card is writable and context is shared`, async ({
+  test(`it includes the patch tool in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
@@ -68,7 +67,7 @@ test.describe('Commands', () => {
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
 
-    expect(boxelMessageData.context.tools.length).toEqual(2);
+    expect(boxelMessageData.context.tools.length).toEqual(1);
     let patchCardTool = boxelMessageData.context.tools.find(
       (t: any) => t.function.name === 'patchCard',
     );
@@ -120,10 +119,6 @@ test.describe('Commands', () => {
         },
       },
     });
-    let searchCardTool = boxelMessageData.context.tools.find(
-      (t: any) => t.function.name === 'searchCardsByTypeAndTitle',
-    );
-    expect(searchCardTool).toMatchObject(getSearchTool());
   });
 
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
@@ -154,7 +149,7 @@ test.describe('Commands', () => {
       );
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
-    expect(boxelMessageData.context.tools).toMatchObject([getSearchTool()]);
+    expect(boxelMessageData.context.tools).toMatchObject([]);
   });
 
   test(`applying a command dispatches a CommandResultEvent if command is succesful`, async ({
@@ -217,10 +212,11 @@ test.describe('Commands', () => {
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
-          name: 'searchCardsByTypeAndTitle',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
             description: 'Searching for card',
             attributes: {

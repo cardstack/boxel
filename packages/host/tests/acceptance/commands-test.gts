@@ -1195,6 +1195,7 @@ module('Acceptance | Commands tests', function (hooks) {
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: 'fd1606f6-4d81-414a-8901-d6017eaf1fe9',
           name: toolName,
           arguments: {
             attributes: {
@@ -1203,10 +1204,6 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
 
     await settled();
