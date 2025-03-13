@@ -542,10 +542,10 @@ class Edit extends Component<typeof Spec> {
   }
 
   get icon() {
-    return this.loadCardIcon.value;
+    return this.cardIconResource.value;
   }
 
-  @use private loadCardIcon = resource(() => {
+  @use private cardIconResource = resource(() => {
     let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
       value: undefined,
     });
