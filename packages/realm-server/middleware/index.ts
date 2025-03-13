@@ -40,6 +40,22 @@ export function proxyAsset(
   });
 }
 
+// Add middleware to handle method override for QUERY
+export function methodOverrideSupport(ctxt: Koa.Context, next: Koa.Next) {
+  const methodOverride = ctxt.request.headers['x-http-method-override'];
+  if (ctxt.method === 'POST' && methodOverride === 'QUERY') {
+    // Change the request method to the overridden method
+    // This is just for internal routing, the actual HTTP method remains POST
+    Object.defineProperty(ctxt.request, 'method', {
+      value: methodOverride,
+      writable: true,
+      enumerable: true,
+      configurable: true,
+    });
+  }
+  return next();
+}
+
 export function livenessCheck(ctxt: Koa.Context, _next: Koa.Next) {
   ctxt.status = 200;
   ctxt.set('server', '@cardstack/host');
@@ -94,7 +110,7 @@ export async function fetchRequestFromContext(
   ctxt: Koa.Context,
 ): Promise<Request> {
   let reqBody: string | undefined;
-  if (['POST', 'PATCH'].includes(ctxt.method)) {
+  if (['POST', 'PATCH', 'PUT', 'QUERY'].includes(ctxt.method)) {
     reqBody = await nodeStreamToText(ctxt.req);
   }
 

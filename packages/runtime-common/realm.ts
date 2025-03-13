@@ -59,7 +59,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { assertQuery, parseQuery } from './query';
+import { InvalidQueryError, assertQuery, parseQuery } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -316,6 +316,7 @@ export class Realm {
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .query('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
@@ -1563,9 +1564,37 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Building-Index'),
     );
+    let cardsQuery;
+    if (request.method === 'QUERY') {
+      cardsQuery = await request.json();
+    } else {
+      cardsQuery = parseQuery(new URL(request.url).search.slice(1));
+    }
 
-    let cardsQuery = parseQuery(new URL(request.url).search.slice(1));
-    assertQuery(cardsQuery);
+    try {
+      assertQuery(cardsQuery);
+    } catch (e) {
+      if (e instanceof InvalidQueryError) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '400',
+                title: 'Invalid Query',
+                message: `Invalid query: ${e.message}`,
+              },
+            ],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      // Re-throw other errors
+      throw e;
+    }
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,

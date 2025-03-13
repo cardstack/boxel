@@ -15,7 +15,7 @@ type Handler = (
   requestContext: RequestContext,
 ) => Promise<Response>;
 
-export type Method = 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
+export type Method = 'GET' | 'QUERY' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
@@ -35,7 +35,7 @@ function isHTTPMethod(method: unknown): method is Method {
   if (typeof method !== 'string') {
     return false;
   }
-  return ['GET', 'POST', 'PATCH', 'DELETE', 'HEAD'].includes(method);
+  return ['GET', 'QUERY', 'POST', 'PATCH', 'DELETE', 'HEAD'].includes(method);
 }
 
 export function extractSupportedMimeType(
@@ -108,6 +108,10 @@ export class Router {
 
   get(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
     this.setRoute(mimeType, 'GET', path, handler);
+    return this;
+  }
+  query(path: string, mimeType: SupportedMimeType, handler: Handler): Router {
+    this.setRoute(mimeType, 'QUERY', path, handler);
     return this;
   }
   post(path: string, mimeType: SupportedMimeType, handler: Handler): Router {

@@ -5,6 +5,13 @@ import qs from 'qs';
 
 import { type CodeRef, isCodeRef, generalSortFields } from './index';
 
+export class InvalidQueryError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'InvalidQueryError';
+  }
+}
+
 export interface Query {
   filter?: Filter;
   sort?: Sort;
@@ -118,7 +125,9 @@ export function assertQuery(
   pointer: string[] = [''],
 ): asserts query is Query {
   if (typeof query !== 'object' || query == null) {
-    throw new Error(`${pointer.join('/') || '/'}: missing query object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: missing query object`,
+    );
   }
 
   for (let [key, value] of Object.entries(query)) {
@@ -128,7 +137,7 @@ export function assertQuery(
         break;
       case 'sort':
         if (!Array.isArray(value)) {
-          throw new Error(
+          throw new InvalidQueryError(
             `${pointer.concat('sort').join('/') || '/'}: sort must be an array`,
           );
         }
@@ -138,7 +147,7 @@ export function assertQuery(
         break;
       case 'queryString':
         if (typeof value !== 'string') {
-          throw new Error(
+          throw new InvalidQueryError(
             `${
               pointer.concat('queryString').join('/') || '/'
             }: queryString must be a string`,
@@ -150,7 +159,7 @@ export function assertQuery(
         break;
 
       default:
-        throw new Error(`unknown field in query: ${key}`);
+        throw new InvalidQueryError(`unknown field in query: ${key}`);
     }
   }
 }
@@ -160,15 +169,17 @@ function assertSortExpression(
   pointer: string[],
 ): asserts sort is Query['sort'] {
   if (typeof sort !== 'object' || sort == null) {
-    throw new Error(`${pointer.join('/') || '/'}: missing sort object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: missing sort object`,
+    );
   }
   if (!('by' in sort)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.concat('by').join('/') || '/'}: missing by object`,
     );
   }
   if (typeof sort.by !== 'string') {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.concat('by').join('/') || '/'}: by must be a string`,
     );
   }
@@ -176,7 +187,7 @@ function assertSortExpression(
     if (Object.keys(generalSortFields).includes(sort.by)) {
       return;
     }
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.concat('on').join('/') || '/'}: missing on object`,
     );
   }
@@ -184,7 +195,7 @@ function assertSortExpression(
 
   if ('direction' in sort) {
     if (sort.direction !== 'asc' && sort.direction !== 'desc') {
-      throw new Error(
+      throw new InvalidQueryError(
         `${
           pointer.concat('direction').join('/') || '/'
         }: direction must be either 'asc' or 'desc'`,
@@ -198,7 +209,9 @@ function assertPage(
   pointer: string[],
 ): asserts page is Query['page'] {
   if (typeof page !== 'object' || page == null) {
-    throw new Error(`${pointer.join('/') || '/'}: missing page object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: missing page object`,
+    );
   }
 
   if ('size' in page) {
@@ -206,14 +219,14 @@ function assertPage(
       (typeof page.size !== 'number' && typeof page.size !== 'string') ||
       (typeof page.size === 'string' && isNaN(page.size))
     ) {
-      throw new Error(
+      throw new InvalidQueryError(
         `${pointer.concat('size').join('/') || '/'}: size must be a number`,
       );
     }
   }
 
   if ('cursor' in page && typeof page.cursor !== 'string') {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.concat('cursor').join('/') || '/'}: cursor must be a string`,
     );
   }
@@ -224,7 +237,9 @@ function assertFilter(
   pointer: string[],
 ): asserts filter is Filter {
   if (typeof filter !== 'object' || filter == null) {
-    throw new Error(`${pointer.join('/') || '/'}: missing filter object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: missing filter object`,
+    );
   }
 
   if ('type' in filter) {
@@ -251,7 +266,7 @@ function assertFilter(
   } else if ('range' in filter) {
     assertRangeFilter(filter, pointer);
   } else {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: cannot determine the type of filter`,
     );
   }
@@ -259,7 +274,9 @@ function assertFilter(
 
 function assertCardType(type: any, pointer: string[]) {
   if (!isCodeRef(type)) {
-    throw new Error(`${pointer.join('/') || '/'}: type is not valid`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: type is not valid`,
+    );
   }
 }
 
@@ -268,17 +285,19 @@ function assertAnyFilter(
   pointer: string[],
 ): asserts filter is AnyFilter {
   if (typeof filter !== 'object' || filter == null) {
-    throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: filter must be an object`,
+    );
   }
   pointer.concat('any');
   if (!('any' in filter)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: AnyFilter must have any property`,
     );
   }
 
   if (!Array.isArray(filter.any)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: any must be an array of Filters`,
     );
   } else {
@@ -293,17 +312,19 @@ function assertEveryFilter(
   pointer: string[],
 ): asserts filter is EveryFilter {
   if (typeof filter !== 'object' || filter == null) {
-    throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: filter must be an object`,
+    );
   }
   pointer.concat('every');
   if (!('every' in filter)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: EveryFilter must have every property`,
     );
   }
 
   if (!Array.isArray(filter.every)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: every must be an array of Filters`,
     );
   } else {
@@ -318,11 +339,13 @@ function assertNotFilter(
   pointer: string[],
 ): asserts filter is NotFilter {
   if (typeof filter !== 'object' || filter == null) {
-    throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: filter must be an object`,
+    );
   }
   pointer.concat('not');
   if (!('not' in filter)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.join('/') || '/'}: NotFilter must have not property`,
     );
   }
@@ -335,18 +358,22 @@ function assertEqFilter(
   pointer: string[],
 ): asserts filter is EqFilter {
   if (typeof filter !== 'object' || filter == null) {
-    throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: filter must be an object`,
+    );
   }
   pointer.concat('eq');
   if (!('eq' in filter)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${
         pointer.concat('eq').join('/') || '/'
       }: EqFilter must have eq property`,
     );
   }
   if (typeof filter.eq !== 'object' || filter.eq == null) {
-    throw new Error(`${pointer.join('/') || '/'}: eq must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: eq must be an object`,
+    );
   }
   Object.entries(filter.eq).forEach(([key, value]) => {
     assertKey(key, pointer);
@@ -359,18 +386,22 @@ function assertContainsFilter(
   pointer: string[],
 ): asserts filter is ContainsFilter {
   if (typeof filter !== 'object' || filter == null) {
-    throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: filter must be an object`,
+    );
   }
   pointer.concat('contains');
   if (!('contains' in filter)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${
         pointer.concat('contains').join('/') || '/'
       }: ContainsFilter must have contains property`,
     );
   }
   if (typeof filter.contains !== 'object' || filter.contains == null) {
-    throw new Error(`${pointer.join('/') || '/'}: contains must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: contains must be an object`,
+    );
   }
   Object.entries(filter.contains).forEach(([key, value]) => {
     assertKey(key, pointer);
@@ -383,23 +414,27 @@ function assertRangeFilter(
   pointer: string[],
 ): asserts filter is RangeFilter {
   if (typeof filter !== 'object' || filter == null) {
-    throw new Error(`${pointer.join('/') || '/'}: filter must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: filter must be an object`,
+    );
   }
   pointer.concat('range');
   if (!('range' in filter)) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${
         pointer.concat('range').join('/') || '/'
       }: RangeFilter must have range property`,
     );
   }
   if (typeof filter.range !== 'object' || filter.range == null) {
-    throw new Error(`${pointer.join('/') || '/'}: range must be an object`);
+    throw new InvalidQueryError(
+      `${pointer.join('/') || '/'}: range must be an object`,
+    );
   }
   Object.entries(filter.range).every(([fieldPath, constraints]) => {
     let innerPointer = [...pointer, fieldPath];
     if (typeof constraints !== 'object' || constraints == null) {
-      throw new Error(
+      throw new InvalidQueryError(
         `${innerPointer.join('/') || '/'}: range constraint must be an object`,
       );
     }
@@ -412,7 +447,7 @@ function assertRangeFilter(
           assertJSONPrimitive(value, innerPointer.concat(key));
           return;
         default:
-          throw new Error(
+          throw new InvalidQueryError(
             `${
               innerPointer.join('/') || '/'
             }: range item must be gt, gte, lt, or lte`,
@@ -424,7 +459,7 @@ function assertRangeFilter(
 
 export function assertKey(key: string, pointer: string[]) {
   if (key.startsWith('[') && key.endsWith(']')) {
-    throw new Error(
+    throw new InvalidQueryError(
       `${pointer.join('/')}: field names cannot be wrapped in brackets: ${key}`,
     );
   }
