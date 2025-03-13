@@ -346,21 +346,24 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     });
   });
 
-  test('can preview compound field instance', async function (assert) {
+  test('can preview selected field instance', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
-    assert.dom('[data-test-field-preview-header]').containsText('Comment');
+    assert
+      .dom('[data-test-playground-format-chooser] button')
+      .exists({ count: 4 });
+    assert.dom('[data-test-format-chooser="isolated"]').doesNotExist();
+    assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
     assert
       .dom('[data-test-embedded-comment-title]')
-      .hasText(
-        'Terrible product',
-        'preview defaults to embedded view of first example',
-      );
+      .hasText('Terrible product');
+    assert.dom('[data-test-embedded-comment]').containsText('0 stars');
 
     await selectFormat('atom');
+    assert.dom('[data-test-format-chooser="embedded"]').hasNoClass('active');
+    assert.dom('[data-test-format-chooser="atom"]').hasClass('active');
     assertFieldExists(assert, 'atom');
 
-    await click('[data-test-edit-button]'); // toggle via header button
+    await selectFormat('edit');
     assertFieldExists(assert, 'edit');
     assert
       .dom('[data-test-field-preview-card] [data-test-field]')
@@ -369,8 +372,9 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .dom('[data-test-field-preview-card] [data-test-field="name"] input')
       .hasValue('Marco');
 
-    await click('[data-test-edit-button]'); // toggle via header button
-    assert.dom('[data-test-embedded-comment]').exists();
+    await selectFormat('fitted');
+    assertFieldExists(assert, 'fitted');
+    assert.dom('[data-test-fitted-comment]').containsText('by Marco');
   });
 
   test('it is not available for non-exports or primitive fields', async function (assert) {
@@ -393,38 +397,9 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .doesNotExist('local compound field');
   });
 
-  test('can display selected field in the chosen format', async function (assert) {
-    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert
-      .dom('[data-test-playground-format-chooser] button')
-      .exists({ count: 4 });
-    assert.dom('[data-test-format-chooser="isolated"]').doesNotExist();
-    assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
-    assert
-      .dom('[data-test-embedded-comment-title]')
-      .hasText('Terrible product');
-    assert.dom('[data-test-embedded-comment]').containsText('0 stars');
-
-    await selectFormat('atom');
-    assert.dom('[data-test-format-chooser="embedded"]').hasNoClass('active');
-    assert.dom('[data-test-format-chooser="atom"]').hasClass('active');
-    assertFieldExists(assert, 'atom');
-
-    await selectFormat('edit');
-    assertFieldExists(assert, 'edit');
-    assert
-      .dom('[data-test-field-preview-card] [data-test-field="name"] input')
-      .hasValue('Marco');
-
-    await selectFormat('fitted');
-    assertFieldExists(assert, 'fitted');
-    assert.dom('[data-test-fitted-comment]').containsText('by Marco');
-  });
-
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
-    assert.dom('[data-test-field-preview-header]').hasText('Comment');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
@@ -624,10 +599,8 @@ module('Acceptance | code-submode | field playground', function (hooks) {
   test('can create new field instance when spec exists but has no examples', async function (assert) {
     await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
     assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
-    assert.dom('[data-test-field-preview-header]').doesNotExist();
 
     await click('[data-test-add-field-instance]');
-    assert.dom('[data-test-field-preview-header]').containsText('Full Name');
     assertFieldExists(assert, 'edit');
     assert
       .dom('[data-test-field-preview-card] [data-test-field="firstName"] input')
