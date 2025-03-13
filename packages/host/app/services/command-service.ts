@@ -14,8 +14,6 @@ import {
   type PatchData,
   CommandContext,
   CommandContextStamp,
-  ResolvedCodeRef,
-  isResolvedCodeRef,
   getClass,
   identifyCard,
 } from '@cardstack/runtime-common';
@@ -28,7 +26,6 @@ import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { SearchCardsByTypeAndTitleCommand } from '../commands/search-cards';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
@@ -172,18 +169,6 @@ export default class CommandService extends Service {
             relationships: payload?.attributes?.patch?.relationships,
           },
         );
-      } else if (command.name === 'searchCardsByTypeAndTitle') {
-        if (!hasSearchData(payload)) {
-          throw new Error(
-            "Search command can't run because it doesn't have all the arguments returned by open ai",
-          );
-        }
-        let command = new SearchCardsByTypeAndTitleCommand(this.commandContext);
-        resultCard = await command.execute({
-          title: payload.attributes.title,
-          cardType: payload.attributes.cardType,
-          type: payload.attributes.type,
-        });
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
@@ -251,22 +236,11 @@ export default class CommandService extends Service {
 }
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
-type SearchPayload = {
-  attributes: { cardType?: string; title?: string; type?: ResolvedCodeRef };
-};
 
 function hasPatchData(payload: any): payload is PatchPayload {
   return (
     payload.attributes?.cardId &&
     (payload.attributes?.patch?.attributes ||
       payload.attributes?.patch?.relationships)
-  );
-}
-
-function hasSearchData(payload: any): payload is SearchPayload {
-  return (
-    isResolvedCodeRef(payload.attributes?.type) ||
-    payload.attributes?.title ||
-    payload.attributes?.cardType
   );
 }

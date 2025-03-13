@@ -13,6 +13,20 @@
             "name": "default"
           },
           "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "module": "@cardstack/boxel-host/commands/search-cards",
+            "name": "SearchCardsByTypeAndTitleCommand"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "module": "@cardstack/boxel-host/commands/search-cards",
+            "name": "SearchCardsByQueryCommand"
+          },
+          "requiresApproval": false
         }
       ]
     },
