@@ -16,7 +16,7 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
-import { provide } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
@@ -24,7 +24,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -34,9 +34,11 @@ import {
   hasExecutableExtension,
   RealmPaths,
   isResolvedCodeRef,
-  type ResolvedCodeRef,
   PermissionsContextName,
+  GetCardContextName,
   CodeRef,
+  type ResolvedCodeRef,
+  type getCard,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -44,7 +46,7 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import consumeContext from '@cardstack/host/modifiers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
@@ -143,6 +145,8 @@ function urlToFilename(url: URL) {
 }
 
 export default class CodeSubmode extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
@@ -156,6 +160,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
@@ -165,21 +170,6 @@ export default class CodeSubmode extends Component<Signature> {
   private panelSelections: Record<string, SelectedAccordionItem>;
 
   private createFileModal: CreateFileModal | undefined;
-  private cardResource = getCard(
-    this,
-    () => {
-      if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
-        return undefined;
-      }
-      // this includes all JSON files, but the card resource is smart enough
-      // to skip JSON that are not card instances
-      let url = this.codePath.href.replace(/\.json$/, '');
-      return url;
-    },
-    {
-      isAutoSave: () => true,
-    },
-  );
   private moduleContentsResource = moduleContentsResource(
     this,
     () => {
@@ -239,12 +229,32 @@ export default class CodeSubmode extends Component<Signature> {
     });
   }
 
+  // you cannot consume context in the constructor. the provider is wired up
+  //  as part of the DOM rendering
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(
+      this,
+      () => {
+        if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
+          return undefined;
+        }
+        // this includes all JSON files, but the card resource is smart enough
+        // to skip JSON that are not card instances
+        let url = this.codePath.href.replace(/\.json$/, '');
+        return url;
+      },
+      {
+        isAutoSaved: true,
+      },
+    );
+  };
+
   private get card() {
-    return this.cardResource.card;
+    return this.cardResource?.card;
   }
 
   private get cardError() {
-    return this.cardResource.cardError;
+    return this.cardResource?.cardError;
   }
 
   private backgroundURLStyle(backgroundURL: string | null) {
@@ -537,7 +547,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isSaving() {
     return (
-      this.sourceFileIsSaving || !!this.cardResource.autoSaveState?.isSaving
+      this.sourceFileIsSaving || !!this.cardResource?.autoSaveState?.isSaving
     );
   }
 
@@ -774,6 +784,7 @@ export default class CodeSubmode extends Component<Signature> {
     <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
       <div
+        {{consumeContext consume=this.makeCardResource}}
         class='code-mode-background'
         style={{this.backgroundURLStyle realmInfo.backgroundURL}}
       ></div>
@@ -786,10 +797,7 @@ export default class CodeSubmode extends Component<Signature> {
       <div
         class='code-mode'
         data-test-code-mode
-        data-test-save-idle={{and
-          (not this.sourceFileIsSaving)
-          (not this.cardResource.autoSaveState.isSaving)
-        }}
+        data-test-save-idle={{not this.isSaving}}
       >
         <div class='code-mode-top-bar'>
           <CardURLBar

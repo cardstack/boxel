@@ -10,7 +10,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-import { provide } from 'ember-provide-consume-context';
+import { provide, consume } from 'ember-provide-consume-context';
 
 import { isEqual } from 'lodash';
 import get from 'lodash/get';
@@ -23,10 +23,14 @@ import { Download } from '@cardstack/boxel-ui/icons';
 
 import {
   CardContextName,
+  GetCardContextName,
+  GetCardsContextName,
   Deferred,
   codeRefWithAbsoluteURL,
   moduleFrom,
   RealmPaths,
+  type getCard,
+  type getCards,
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -151,6 +155,9 @@ interface CardToDelete {
 }
 
 export default class InteractSubmode extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
@@ -300,6 +307,9 @@ export default class InteractSubmode extends Component<Signature> {
         } else {
           let cardUrl = card instanceof URL ? card : new URL(card as string);
           try {
+            // This usage of CardService.getCard() that bypasses the identity
+            // map is ok since we just pluck off some values from the card. we
+            //don't pass the instance around
             let loadedCard = await here.cardService.getCard(cardUrl);
             cardToDelete = {
               id: loadedCard.id,
@@ -352,6 +362,7 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
+      // TODO remove this, it will move into dynamic context
       getCards: (
         getQuery: () => Query | undefined,
         getRealms: () => string[] | undefined,
@@ -543,6 +554,8 @@ export default class InteractSubmode extends Component<Signature> {
         let loadedCards = await Promise.all(
           selectedCards.map((cardDefOrId: CardDefOrId) => {
             if (typeof cardDefOrId === 'string') {
+              // WARNING This card is not part of the identity map!
+              // TODO refactor this to use CardResource (please make ticket)
               return this.cardService.getCard(cardDefOrId);
             }
             return cardDefOrId;
@@ -692,6 +705,8 @@ export default class InteractSubmode extends Component<Signature> {
   > {
     return {
       actions: this.publicAPI(this, 0),
+      getCard: this.getCard,
+      getCards: this.getCards,
       // TODO: should we include this here??
       commandContext: this.commandService.commandContext,
     };

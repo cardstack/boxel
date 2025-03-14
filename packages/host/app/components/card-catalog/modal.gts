@@ -542,6 +542,8 @@ export default class CardCatalogModal extends Component<Signature> {
           realmOfSelectedCard = (await this.cardService.getRealmURL(card))
             ?.href;
         } else if (typeof selectedItem === 'string') {
+          // WARNING This card is not part of the identity map!
+          // TODO refactor this to use CardResource (please make ticket)
           card = await this.cardService.getCard(selectedItem);
           realmOfSelectedCard = (
             card ? await this.cardService.getRealmURL(card) : undefined

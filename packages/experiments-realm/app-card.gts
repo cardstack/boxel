@@ -15,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm, getCard } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -62,7 +62,7 @@ export class Tab extends FieldDef {
 }
 
 class TableView extends GlimmerComponent<{
-  Args: { cards: PrerenderedCard[] };
+  Args: { cards: PrerenderedCard[]; context?: CardContext };
 }> {
   <template>
     <table class='styled-table'>
@@ -127,10 +127,16 @@ class TableView extends GlimmerComponent<{
   }
 
   private _getCards = restartableTask(async () => {
+    if (!this.args.context) {
+      this.instances = [];
+      return;
+    }
+    let context = this.args.context;
     let instances: CardDef[] = [];
     await Promise.all(
       this.args.cards.map(async (c) => {
-        let result = getCard(new URL(c.url));
+        let result = context.getCard(this, () => c.url);
+        // TODO Make this reactive and don't throw away the resource
         await result.loaded;
         if (result.card) {
           instances.push(result.card);
@@ -184,7 +190,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
           <:loading>Loading...</:loading>
           <:response as |cards|>
             {{#if @activeTab.isTable}}
-              <TableView @cards={{cards}} />
+              <TableView @cards={{cards}} @context={{@context}} />
             {{else}}
               <CardsGrid @cards={{cards}} @context={{@context}} />
             {{/if}}

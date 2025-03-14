@@ -244,6 +244,64 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   return await chooser.chooseFile<T>();
 }
 
+export interface CardErrorsJSONAPI {
+  errors: {
+    id?: string; // 404 errors won't necessarily have an id
+    status: number;
+    title: string;
+    message: string;
+    realm: string | undefined;
+    meta: {
+      lastKnownGoodHtml: string | null;
+      cardTitle: string | null;
+      scopedCssUrls: string[];
+      stack: string | null;
+    };
+  }[];
+}
+export type CardErrorJSONAPI = CardErrorsJSONAPI['errors'][0];
+export type AutoSaveState = {
+  isSaving: boolean;
+  hasUnsavedChanges: boolean;
+  lastSaved: number | undefined;
+  lastSaveError: Error | undefined;
+  lastSavedErrorMsg: string | undefined;
+};
+export type getCard<T extends CardDef = CardDef> = (
+  parent: object,
+  url: () => string | LooseSingleCardDocument | undefined,
+  opts?: {
+    isLive?: boolean;
+    isAutoSaved?: boolean;
+  },
+) => // This is a duck type of the CardResource
+{
+  card: T | undefined;
+  isLoaded: boolean;
+  url: string | undefined;
+  autoSaveState: AutoSaveState | undefined;
+  cardError: CardErrorJSONAPI | undefined;
+  // TODO remove this
+  loaded: Promise<void>;
+};
+
+export type getCards = (
+  parent: object,
+  getQuery: () => Query | undefined,
+  getRealms?: () => string[] | undefined,
+  opts?: {
+    isLive?: true;
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+  },
+) => // This is a duck type of the SearchResource
+{
+  instances: CardDef[];
+  instancesByRealm: { realm: string; cards: CardDef[] }[];
+  // TODO remove this
+  loaded: Promise<void>;
+};
+
+// TODO remove this
 export interface CardSearch {
   getCards(
     getQuery: () => Query | undefined,
@@ -271,6 +329,7 @@ export interface CardCatalogQuery extends Query {
   filter?: CardTypeFilter | EveryFilter;
 }
 
+// TODO remove this
 export function getCards(
   getQuery: () => Query | undefined,
   getRealms: () => string[] | undefined,
@@ -282,19 +341,6 @@ export function getCards(
   let here = globalThis as any;
   let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
   return finder?.getCards(getQuery, getRealms, opts);
-}
-
-export function getCard<T extends CardDef>(
-  url: URL,
-  opts?: { loader?: Loader; isLive?: boolean },
-) {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CARD_SEARCH) {
-    // on the server we don't need this
-    return { card: undefined, loaded: undefined };
-  }
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCard<T>(url, opts);
 }
 
 export interface CardCreator {
@@ -384,6 +430,8 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
+
+  // TODO remove this
   getCards: (
     // The reason (getQuery, getRealms) is a thunk is to ensure that the arguments are reactive wrt to ember resource
     // This is the expectation of ember-resources ie`.from` method should be instantiated at the root of the component and expect a thunk

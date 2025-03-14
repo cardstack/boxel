@@ -72,6 +72,11 @@ export default class RecentCardsService extends Service {
 
     const recentCardIds = JSON.parse(recentCardIdsString) as string[];
     for (const recentCardId of recentCardIds) {
+      // TODO This seems dubious. RecentCardsService probably should not be
+      // dealing in CardDef's but rather card id's. if consumers want an
+      // instantiated card they can use getCard on their own instead of relying
+      // on this to instantiate cards for them. Please refactor as part of
+      // removing the CardResource.loaded promise.
       const cardResource = getCard(this, () => recentCardId);
       await cardResource.loaded;
       let { card } = cardResource;

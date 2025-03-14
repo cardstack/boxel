@@ -4,6 +4,7 @@
 
 import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
+import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
@@ -23,6 +24,8 @@ import type CardService from '../services/card-service';
 
 import type StoreService from '../services/store';
 
+let waiter = buildWaiter('card-resource');
+
 interface Args {
   named: {
     // using string type here so that URL's that have the same href but are
@@ -33,7 +36,7 @@ interface Args {
     storeService: StoreService;
     cardService: CardService;
     relativeTo?: URL;
-    isAutoSave: boolean;
+    isAutoSaved: boolean;
   };
 }
 
@@ -58,7 +61,7 @@ export class CardResource extends Resource<Args> {
   #url: string | undefined;
   #isLive = false;
   #api: typeof CardAPI | undefined;
-  #isAutoSave = false;
+  #isAutoSaved = false;
 
   onCardInstanceChange?: (
     oldCard: CardDef | undefined,
@@ -69,7 +72,7 @@ export class CardResource extends Resource<Args> {
     let {
       urlOrDoc,
       isLive,
-      isAutoSave,
+      isAutoSaved,
       storeService,
       cardService,
       relativeTo,
@@ -78,7 +81,7 @@ export class CardResource extends Resource<Args> {
     this.cardService = cardService;
     this.#url = urlOrDoc ? asURL(urlOrDoc) : undefined;
     this.#isLive = isLive;
-    this.#isAutoSave = isAutoSave;
+    this.#isAutoSaved = isAutoSaved;
 
     if (
       urlOrDoc !== this._loading?.urlOrDoc ||
@@ -100,8 +103,8 @@ export class CardResource extends Resource<Args> {
     return this.#isLive;
   }
 
-  get isAutoSave() {
-    return this.#isAutoSave;
+  get isAutoSaved() {
+    return this.#isAutoSaved;
   }
 
   get card() {
@@ -139,24 +142,29 @@ export class CardResource extends Resource<Args> {
       let card: CardDef | undefined;
       let error: CardError | undefined;
 
-      if (urlOrDoc) {
-        this.#api = await this.cardService.getAPI();
-        ({ url, card, error } = await this.store.createSubscriber({
-          resource: this,
-          urlOrDoc,
-          relativeTo,
-          setCard: (card) => {
-            if (card !== this.card) {
-              this._card = card;
-            }
-          },
-          setCardError: (error) => (this._error = error),
-        }));
+      let token = waiter.beginAsync();
+      try {
+        if (urlOrDoc) {
+          this.#api = await this.cardService.getAPI();
+          ({ url, card, error } = await this.store.createSubscriber({
+            resource: this,
+            urlOrDoc,
+            relativeTo,
+            setCard: (card) => {
+              if (card !== this.card) {
+                this._card = card;
+              }
+            },
+            setCardError: (error) => (this._error = error),
+          }));
+        }
+        this.#url = url;
+        this._card = card;
+        this._error = error;
+        this._isLoaded = true;
+      } finally {
+        waiter.endAsync(token);
       }
-      this.#url = url;
-      this._card = card;
-      this._error = error;
-      this._isLoaded = true;
     },
   );
 
@@ -171,21 +179,31 @@ export class CardResource extends Resource<Args> {
   }
 }
 
+// WARNING! please don't import this directly into your component's module.
+// Rather please instead use:
+// ```
+//   import { consume } from 'ember-provide-consume-context';
+//   import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
+//    ...
+//   @consume(GetCardContextName) private declare getCard: getCard;
+// ```
+// If you need to use `getCard()` in something that is not a Component, then
+// let's talk.
 export function getCard(
   parent: object,
   urlOrDoc: () => string | LooseSingleCardDocument | undefined,
   opts?: {
     relativeTo?: URL; // used for new cards
-    isLive?: () => boolean;
-    isAutoSave?: () => boolean;
+    isLive?: boolean;
+    isAutoSaved?: boolean;
   },
 ) {
   return CardResource.from(parent, () => ({
     named: {
       urlOrDoc: urlOrDoc(),
-      isLive: opts?.isLive ? opts.isLive() : true,
+      isLive: opts?.isLive != null ? opts.isLive : true,
       relativeTo: opts?.relativeTo,
-      isAutoSave: opts?.isAutoSave ? opts.isAutoSave() : false,
+      isAutoSaved: opts?.isAutoSaved != null ? opts.isAutoSaved : false,
       storeService: (getOwner(parent) as any).lookup(
         'service:store',
       ) as StoreService,

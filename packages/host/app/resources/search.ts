@@ -40,6 +40,9 @@ interface Args {
   };
 }
 
+// TODO refactor this so that it is a resource that holds a list of CardDefs,
+// not a resource that holds a list of CardResources. All the loading should
+// happen at the same time. Please make a ticket for this.
 export class Search extends Resource<Args> {
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
@@ -147,8 +150,9 @@ export class Search extends Resource<Args> {
     // untracked so our `this.cardResources.set` below will not be an assertion.
     let resource = this.seenCard(url, false);
     if (!resource) {
+      // TODO refactor this out--we don't want to hold CardResources at this layer
       resource = getCard(this, () => urlOrDoc, {
-        isLive: () => true,
+        isLive: true,
       });
       this.cardResources.set(url, resource);
       // only after the set has happened can we safely do the tracked read to

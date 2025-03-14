@@ -152,6 +152,9 @@ export default class OperatorModeStateService extends Service {
   }
 
   patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
+    // WARNING This card is not part of the identity map! Unsure if that is
+    // necessary for the way this card is used. TODO consider refactor this to
+    // use CardResource (please make ticket for this investigation)
     let card = await this.cardService.getCard(id);
     let document = await this.cardService.serializeCard(card);
     if (patch.attributes) {
@@ -552,8 +555,15 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
+        // TODO this seems dubious. We are unable to use @consume getCard at
+        // this layer. moreover we are throwing away the resource anyways (via
+        // stackItem.ready), Aaaaand the lifetime of these resources is wrong
+        // since this is a service. Let's figure out why we are deserializing
+        // cards at this layer and see if we can get rid of resource usage here
+        // altogether. Please refactor as part of eliminating the
+        // CardService.loaded promise.
         let cardResource = getCard(this, () => item.id, {
-          isAutoSave: () => true,
+          isAutoSaved: true,
         });
         let stackItem = new StackItem({
           owner: this, // ugh, not a great owner...

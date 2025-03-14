@@ -12,10 +12,10 @@ import {
   field,
   contains,
   StringField,
+  type CardContext,
 } from 'https://cardstack.com/base/card-api';
 
 import {
-  getCard,
   type LooseSingleCardDocument,
   ResolvedCodeRef,
   TypedFilter,
@@ -70,6 +70,7 @@ const or = function (item1: any, item2: any) {
 interface CardAdminViewSignature {
   Args: {
     cardId: string;
+    context?: CardContext<BlogPost>;
   };
   Element: HTMLElement;
 }
@@ -138,7 +139,9 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
     </style>
   </template>
 
-  @tracked resource = getCard<BlogPost>(new URL(this.args.cardId));
+  @tracked resource = this.args.context
+    ? this.args.context.getCard(this, () => this.args.cardId)
+    : undefined;
 
   formattedDate = (datetime: Date) => {
     return formatDatetime(datetime, {
@@ -152,7 +155,7 @@ class BlogAdminData extends GlimmerComponent<CardAdminViewSignature> {
   };
 
   get editors() {
-    return this.resource.card && this.resource.card.editors.length > 0
+    return this.resource?.card && this.resource.card.editors.length > 0
       ? this.resource.card.editors
           .map((editor) =>
             editor.email ? `${editor.name} (${editor.email})` : editor.name,
@@ -227,7 +230,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
             >
               <:meta as |card|>
                 {{#if this.showAdminData}}
-                  <BlogAdminData @cardId={{card.url}} />
+                  <BlogAdminData
+                    @cardId={{card.url}}
+                    @context={{this.context}}
+                  />
                 {{/if}}
               </:meta>
             </CardList>
@@ -286,6 +292,10 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
     super(owner, args);
     this.setFilters();
     this.activeFilter = this.filters[0];
+  }
+
+  private get context() {
+    return this.args.context as CardContext<BlogPost>;
   }
 
   private get gridClass() {
