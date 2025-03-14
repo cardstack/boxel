@@ -267,7 +267,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
-  @action viewCardInPlayground(card: CardDef) {
+  @action viewCardInPlayground(card: CardDef | string) {
     this.args.updatePlaygroundSelections(card.id);
   }
 
