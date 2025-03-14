@@ -574,7 +574,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   @action onSelectCard(cardId: string): void {
     this._selectedCard = this.cards.find((card) => card.id === cardId);
-    this.updateFieldSpecForPlayground(cardId);
   }
 
   get canWrite() {
@@ -621,37 +620,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   get showCreateSpec() {
     return this.cards.length === 0 && this.canWrite;
   }
-
-  // When previewing a field spec, changing the spec in Spec panel should
-  // change the selected spec in Playground panel
-  private updateFieldSpecForPlayground = (id: string) => {
-    let declaration = this.args.selectedDeclaration;
-    if (
-      !declaration?.exportName ||
-      !isCardOrFieldDeclaration(declaration) ||
-      !isFieldDef(declaration.cardOrField)
-    ) {
-      return;
-    }
-    let moduleId = internalKeyFor(
-      this.getSelectedDeclarationAsCodeRef,
-      undefined,
-    );
-    let cardId = id.replace(/\.json$/, '');
-    let selections = window.localStorage.getItem(PlaygroundSelections);
-    if (selections) {
-      let selection = JSON.parse(selections)[moduleId];
-      if (selection?.cardId === cardId) {
-        return;
-      }
-    }
-    this.playgroundPanelService.persistSelections(
-      moduleId,
-      cardId,
-      'embedded',
-      0,
-    );
-  };
 
   <template>
     {{yield
@@ -741,6 +709,30 @@ interface ModifierSignature {
 
 export class SpecPreviewModifier extends Modifier<ModifierSignature> {
   @service private declare playgroundPanelService: PlaygroundPanelService;
+
+  // When previewing a field spec, changing the spec in Spec panel should
+  // change the selected spec in Playground panel
+  private updateFieldSpecForPlayground = (
+    id: string,
+    codeRef: ResolvedCodeRef,
+  ) => {
+    let moduleId = internalKeyFor(codeRef, undefined);
+    let cardId = id.replace(/\.json$/, '');
+    let selections = window.localStorage.getItem(PlaygroundSelections);
+    if (selections) {
+      let selection = JSON.parse(selections)[moduleId];
+      if (selection?.cardId === cardId) {
+        return;
+      }
+    }
+    this.playgroundPanelService.persistSelections(
+      moduleId,
+      cardId,
+      'embedded',
+      0,
+    );
+  };
+
   modify(
     _element: HTMLElement,
     _positional: [],
@@ -753,12 +745,6 @@ export class SpecPreviewModifier extends Modifier<ModifierSignature> {
     if (!isResolvedCodeRef(maybeAbsoluteRef)) {
       throw new Error('bug: ref in spec cannot be resolved to an absolute');
     }
-    let key = internalKeyFor(maybeAbsoluteRef, new URL(id));
-    let existingSelection = this.playgroundPanelService.getSelection(key);
-    if (!existingSelection) {
-      next(this, () => {
-        this.playgroundPanelService.persistSelections(key, id, 'embedded', 0);
-      });
-    }
+    this.updateFieldSpecForPlayground(id, maybeAbsoluteRef);
   }
 }
