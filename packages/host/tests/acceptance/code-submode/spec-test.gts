@@ -18,7 +18,6 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
   getPlaygroundSelections,
-  setPlaygroundSelections,
   togglePlaygroundPanel,
 } from '../../helpers/playground';
 
@@ -631,6 +630,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
       .hasText('pet-entry-2.json');
+    await click('[data-option-index="0"]');
 
     await waitFor(`[data-test-links-to-many="linkedExamples"]`);
     assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();
@@ -643,19 +643,14 @@ module('Acceptance | Spec preview', function (hooks) {
     );
     await waitFor('[data-test-card-overlay]');
     assert.dom('[data-test-card-overlay]').exists();
-    await click('[data-test-card-overlay]');
+
+    await click(`[data-test-card="${testRealmURL}Pet/mango"]`);
 
     const petModuleId = `${testRealmURL}pet/Pet`;
     const petId = `${testRealmURL}Pet/mango`;
 
-    setPlaygroundSelections({
-      [`${petModuleId}`]: {
-        cardId: petId,
-        format: 'isolated',
-      },
-    });
-
     await togglePlaygroundPanel();
+
     assert.deepEqual(
       getPlaygroundSelections()?.[petModuleId],
       {
