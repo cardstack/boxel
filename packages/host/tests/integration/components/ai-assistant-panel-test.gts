@@ -392,7 +392,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
@@ -591,7 +591,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
       eventId: 'event1',
     };
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'A patch',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
@@ -650,7 +650,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel(id);
     await waitFor('[data-test-person="Fadhlan"]');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Removing pet and changing preferred carrier',
       formatted_body: 'Removing pet and changing preferred carrier',
@@ -691,7 +691,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
     assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Link to pet and change preferred carrier',
       formatted_body: 'Link to pet and change preferred carrier',
@@ -757,7 +757,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
       eventId: 'event1',
     };
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'A patch',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
@@ -813,7 +813,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Mickey"]');
     assert.dom('[data-test-tripTitle]').hasText('Summer Vacation');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change tripTitle to Trip to Japan',
       formatted_body: 'Change tripTitle to Trip to Japan',
@@ -854,7 +854,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change first name to Dave',
       formatted_body: 'Change first name to Dave',
@@ -878,7 +878,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Incorrect patch command',
       formatted_body: 'Incorrect patch command',
@@ -898,7 +898,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change first name to Jackie and switch to code mode',
       formatted_body: 'Change first name to Jackie and switch to code mode',
@@ -980,7 +980,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change first name to Dave',
       formatted_body: 'Change first name to Dave',
@@ -1028,7 +1028,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    let event1Id = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let event1Id = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       formatted_body: '',
       msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
@@ -1052,7 +1052,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         }),
       }),
     });
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'card with error',
       formatted_body: 'card with error',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1073,7 +1073,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     let cardFragmentsEventId = '!card_fragments_event_id';
     let now = Date.now();
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -1086,7 +1086,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
       { origin_server_ts: now + 60000 },
     );
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -1331,7 +1331,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it can render reasoning from ai bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]:
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
       body: null,
@@ -1348,7 +1348,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('by default reasoning content expands when reasoning starts streaming, then collapses when body starts streaming', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    let eventId = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
       body: null,
       msgtype: 'm.text',
@@ -1364,7 +1364,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .doesNotExist();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]:
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
       body: null,
@@ -1391,7 +1391,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .hasAttribute('open');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]:
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
       body: 'You should get a',
@@ -1414,7 +1414,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('if user explicity collapses or expands reasoning content, that state is remembered', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    let eventId = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
       body: null,
       msgtype: 'm.text',
@@ -1430,7 +1430,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .doesNotExist();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]:
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
       body: null,
@@ -1467,7 +1467,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .doesNotHaveAttribute('open');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]:
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
       body: null,
@@ -1483,7 +1483,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .doesNotHaveAttribute('open');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]:
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
       body: 'You should get a beagle.',
@@ -1501,7 +1501,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .hasAttribute('open');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       [APP_BOXEL_REASONING_CONTENT_KEY]:
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
       body: 'You should get a beagle. They are great companions.',
@@ -1521,7 +1521,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it can render a markdown message from ai bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
       msgtype: 'm.text',
       formatted_body:
@@ -1633,7 +1633,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
@@ -2043,14 +2043,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@testuser:localhost', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
       format: 'org.matrix.custom.html',
     });
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'There was an error processing your request, please try again later',
       msgtype: 'm.text',
       formatted_body:
@@ -2060,14 +2060,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       errorMessage: 'AI bot error',
     });
 
-    await simulateRemoteMessage(roomId, '@testuser:localhost', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
       format: 'org.matrix.custom.html',
     });
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'There was an error processing your request, please try again later',
       msgtype: 'm.text',
       formatted_body:
@@ -2112,7 +2112,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('replacement message should use `created` from the oldest message', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    let firstMessageId = await simulateRemoteMessage(
+    let firstMessageId = simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -2131,7 +2131,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
       },
     );
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -2144,7 +2144,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
       },
     );
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -2387,7 +2387,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       anotherRoomId,
       '@aibot:localhost',
       {
@@ -2404,7 +2404,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-ai-assistant-toast]').exists({ count: 0 });
 
     let fourteenMinutesAgo = subMinutes(new Date(), 14);
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       anotherRoomId,
       '@aibot:localhost',
       {
@@ -2530,7 +2530,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists();
 
-    commandResultEvents = await getRoomEvents(roomId).filter(
+    commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
@@ -2582,7 +2582,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: '__EVENT_ID__',
       },
     });
-    let commandResultEvents = await getRoomEvents(roomId).filter(
+    let commandResultEvents = getRoomEvents(roomId).filter(
       (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
     assert.equal(
@@ -2601,7 +2601,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists();
 
-    commandResultEvents = await getRoomEvents(roomId).filter(
+    commandResultEvents = getRoomEvents(roomId).filter(
       (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
     assert.equal(
@@ -2615,7 +2615,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let id = `${testRealmURL}Pet/mango.json`;
     let roomId = await renderAiAssistantPanel(id);
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
@@ -2662,7 +2662,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let id = `${testRealmURL}Pet/mango.json`;
     let roomId = await renderAiAssistantPanel(id);
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
@@ -2704,7 +2704,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('toggle more search results', async function (assert) {
     let id = `${testRealmURL}Person/fadhlan.json`;
     let roomId = await renderAiAssistantPanel(id);
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
@@ -2768,7 +2768,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     };
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
@@ -2839,7 +2839,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     };
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
@@ -2970,7 +2970,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it shows the copy code to clipboard button', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -3019,7 +3019,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it renders codeblock in monaco', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
