@@ -2637,10 +2637,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       ],
     });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-boxel-command-result]');
-    await waitFor('.result-list li:nth-child(2)');
+    await settled();
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -2681,12 +2678,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       ],
     });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-boxel-card-header-title]',
-    );
-    await waitFor('.result-list li:nth-child(1)');
+    await settled();
     assert
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
@@ -2726,10 +2718,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       ],
     });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-boxel-command-result]');
-    await waitFor('.result-list li:nth-child(5)');
+    await settled();
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')
@@ -2782,11 +2771,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       ],
     });
-
+    await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
-
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
@@ -2853,13 +2839,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       ],
     });
+    await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();
     assert.dom('[data-test-workspace-chooser]').exists();
-
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
