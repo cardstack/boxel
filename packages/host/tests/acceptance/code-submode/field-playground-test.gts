@@ -377,7 +377,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     await selectFormat('fitted');
     assertFieldExists(assert, 'fitted');
     assert.dom('[data-test-fitted-comment]').containsText('by Marco');
-    await this.pauseTest();
   });
 
   test('can not preview non-exports or primitives', async function (assert) {
