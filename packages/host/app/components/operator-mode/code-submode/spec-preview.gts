@@ -77,7 +77,7 @@ interface Signature {
     default: [
       WithBoundArgs<
         typeof SpecPreviewTitle,
-        | 'showCreateSpecIntent'
+        | 'showCreateSpec'
         | 'createSpec'
         | 'isCreateSpecInstanceRunning'
         | 'specType'
@@ -86,7 +86,7 @@ interface Signature {
       (
         | WithBoundArgs<
             typeof SpecPreviewContent,
-            | 'showCreateSpecIntent'
+            | 'showCreateSpec'
             | 'canWrite'
             | 'onSelectCard'
             | 'spec'
@@ -103,7 +103,7 @@ interface TitleSignature {
   Args: {
     numberOfInstances: number;
     specType: SpecType;
-    showCreateSpecIntent: boolean;
+    showCreateSpec: boolean;
     createSpec: (event: MouseEvent) => void;
     isCreateSpecInstanceRunning: boolean;
   };
@@ -118,7 +118,7 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
     Boxel Spec
 
     <span class='has-spec' data-test-has-spec>
-      {{#if @showCreateSpecIntent}}
+      {{#if @showCreateSpec}}
         <BoxelButton
           @kind='primary'
           @size='small'
@@ -172,7 +172,7 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 interface ContentSignature {
   Element: HTMLDivElement;
   Args: {
-    showCreateSpecIntent: boolean;
+    showCreateSpec: boolean;
     canWrite: boolean;
     onSelectCard: (cardId: string) => void;
     cards: Spec[];
@@ -257,11 +257,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     <div
       class={{cn
         'container'
-        spec-intent-message=@showCreateSpecIntent
+        spec-intent-message=@showCreateSpec
         cannot-write=this.displayCannotWrite
       }}
     >
-      {{#if @showCreateSpecIntent}}
+      {{#if @showCreateSpec}}
         <div data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
         </div>
@@ -627,9 +627,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.card?.specType as SpecType;
   }
 
-  getSpecIntent = (cards: any[]) => {
-    return cards.length === 0 && this.canWrite;
-  };
+  get showCreateSpec() {
+    return this.cards.length === 0 && this.canWrite;
+  }
 
   // When previewing a field spec, changing the spec in Spec panel should
   // change the selected spec in Playground panel
@@ -663,27 +663,25 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
-    {{#let (this.getSpecIntent this.cards) as |showCreateSpecIntent|}}
-      {{yield
-        (component
-          SpecPreviewTitle
-          showCreateSpecIntent=showCreateSpecIntent
-          createSpec=this.createSpec
-          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-          specType=this.specType
-          numberOfInstances=this.cards.length
-        )
-        (component
-          SpecPreviewContent
-          showCreateSpecIntent=showCreateSpecIntent
-          canWrite=this.canWrite
-          onSelectCard=this.onSelectCard
-          spec=this.card
-          isLoading=false
-          cards=this.cards
-        )
-      }}
-    {{/let}}
+    {{yield
+      (component
+        SpecPreviewTitle
+        showCreateSpec=this.showCreateSpec
+        createSpec=this.createSpec
+        isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+        specType=this.specType
+        numberOfInstances=this.cards.length
+      )
+      (component
+        SpecPreviewContent
+        showCreateSpec=this.showCreateSpec
+        canWrite=this.canWrite
+        onSelectCard=this.onSelectCard
+        spec=this.card
+        isLoading=false
+        cards=this.cards
+      )
+    }}
   </template>
 }
 
