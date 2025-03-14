@@ -21,7 +21,7 @@ import {
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
-import { provide } from 'ember-provide-consume-context';
+import { provide, consume } from 'ember-provide-consume-context';
 
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -38,9 +38,13 @@ import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 import {
   type Actions,
   type Permissions,
+  type getCard,
+  type getCards,
   cardTypeDisplayName,
   PermissionsContextName,
   RealmURLContextName,
+  GetCardContextName,
+  GetCardsContextName,
   Deferred,
   cardTypeIcon,
   CommandContext,
@@ -113,6 +117,9 @@ export interface RenderedCardForOverlayActions {
 }
 
 export default class OperatorModeStackItem extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -238,6 +245,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
       commandContext: this.args.commandContext,
+      getCard: this.getCard,
+      getCards: this.getCards,
     };
   }
 

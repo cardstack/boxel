@@ -354,6 +354,8 @@ export default class CardService extends Service {
     return card;
   }
 
+  // Warning! this is a low level API for getting a card that bypasses the
+  // store's identity map. Cards from here are divorced from the store.
   async getCard<T extends CardDef = CardDef>(url: URL | string): Promise<T> {
     if (typeof url === 'string') {
       url = new URL(url);

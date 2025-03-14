@@ -12,6 +12,7 @@ import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
+import { consume } from 'ember-provide-consume-context';
 
 import {
   FieldContainer,
@@ -31,13 +32,13 @@ import {
   Deferred,
   SupportedMimeType,
   maybeRelativeURL,
+  GetCardContextName,
+  type getCard,
   type LocalPath,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
-
-import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -327,6 +328,8 @@ export default class CreateFileModal extends Component<Signature> {
     </style>
   </template>
 
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare cardService: CardService;
   @service private declare network: NetworkService;
 
@@ -537,9 +540,13 @@ export default class CreateFileModal extends Component<Signature> {
           this.fileType.id === 'field-definition'
             ? 'fields/field'
             : 'types/card';
-        let resource = getCard(this, () => `${baseRealm.url}${specEntryPath}`, {
-          isLive: () => false,
-        });
+        let resource = this.getCard(
+          this,
+          () => `${baseRealm.url}${specEntryPath}`,
+          {
+            isLive: false,
+          },
+        );
         await resource.loaded;
         this.selectedSpec = resource.card as Spec;
       }

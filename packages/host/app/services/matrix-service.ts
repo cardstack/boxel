@@ -910,6 +910,8 @@ export default class MatrixService extends Service {
 
     return await Promise.all(
       defaultSkills.map(async (skillCardURL) => {
+        // WARNING This card is not part of the identity map!
+        // TODO refactor this to use CardResource (please make ticket)
         return await this.cardService.getCard<SkillCard>(skillCardURL);
       }),
     );

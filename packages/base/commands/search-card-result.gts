@@ -9,7 +9,13 @@ import {
   IconPlus,
   IconSearchThick,
 } from '@cardstack/boxel-ui/icons';
-import { Query, getCard, primitive } from '@cardstack/runtime-common';
+import {
+  type getCard,
+  type Query,
+  primitive,
+  GetCardContextName,
+} from '@cardstack/runtime-common';
+import { consume } from 'ember-provide-consume-context';
 import {
   BaseDef,
   CardDef,
@@ -24,11 +30,7 @@ import {
 } from '../card-api';
 import CodeRefField from '../code-ref';
 
-type AttachedCardResource = {
-  card: CardDef | undefined;
-  loaded?: Promise<void>;
-  cardError?: { id: string; error: Error };
-};
+type AttachedCardResource = ReturnType<getCard>;
 
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
@@ -73,7 +75,7 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
           >
             Error: cannot render card
             {{cardResource.cardError.id}}:
-            {{cardResource.cardError.error.message}}
+            {{cardResource.cardError.message}}
           </li>
         {{else if cardResource.card}}
           <li
@@ -134,6 +136,7 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
 class SearchCardsResultEmbeddedView extends Component<
   typeof SearchCardsResult
 > {
+  @consume(GetCardContextName) private declare getCard: getCard;
   @tracked showAllResults = false;
 
   @cached
@@ -141,19 +144,7 @@ class SearchCardsResultEmbeddedView extends Component<
     if (!this.cardIdsToDisplay.length) {
       return [];
     }
-    let cards = this.cardIdsToDisplay.map((id) => {
-      let card = getCard(new URL(id));
-      if (!card) {
-        return {
-          card: undefined,
-          cardError: {
-            id,
-            error: new Error(`cannot find card for id "${id}"`),
-          },
-        };
-      }
-      return card;
-    });
+    let cards = this.cardIdsToDisplay.map((id) => this.getCard(this, () => id));
     return cards;
   }
 
