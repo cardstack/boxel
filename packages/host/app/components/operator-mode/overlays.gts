@@ -1,61 +1,53 @@
-import { fn, array } from '@ember/helper';
-import { on } from '@ember/modifier';
+import { array } from '@ember/helper';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+import { htmlSafe, SafeString } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
+import { isEqual } from 'lodash';
 import { type TrackedArray } from 'tracked-built-ins';
-
-import {
-  BoxelDropdown,
-  IconButton,
-  Menu,
-  Tooltip,
-  BoxelDropdownAPI,
-} from '@cardstack/boxel-ui/components';
-import { compact, cn, menuItem, or } from '@cardstack/boxel-ui/helpers';
-
-import {
-  Eye,
-  IconCircle,
-  IconCircleSelected,
-  IconLink,
-  IconPencil,
-  IconTrash,
-  ThreeDotsHorizontal,
-} from '@cardstack/boxel-ui/icons';
 
 import { type Actions } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
-
 import RealmService from '@cardstack/host/services/realm';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
-import { removeFileExtension } from '../search-sheet/utils';
+import { CardDefOrId } from './stack-item';
 
-import { CardDefOrId, RenderedCardForOverlayActions } from './stack-item';
-
+import type { RenderedCardForOverlayActions } from '../../resources/element-tracker';
 import type { MiddlewareState } from '@floating-ui/dom';
 
-interface Signature {
+interface OverlaySignature {
   Args: {
     renderedCardsForOverlayActions: RenderedCardForOverlayActions[];
-    publicAPI: Actions;
+    publicAPI?: Actions;
+    onSelectCard?: (cardDefOrId: CardDefOrId) => void;
     toggleSelect?: (cardDefOrId: CardDefOrId) => void;
-    selectedCards: TrackedArray<CardDefOrId>;
+    selectedCards?: TrackedArray<CardDefOrId>;
+    overlayClassName?: string;
   };
   Element: HTMLElement;
+  Blocks: {
+    default: [
+      renderedCard: RenderedCardForOverlayActions,
+      cardDefOrId: CardDefOrId,
+      cardId: string,
+      isSelected: boolean,
+      isHovered: boolean,
+    ];
+  };
 }
 
 let boundRenderedCardElement = new WeakSet<HTMLElement>();
 
-export default class OperatorModeOverlays extends Component<Signature> {
+export default class Overlays extends Component<OverlaySignature> {
+  @tracked overlayClassName = this.args.overlayClassName ?? 'base-overlay';
+
   <template>
     {{#each this.renderedCardsForOverlayActionsWithEvents as |renderedCard|}}
       {{#let
@@ -64,299 +56,40 @@ export default class OperatorModeOverlays extends Component<Signature> {
         (this.isSelected renderedCard.cardDefOrId)
         as |cardDefOrId cardId isSelected|
       }}
-        {{#if (or isSelected (this.isHovered renderedCard))}}
+        {{#if (this.shouldRenderOverlay renderedCard isSelected)}}
           <div
-            class={{cn
-              'actions-overlay'
-              selected=isSelected
-              hovered=(this.isHovered renderedCard)
-            }}
+            class={{this.overlayClassName}}
             {{velcro renderedCard.element middleware=(array this.offset)}}
-            data-test-overlay-selected={{if
-              isSelected
-              (removeFileExtension cardId)
-            }}
-            data-test-overlay-card={{removeFileExtension cardId}}
             style={{renderedCard.overlayZIndexStyle}}
+            data-test-card-overlay
             ...attributes
           >
-            <div class={{cn 'actions' field=(this.isField renderedCard)}}>
-              {{#if (this.isButtonDisplayed 'select' renderedCard)}}
-                <div class='actions-item select'>
-                  <IconButton
-                    class='actions-item__button'
-                    {{! @glint-ignore (glint thinks toggleSelect is not in this scope but it actually is - we check for it in the condition above) }}
-                    {{on 'click' (fn @toggleSelect cardDefOrId)}}
-                    @width='100%'
-                    @height='100%'
-                    @icon={{if isSelected IconCircleSelected IconCircle}}
-                    aria-label='select card'
-                    data-test-overlay-select={{(removeFileExtension cardId)}}
-                  />
-                </div>
-              {{/if}}
-              {{#if
-                (or
-                  (this.isButtonDisplayed 'edit' renderedCard)
-                  (this.isButtonDisplayed 'more-options' renderedCard)
-                )
-              }}
-                <div class='actions-item'>
-                  {{#if (this.isButtonDisplayed 'edit' renderedCard)}}
-                    <IconButton
-                      @icon={{IconPencil}}
-                      @width='100%'
-                      @height='100%'
-                      class='actions-item__button'
-                      aria-label='Edit'
-                      data-test-overlay-edit
-                      {{on
-                        'click'
-                        (fn
-                          this.openOrSelectCard
-                          cardDefOrId
-                          'edit'
-                          renderedCard.fieldType
-                          renderedCard.fieldName
-                        )
-                      }}
-                    />
-                  {{/if}}
-                  {{#if (this.isButtonDisplayed 'more-options' renderedCard)}}
-                    <div>
-                      <BoxelDropdown
-                        @registerAPI={{(this.registerDropdownAPI renderedCard)}}
-                      >
-                        <:trigger as |bindings|>
-                          <Tooltip @placement='top'>
-                            <:trigger>
-                              <IconButton
-                                @icon={{ThreeDotsHorizontal}}
-                                @width='100%'
-                                @height='100%'
-                                class='actions-item__button'
-                                aria-label='Options'
-                                data-test-overlay-more-options
-                                {{bindings}}
-                              />
-                            </:trigger>
-                            <:content>
-                              More Options
-                            </:content>
-                          </Tooltip>
-                        </:trigger>
-                        <:content as |dd|>
-                          <Menu
-                            @closeMenu={{dd.close}}
-                            @items={{compact
-                              (array
-                                (if
-                                  (this.isMenuDisplayed 'view' renderedCard)
-                                  (menuItem
-                                    'View card'
-                                    (fn this.openOrSelectCard cardDefOrId)
-                                    icon=Eye
-                                  )
-                                )
-                                (if
-                                  (this.isMenuDisplayed
-                                    'copy-card-url' renderedCard
-                                  )
-                                  (menuItem
-                                    'Copy Card URL'
-                                    (fn
-                                      @publicAPI.copyURLToClipboard cardDefOrId
-                                    )
-                                    icon=IconLink
-                                  )
-                                )
-                                (if
-                                  (this.isMenuDisplayed 'delete' renderedCard)
-                                  (menuItem
-                                    'Delete'
-                                    (fn @publicAPI.delete cardDefOrId)
-                                    icon=IconTrash
-                                    dangerous=true
-                                  )
-                                )
-                              )
-                            }}
-                          />
-                        </:content>
-                      </BoxelDropdown>
-                    </div>
-                  {{/if}}
-                </div>
-              {{/if}}
-            </div>
+            {{yield
+              renderedCard
+              cardDefOrId
+              cardId
+              isSelected
+              (this.isHovered renderedCard)
+            }}
           </div>
         {{/if}}
       {{/let}}
     {{/each}}
     <style scoped>
-      :global(:root) {
-        --overlay-fitted-card-header-height: 2.5rem;
-      }
-      .actions-overlay {
-        border-radius: var(--boxel-border-radius);
-        pointer-events: none;
-
-        container-name: actions-overlay;
-        container-type: size;
-      }
-      .actions-overlay.selected {
-        box-shadow: 0 0 0 var(--boxel-outline-width) var(--boxel-highlight);
-      }
-      .hovered {
-        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.16);
-      }
-      .hover-button {
-        display: none;
-        position: absolute;
-        width: 30px;
-        height: 30px;
-        pointer-events: auto;
-      }
-      .hovered .hover-button:not(:disabled),
-      .hovered .hover-button.select {
-        display: block;
-      }
-
-      @container actions-overlay (aspect-ratio <= 1.0) {
-        .actions {
-          --overlay-embedded-card-header-height: 2.2rem;
-        }
-
-        .actions-item {
-          padding: var(--boxel-sp-5xs);
-        }
-
-        .actions-item__button {
-          padding: var(--boxel-sp-4xs);
-          --boxel-icon-button-width: calc(
-            var(--overlay-embedded-card-header-height) -
-              calc(var(--boxel-sp-4xs) + var(--boxel-sp-5xs))
-          );
-          --boxel-icon-button-height: calc(
-            var(--overlay-embedded-card-header-height) -
-              calc(var(--boxel-sp-4xs) + var(--boxel-sp-5xs))
-          );
-        }
-      }
-
-      @container actions-overlay (aspect-ratio <= 1.0) and (width <= 120px) {
-        .actions {
-          --overlay-embedded-card-header-height: 1.8rem;
-        }
-
-        .actions-item__button {
-          padding: var(--boxel-sp-5xs);
-          --boxel-icon-button-width: calc(
-            var(--overlay-embedded-card-header-height) -
-              calc(var(--boxel-sp-5xs) * 2)
-          );
-          --boxel-icon-button-height: calc(
-            var(--overlay-embedded-card-header-height) -
-              calc(var(--boxel-sp-5xs) * 2)
-          );
-        }
-      }
-
-      @container actions-overlay (aspect-ratio > 1.0) {
-        .actions {
-          --overlay-embedded-card-header-height: 2.2rem;
-        }
-
-        .actions-item {
-          padding: var(--boxel-sp-5xs);
-        }
-
-        .actions-item__button {
-          padding: var(--boxel-sp-4xs);
-          --boxel-icon-button-width: calc(
-            var(--overlay-embedded-card-header-height) -
-              calc(var(--boxel-sp-4xs) + var(--boxel-sp-5xs))
-          );
-          --boxel-icon-button-height: calc(
-            var(--overlay-embedded-card-header-height) -
-              calc(var(--boxel-sp-4xs) + var(--boxel-sp-5xs))
-          );
-        }
-      }
-
-      @container actions-overlay (aspect-ratio > 2.0) and (height <= 57px) {
-        .actions {
-          --overlay-embedded-card-header-height: 1.5rem;
-          margin-top: var(--boxel-sp-5xs);
-        }
-
-        .actions-item {
-          padding: var(--boxel-sp-6xs);
-        }
-
-        .actions-item__button {
-          padding: var(--boxel-sp-6xs);
-          --boxel-icon-button-width: calc(
-            var(--overlay-embedded-card-header-height) -
-              calc(var(--boxel-sp-6xs) * 2)
-          );
-          --boxel-icon-button-height: calc(
-            var(--overlay-embedded-card-header-height) -
-              calc(var(--boxel-sp-6xs) * 2)
-          );
-        }
-      }
-      .hovered .actions {
-        visibility: visible;
-      }
-      .actions {
-        visibility: hidden;
-        height: auto;
-        display: flex;
-        justify-content: space-between;
-
-        margin-top: var(--boxel-sp-xxxs);
-        margin-left: var(--boxel-sp-xxxs);
-        margin-right: var(--boxel-sp-xxxs);
-      }
-      .actions.field {
-        justify-content: flex-end;
-      }
-      .actions-item {
-        display: flex;
-        align-items: center;
-        background: var(--boxel-light);
-        border: 1px solid var(--boxel-450);
-        border-radius: var(--boxel-border-radius-sm);
-        gap: var(--boxel-sp-xxxs);
-        box-shadow: 0 3px 3px 0 rgba(0, 0, 0, 0.5);
-      }
-      .actions-item__button {
-        --icon-bg: var(--boxel-dark);
-        --icon-color: var(--boxel-dark);
-
-        pointer-events: auto; /* pointer events are disabled in the overlay, we re-enable it here for header actions */
-        display: flex;
-        border-radius: 5px;
-      }
-      .actions-item__button:hover {
-        --icon-bg: var(--boxel-dark);
-        --icon-color: var(--boxel-dark);
-        background-color: var(--boxel-highlight);
-      }
-      .selected .actions-item.select {
-        visibility: visible;
+      .base-overlay {
+        width: 100%;
+        height: 100%;
       }
     </style>
   </template>
 
-  @service private declare cardService: CardService;
-  @service private declare realm: RealmService;
+  @service protected declare cardService: CardService;
+  @service protected declare realm: RealmService;
 
-  @tracked private currentlyHoveredCard: RenderedCardForOverlayActions | null =
-    null;
+  @tracked
+  protected currentlyHoveredCard: RenderedCardForOverlayActions | null = null;
 
-  private offset = {
+  protected offset = {
     name: 'offset',
     fn: (state: MiddlewareState) => {
       let { elements, rects } = state;
@@ -373,18 +106,13 @@ export default class OperatorModeOverlays extends Component<Signature> {
     },
   };
 
-  private dropdownAPIs: WeakMap<
-    RenderedCardForOverlayActions,
-    BoxelDropdownAPI
-  > = new Map();
-
   // Since we put absolutely positined overlays containing operator mode actions on top of the rendered cards,
   // we are running into a problem where the overlays are interfering with scrolling of the container that holds the rendered cards.
   // That means scrolling stops when the cursor gets over the overlay, which is a bug. We solved this problem by disabling pointer
   // events on the overlay. However, that prevents the browser from detecting hover state, which is needed to show the operator mode actions, and
   // click event, needed to open the card. To solve this, we add event listeners to the rendered cards underneath the overlay, and use those to
   // detect hover state and click event.
-  private get renderedCardsForOverlayActionsWithEvents() {
+  protected get renderedCardsForOverlayActionsWithEvents() {
     let renderedCards = this.args.renderedCardsForOverlayActions;
     for (const renderedCard of renderedCards) {
       if (boundRenderedCardElement.has(renderedCard.element)) {
@@ -406,7 +134,7 @@ export default class OperatorModeOverlays extends Component<Signature> {
         // eslint-disable-next-line ember/no-side-effects
         (ev: MouseEvent) => {
           let relatedTarget = ev.relatedTarget as HTMLElement;
-          if (relatedTarget?.closest?.('.actions-overlay')) {
+          if (relatedTarget?.closest?.(`.${this.overlayClassName}`)) {
             return;
           }
           this.setCurrentlyHoveredCard(null);
@@ -418,104 +146,40 @@ export default class OperatorModeOverlays extends Component<Signature> {
         e.stopPropagation();
         this.openOrSelectCard(
           renderedCard.cardDefOrId,
-          renderedCard.stackItem.format,
+          this.getFormatForCard(renderedCard),
           renderedCard.fieldType,
           renderedCard.fieldName,
         );
       });
       renderedCard.element.style.cursor = 'pointer';
-      renderedCard.overlayZIndexStyle = this.zIndexStyle(renderedCard.element);
+      renderedCard.overlayZIndexStyle = this.zIndexStyle(
+        renderedCard.element,
+        renderedCard.overlayZIndexStyle,
+      );
     }
 
     return renderedCards;
   }
 
-  @action
-  private isButtonDisplayed(
-    type: string,
+  @action protected shouldRenderOverlay(
     renderedCard: RenderedCardForOverlayActions,
+    isSelected: boolean,
   ): boolean {
-    switch (type) {
-      case 'select':
-        return !this.isField(renderedCard) && !!this.args.toggleSelect;
-      case 'edit':
-        return this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId));
-      case 'more-options':
-        return (
-          this.isMenuDisplayed('view', renderedCard) ||
-          this.isMenuDisplayed('copy-card-url', renderedCard) ||
-          this.isMenuDisplayed('delete', renderedCard)
-        );
-      default:
-        return false;
-    }
+    return isSelected || this.isHovered(renderedCard);
   }
 
-  @action
-  private isMenuDisplayed(
-    type: string,
-    renderedCard: RenderedCardForOverlayActions,
-  ) {
-    switch (type) {
-      case 'view':
-      case 'copy-card-url':
-        return true;
-      case 'delete':
-        return (
-          !this.isField(renderedCard) &&
-          this.realm.canWrite(this.getCardId(renderedCard.cardDefOrId))
-        );
-      default:
-        return false;
-    }
-  }
-
-  private isField(renderedCard: RenderedCardForOverlayActions) {
-    return (
-      renderedCard.fieldType === 'contains' ||
-      renderedCard.fieldType === 'linksTo' ||
-      renderedCard.fieldType === 'linksToMany'
-    );
-  }
-
-  @action getCardId(cardDefOrId: CardDefOrId) {
+  @action protected getCardId(cardDefOrId: CardDefOrId) {
     return typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
   }
 
-  private setCurrentlyHoveredCard = (
-    renderedCard: RenderedCardForOverlayActions | null,
-  ) => {
-    // Hide the dropdown content when the overlay is not hovered.
-    // Make it visible again when it is hovered.
-    let hoveredCard = this.currentlyHoveredCard ?? renderedCard;
-    if (hoveredCard) {
-      let dropdownContentElement = document.querySelector(
-        `#ember-basic-dropdown-content-${
-          this.dropdownAPIs.get(hoveredCard)?.uniqueId
-        }`,
-      );
-
-      if (dropdownContentElement) {
-        const dropdownElement = dropdownContentElement as HTMLElement;
-        dropdownElement.style.visibility =
-          dropdownElement.style.visibility === 'hidden' ? 'visible' : 'hidden';
-      }
-    }
-    this.currentlyHoveredCard = renderedCard;
-  };
-
   @action
-  private registerDropdownAPI(renderedCard: RenderedCardForOverlayActions) {
-    return (dropdownAPI: BoxelDropdownAPI) => {
-      if (this.dropdownAPIs.has(renderedCard)) {
-        return;
-      }
-
-      this.dropdownAPIs.set(renderedCard, dropdownAPI);
-    };
+  protected setCurrentlyHoveredCard(
+    renderedCard: RenderedCardForOverlayActions | null,
+  ) {
+    this.currentlyHoveredCard = renderedCard;
   }
 
-  @action private openOrSelectCard(
+  @action protected openOrSelectCard(
     cardDefOrId: CardDefOrId,
     format: Format = 'isolated',
     fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany',
@@ -523,22 +187,34 @@ export default class OperatorModeOverlays extends Component<Signature> {
   ) {
     if (this.args.toggleSelect && this.args.selectedCards?.length) {
       this.args.toggleSelect(cardDefOrId);
+    } else if (this.args.onSelectCard) {
+      this.args.onSelectCard(cardDefOrId);
     } else {
       this.viewCard.perform(cardDefOrId, format, fieldType, fieldName);
     }
   }
 
-  @action private isSelected(cardDefOrId: CardDefOrId) {
-    return this.args.selectedCards?.some(
-      (card: CardDefOrId) => card === cardDefOrId,
+  @action protected isSelected(cardDefOrId: CardDefOrId) {
+    return (
+      this.args.selectedCards?.some(
+        (card: CardDefOrId) => card === cardDefOrId,
+      ) ?? false
     );
   }
 
-  @action private isHovered(renderedCard: RenderedCardForOverlayActions) {
-    return this.currentlyHoveredCard === renderedCard;
+  @action protected isHovered(renderedCard: RenderedCardForOverlayActions) {
+    return isEqual(this.currentlyHoveredCard, renderedCard);
   }
 
-  private viewCard = dropTask(
+  protected isField(renderedCard: RenderedCardForOverlayActions) {
+    return (
+      renderedCard.fieldType === 'contains' ||
+      renderedCard.fieldType === 'linksTo' ||
+      renderedCard.fieldType === 'linksToMany'
+    );
+  }
+
+  protected viewCard = dropTask(
     async (
       cardDefOrId: CardDefOrId,
       format: Format = 'isolated',
@@ -549,14 +225,20 @@ export default class OperatorModeOverlays extends Component<Signature> {
         typeof cardDefOrId === 'string' ? cardDefOrId : cardDefOrId.id;
       let canWrite = this.realm.canWrite(cardId);
       format = canWrite ? format : 'isolated';
-      await this.args.publicAPI.viewCard(new URL(cardId), format, {
-        fieldType,
-        fieldName,
-      });
+      if (this.args.publicAPI) {
+        await this.args.publicAPI.viewCard(new URL(cardId), format, {
+          fieldType,
+          fieldName,
+        });
+      }
     },
   );
 
-  private zIndexStyle(element: HTMLElement) {
+  protected zIndexStyle(element: HTMLElement, overlayZIndexStyle?: SafeString) {
+    if (overlayZIndexStyle) {
+      return overlayZIndexStyle;
+    }
+
     let parentElement = element.parentElement!;
     let zIndexParentElement = window
       .getComputedStyle(parentElement)
@@ -566,5 +248,17 @@ export default class OperatorModeOverlays extends Component<Signature> {
         ? zIndexParentElement
         : String(Number(zIndexParentElement) + 1);
     return htmlSafe(`z-index: ${zIndex}`);
+  }
+
+  /**
+   * Gets the format to use when opening or selecting a card
+   * Override this in subclasses to customize format behavior
+   */
+  @action
+  protected getFormatForCard(
+    renderedCard: RenderedCardForOverlayActions,
+  ): Format {
+    // Default implementation - prefer stackItem.format if available, otherwise use direct format
+    return (renderedCard.format || 'isolated') as Format;
   }
 }

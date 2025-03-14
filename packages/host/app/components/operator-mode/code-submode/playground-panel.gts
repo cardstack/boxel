@@ -2,7 +2,9 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+
 import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -41,6 +43,8 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import consumeContext from '@cardstack/host/modifiers/consume-context';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -49,8 +53,6 @@ import type RealmService from '@cardstack/host/services/realm';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-
-import consumeContext from '@cardstack/host/modifiers/consume-context';
 
 import type {
   CardDef,
@@ -504,7 +506,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @tracked private fieldChooserIsOpen = false;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private fieldFormats: Format[] = ['embedded', 'atom', 'edit'];
+  private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
 
   private makeCardResource = () => {
     this.cardResource = this.getCard(

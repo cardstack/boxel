@@ -19,6 +19,7 @@ import {
   ecsMetadata,
   setContextResponse,
   fetchRequestFromContext,
+  methodOverrideSupport,
 } from './middleware';
 import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
@@ -164,6 +165,7 @@ export class RealmServer {
       })
       .use(convertAcceptHeaderQueryParam)
       .use(convertAuthHeaderQueryParam)
+      .use(methodOverrideSupport)
       .use(
         createRoutes({
           dbAdapter: this.dbAdapter,

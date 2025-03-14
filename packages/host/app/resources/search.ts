@@ -8,7 +8,6 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
 
-import { stringify } from 'qs';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -172,11 +171,13 @@ export class Search extends Resource<Args> {
       let results = flatMap(
         await Promise.all(
           this.realmsToSearch.map(async (realm) => {
-            let json = await this.cardService.fetchJSON(
-              `${realm}_search?${stringify(query, {
-                strictNullHandling: true,
-              })}`,
-            );
+            let json = await this.cardService.fetchJSON(`${realm}_search`, {
+              method: 'QUERY',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(query),
+            });
             if (!isCardCollectionDocument(json)) {
               throw new Error(
                 `The realm search response was not a card collection document:
