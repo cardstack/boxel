@@ -413,15 +413,15 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .hasValue('Comment spec');
     assert
       .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-      .containsText('Spec/comment-1.json');
+      .containsText('Spec/comment-1');
     await click('[data-test-spec-selector] > div');
     assert
       .dom('[data-option-index="1"] [data-test-spec-selector-item-path]')
-      .hasText('Spec/comment-2.json');
+      .hasText('Spec/comment-2');
     await click('[data-option-index="1"]');
     assert
       .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-      .containsText('Spec/comment-2.json');
+      .containsText('Spec/comment-2');
     assert
       .dom(
         `[data-test-card="${testRealmURL}Spec/comment-2"] [data-test-boxel-input-id="spec-title"]`,
