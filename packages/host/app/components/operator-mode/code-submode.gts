@@ -470,12 +470,8 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  private get selectedCardOrFieldDef() {
-    return this.selectedCardOrField?.cardOrField;
-  }
-
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
-    let codeRef = identifyCard(this.selectedCardOrFieldDef);
+    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
     return isResolvedCodeRef(codeRef) ? codeRef : undefined;
   }
 
@@ -950,7 +946,7 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if this.selectedCardOrFieldDef}}
+                  {{else if this.selectedCardOrField.cardOrField}}
                     <Accordion
                       data-test-rhs-panel='card-or-field'
                       data-test-selected-accordion-item={{this.selectedAccordionItem}}
@@ -959,7 +955,7 @@ export default class CodeSubmode extends Component<Signature> {
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @moduleContentsResource={{this.moduleContentsResource}}
-                        @card={{this.selectedCardOrFieldDef}}
+                        @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
                         @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
                         @isReadOnly={{this.isReadOnly}}
@@ -996,7 +992,9 @@ export default class CodeSubmode extends Component<Signature> {
                         <:title>Playground</:title>
                         <:content>
                           {{#if (eq this.selectedAccordionItem 'playground')}}
-                            {{#if (isPrimitive this.selectedCardOrFieldDef)}}
+                            {{#if
+                              (isPrimitive this.selectedCardOrField.cardOrField)
+                            }}
                               <p
                                 class='file-incompatible-message'
                                 data-test-incompatible-primitives
@@ -1009,7 +1007,7 @@ export default class CodeSubmode extends Component<Signature> {
                                 @codeRef={{this.selectedCodeRef}}
                                 @isUpdating={{this.moduleContentsResource.isLoading}}
                                 @isFieldDef={{isFieldDef
-                                  this.selectedCardOrFieldDef
+                                  this.selectedCardOrField.cardOrField
                                 }}
                               />
                             {{else}}
