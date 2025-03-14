@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import { next } from '@ember/runloop';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -13,6 +14,7 @@ import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
 
 import { task } from 'ember-concurrency';
+import Modifier from 'ember-modifier';
 import window from 'ember-window-mock';
 
 import {
@@ -26,20 +28,19 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
+  type CodeRef,
   type Query,
   specRef,
   isCardDef,
   isFieldDef,
   internalKeyFor,
 } from '@cardstack/runtime-common';
-
 import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
 import Preview from '@cardstack/host/components/preview';
-
 import {
   CardOrFieldDeclaration,
   isCardOrFieldDeclaration,
@@ -329,6 +330,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 @card={{@spec}}
                 @format='edit'
                 @cardContext={{this.cardContext}}
+                {{SpecPreviewModifier id=this.selectedId codeRef=@spec.ref}}
               />
             {{/if}}
           {{/if}}
@@ -453,10 +455,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   private createSpecInstance = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
-      let maybeRef = codeRefWithAbsoluteURL(ref, relativeTo);
+      let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
       let realmURL = this.operatorModeStateService.realmURL;
-      if (isResolvedCodeRef(maybeRef)) {
-        ref = maybeRef;
+      if (isResolvedCodeRef(maybeAbsoluteRef)) {
+        ref = maybeAbsoluteRef;
       }
       let doc = {
         data: {
@@ -490,10 +492,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       }
     },
   );
-
-  initializeFieldSpecForPlayground = () => {
-    this.updateFieldSpecForPlayground(this.cards[0].id);
-  };
 
   get realms() {
     return this.realmServer.availableRealmURLs;
@@ -607,12 +605,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.search.instances as Spec[];
   }
 
-  get shouldInitializeFieldSpecForPlayground() {
-    return (
-      !this.search.isLoading && !this._selectedCard && this.cards.length > 1
-    );
-  }
-
   get card() {
     if (this._selectedCard) {
       return this._selectedCard;
@@ -673,9 +665,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         (component SpecPreviewLoading)
       }}
     {{else}}
-      {{#if this.shouldInitializeFieldSpecForPlayground}}
-        {{this.initializeFieldSpecForPlayground}}
-      {{/if}}
       {{#let (this.getSpecIntent this.cards) as |showCreateSpecIntent|}}
         {{yield
           (component
@@ -754,4 +743,37 @@ function getRelativePath(baseUrl: string, targetUrl: string) {
   const basePath = new URL(baseUrl).pathname;
   const targetPath = new URL(targetUrl).pathname;
   return targetPath.replace(basePath, '') || '/';
+}
+
+interface ModifierSignature {
+  Args: {
+    Named: {
+      id?: string;
+      codeRef?: CodeRef;
+    };
+  };
+}
+
+export class SpecPreviewModifier extends Modifier<ModifierSignature> {
+  @service private declare playgroundPanelService: PlaygroundPanelService;
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    { id, codeRef }: ModifierSignature['Args']['Named'],
+  ) {
+    if (!id || !codeRef) {
+      throw new Error('bug: no id or codeRef');
+    }
+    let maybeAbsoluteRef = codeRefWithAbsoluteURL(codeRef, new URL(id));
+    if (!isResolvedCodeRef(maybeAbsoluteRef)) {
+      throw new Error('bug: ref in spec cannot be resolved to an absolute');
+    }
+    let key = internalKeyFor(maybeAbsoluteRef, new URL(id));
+    let existingSelection = this.playgroundPanelService.getSelection(key);
+    if (!existingSelection) {
+      next(this, () => {
+        this.playgroundPanelService.persistSelections(key, id, 'embedded', 0);
+      });
+    }
+  }
 }
