@@ -1,4 +1,10 @@
-import { click, waitFor, fillIn, triggerEvent } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  fillIn,
+  triggerEvent,
+  find,
+} from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -22,7 +28,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 const testRealm2URL = `http://test-realm/test2/`;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksTo, linksToMany, CardDef, FieldDef, Component } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
 
   export class Person extends CardDef {
@@ -50,6 +56,9 @@ const personCardSource = `
       </template>
     };
   }
+  export class PersonField extends FieldDef {
+    static displayName = 'PersonField';
+  }
 `;
 
 const person1CardSource = `
@@ -62,7 +71,7 @@ const person1CardSource = `
 `;
 
 const petCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+  import { contains, field, Component, CardDef, FieldDef} from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
 
   export class Pet extends CardDef {
@@ -94,6 +103,10 @@ const petCardSource = `
         <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
       </template>
     }
+  }
+
+  export class PetField extends FieldDef {
+    static displayName = 'PetField';
   }
 `;
 
@@ -177,6 +190,26 @@ module('Acceptance | Spec preview', function (hooks) {
             },
           },
         },
+        'person-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'PersonField',
+              description: 'Spec',
+              specType: 'field',
+              ref: {
+                module: `./person`,
+                name: 'PersonField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
         'employee-entry.json': {
           data: {
             type: 'card',
@@ -199,6 +232,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
+              title: 'Pet',
               specType: 'card',
               ref: {
                 module: `./pet`,
@@ -217,6 +251,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
+              title: 'Pet2',
               specType: 'card',
               ref: {
                 module: `./pet`,
@@ -233,6 +268,26 @@ module('Acceptance | Spec preview', function (hooks) {
                 links: {
                   self: `${testRealmURL}Pet/pudding`,
                 },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'pet-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'PetField',
+              description: 'Spec',
+              specType: 'field',
+              ref: {
+                module: `./pet`,
+                name: 'PetField',
               },
             },
             meta: {
@@ -367,9 +422,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-accordion-item="spec-preview"] button');
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
-    assert
-      .dom('[data-test-spec-selector-item-path]')
-      .hasText('person-entry.json');
+    assert.dom('[data-test-spec-selector-item-path]').hasText('person-entry');
     await percySnapshot(assert);
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person');
     assert
@@ -378,6 +431,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
+    assert.dom('[data-test-spec-tag]').containsText('card');
     await waitFor('[data-test-view-spec-instance]');
     assert.dom('[data-test-view-spec-instance]').exists();
   });
@@ -393,9 +447,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
-    assert
-      .dom('[data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2.json');
+    assert.dom('[data-test-spec-selector-item-path]').hasText('pet-entry-2');
     await waitFor('[data-test-view-spec-instance]');
     assert.dom('[data-test-view-spec-instance]').exists();
   });
@@ -464,6 +516,7 @@ module('Acceptance | Spec preview', function (hooks) {
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('NewSkill');
     assert.dom('[data-test-exported-type]').hasText('skill');
+    assert.dom('[data-test-spec-tag]').hasText('skill');
     assert.dom('[data-test-exported-name]').hasText('NewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
@@ -481,6 +534,7 @@ module('Acceptance | Spec preview', function (hooks) {
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('ExtendedNewSkill');
     assert.dom('[data-test-exported-type]').hasText('skill');
+    assert.dom('[data-test-spec-tag]').hasText('skill');
     assert.dom('[data-test-exported-name]').hasText('ExtendedNewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
@@ -521,9 +575,10 @@ module('Acceptance | Spec preview', function (hooks) {
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
     assert.dom('[data-test-exported-name]').containsText('default');
+    assert.dom('[data-test-spec-tag]').hasText('card');
   });
 
-  test<TestContextWithSave>('spec auto saved', async function (assert) {
+  test<TestContextWithSave>('spec auto saved (but with stability)', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
@@ -537,7 +592,14 @@ module('Acceptance | Spec preview', function (hooks) {
       }
       assert.strictEqual(json.data.attributes?.readMe, readMeInput);
     });
+    let cardComponentId = find(
+      `[data-test-card='${testRealmURL}person-entry']`,
+    )?.id;
     await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
+    let cardComponentIdAfter = find(
+      `[data-test-card='${testRealmURL}person-entry']`,
+    )?.id;
+    assert.strictEqual(cardComponentIdAfter, cardComponentId);
   });
 
   test('clicking view instance button correctly navigates to spec file and displays content in editor', async function (assert) {
@@ -568,6 +630,42 @@ module('Acceptance | Spec preview', function (hooks) {
       .exists();
   });
 
+  test('navigation: spec preview updates when changing between different declarations inside inspector', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet2');
+    assert.dom('[data-test-number-of-instance]').hasText('2 instances');
+    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-name]').hasText('Pet');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
+    await click('[data-test-boxel-selector-item-text="PetField"]');
+    assert
+      .dom('[data-test-title] [data-test-boxel-input]')
+      .hasValue('PetField');
+    assert.dom('[data-test-exported-type]').hasText('field');
+    assert.dom('[data-test-exported-name]').hasText('PetField');
+    assert.dom('[data-test-spec-tag]').hasText('field');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
+
+    await click('[data-test-boxel-selector-item-text="Pet"]');
+
+    assert
+      .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
+      .containsText('pet-entry');
+    await click('[data-test-spec-selector] > div');
+    await click('[data-option-index="1"]');
+
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet');
+    assert.dom('[data-test-number-of-instance]').hasText('2 instances');
+    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-name]').hasText('Pet');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
+  });
+
   test('show overlay on examples card', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -584,7 +682,7 @@ module('Acceptance | Spec preview', function (hooks) {
 
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2.json');
+      .hasText('pet-entry-2');
     await click('[data-option-index="0"]');
 
     assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();

@@ -73,6 +73,7 @@ export default class OperatorModeContainer extends Component<Signature> {
     opts: {
       isLive?: true;
       doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+      isAutoSave?: true;
     },
   ): SearchQuery {
     return getSearch(this, getQuery, getRealms, opts);
