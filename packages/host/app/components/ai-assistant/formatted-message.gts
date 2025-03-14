@@ -20,6 +20,7 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
+import { registerDestructor } from '@ember/destroyable';
 
 interface FormattedMessageSignature {
   sanitizedHtml: SafeString;
@@ -39,6 +40,14 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
+
+  constructor(owner: Owner, args: FormattedMessageSignature) {
+    super(owner, args);
+
+    registerDestructor(this, () => {
+      // debugger;
+    });
+  }
 
   registerCodeBlockContainer = (
     fileUrl: string,
@@ -95,16 +104,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
   <template>
     {{#if @renderCodeBlocks}}
-      <div
-        class='message'
-        {{CodeBlock
-          codeBlockSelector='pre[data-codeblock]'
-          languageAttr='data-codeblock'
-          monacoSDK=@monacoSDK
-          editorDisplayOptions=this.editorDisplayOptions
-          registerCodeBlockContainer=this.registerCodeBlockContainer
-        }}
-      >
+      <div class='message'>
         {{@sanitizedHtml}}
 
         {{#each this.codeActions as |codeAction|}}

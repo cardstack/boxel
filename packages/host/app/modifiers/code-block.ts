@@ -9,6 +9,7 @@ import * as MonacoSDK from 'monaco-editor';
 import { MonacoEditorOptions } from './monaco';
 
 import '@cardstack/requirejs-monaco-ember-polyfill';
+import { schedule } from '@ember/runloop';
 
 interface Signature {
   Args: {
@@ -31,6 +32,7 @@ export default class CodeBlock extends Modifier<Signature> {
     editor: MonacoSDK.editor.IStandaloneCodeEditor;
     model: MonacoSDK.editor.ITextModel;
     language: string | undefined;
+    codeBlockId: string;
   }[] = [];
   modify(
     element: HTMLElement,
@@ -41,12 +43,19 @@ export default class CodeBlock extends Modifier<Signature> {
       monacoSDK,
       editorDisplayOptions,
       registerCodeBlockContainer,
+      sanitizedHtml,
     }: Signature['Args']['Named'],
   ) {
     let codeBlocks = element.querySelectorAll(codeBlockSelector);
     if (!codeBlocks || codeBlocks.length === 0) {
       return;
     }
+
+    if (sanitizedHtml) {
+      console.log('sanitizedHtml', sanitizedHtml);
+    }
+
+    // use sanitizedHTML instead of localstorage thing?
 
     for (let [index, codeBlockNode] of [...codeBlocks].entries()) {
       let codeBlock = codeBlockNode as HTMLElement;
@@ -74,12 +83,43 @@ export default class CodeBlock extends Modifier<Signature> {
       let language = codeBlock.getAttribute(languageAttr) ?? undefined;
       let state = this.monacoState[index];
       if (state) {
-        let { model, language: lastLanguage } = state;
+        let { model, language: lastLanguage, codeBlockId } = state;
         if (language && language !== lastLanguage) {
           monacoSDK.editor.setModelLanguage(model, language);
         }
         if (content !== model.getValue()) {
           model.setValue(content);
+
+          // find element with data-codeblock-id=codeBlockId and move it
+          // to be straight after element with id=codeBlockId and by
+          // moving i mean actually moving the dom node
+          // let codeBlock = document.getElementById(codeBlockId);
+          // let monacoContainer = document.querySelector(
+          //   `[data-codeblock-id="${codeBlockId}"]`,
+          // );
+          // if (monacoContainer) {
+          //   debugger;
+          //   monacoContainer.parentNode?.insertBefore(
+          //     monacoContainer,
+          //     codeBlock.nextSibling,
+          //   );
+          // }
+
+          // find n-th pre element using index
+          schedule('afterRender', () => {
+            let preElement = document.querySelectorAll('pre')[index];
+            let monacoContainer =
+              document.querySelectorAll('.preview-code')[index];
+            // move monacoContainer right after preElement
+            if (monacoContainer && preElement) {
+              debugger;
+              // preElement.parentNode?.insertBefore(
+              //   monacoContainer,
+              //   preElement.nextSibling,
+              // );
+              preElement.insertAdjacentElement('afterend', monacoContainer);
+            }
+          });
         }
       } else {
         // The light theme editor is used for the main editor in code mode,
@@ -120,49 +160,66 @@ export default class CodeBlock extends Modifier<Signature> {
           'preview-code monaco-container code-block',
         );
         monacoContainer.setAttribute('style', `height: ${lines + 4}rem`);
+        monacoContainer.setAttribute('data-codeblock-id', id);
 
-        codeBlock.replaceWith(monacoContainer);
+        // add monacoContainer as next sibling to codeblock
+        debugger;
+        codeBlock.parentNode?.insertBefore(
+          monacoContainer,
+          codeBlock.nextSibling,
+        );
+
         let editor = monacoSDK.editor.create(monacoContainer, editorOptions);
         let model = editor.getModel()!;
+        monacoSDK.editor.setModelLanguage(model, language);
+        model.setValue(content);
+        this.monacoState.push({ editor, model, language, codeBlockId: id });
 
-        let codeActionsContainer = makeCodeActionsContainerDiv();
-        monacoContainer.insertBefore(
-          codeActionsContainer,
-          monacoContainer.firstChild,
-        );
+        window._monacoState = this.monacoState;
+        // codeBlock.replaceWith(monacoContainer);
+        // let editor = monacoSDK.editor.create(monacoContainer, editorOptions);
+        // let model = editor.getModel()!;
+        // // model.setValue(content);
 
-        registerCodeBlockContainer(
-          fileUrl ?? '',
-          model.getValue(),
-          codeActionsContainer,
-        );
-        this.monacoState.push({ editor, model, language });
+        // let codeActionsContainer = makeCodeActionsContainerDiv();
+        // monacoContainer.insertBefore(
+        //   codeActionsContainer,
+        //   monacoContainer.firstChild,
+        // );
 
-        let copyButton = makeCopyButton();
-        monacoContainer.insertBefore(copyButton, monacoContainer.firstChild);
-        copyButton.onclick = (event) => {
-          let buttonElement = event.currentTarget as HTMLElement;
-          let codeBlock = buttonElement.nextElementSibling;
-          if (codeBlock) {
-            navigator.clipboard.writeText(content).then(() => {
-              let svg = buttonElement.children[0];
-              let copyText = buttonElement.children[1];
-              buttonElement.replaceChildren(
-                svg,
-                document.createTextNode('Copied'),
-              );
-              setTimeout(
-                () => buttonElement.replaceChildren(svg, copyText),
-                2000,
-              );
-            });
-          }
-        };
+        // registerCodeBlockContainer(
+        //   fileUrl ?? '',
+        //   model.getValue(),
+        //   codeActionsContainer,
+        // );
+        // this.monacoState.push({ editor, model, language });
+
+        // let copyButton = makeCopyButton();
+        // monacoContainer.insertBefore(copyButton, monacoContainer.firstChild);
+        // copyButton.onclick = (event) => {
+        //   let buttonElement = event.currentTarget as HTMLElement;
+        //   let codeBlock = buttonElement.nextElementSibling;
+        //   if (codeBlock) {
+        //     navigator.clipboard.writeText(content).then(() => {
+        //       let svg = buttonElement.children[0];
+        //       let copyText = buttonElement.children[1];
+        //       buttonElement.replaceChildren(
+        //         svg,
+        //         document.createTextNode('Copied'),
+        //       );
+        //       setTimeout(
+        //         () => buttonElement.replaceChildren(svg, copyText),
+        //         2000,
+        //       );
+        //     });
+        //   }
+        // };
       }
     }
 
     registerDestructor(this, () => {
       for (let { editor } of this.monacoState) {
+        debugger;
         editor.dispose();
       }
     });

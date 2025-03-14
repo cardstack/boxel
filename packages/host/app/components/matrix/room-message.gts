@@ -2,7 +2,7 @@ import { fn } from '@ember/helper';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -28,6 +28,7 @@ import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
 import RoomMessageCommand from './room-message-command';
+import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -58,7 +59,15 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
+    this._loadMessageResources.perform();
+    // this.loadMessageResources();
+    registerDestructor(this, () => {
+      // debugger;
+      // not here
+    });
   }
+
+  resourcesLoaded = false;
 
   @tracked private streamingTimeout = false;
 
@@ -98,7 +107,7 @@ export default class RoomMessage extends Component<Signature> {
       In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
       If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
     }}
-    {{#if this.resources}}
+    {{#if this.eagerlyLoadedResources}}
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
@@ -118,7 +127,7 @@ export default class RoomMessage extends Component<Signature> {
           userId=this.message.author.userId
           displayName=this.message.author.displayName
         }}
-        @resources={{this.resources}}
+        @resources={{this.eagerlyLoadedResources}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
@@ -151,8 +160,15 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service declare commandService: CommandService;
+  eagerlyLoadedResources:
+    | {
+        cards: CardDef[] | undefined;
+        files: FileDef[] | undefined;
+        errors: { id: string; error: Error }[] | undefined;
+      }
+    | undefined;
 
-  private loadMessageResources = trackedFunction(this, async () => {
+  loadMessageResources = trackedFunction(this, async () => {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
 
@@ -173,6 +189,8 @@ export default class RoomMessage extends Component<Signature> {
       await Promise.all(promises);
     }
 
+    this.resourcesLoaded = true;
+
     return {
       cards: cards.length ? cards : undefined,
       files: this.message.attachedFiles?.length
@@ -182,7 +200,38 @@ export default class RoomMessage extends Component<Signature> {
     };
   });
 
-  private get resources() {
+  _loadMessageResources = task(async () => {
+    let cards: CardDef[] = [];
+    let errors: { id: string; error: Error }[] = [];
+
+    let promises = this.message.attachedResources?.map(async (resource) => {
+      await resource.loaded;
+      if (resource.card) {
+        cards.push(resource.card);
+      } else if (resource.cardError) {
+        let { id, error } = resource.cardError;
+        errors.push({
+          id,
+          error,
+        });
+      }
+    });
+
+    if (promises) {
+      await Promise.all(promises);
+    }
+
+    this.eagerlyLoadedResources = {
+      cards: cards.length ? cards : undefined,
+      files: this.message.attachedFiles?.length
+        ? this.message.attachedFiles
+        : undefined,
+      errors: errors.length ? errors : undefined,
+    };
+  });
+
+  @cached
+  get resources() {
     return this.loadMessageResources.value;
   }
 

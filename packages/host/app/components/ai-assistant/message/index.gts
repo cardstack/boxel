@@ -201,6 +201,14 @@ function isPresent(val: SafeString | string | null | undefined) {
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      debugger;
+    });
+  }
+
   get isReasoningExpandedByDefault() {
     let result =
       this.args.isStreaming &&
@@ -286,9 +294,10 @@ export default class AiAssistantMessage extends Component<Signature> {
               {{/if}}
             </div>
           {{/if}}
-          {{#if (and @isFromAssistant @isStreaming)}}
+
+          {{#if @isFromAssistant}}
             <FormattedMessage
-              @renderCodeBlocks={{false}}
+              @renderCodeBlocks={{true}}
               @monacoSDK={{@monacoSDK}}
               @sanitizedHtml={{wrapLastTextNodeInStreamingTextSpan
                 @formattedMessage

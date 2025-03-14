@@ -42,6 +42,10 @@ export default class MessageService extends Service {
 
     if (!maybeEventSource) {
       let token = getPersistedTokenForRealm(realmURL);
+      if (realmURL.includes('/base/')) {
+        return () => {};
+      }
+
       if (!token) {
         throw new Error(`Could not find JWT for realm ${realmURL}`);
       }

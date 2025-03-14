@@ -1,5 +1,5 @@
 import { guidFor } from '@ember/object/internals';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { EventStatus } from 'matrix-js-sdk';
 
@@ -118,6 +118,7 @@ export class Message implements RoomMessageInterface {
     return cards;
   }
 
+  @cached
   get attachedResources(): AttachedCardResource[] | undefined {
     return this.getCardResources(this.attachedCardIds);
   }

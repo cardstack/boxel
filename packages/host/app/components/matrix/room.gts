@@ -247,6 +247,7 @@ export default class Room extends Component<Signature> {
     super(owner, args);
     this.doMatrixEventFlush.perform();
     registerDestructor(this, () => {
+      debugger;
       this.scrollState().messageVisibilityObserver.disconnect();
     });
   }
