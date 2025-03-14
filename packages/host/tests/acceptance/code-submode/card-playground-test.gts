@@ -273,10 +273,11 @@ module('Acceptance | code-submode | card playground', function (hooks) {
 
     await selectDeclaration('LocalCategoryCard');
     assert
-      .dom('[data-test-accordion-item="playground"]')
+      .dom('[data-test-playground-panel]')
       .doesNotExist(
-        'playground does not exist for LocalCategory (local card def)',
+        'playground preview is not available for LocalCategory (local card def)',
       );
+    assert.dom('[data-test-incompatible-nonexports]').exists();
 
     await selectDeclaration('RandomClass');
     assert

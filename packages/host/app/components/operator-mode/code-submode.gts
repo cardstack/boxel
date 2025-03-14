@@ -28,10 +28,10 @@ import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
-  primitive,
   identifyCard,
   isFieldDef,
   isCardDocumentString,
+  isPrimitive,
   hasExecutableExtension,
   RealmPaths,
   isResolvedCodeRef,
@@ -470,16 +470,13 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
+  private get selectedCardOrFieldDef() {
+    return this.selectedCardOrField?.cardOrField;
+  }
+
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
-    let baseDefType = this.selectedCardOrField?.cardOrField;
-    if (!baseDefType || primitive in baseDefType) {
-      return undefined;
-    }
-    let codeRef = identifyCard(baseDefType);
-    if (!isResolvedCodeRef(codeRef)) {
-      return undefined;
-    }
-    return codeRef;
+    let codeRef = identifyCard(this.selectedCardOrFieldDef);
+    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
   }
 
   get showSpecPreview() {
@@ -953,7 +950,7 @@ export default class CodeSubmode extends Component<Signature> {
                     >
                       {{this.fileIncompatibilityMessage}}
                     </div>
-                  {{else if this.selectedCardOrField.cardOrField}}
+                  {{else if this.selectedCardOrFieldDef}}
                     <Accordion
                       data-test-rhs-panel='card-or-field'
                       data-test-selected-accordion-item={{this.selectedAccordionItem}}
@@ -962,7 +959,7 @@ export default class CodeSubmode extends Component<Signature> {
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @moduleContentsResource={{this.moduleContentsResource}}
-                        @card={{this.selectedCardOrField.cardOrField}}
+                        @card={{this.selectedCardOrFieldDef}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
                         @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
                         @isReadOnly={{this.isReadOnly}}
@@ -989,29 +986,45 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.selectedCodeRef}}
-                        <A.Item
-                          class='accordion-item'
-                          @contentClass='accordion-item-content'
-                          @onClick={{fn this.selectAccordionItem 'playground'}}
-                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                          data-test-accordion-item='playground'
-                        >
-                          <:title>Playground</:title>
-                          <:content>
-                            {{#if (eq this.selectedAccordionItem 'playground')}}
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'playground'}}
+                        @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                        data-test-accordion-item='playground'
+                      >
+                        <:title>Playground</:title>
+                        <:content>
+                          {{#if (eq this.selectedAccordionItem 'playground')}}
+                            {{#if (isPrimitive this.selectedCardOrFieldDef)}}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-primitives
+                              >
+                                <span>Playground is not currently supported for
+                                  primitive fields.</span>
+                              </p>
+                            {{else if this.selectedCodeRef}}
                               <PlaygroundPanel
                                 @codeRef={{this.selectedCodeRef}}
                                 @isUpdating={{this.moduleContentsResource.isLoading}}
-                                @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
                                 @isFieldDef={{isFieldDef
-                                  this.selectedCardOrField.cardOrField
+                                  this.selectedCardOrFieldDef
                                 }}
                               />
+                            {{else}}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-nonexports
+                              >
+                                <span>Playground is not currently supported for
+                                  card or field definitions that are not
+                                  exported.</span>
+                              </p>
                             {{/if}}
-                          </:content>
-                        </A.Item>
-                      {{/if}}
+                          {{/if}}
+                        </:content>
+                      </A.Item>
                       {{#if this.showSpecPreview}}
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
@@ -1203,6 +1216,10 @@ export default class CodeSubmode extends Component<Signature> {
         color: var(--boxel-450);
         font-weight: 500;
         padding: var(--boxel-sp-xl);
+        margin-block: 0;
+      }
+      .file-incompatible-message > span {
+        max-width: 400px;
       }
       .empty-container {
         background-color: var(--boxel-light-100);

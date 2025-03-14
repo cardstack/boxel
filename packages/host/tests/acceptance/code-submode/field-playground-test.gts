@@ -382,19 +382,20 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-playground-panel]').exists();
 
     await selectDeclaration('Status');
-    assert
-      .dom('[data-test-accordion-item="playground"]')
-      .doesNotExist('primitive field');
+    assert.dom('[data-test-playground-panel]').doesNotExist('primitive field');
+    assert.dom('[data-test-incompatible-primitives]').exists();
 
     await selectDeclaration('LocalStatusField');
     assert
-      .dom('[data-test-accordion-item="playground"]')
+      .dom('[data-test-playground-panel]')
       .doesNotExist('local primitive field');
+    assert.dom('[data-test-incompatible-primitives]').exists();
 
     await selectDeclaration('LocalCommentField');
     assert
-      .dom('[data-test-accordion-item="playground"]')
+      .dom('[data-test-playground-panel]')
       .doesNotExist('local compound field');
+    assert.dom('[data-test-incompatible-nonexports]').exists();
   });
 
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {

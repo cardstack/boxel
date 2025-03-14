@@ -788,7 +788,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
-    isLoadingNewModule?: boolean;
     isFieldDef?: boolean;
     isUpdating?: boolean;
   };
@@ -831,9 +830,6 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   get isLoading() {
     // TODO: improve live updating UX for fields
-    return (
-      this.args.isLoadingNewModule ||
-      (this.args.isFieldDef && this.args.isUpdating)
-    );
+    return this.args.isFieldDef && this.args.isUpdating;
   }
 }
