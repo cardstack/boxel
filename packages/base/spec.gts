@@ -14,10 +14,8 @@ import StringField from './string';
 import BooleanField from './boolean';
 import CodeRef from './code-ref';
 import MarkdownField from './markdown';
-import { restartableTask } from 'ember-concurrency';
 import {
   FieldContainer,
-  LoadingIndicator,
   Pill,
   RealmIcon,
   BoxelInput,
@@ -40,11 +38,727 @@ import StackIcon from '@cardstack/boxel-icons/stack';
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import LayoutList from '@cardstack/boxel-icons/layout-list';
 import Brain from '@cardstack/boxel-icons/brain';
+import { use, resource } from 'ember-resources';
+import { TrackedObject } from 'tracked-built-ins';
 
 export type SpecType = 'card' | 'field' | 'app' | 'skill';
 
 class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
+}
+
+class Isolated extends Component<typeof Spec> {
+  get defaultIcon() {
+    return this.args.model.constructor?.icon;
+  }
+
+  get icon() {
+    return this.loadCardIcon.value;
+  }
+
+  @use private loadCardIcon = resource(() => {
+    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let card = await loadCard(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          icon.value = card.icon;
+        }
+      } catch (e) {
+        icon.value = undefined;
+      }
+    })();
+    return icon;
+  });
+
+  get absoluteRef() {
+    if (!this.args.model.ref || !this.args.model.id) {
+      return undefined;
+    }
+    let url = new URL(this.args.model.id);
+    let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+    if (!isResolvedCodeRef(ref)) {
+      throw new Error('ref is not a resolved code ref');
+    }
+    return ref;
+  }
+
+  private get realmInfo() {
+    return getCardMeta(this.args.model as CardDef, 'realmInfo');
+  }
+
+  <template>
+    <article class='container'>
+      <header class='header' aria-labelledby='title'>
+        <div class='box header-icon-container'>
+          {{#if this.icon}}
+            <this.icon width='35' height='35' role='presentation' />
+          {{else}}
+            <this.defaultIcon width='35' height='35' role='presentation' />
+          {{/if}}
+        </div>
+        <div class='header-info-container'>
+          <h1 class='title' id='title' data-test-title>
+            <@fields.title />
+          </h1>
+          <p class='description' data-test-description>
+            <@fields.description />
+          </p>
+        </div>
+      </header>
+      <section class='readme section'>
+        <header class='row-header' aria-labelledby='readme'>
+          <BookOpenText width='20' height='20' role='presentation' />
+          <h2 id='readme'>Read Me</h2>
+        </header>
+        <div data-test-readme>
+          <@fields.readMe />
+        </div>
+      </section>
+      <section class='examples section'>
+        <header class='row-header' aria-labelledby='examples'>
+          <LayersSubtract width='20' height='20' role='presentation' />
+          <h2 id='examples'>Examples</h2>
+        </header>
+        {{#if (eq @model.specType 'field')}}
+          <@fields.containedExamples />
+        {{else}}
+          <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
+        {{/if}}
+      </section>
+      <section class='module section'>
+        <header class='row-header' aria-labelledby='module'>
+          <GitBranch width='20' height='20' role='presentation' />
+          <h2 id='module'>Module</h2>
+        </header>
+        <div class='code-ref-container'>
+          <FieldContainer @label='URL' @vertical={{true}}>
+            <div class='code-ref-row'>
+              <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+              <span class='code-ref-value' data-test-module-href>
+                {{@model.moduleHref}}
+              </span>
+            </div>
+          </FieldContainer>
+          <FieldContainer @label='Module Name' @vertical={{true}}>
+            <div class='code-ref-row'>
+              <ExportArrow class='exported-arrow' width='10' height='10' />
+              <div class='code-ref-value' data-test-exported-name>
+                {{@model.ref.name}}
+              </div>
+              <div class='exported-type' data-test-exported-type>
+                {{@model.specType}}
+              </div>
+            </div>
+          </FieldContainer>
+        </div>
+      </section>
+    </article>
+    <style scoped>
+      .container {
+        --boxel-spec-background-color: #ebeaed;
+        --boxel-spec-code-ref-background-color: #e2e2e2;
+        --boxel-spec-code-ref-text-color: #646464;
+
+        height: 100%;
+        min-height: max-content;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-spec-background-color);
+      }
+      .section {
+        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--boxel-400);
+      }
+      h1 {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
+        letter-spacing: var(--boxel-lsp-xs);
+        line-height: 1.2;
+      }
+      h2 {
+        margin: 0;
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      p {
+        margin-top: var(--boxel-sp-4xs);
+        margin-bottom: 0;
+      }
+      .title,
+      .description {
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        overflow: hidden;
+        text-wrap: pretty;
+        word-break: break-word;
+      }
+      .box {
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius-lg);
+        background-color: var(--boxel-light);
+      }
+      .header {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+      }
+      .header-icon-container {
+        flex-shrink: 0;
+        height: var(--boxel-icon-xxl);
+        width: var(--boxel-icon-xxl);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--boxel-100);
+      }
+      .header-info-container {
+        flex: 1;
+        align-self: center;
+      }
+      .row-header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding-bottom: var(--boxel-sp-lg);
+      }
+      .row-content {
+        margin-top: var(--boxel-sp-sm);
+      }
+
+      /* code ref container styles */
+      .code-ref-container {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .code-ref-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        min-height: var(--boxel-form-control-height);
+        padding: var(--boxel-sp-xs);
+        background-color: var(
+          --boxel-spec-code-ref-background-color,
+          var(--boxel-100)
+        );
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+        color: var(--boxel-spec-code-ref-text-color, var(--boxel-450));
+      }
+      .code-ref-value {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .exported-type {
+        margin-left: auto;
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp);
+        text-transform: uppercase;
+      }
+      .exported-arrow {
+        min-width: 8px;
+        min-height: 8px;
+      }
+      .realm-icon {
+        width: 18px;
+        height: 18px;
+        border: 1px solid var(--boxel-dark);
+      }
+    </style>
+  </template>
+}
+
+class Fitted extends Component<typeof Spec> {
+  get defaultIcon() {
+    return this.args.model.constructor?.icon;
+  }
+
+  get icon() {
+    return this.loadCardIcon.value;
+  }
+
+  @use private loadCardIcon = resource(() => {
+    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let card = await loadCard(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          icon.value = card.icon;
+        }
+      } catch (e) {
+        icon.value = undefined;
+      }
+    })();
+    return icon;
+  });
+
+  <template>
+    <div class='fitted-template'>
+      <div class='thumbnail-section'>
+        {{#if this.icon}}
+          <this.icon width='35' height='35' role='presentation' />
+        {{else}}
+          <this.defaultIcon width='35' height='35' role='presentation' />
+        {{/if}}
+      </div>
+      <div class='info-section'>
+        <h3 class='card-title' data-test-card-title><@fields.title /></h3>
+        <h4 class='card-description' data-test-card-description>
+          <@fields.description />
+        </h4>
+      </div>
+      {{#if @model.specType}}
+        <SpecTag @specType={{@model.specType}} />
+      {{/if}}
+    </div>
+    <style scoped>
+      @layer {
+        .fitted-template {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          gap: var(--boxel-sp-xs);
+          padding: var(--boxel-sp-xs);
+          overflow: hidden;
+          align-items: center;
+        }
+        .thumbnail-section {
+          flex-shrink: 0;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          overflow: hidden;
+        }
+        .info-section {
+          width: 100%;
+          overflow: hidden;
+        }
+        .card-title {
+          margin-block: 0;
+          font: 600 var(--boxel-font-sm);
+          letter-spacing: var(--boxel-lsp-sm);
+          line-height: 1.25;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        .card-description {
+          margin-top: var(--boxel-sp-4xs);
+          margin-bottom: 0;
+          color: var(--boxel-450);
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          overflow: hidden;
+        }
+        :deep(.spec-tag-pill) {
+          height: max-content;
+        }
+        :deep(.spec-tag-pill .icon) {
+          width: 18px;
+        }
+      }
+
+      /* Aspect Ratio <= 1.0 (Vertical) */
+      @container fitted-card (aspect-ratio <= 1.0) {
+        .fitted-template {
+          flex-direction: column;
+        }
+        .thumbnail-section {
+          width: 100%;
+          height: 50cqmin;
+        }
+        .info-section {
+          text-align: center;
+        }
+      }
+
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
+        .thumbnail-section {
+          display: none;
+        }
+      }
+      /* Vertical Tiles*/
+      /* Small Tile (150 x 170) */
+      @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
+        .thumbnail-section {
+          min-height: 70px;
+        }
+        .card-title {
+          -webkit-line-clamp: 3;
+        }
+      }
+      /* CardsGrid Tile (170 x 250) */
+      @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
+        .thumbnail-section {
+          height: auto;
+          aspect-ratio: 1 / 1;
+        }
+        .card-title {
+          -webkit-line-clamp: 2;
+        }
+      }
+      /* Tall Tile (150 x 275) */
+      @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
+        .thumbnail-section {
+          min-height: 85px;
+        }
+        .card-title {
+          font-size: var(--boxel-font-size);
+          -webkit-line-clamp: 4;
+        }
+      }
+      /* Large Tile (250 x 275) */
+      @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
+        .thumbnail-section {
+          min-height: 150px;
+        }
+        .card-title {
+          font-size: var(--boxel-font-size-sm);
+          -webkit-line-clamp: 3;
+        }
+      }
+      /* Vertical Cards */
+      @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
+        .fitted-template {
+          padding: var(--boxel-sp);
+          gap: var(--boxel-sp);
+        }
+        .thumbnail-section {
+          min-height: 236px;
+        }
+        .card-title {
+          font-size: var(--boxel-font-size-med);
+          -webkit-line-clamp: 4;
+        }
+      }
+      /* Expanded Card (400 x 445) */
+
+      /* 1.0 < Aspect Ratio (Horizontal) */
+      @container fitted-card (1.0 < aspect-ratio) {
+        .thumbnail-section {
+          aspect-ratio: 1;
+        }
+      }
+      @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
+        .info-section {
+          align-self: center;
+        }
+      }
+      /* Badges */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
+        .fitted-template {
+          padding: var(--boxel-sp-xxxs);
+        }
+        .thumbnail-section {
+          display: none;
+        }
+      }
+      /* Small Badge (150 x 40) */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
+        .card-title {
+          -webkit-line-clamp: 1;
+          font: 600 var(--boxel-font-xs);
+        }
+        .card-display-name {
+          margin-top: 0;
+        }
+      }
+      /* Medium Badge (150 x 65) */
+
+      /* Large Badge (150 x 105) */
+      @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
+        .card-title {
+          -webkit-line-clamp: 3;
+        }
+      }
+
+      /* Strips */
+      /* Single Strip (250 x 40) */
+      @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
+        .fitted-template {
+          padding: var(--boxel-sp-xxxs);
+        }
+      }
+      /* Double Strip (250 x 65) */
+      /* Triple Strip (250 x 105) */
+      /* Double Wide Strip (400 x 65) */
+      /* Triple Wide Strip (400 x 105) */
+
+      /* Horizontal Tiles */
+      /* Regular Tile (250 x 170) */
+      @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
+        .thumbnail-section {
+          height: 40%;
+        }
+        .card-title {
+          -webkit-line-clamp: 4;
+          font-size: var(--boxel-font-size);
+        }
+      }
+
+      /* Horizontal Cards */
+      /* Compact Card (400 x 170) */
+      @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
+        .thumbnail-section {
+          height: 100%;
+        }
+      }
+      /* Full Card (400 x 275) */
+      @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
+        .fitted-template {
+          padding: var(--boxel-sp);
+          gap: var(--boxel-sp);
+        }
+        .thumbnail-section {
+          max-width: 44%;
+        }
+        .card-title {
+          font-size: var(--boxel-font-size-med);
+        }
+      }
+    </style>
+  </template>
+}
+
+class Edit extends Component<typeof Spec> {
+  get defaultIcon() {
+    return this.args.model.constructor?.icon;
+  }
+
+  get icon() {
+    return this.cardIconResource.value;
+  }
+
+  @use private cardIconResource = resource(() => {
+    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      try {
+        if (this.args.model.ref && this.args.model.id) {
+          let card = await loadCard(this.args.model.ref, {
+            loader: myLoader(),
+            relativeTo: new URL(this.args.model.id),
+          });
+          icon.value = card.icon;
+        }
+      } catch (e) {
+        icon.value = undefined;
+      }
+    })();
+    return icon;
+  });
+
+  get absoluteRef() {
+    if (!this.args.model.ref || !this.args.model.id) {
+      return undefined;
+    }
+    let url = new URL(this.args.model.id);
+    let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
+    if (!isResolvedCodeRef(ref)) {
+      throw new Error('ref is not a resolved code ref');
+    }
+    return ref;
+  }
+
+  private get realmInfo() {
+    return getCardMeta(this.args.model as CardDef, 'realmInfo');
+  }
+
+  <template>
+    <article class='container'>
+      <header class='header' aria-labelledby='title'>
+        <div class='box header-icon-container'>
+          {{#if this.icon}}
+            <this.icon width='35' height='35' role='presentation' />
+          {{else}}
+            <this.defaultIcon width='35' height='35' role='presentation' />
+          {{/if}}
+        </div>
+        <div class='header-info-container'>
+          <div class='header-title-container' data-test-title>
+            <label for='spec-title' class='boxel-sr-only'>Title</label>
+            <@fields.title />
+          </div>
+          <div class='header-description-container' data-test-description>
+            <label
+              for='spec-description'
+              class='boxel-sr-only'
+            >Description</label>
+            <@fields.description />
+          </div>
+        </div>
+      </header>
+      <section class='readme section'>
+        <header class='row-header' aria-labelledby='readme'>
+          <BookOpenText width='20' height='20' role='presentation' />
+          <h2 id='readme'>Read Me</h2>
+        </header>
+        <div data-test-readme>
+          <@fields.readMe />
+        </div>
+      </section>
+      <section class='examples section'>
+        <header class='row-header' aria-labelledby='examples'>
+          <LayersSubtract width='20' height='20' role='presentation' />
+          <h2 id='examples'>Examples</h2>
+        </header>
+        {{#if (eq @model.specType 'field')}}
+          <@fields.containedExamples />
+        {{else}}
+          <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
+        {{/if}}
+      </section>
+      <section class='module section'>
+        <header class='row-header' aria-labelledby='module'>
+          <GitBranch width='20' height='20' role='presentation' />
+          <h2 id='module'>Module</h2>
+        </header>
+        <div class='code-ref-container'>
+          <FieldContainer @label='URL' @vertical={{true}}>
+            <div class='code-ref-row'>
+              <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+              <span class='code-ref-value' data-test-module-href>
+                {{@model.moduleHref}}
+              </span>
+            </div>
+          </FieldContainer>
+          <FieldContainer @label='Module Name' @vertical={{true}}>
+            <div class='code-ref-row'>
+              <ExportArrow class='exported-arrow' width='10' height='10' />
+              <div class='code-ref-value' data-test-exported-name>
+                {{@model.ref.name}}
+              </div>
+              <div class='exported-type' data-test-exported-type>
+                {{@model.specType}}
+              </div>
+            </div>
+          </FieldContainer>
+        </div>
+      </section>
+    </article>
+    <style scoped>
+      .container {
+        --boxel-spec-background-color: #ebeaed;
+        --boxel-spec-code-ref-background-color: #e2e2e2;
+        --boxel-spec-code-ref-text-color: #646464;
+
+        height: 100%;
+        min-height: max-content;
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-spec-background-color);
+      }
+      .section {
+        margin-top: var(--boxel-sp);
+        padding-top: var(--boxel-sp);
+        border-top: 1px solid var(--boxel-400);
+      }
+      h2 {
+        margin: 0;
+        font: 600 var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+      }
+      .box {
+        border: 1px solid var(--boxel-border-color);
+        border-radius: var(--boxel-border-radius-lg);
+        background-color: var(--boxel-light);
+      }
+      .header {
+        display: flex;
+        gap: var(--boxel-sp-sm);
+      }
+      .header-icon-container {
+        flex-shrink: 0;
+        height: var(--boxel-icon-xxl);
+        width: var(--boxel-icon-xxl);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--boxel-100);
+      }
+      .header-info-container {
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+        flex: 1;
+        align-self: center;
+      }
+      .header-info-container > div + div {
+        border-top: 1px solid var(--boxel-spec-background-color);
+      }
+      .header-title-container,
+      .header-description-container {
+        padding: var(--boxel-sp-xs);
+      }
+
+      .row-header {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding-bottom: var(--boxel-sp-lg);
+      }
+      .row-content {
+        margin-top: var(--boxel-sp-sm);
+      }
+
+      /* code ref container styles */
+      .code-ref-container {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+      }
+      .code-ref-row {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        min-height: var(--boxel-form-control-height);
+        padding: var(--boxel-sp-xs);
+        background-color: var(
+          --boxel-spec-code-ref-background-color,
+          var(--boxel-100)
+        );
+        border: var(--boxel-border);
+        border-radius: var(--boxel-border-radius);
+        color: var(--boxel-spec-code-ref-text-color, var(--boxel-450));
+      }
+      .code-ref-value {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .exported-type {
+        margin-left: auto;
+        color: var(--boxel-450);
+        font: 500 var(--boxel-font-xs);
+        letter-spacing: var(--boxel-lsp);
+        text-transform: uppercase;
+      }
+      .exported-arrow {
+        min-width: 8px;
+        min-height: 8px;
+      }
+      .realm-icon {
+        width: 18px;
+        height: 18px;
+        border: 1px solid var(--boxel-dark);
+      }
+    </style>
+  </template>
 }
 
 class SpecTitleField extends StringField {
@@ -149,229 +863,7 @@ export class Spec extends CardDef {
   @field title = contains(SpecTitleField);
   @field description = contains(SpecDescriptionField);
 
-  static isolated = class Isolated extends Component<typeof this> {
-    icon: CardOrFieldTypeIcon | undefined;
-
-    get defaultIcon() {
-      return this.args.model.constructor?.icon;
-    }
-    constructor(owner: any, args: any) {
-      super(owner, args);
-      this.loadCardIcon.perform();
-    }
-
-    private loadCardIcon = restartableTask(async () => {
-      if (this.args.model.ref && this.args.model.id) {
-        let card = await loadCard(this.args.model.ref, {
-          loader: myLoader(),
-          relativeTo: new URL(this.args.model.id),
-        });
-        this.icon = card.icon;
-      }
-    });
-
-    get absoluteRef() {
-      if (!this.args.model.ref || !this.args.model.id) {
-        return undefined;
-      }
-      let url = new URL(this.args.model.id);
-      let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
-      if (!isResolvedCodeRef(ref)) {
-        throw new Error('ref is not a resolved code ref');
-      }
-      return ref;
-    }
-
-    private get realmInfo() {
-      return getCardMeta(this.args.model as CardDef, 'realmInfo');
-    }
-
-    <template>
-      <article class='container'>
-        <header class='header' aria-labelledby='title'>
-          <div class='box header-icon-container'>
-            {{#if this.loadCardIcon.isRunning}}
-              <LoadingIndicator />
-            {{else if this.icon}}
-              <this.icon width='35' height='35' role='presentation' />
-            {{else}}
-              <this.defaultIcon width='35' height='35' role='presentation' />
-            {{/if}}
-          </div>
-          <div class='header-info-container'>
-            <h1 class='title' id='title' data-test-title>
-              <@fields.title />
-            </h1>
-            <p class='description' data-test-description>
-              <@fields.description />
-            </p>
-          </div>
-        </header>
-        <section class='readme section'>
-          <header class='row-header' aria-labelledby='readme'>
-            <BookOpenText width='20' height='20' role='presentation' />
-            <h2 id='readme'>Read Me</h2>
-          </header>
-          <div data-test-readme>
-            <@fields.readMe />
-          </div>
-        </section>
-        <section class='examples section'>
-          <header class='row-header' aria-labelledby='examples'>
-            <LayersSubtract width='20' height='20' role='presentation' />
-            <h2 id='examples'>Examples</h2>
-          </header>
-          {{#if (eq @model.specType 'field')}}
-            <@fields.containedExamples />
-          {{else}}
-            <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
-          {{/if}}
-        </section>
-        <section class='module section'>
-          <header class='row-header' aria-labelledby='module'>
-            <GitBranch width='20' height='20' role='presentation' />
-            <h2 id='module'>Module</h2>
-          </header>
-          <div class='code-ref-container'>
-            <FieldContainer @label='URL' @vertical={{true}}>
-              <div class='code-ref-row'>
-                <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
-                <span class='code-ref-value' data-test-module-href>
-                  {{@model.moduleHref}}
-                </span>
-              </div>
-            </FieldContainer>
-            <FieldContainer @label='Module Name' @vertical={{true}}>
-              <div class='code-ref-row'>
-                <ExportArrow class='exported-arrow' width='10' height='10' />
-                <div class='code-ref-value' data-test-exported-name>
-                  {{@model.ref.name}}
-                </div>
-                <div class='exported-type' data-test-exported-type>
-                  {{@model.specType}}
-                </div>
-              </div>
-            </FieldContainer>
-          </div>
-        </section>
-      </article>
-      <style scoped>
-        .container {
-          --boxel-spec-background-color: #ebeaed;
-          --boxel-spec-code-ref-background-color: #e2e2e2;
-          --boxel-spec-code-ref-text-color: #646464;
-
-          height: 100%;
-          min-height: max-content;
-          padding: var(--boxel-sp);
-          background-color: var(--boxel-spec-background-color);
-        }
-        .section {
-          margin-top: var(--boxel-sp);
-          padding-top: var(--boxel-sp);
-          border-top: 1px solid var(--boxel-400);
-        }
-        h1 {
-          margin: 0;
-          font-size: 18px;
-          font-weight: 600;
-          letter-spacing: var(--boxel-lsp-xs);
-          line-height: 1.2;
-        }
-        h2 {
-          margin: 0;
-          font: 600 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        p {
-          margin-top: var(--boxel-sp-4xs);
-          margin-bottom: 0;
-        }
-        .title,
-        .description {
-          display: -webkit-box;
-          -webkit-box-orient: vertical;
-          -webkit-line-clamp: 2;
-          overflow: hidden;
-          text-wrap: pretty;
-          word-break: break-word;
-        }
-        .box {
-          border: 1px solid var(--boxel-border-color);
-          border-radius: var(--boxel-border-radius-lg);
-          background-color: var(--boxel-light);
-        }
-        .header {
-          display: flex;
-          gap: var(--boxel-sp-sm);
-        }
-        .header-icon-container {
-          flex-shrink: 0;
-          height: var(--boxel-icon-xxl);
-          width: var(--boxel-icon-xxl);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background-color: var(--boxel-100);
-        }
-        .header-info-container {
-          flex: 1;
-          align-self: center;
-        }
-        .row-header {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-lg);
-        }
-        .row-content {
-          margin-top: var(--boxel-sp-sm);
-        }
-
-        /* code ref container styles */
-        .code-ref-container {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xs);
-        }
-        .code-ref-row {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          min-height: var(--boxel-form-control-height);
-          padding: var(--boxel-sp-xs);
-          background-color: var(
-            --boxel-spec-code-ref-background-color,
-            var(--boxel-100)
-          );
-          border: var(--boxel-border);
-          border-radius: var(--boxel-border-radius);
-          color: var(--boxel-spec-code-ref-text-color, var(--boxel-450));
-        }
-        .code-ref-value {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .exported-type {
-          margin-left: auto;
-          color: var(--boxel-450);
-          font: 500 var(--boxel-font-xs);
-          letter-spacing: var(--boxel-lsp);
-          text-transform: uppercase;
-        }
-        .exported-arrow {
-          min-width: 8px;
-          min-height: 8px;
-        }
-        .realm-icon {
-          width: 18px;
-          height: 18px;
-          border: 1px solid var(--boxel-dark);
-        }
-      </style>
-    </template>
-  };
+  static isolated = Isolated;
 
   static embedded = class Embedded extends Component<typeof this> {
     get icon() {
@@ -427,477 +919,9 @@ export class Spec extends CardDef {
     </template>
   };
 
-  static fitted = class Fitted extends Component<typeof this> {
-    icon: CardOrFieldTypeIcon | undefined;
+  static fitted = Fitted;
 
-    get defaultIcon() {
-      return this.args.model.constructor?.icon;
-    }
-    constructor(owner: any, args: any) {
-      super(owner, args);
-      this.loadCardIcon.perform();
-    }
-
-    private loadCardIcon = restartableTask(async () => {
-      if (this.args.model.ref && this.args.model.id) {
-        let card = await loadCard(this.args.model.ref, {
-          loader: myLoader(),
-          relativeTo: new URL(this.args.model.id),
-        });
-        this.icon = card.icon;
-      }
-    });
-
-    <template>
-      <div class='fitted-template'>
-        <div class='thumbnail-section'>
-          {{#if this.loadCardIcon.isRunning}}
-            <LoadingIndicator />
-          {{else if this.icon}}
-            <this.icon width='35' height='35' role='presentation' />
-          {{else}}
-            <this.defaultIcon width='35' height='35' role='presentation' />
-          {{/if}}
-        </div>
-        <div class='info-section'>
-          <h3 class='card-title' data-test-card-title><@fields.title /></h3>
-          <h4 class='card-description' data-test-card-description>
-            <@fields.description />
-          </h4>
-        </div>
-        {{#if @model.specType}}
-          <SpecTag @specType={{@model.specType}} />
-        {{/if}}
-      </div>
-      <style scoped>
-        @layer {
-          .fitted-template {
-            width: 100%;
-            height: 100%;
-            display: flex;
-            gap: var(--boxel-sp-xs);
-            padding: var(--boxel-sp-xs);
-            overflow: hidden;
-            align-items: center;
-          }
-          .thumbnail-section {
-            flex-shrink: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            overflow: hidden;
-          }
-          .info-section {
-            width: 100%;
-            overflow: hidden;
-          }
-          .card-title {
-            margin-block: 0;
-            font: 600 var(--boxel-font-sm);
-            letter-spacing: var(--boxel-lsp-sm);
-            line-height: 1.25;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            overflow: hidden;
-          }
-          .card-description {
-            margin-top: var(--boxel-sp-4xs);
-            margin-bottom: 0;
-            color: var(--boxel-450);
-            font: 500 var(--boxel-font-xs);
-            letter-spacing: var(--boxel-lsp-xs);
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            overflow: hidden;
-          }
-          :deep(.spec-tag-pill) {
-            height: max-content;
-          }
-          :deep(.spec-tag-pill .icon) {
-            width: 18px;
-          }
-        }
-
-        /* Aspect Ratio <= 1.0 (Vertical) */
-        @container fitted-card (aspect-ratio <= 1.0) {
-          .fitted-template {
-            flex-direction: column;
-          }
-          .thumbnail-section {
-            width: 100%;
-            height: 50cqmin;
-          }
-          .info-section {
-            text-align: center;
-          }
-        }
-
-        @container fitted-card (aspect-ratio <= 1.0) and (height <= 118px) {
-          .thumbnail-section {
-            display: none;
-          }
-        }
-        /* Vertical Tiles*/
-        /* Small Tile (150 x 170) */
-        @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (170px <= height) {
-          .thumbnail-section {
-            min-height: 70px;
-          }
-          .card-title {
-            -webkit-line-clamp: 3;
-          }
-        }
-        /* CardsGrid Tile (170 x 250) */
-        @container fitted-card (aspect-ratio <= 1.0) and (150px < width < 250px ) and (170px < height < 275px) {
-          .thumbnail-section {
-            height: auto;
-            aspect-ratio: 1 / 1;
-          }
-          .card-title {
-            -webkit-line-clamp: 2;
-          }
-        }
-        /* Tall Tile (150 x 275) */
-        @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
-          .thumbnail-section {
-            min-height: 85px;
-          }
-          .card-title {
-            font-size: var(--boxel-font-size);
-            -webkit-line-clamp: 4;
-          }
-        }
-        /* Large Tile (250 x 275) */
-        @container fitted-card (aspect-ratio <= 1.0) and (250px <= width ) and (275px <= height) {
-          .thumbnail-section {
-            min-height: 150px;
-          }
-          .card-title {
-            font-size: var(--boxel-font-size-sm);
-            -webkit-line-clamp: 3;
-          }
-        }
-        /* Vertical Cards */
-        @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
-          .fitted-template {
-            padding: var(--boxel-sp);
-            gap: var(--boxel-sp);
-          }
-          .thumbnail-section {
-            min-height: 236px;
-          }
-          .card-title {
-            font-size: var(--boxel-font-size-med);
-            -webkit-line-clamp: 4;
-          }
-        }
-        /* Expanded Card (400 x 445) */
-
-        /* 1.0 < Aspect Ratio (Horizontal) */
-        @container fitted-card (1.0 < aspect-ratio) {
-          .thumbnail-section {
-            aspect-ratio: 1;
-          }
-        }
-        @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
-          .info-section {
-            align-self: center;
-          }
-        }
-        /* Badges */
-        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
-          .fitted-template {
-            padding: var(--boxel-sp-xxxs);
-          }
-          .thumbnail-section {
-            display: none;
-          }
-        }
-        /* Small Badge (150 x 40) */
-        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (height < 65px) {
-          .card-title {
-            -webkit-line-clamp: 1;
-            font: 600 var(--boxel-font-xs);
-          }
-          .card-display-name {
-            margin-top: 0;
-          }
-        }
-        /* Medium Badge (150 x 65) */
-
-        /* Large Badge (150 x 105) */
-        @container fitted-card (1.0 < aspect-ratio) and (width < 250px) and (105px <= height) {
-          .card-title {
-            -webkit-line-clamp: 3;
-          }
-        }
-
-        /* Strips */
-        /* Single Strip (250 x 40) */
-        @container fitted-card (1.0 < aspect-ratio) and (250px <= width) and (height < 65px) {
-          .fitted-template {
-            padding: var(--boxel-sp-xxxs);
-          }
-        }
-        /* Double Strip (250 x 65) */
-        /* Triple Strip (250 x 105) */
-        /* Double Wide Strip (400 x 65) */
-        /* Triple Wide Strip (400 x 105) */
-
-        /* Horizontal Tiles */
-        /* Regular Tile (250 x 170) */
-        @container fitted-card (1.0 < aspect-ratio) and (250px <= width < 400px) and (170px <= height) {
-          .thumbnail-section {
-            height: 40%;
-          }
-          .card-title {
-            -webkit-line-clamp: 4;
-            font-size: var(--boxel-font-size);
-          }
-        }
-
-        /* Horizontal Cards */
-        /* Compact Card (400 x 170) */
-        @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (170px <= height) {
-          .thumbnail-section {
-            height: 100%;
-          }
-        }
-        /* Full Card (400 x 275) */
-        @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
-          .fitted-template {
-            padding: var(--boxel-sp);
-            gap: var(--boxel-sp);
-          }
-          .thumbnail-section {
-            max-width: 44%;
-          }
-          .card-title {
-            font-size: var(--boxel-font-size-med);
-          }
-        }
-      </style>
-    </template>
-  };
-
-  static edit = class Edit extends Component<typeof this> {
-    icon: CardOrFieldTypeIcon | undefined;
-
-    get defaultIcon() {
-      return this.args.model.constructor?.icon;
-    }
-    constructor(owner: any, args: any) {
-      super(owner, args);
-      this.loadCardIcon.perform();
-    }
-
-    private loadCardIcon = restartableTask(async () => {
-      if (this.args.model.ref && this.args.model.id) {
-        let card = await loadCard(this.args.model.ref, {
-          loader: myLoader(),
-          relativeTo: new URL(this.args.model.id),
-        });
-        this.icon = card.icon;
-      }
-    });
-
-    get absoluteRef() {
-      if (!this.args.model.ref || !this.args.model.id) {
-        return undefined;
-      }
-      let url = new URL(this.args.model.id);
-      let ref = codeRefWithAbsoluteURL(this.args.model.ref, url);
-      if (!isResolvedCodeRef(ref)) {
-        throw new Error('ref is not a resolved code ref');
-      }
-      return ref;
-    }
-
-    private get realmInfo() {
-      return getCardMeta(this.args.model as CardDef, 'realmInfo');
-    }
-
-    <template>
-      <article class='container'>
-        <header class='header' aria-labelledby='title'>
-          <div class='box header-icon-container'>
-            {{#if this.loadCardIcon.isRunning}}
-              <LoadingIndicator />
-            {{else if this.icon}}
-              <this.icon width='35' height='35' role='presentation' />
-            {{else}}
-              <this.defaultIcon width='35' height='35' role='presentation' />
-            {{/if}}
-          </div>
-          <div class='header-info-container'>
-            <div class='header-title-container' data-test-title>
-              <label for='spec-title' class='boxel-sr-only'>Title</label>
-              <@fields.title />
-            </div>
-            <div class='header-description-container' data-test-description>
-              <label
-                for='spec-description'
-                class='boxel-sr-only'
-              >Description</label>
-              <@fields.description />
-            </div>
-          </div>
-        </header>
-        <section class='readme section'>
-          <header class='row-header' aria-labelledby='readme'>
-            <BookOpenText width='20' height='20' role='presentation' />
-            <h2 id='readme'>Read Me</h2>
-          </header>
-          <div data-test-readme>
-            <@fields.readMe />
-          </div>
-        </section>
-        <section class='examples section'>
-          <header class='row-header' aria-labelledby='examples'>
-            <LayersSubtract width='20' height='20' role='presentation' />
-            <h2 id='examples'>Examples</h2>
-          </header>
-          {{#if (eq @model.specType 'field')}}
-            <@fields.containedExamples />
-          {{else}}
-            <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
-          {{/if}}
-        </section>
-        <section class='module section'>
-          <header class='row-header' aria-labelledby='module'>
-            <GitBranch width='20' height='20' role='presentation' />
-            <h2 id='module'>Module</h2>
-          </header>
-          <div class='code-ref-container'>
-            <FieldContainer @label='URL' @vertical={{true}}>
-              <div class='code-ref-row'>
-                <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
-                <span class='code-ref-value' data-test-module-href>
-                  {{@model.moduleHref}}
-                </span>
-              </div>
-            </FieldContainer>
-            <FieldContainer @label='Module Name' @vertical={{true}}>
-              <div class='code-ref-row'>
-                <ExportArrow class='exported-arrow' width='10' height='10' />
-                <div class='code-ref-value' data-test-exported-name>
-                  {{@model.ref.name}}
-                </div>
-                <div class='exported-type' data-test-exported-type>
-                  {{@model.specType}}
-                </div>
-              </div>
-            </FieldContainer>
-          </div>
-        </section>
-      </article>
-      <style scoped>
-        .container {
-          --boxel-spec-background-color: #ebeaed;
-          --boxel-spec-code-ref-background-color: #e2e2e2;
-          --boxel-spec-code-ref-text-color: #646464;
-
-          height: 100%;
-          min-height: max-content;
-          padding: var(--boxel-sp);
-          background-color: var(--boxel-spec-background-color);
-        }
-        .section {
-          margin-top: var(--boxel-sp);
-          padding-top: var(--boxel-sp);
-          border-top: 1px solid var(--boxel-400);
-        }
-        h2 {
-          margin: 0;
-          font: 600 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-        .box {
-          border: 1px solid var(--boxel-border-color);
-          border-radius: var(--boxel-border-radius-lg);
-          background-color: var(--boxel-light);
-        }
-        .header {
-          display: flex;
-          gap: var(--boxel-sp-sm);
-        }
-        .header-icon-container {
-          flex-shrink: 0;
-          height: var(--boxel-icon-xxl);
-          width: var(--boxel-icon-xxl);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          background-color: var(--boxel-100);
-        }
-        .header-info-container {
-          background-color: var(--boxel-light);
-          border-radius: var(--boxel-border-radius);
-          flex: 1;
-          align-self: center;
-        }
-        .header-info-container > div + div {
-          border-top: 1px solid var(--boxel-spec-background-color);
-        }
-        .header-title-container,
-        .header-description-container {
-          padding: var(--boxel-sp-xs);
-        }
-
-        .row-header {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          padding-bottom: var(--boxel-sp-lg);
-        }
-        .row-content {
-          margin-top: var(--boxel-sp-sm);
-        }
-
-        /* code ref container styles */
-        .code-ref-container {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xs);
-        }
-        .code-ref-row {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-          min-height: var(--boxel-form-control-height);
-          padding: var(--boxel-sp-xs);
-          background-color: var(
-            --boxel-spec-code-ref-background-color,
-            var(--boxel-100)
-          );
-          border: var(--boxel-border);
-          border-radius: var(--boxel-border-radius);
-          color: var(--boxel-spec-code-ref-text-color, var(--boxel-450));
-        }
-        .code-ref-value {
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-        .exported-type {
-          margin-left: auto;
-          color: var(--boxel-450);
-          font: 500 var(--boxel-font-xs);
-          letter-spacing: var(--boxel-lsp);
-          text-transform: uppercase;
-        }
-        .exported-arrow {
-          min-width: 8px;
-          min-height: 8px;
-        }
-        .realm-icon {
-          width: 18px;
-          height: 18px;
-          border: 1px solid var(--boxel-dark);
-        }
-      </style>
-    </template>
-  };
+  static edit = Edit;
 }
 
 interface SpecTagSignature {
