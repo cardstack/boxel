@@ -11,13 +11,11 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   type PatchData,
-  type ResolvedCodeRef,
   Command,
   CommandContext,
   CommandContextStamp,
   getClass,
   identifyCard,
-  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
