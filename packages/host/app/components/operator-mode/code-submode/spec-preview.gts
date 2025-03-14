@@ -1,9 +1,9 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
-import { next } from '@ember/runloop';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -38,6 +38,7 @@ import {
 import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
+  loadCard,
 } from '@cardstack/runtime-common/code-ref';
 
 import Preview from '@cardstack/host/components/preview';
@@ -50,6 +51,7 @@ import { getSearch } from '@cardstack/host/resources/search';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
@@ -57,7 +59,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import { CardContext } from 'https://cardstack.com/base/card-api';
+import { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -429,6 +431,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @tracked private _selectedCard?: Spec;
 
@@ -452,30 +455,18 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
       let maybeAbsoluteRef = codeRefWithAbsoluteURL(ref, relativeTo);
-      let realmURL = this.operatorModeStateService.realmURL;
       if (isResolvedCodeRef(maybeAbsoluteRef)) {
         ref = maybeAbsoluteRef;
       }
-      let doc = {
-        data: {
-          attributes: {
-            specType,
-            ref,
-            title: ref.name,
-          },
-          meta: {
-            adoptsFrom: specRef,
-            realmURL: realmURL.href,
-          },
-        },
-      };
       try {
-        let card = await this.cardService.createFromSerialized(doc.data, doc);
-        if (!card) {
-          throw new Error(
-            `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
-          );
-        }
+        let Klass = await loadCard(specRef, {
+          loader: this.loaderService.loader,
+        });
+        let card = new Klass({
+          specType,
+          ref,
+          title: ref.name,
+        }) as CardDef;
         await this.cardService.saveModel(card);
       } catch (e: any) {
         console.log('Error saving', e);
