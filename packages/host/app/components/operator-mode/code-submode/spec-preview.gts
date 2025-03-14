@@ -1,7 +1,6 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
@@ -131,7 +130,10 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
           Create
         </BoxelButton>
       {{else if this.moreThanOneInstance}}
-        <div class='number-of-instance'>
+        <div
+          data-test-number-of-instance={{@numberOfInstances}}
+          class='number-of-instance'
+        >
           <DotIcon class='dot-icon' />
           <div class='number-of-instance-text'>
             {{@numberOfInstances}}
@@ -657,7 +659,11 @@ export class SpecTag extends GlimmerComponent<SpecTagSignature> {
   }
   <template>
     {{#if this.icon}}
-      <Pill class='spec-tag-pill' ...attributes>
+      <Pill
+        data-test-spec-tag={{@specType}}
+        class='spec-tag-pill'
+        ...attributes
+      >
         <:iconLeft>
           {{this.icon}}
         </:iconLeft>
