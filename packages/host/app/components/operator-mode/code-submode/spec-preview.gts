@@ -196,10 +196,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return this.args.cards.length === 1;
   }
 
-  get shouldSelectFirstCard() {
-    return this.args.cards.length > 0 && !this.args.spec;
-  }
-
   get cardIds() {
     return this.args.cards.map((card) => card.id);
   }
