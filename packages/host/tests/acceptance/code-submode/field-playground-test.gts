@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 import type { Realm } from '@cardstack/runtime-common';
 
 import {
+  percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
   setupOnSave,
@@ -346,7 +347,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     });
   });
 
-  test('can preview selected field instance', async function (assert) {
+  test('can preview compound field instance', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert
       .dom('[data-test-playground-format-chooser] button')
@@ -357,6 +358,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
     assert.dom('[data-test-embedded-comment]').containsText('0 stars');
+    await percySnapshot(assert);
 
     await selectFormat('atom');
     assert.dom('[data-test-format-chooser="embedded"]').hasNoClass('active');
@@ -375,9 +377,10 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     await selectFormat('fitted');
     assertFieldExists(assert, 'fitted');
     assert.dom('[data-test-fitted-comment]').containsText('by Marco');
+    await this.pauseTest();
   });
 
-  test('it is not available for non-exports or primitive fields', async function (assert) {
+  test('can not preview non-exports or primitives', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-playground-panel]').exists();
 
