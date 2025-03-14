@@ -1,10 +1,4 @@
-import {
-  click,
-  waitFor,
-  fillIn,
-  triggerEvent,
-  pauseTest,
-} from '@ember/test-helpers';
+import { click, waitFor, fillIn, triggerEvent } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -21,16 +15,13 @@ import {
   setupOnSave,
 } from '../../helpers';
 
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
   getPlaygroundSelections,
-  openFileInPlayground,
-  selectDeclaration,
   setPlaygroundSelections,
-  setRecentFiles,
   togglePlaygroundPanel,
 } from '../../helpers/playground';
 
-import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
