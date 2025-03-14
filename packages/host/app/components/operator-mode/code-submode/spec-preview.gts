@@ -607,7 +607,22 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   get card() {
     if (this._selectedCard) {
-      return this._selectedCard;
+      //if different module (or realm) return selected card
+      if (
+        this._selectedCard?.moduleHref !==
+        this.getSelectedDeclarationAsCodeRef.module
+      ) {
+        return this._selectedCard;
+      } else {
+        //only return selected card if it has the same name
+        //otherwise, just keep selected card
+        if (
+          this._selectedCard?.ref.name ===
+          this.getSelectedDeclarationAsCodeRef.name
+        ) {
+          return this._selectedCard;
+        }
+      }
     }
     return this.cards?.[0] as Spec;
   }
@@ -652,42 +667,27 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
-    {{#if @isLoadingNewModule}}
+    {{#let (this.getSpecIntent this.cards) as |showCreateSpecIntent|}}
       {{yield
         (component
           SpecPreviewTitle
-          showCreateSpecIntent=false
+          showCreateSpecIntent=showCreateSpecIntent
           createSpec=this.createSpec
           isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
           specType=this.specType
-          numberOfInstances=0
+          numberOfInstances=this.cards.length
         )
-        (component SpecPreviewLoading)
+        (component
+          SpecPreviewContent
+          showCreateSpecIntent=showCreateSpecIntent
+          canWrite=this.canWrite
+          onSelectCard=this.onSelectCard
+          spec=this.card
+          isLoading=false
+          cards=this.cards
+        )
       }}
-    {{else}}
-      {{#let (this.getSpecIntent this.cards) as |showCreateSpecIntent|}}
-        {{yield
-          (component
-            SpecPreviewTitle
-            showCreateSpecIntent=showCreateSpecIntent
-            createSpec=this.createSpec
-            isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-            specType=this.specType
-            numberOfInstances=this.cards.length
-          )
-          (component
-            SpecPreviewContent
-            showCreateSpecIntent=showCreateSpecIntent
-            canWrite=this.canWrite
-            onSelectCard=this.onSelectCard
-            spec=this.card
-            isLoading=false
-            cards=this.cards
-          )
-        }}
-      {{/let}}
-
-    {{/if}}
+    {{/let}}
   </template>
 }
 
