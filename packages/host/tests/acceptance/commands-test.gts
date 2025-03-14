@@ -447,28 +447,28 @@ module('Acceptance | Commands tests', function (hooks) {
                     name: 'default',
                     module: '@cardstack/boxel-host/commands/get-boxel-ui-state',
                   },
-                  executors: [],
+                  requiresApproval: true,
                 },
                 {
                   codeRef: {
                     name: 'SearchCardsByTypeAndTitleCommand',
                     module: '@cardstack/boxel-host/commands/search-cards',
                   },
-                  executors: [],
+                  requiresApproval: true,
                 },
                 {
                   codeRef: {
                     name: 'default',
                     module: '@cardstack/boxel-host/commands/switch-submode',
                   },
-                  executors: [],
+                  requiresApproval: true,
                 },
                 {
                   codeRef: {
                     name: 'default',
                     module: `/test/maybe-boom-command`,
                   },
-                  executors: [],
+                  requiresApproval: true,
                 },
               ],
               title: 'Useful Commands',
@@ -579,25 +579,23 @@ module('Acceptance | Commands tests', function (hooks) {
       required: ['attributes', 'description'],
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Switching to code submode',
+      body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Switching to code submode',
+      formatted_body: '',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
           name: toolName,
           arguments: {
+            description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await waitFor('[data-test-submode-switcher=code]');
     assert.dom('[data-test-submode-switcher=code]').exists();
@@ -643,23 +641,21 @@ module('Acceptance | Commands tests', function (hooks) {
     let boxelMessageData = JSON.parse(message.content.data);
     let toolName = boxelMessageData.context.tools[0].function.name;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Delaying 1 second',
+      body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Delaying 1 second',
+      formatted_body: '',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
           name: toolName,
           arguments: {
+            description: 'Delaying 1 second',
             attributes: {},
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await waitFor(
       '[data-test-message-idx="0"][data-test-boxel-message-from="testuser"]',
@@ -847,14 +843,17 @@ module('Acceptance | Commands tests', function (hooks) {
     let meetingCardId = parsedCard.data.id;
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Update card',
+      body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Update card',
+      formatted_body: '',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
           arguments: {
+            description:
+              'Change the topic of the meeting to "Meeting with Hassan"',
             attributes: {
               cardId: meetingCardId,
               patch: {
@@ -866,10 +865,6 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
 
     await waitUntil(
@@ -911,15 +906,16 @@ module('Acceptance | Commands tests', function (hooks) {
     // simulate message
     let roomId = getRoomIds().pop()!;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: 'Switching to code submode',
+      body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Switching to code submode',
+      formatted_body: '',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'switch-submode_dd88',
           arguments: {
+            description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
@@ -929,6 +925,10 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     // Click on the apply button
     await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('[data-test-message-idx="0"] .command-description')
+      .containsText('Switching to code submode');
+
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
 
     // check we're in code mode
@@ -950,7 +950,7 @@ module('Acceptance | Commands tests', function (hooks) {
     assert.strictEqual(message.content.commandRequestId, 'abc123');
   });
 
-  test('ShowCard command added from a skill, can be executed when clicked on', async function (assert) {
+  test('ShowCard command added from a skill, can be automatically executed', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -971,6 +971,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Show the card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
@@ -992,9 +993,13 @@ module('Acceptance | Commands tests', function (hooks) {
         },
       ],
     });
-    // Click on the apply button
     await waitFor('[data-test-message-idx="0"]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
+
+    // Note: you don't have to click on apply button, because command on Skill
+    // has requireApproval set to false
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
+    );
 
     assert.dom('[data-test-command-id]').doesNotHaveClass('is-failed');
 
@@ -1129,6 +1134,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Inspecting the current UI state',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
@@ -1137,10 +1143,6 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await settled();
     assert
@@ -1188,8 +1190,10 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Getting weather information for London',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
+          id: 'fd1606f6-4d81-414a-8901-d6017eaf1fe9',
           name: toolName,
           arguments: {
             attributes: {
@@ -1198,10 +1202,6 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
 
     await settled();
@@ -1248,6 +1248,7 @@ module('Acceptance | Commands tests', function (hooks) {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         formatted_body: 'Will it boom?',
         format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
         [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
           {
             id: '8406a6eb-a3d5-494f-a7f3-ae9880115756',

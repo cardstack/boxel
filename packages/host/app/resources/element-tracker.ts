@@ -1,10 +1,34 @@
 import { registerDestructor } from '@ember/destroyable';
 import { schedule } from '@ember/runloop';
+import { SafeString } from '@ember/template';
 
 import Modifier from 'ember-modifier';
 import { TrackedArray } from 'tracked-built-ins';
 
-export default class ElementTracker<Meta extends object = object> {
+import {
+  CardDef,
+  Format,
+  FieldType,
+} from 'https://cardstack.com/base/card-api';
+
+interface Meta {
+  cardId?: string;
+  card?: CardDef;
+  format: Format | 'data';
+  fieldType: FieldType | undefined;
+  fieldName: string | undefined;
+}
+
+export interface RenderedCardForOverlayActions {
+  element: HTMLElement;
+  cardDefOrId: CardDef | string;
+  fieldType: FieldType | undefined;
+  fieldName: string | undefined;
+  format: Format | 'data';
+  overlayZIndexStyle?: SafeString;
+}
+
+export default class ElementTracker {
   elements: { element: HTMLElement; meta: Meta }[] = new TrackedArray();
 
   get trackElement(): typeof Modifier<{ Args: { Named: Meta } }> {
@@ -63,5 +87,36 @@ export default class ElementTracker<Meta extends object = object> {
         });
       }
     };
+  }
+
+  filter(
+    conditions: Partial<Meta>[],
+    operator: 'and' | 'or' = 'and',
+  ): RenderedCardForOverlayActions[] {
+    const checkCondition = (
+      entry: { element: HTMLElement; meta: Meta },
+      condition: Partial<Meta>,
+    ) => {
+      return Object.keys(condition).every((key) => {
+        return entry.meta[key as keyof Meta] === condition[key as keyof Meta];
+      });
+    };
+    const filteredElements = this.elements.filter((entry) => {
+      if (operator === 'and') {
+        return conditions.every((condition) =>
+          checkCondition(entry, condition),
+        );
+      } else {
+        return conditions.some((condition) => checkCondition(entry, condition));
+      }
+    });
+
+    return filteredElements.map((entry) => ({
+      element: entry.element,
+      cardDefOrId: entry.meta.card || entry.meta.cardId!,
+      fieldType: entry.meta.fieldType,
+      fieldName: entry.meta.fieldName,
+      format: entry.meta.format,
+    }));
   }
 }

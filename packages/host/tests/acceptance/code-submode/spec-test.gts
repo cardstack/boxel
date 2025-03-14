@@ -1,4 +1,10 @@
-import { click, waitFor, fillIn, find } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  fillIn,
+  triggerEvent,
+  find,
+} from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -16,6 +22,7 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
+
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 
 const testRealm2URL = `http://test-realm/test2/`;
@@ -247,6 +254,18 @@ module('Acceptance | Spec preview', function (hooks) {
                 name: 'Pet',
               },
             },
+            relationships: {
+              'linkedExamples.0': {
+                links: {
+                  self: `${testRealmURL}Pet/mango`,
+                },
+              },
+              'linkedExamples.1': {
+                links: {
+                  self: `${testRealmURL}Pet/pudding`,
+                },
+              },
+            },
             meta: {
               adoptsFrom: {
                 module: `${baseRealm.url}spec`,
@@ -304,6 +323,19 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             attributes: {
               name: 'Mango',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'Pet',
+              },
+            },
+          },
+        },
+        'Pet/pudding.json': {
+          data: {
+            attributes: {
+              name: 'Pudding',
             },
             meta: {
               adoptsFrom: {
@@ -588,5 +620,42 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-exported-type]').hasText('field');
     assert.dom('[data-test-exported-name]').hasText('PersonField');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}person`);
+  });
+
+  test('show overlay on examples card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    await click('[data-test-accordion-item="spec-preview"] button');
+
+    await waitFor('[data-test-spec-selector]');
+    assert.dom('[data-test-spec-selector]').exists();
+
+    await click('[data-test-spec-selector] > div');
+
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2.json');
+    await click('[data-option-index="0"]');
+
+    assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();
+    assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
+
+    await triggerEvent(
+      `[data-test-card="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+
+    assert.dom('[data-test-card-overlay]').exists();
+
+    await triggerEvent(
+      `[data-test-card="${testRealmURL}Pet/mango"]`,
+      'mouseleave',
+    );
+
+    assert.dom('[data-test-card-overlay]').doesNotExist();
   });
 });

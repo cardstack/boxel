@@ -2,6 +2,7 @@ import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -55,7 +56,13 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
+import { CardContext } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+
+import ElementTracker, {
+  type RenderedCardForOverlayActions,
+} from '../../../resources/element-tracker';
+import Overlays from '../overlays';
 
 import type { WithBoundArgs } from '@glint/template';
 
@@ -173,9 +180,16 @@ interface ContentSignature {
   };
 }
 
+type SpecPreviewCardContext = Omit<
+  CardContext,
+  'prerenderedCardSearchComponent'
+>;
+
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+
+  cardTracker = new ElementTracker();
 
   get onlyOneInstance() {
     return this.args.cards.length === 1;
@@ -187,6 +201,21 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   get cardIds() {
     return this.args.cards.map((card) => card.id);
+  }
+
+  private get cardContext(): SpecPreviewCardContext {
+    return {
+      cardComponentModifier: this.cardTracker.trackElement,
+    };
+  }
+
+  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
+    return this.cardTracker
+      .filter([{ fieldType: 'linksToMany' }])
+      .map((entry) => ({
+        ...entry,
+        overlayZIndexStyle: htmlSafe(`z-index: 1`),
+      }));
   }
 
   getDropdownData = (id: string) => {
@@ -285,10 +314,22 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             </BoxelButton>
           </div>
           {{#if @spec}}
+            <Overlays
+              @overlayClassName='spec-preview-overlay'
+              @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+            />
             {{#if this.displayIsolated}}
-              <Preview @card={{@spec}} @format='isolated' />
+              <Preview
+                @card={{@spec}}
+                @format='isolated'
+                @cardContext={{this.cardContext}}
+              />
             {{else}}
-              <Preview @card={{@spec}} @format='edit' />
+              <Preview
+                @card={{@spec}}
+                @format='edit'
+                @cardContext={{this.cardContext}}
+              />
             {{/if}}
           {{/if}}
         </div>
@@ -320,6 +361,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
         width: 100%;
         align-content: center;
         text-align: center;
+      }
+      .spec-preview-overlay {
+        pointer-events: none;
+        border-radius: var(--boxel-border-radius);
+        box-shadow: 0 0 0 1px var(--boxel-dark);
       }
       .spec-selector-container {
         display: flex;

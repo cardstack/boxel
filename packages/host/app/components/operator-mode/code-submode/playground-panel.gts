@@ -484,7 +484,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     </style>
   </template>
 
-  fieldFormats: Format[] = ['embedded', 'atom', 'edit'];
+  fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
