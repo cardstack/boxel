@@ -1011,7 +1011,6 @@ export default class CodeSubmode extends Component<Signature> {
                       {{#if this.showSpecPreview}}
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
-                          @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
                           as |SpecPreviewTitle SpecPreviewContent|
                         >
                           <A.Item

@@ -72,7 +72,6 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     selectedDeclaration?: ModuleDeclaration;
-    isLoadingNewModule?: boolean;
   };
   Blocks: {
     default: [
@@ -624,25 +623,39 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   <template>
-    {{yield
-      (component
-        SpecPreviewTitle
-        showCreateSpec=this.showCreateSpec
-        createSpec=this.createSpec
-        isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-        specType=this.specType
-        numberOfInstances=this.cards.length
-      )
-      (component
-        SpecPreviewContent
-        showCreateSpec=this.showCreateSpec
-        canWrite=this.canWrite
-        onSelectCard=this.onSelectCard
-        spec=this.card
-        isLoading=false
-        cards=this.cards
-      )
-    }}
+    {{#if this.search.isRunning}}
+      {{yield
+        (component
+          SpecPreviewTitle
+          showCreateSpec=false
+          createSpec=this.createSpec
+          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+          specType=this.specType
+          numberOfInstances=0
+        )
+        (component SpecPreviewLoading)
+      }}
+    {{else}}
+      {{yield
+        (component
+          SpecPreviewTitle
+          showCreateSpec=this.showCreateSpec
+          createSpec=this.createSpec
+          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+          specType=this.specType
+          numberOfInstances=this.cards.length
+        )
+        (component
+          SpecPreviewContent
+          showCreateSpec=this.showCreateSpec
+          canWrite=this.canWrite
+          onSelectCard=this.onSelectCard
+          spec=this.card
+          isLoading=false
+          cards=this.cards
+        )
+      }}
+    {{/if}}
   </template>
 }
 
