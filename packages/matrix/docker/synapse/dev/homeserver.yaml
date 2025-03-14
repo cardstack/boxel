@@ -99,3 +99,6 @@ email:
 
 templates:
   custom_template_directory: "/custom/templates/"
+
+experimental_features:
+  msc3575_enabled: true

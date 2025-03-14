@@ -657,7 +657,8 @@ export default class AiAssistantPanel extends Component<Signature> {
     return Boolean(
       this.matrixService.currentRoomId &&
         this.maybeMonacoSDK &&
-        this.doCreateRoom.isIdle,
+        this.doCreateRoom.isIdle &&
+        !this.matrixService.isLoadingTimeline,
     );
   }
 }
