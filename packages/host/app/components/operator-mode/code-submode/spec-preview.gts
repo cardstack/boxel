@@ -61,7 +61,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import { CardContext } from 'https://cardstack.com/base/card-api';
+import { CardContext, type CardDef } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -96,6 +96,7 @@ interface Signature {
             | 'spec'
             | 'isLoading'
             | 'cards'
+            | 'updatePlaygroundSelections'
           >
         | WithBoundArgs<typeof SpecPreviewLoading, never>
       ),
@@ -183,6 +184,7 @@ interface ContentSignature {
     cards: PrerenderedCard[];
     spec: Spec | undefined;
     isLoading: boolean;
+    updatePlaygroundSelections: (cardId: string) => void;
   };
 }
 
@@ -265,6 +267,10 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
+  @action viewCardInPlayground(card: CardDef) {
+    this.args.updatePlaygroundSelections(card.id);
+  }
+
   <template>
     <div
       class={{cn
@@ -326,6 +332,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             <Overlays
               @overlayClassName='spec-preview-overlay'
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+              @onSelectCard={{this.viewCardInPlayground}}
             />
             {{#if this.displayIsolated}}
               <Preview
@@ -614,25 +621,43 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return cards.length === 0 && this.canWrite;
   };
 
-  // When previewing a field spec, changing the spec in Spec panel should
-  // change the selected spec in Playground panel
-  private updateFieldSpecForPlayground = (id: string) => {
-    let declaration = this.args.selectedDeclaration;
-    if (
-      !declaration?.exportName ||
-      !isCardOrFieldDeclaration(declaration) ||
-      !isFieldDef(declaration.cardOrField)
-    ) {
+  /**
+   * Updates playground selections in localStorage if needed
+   * @param id The card ID to select
+   * @param format The display format to use ('embedded' or 'isolated')
+   * @param isFieldSpec Whether we're checking for a field spec (true) or card (false)
+   * @param fieldIndex The index of the field to select
+   */
+  private updatePlaygroundSelection(
+    id: string,
+    format: 'embedded' | 'isolated',
+    isFieldSpec: boolean,
+    fieldIndex?: number,
+  ) {
+    const declaration = this.args.selectedDeclaration;
+
+    if (!declaration?.exportName || !isCardOrFieldDeclaration(declaration)) {
       return;
     }
-    let moduleId = internalKeyFor(
+
+    // Check if we have the right kind of definition (field or card)
+    const hasExpectedDefType = isFieldSpec
+      ? isFieldDef(declaration.cardOrField)
+      : isCardDef(declaration.cardOrField);
+
+    if (!hasExpectedDefType) {
+      return;
+    }
+
+    const moduleId = internalKeyFor(
       this.getSelectedDeclarationAsCodeRef,
       undefined,
     );
-    let cardId = id.replace(/\.json$/, '');
-    let selections = window.localStorage.getItem(PlaygroundSelections);
+    const cardId = id.replace(/\.json$/, '');
+
+    const selections = window.localStorage.getItem(PlaygroundSelections);
     if (selections) {
-      let selection = JSON.parse(selections)[moduleId];
+      const selection = JSON.parse(selections)[moduleId];
       if (selection?.cardId === cardId) {
         return;
       }
@@ -640,9 +665,19 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     this.playgroundPanelService.persistSelections(
       moduleId,
       cardId,
-      'embedded',
-      0,
+      format,
+      fieldIndex,
     );
+  }
+
+  // Updates playground selection when a field spec is selected
+  private updateFieldSpecForPlayground = (id: string) => {
+    this.updatePlaygroundSelection(id, 'embedded', true, 0);
+  };
+
+  // Updates playground selection when a linkedExample card is selected
+  private updatePlaygroundSelections = (id: string) => {
+    this.updatePlaygroundSelection(id, 'isolated', false);
   };
 
   <template>
@@ -671,6 +706,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
               spec=this.card
               isLoading=false
               cards=cards
+              updatePlaygroundSelections=this.updatePlaygroundSelections
             )
           }}
         {{/let}}

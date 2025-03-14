@@ -1,4 +1,10 @@
-import { click, waitFor, fillIn, triggerEvent } from '@ember/test-helpers';
+import {
+  click,
+  waitFor,
+  fillIn,
+  triggerEvent,
+  pauseTest,
+} from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -14,6 +20,16 @@ import {
   type TestContextWithSave,
   setupOnSave,
 } from '../../helpers';
+
+import {
+  getPlaygroundSelections,
+  openFileInPlayground,
+  selectDeclaration,
+  setPlaygroundSelections,
+  setRecentFiles,
+  togglePlaygroundPanel,
+} from '../../helpers/playground';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
@@ -603,5 +619,60 @@ module('Acceptance | Spec preview', function (hooks) {
     );
 
     assert.dom('[data-test-card-overlay]').doesNotExist();
+  });
+
+  test('updatePlaygroundSelections sets card selection in playground when clicking an example card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+
+    // Then open and interact with the spec preview
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    await click('[data-test-accordion-item="spec-preview"] button');
+
+    await waitFor('[data-test-spec-selector]');
+    assert.dom('[data-test-spec-selector]').exists();
+
+    await click('[data-test-spec-selector] > div');
+
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2.json');
+
+    await waitFor(`[data-test-links-to-many="linkedExamples"]`);
+    assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();
+    assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
+
+    // Click the first card: Mango
+    await triggerEvent(
+      `[data-test-card="${testRealmURL}Pet/mango"]`,
+      'mouseenter',
+    );
+    await waitFor('[data-test-card-overlay]');
+    assert.dom('[data-test-card-overlay]').exists();
+    await click('[data-test-card-overlay]');
+
+    const petModuleId = `${testRealmURL}pet/Pet`;
+    const petId = `${testRealmURL}Pet/mango`;
+
+    setPlaygroundSelections({
+      [`${petModuleId}`]: {
+        cardId: petId,
+        format: 'isolated',
+      },
+    });
+
+    await togglePlaygroundPanel();
+    assert.deepEqual(
+      getPlaygroundSelections()?.[petModuleId],
+      {
+        cardId: petId,
+        format: 'isolated',
+      },
+      'local storage is updated',
+    );
+    assert.dom('[data-test-selected-item]').hasText('Mango');
   });
 });
