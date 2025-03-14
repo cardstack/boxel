@@ -476,7 +476,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         this._selectedCard = this.cards.find(
           (card) => card.id === this.card.id,
         );
-        this.updateFieldSpecForPlayground(this.card.id);
       }
     },
   );
@@ -623,7 +622,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   <template>
-    {{#if this.search.isRunning}}
+    {{#if this.search.isLoading}}
       {{yield
         (component
           SpecPreviewTitle
