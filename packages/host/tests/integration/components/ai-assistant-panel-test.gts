@@ -1421,8 +1421,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       formatted_body: null,
       isStreamingFinished: false,
     });
-
-    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    await settled();
     assert
       .dom('[data-test-message-idx="0"] .reasoning-content')
       .containsText('Thinking...');
@@ -1442,14 +1441,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: eventId,
       },
     });
-    await waitUntil(() => {
-      const element = document.querySelector(
-        '[data-test-message-idx="0"] details[data-test-reasoning]',
-      );
-      return element?.textContent?.includes?.(
-        'they want to know what kind of dog to get',
-      );
-    });
+    await settled();
     assert
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .containsText('they want to know what kind of dog to get');
@@ -1459,9 +1451,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await click(
       '[data-test-message-idx="0"] details[data-test-reasoning] summary',
-    );
-    await waitFor(
-      `[data-test-message-idx="0"] details[data-test-reasoning]:not([open])`,
     );
     assert
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
@@ -1479,6 +1468,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: eventId,
       },
     });
+    await settled();
     assert
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .doesNotHaveAttribute('open');
@@ -1491,6 +1481,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       formatted_body: 'You should get a beagle.',
       isStreamingFinished: false,
     });
+    await settled();
     assert
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .doesNotHaveAttribute('open');
@@ -1513,6 +1504,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         event_id: eventId,
       },
     });
+    await settled();
     assert
       .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
       .hasAttribute('open');
