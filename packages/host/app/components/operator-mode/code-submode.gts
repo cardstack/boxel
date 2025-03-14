@@ -31,6 +31,7 @@ import {
   identifyCard,
   isFieldDef,
   isCardDocumentString,
+  isPrimitive,
   hasExecutableExtension,
   RealmPaths,
   isResolvedCodeRef,
@@ -470,12 +471,8 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
-    let baseDefType = this.selectedCardOrField?.cardOrField;
-    let codeRef = identifyCard(baseDefType);
-    if (!isResolvedCodeRef(codeRef)) {
-      return undefined;
-    }
-    return codeRef;
+    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
+    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
   }
 
   get showSpecPreview() {
@@ -985,29 +982,47 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.selectedCodeRef}}
-                        <A.Item
-                          class='accordion-item'
-                          @contentClass='accordion-item-content'
-                          @onClick={{fn this.selectAccordionItem 'playground'}}
-                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                          data-test-accordion-item='playground'
-                        >
-                          <:title>Playground</:title>
-                          <:content>
-                            {{#if (eq this.selectedAccordionItem 'playground')}}
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'playground'}}
+                        @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                        data-test-accordion-item='playground'
+                      >
+                        <:title>Playground</:title>
+                        <:content>
+                          {{#if (eq this.selectedAccordionItem 'playground')}}
+                            {{#if
+                              (isPrimitive this.selectedCardOrField.cardOrField)
+                            }}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-primitives
+                              >
+                                <span>Playground is not currently supported for
+                                  primitive fields.</span>
+                              </p>
+                            {{else if this.selectedCodeRef}}
                               <PlaygroundPanel
                                 @codeRef={{this.selectedCodeRef}}
                                 @isUpdating={{this.moduleContentsResource.isLoading}}
-                                @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
                                 @isFieldDef={{isFieldDef
                                   this.selectedCardOrField.cardOrField
                                 }}
                               />
+                            {{else}}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-nonexports
+                              >
+                                <span>Playground is not currently supported for
+                                  card or field definitions that are not
+                                  exported.</span>
+                              </p>
                             {{/if}}
-                          </:content>
-                        </A.Item>
-                      {{/if}}
+                          {{/if}}
+                        </:content>
+                      </A.Item>
                       {{#if this.showSpecPreview}}
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
@@ -1199,6 +1214,10 @@ export default class CodeSubmode extends Component<Signature> {
         color: var(--boxel-450);
         font-weight: 500;
         padding: var(--boxel-sp-xl);
+        margin-block: 0;
+      }
+      .file-incompatible-message > span {
+        max-width: 400px;
       }
       .empty-container {
         background-color: var(--boxel-light-100);

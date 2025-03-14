@@ -6,7 +6,7 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
-import { isField } from './constants';
+import { isField, primitive } from './constants';
 import { CardError } from './error';
 import { isUrlLike, trimExecutableExtension } from './index';
 
@@ -97,6 +97,10 @@ export function isCardInstance(card: any): card is CardDef {
 
 export function isFieldDef(field: any): field is typeof FieldDef {
   return isBaseDef(field) && 'isFieldDef' in field;
+}
+
+export function isPrimitive(def: any) {
+  return isBaseDef(def) && primitive in def;
 }
 
 export function codeRefWithAbsoluteURL(
