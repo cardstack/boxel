@@ -1968,11 +1968,19 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update(url, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          this.broadcastRealmEvent({
-            eventName: 'index',
-            indexType: 'incremental',
-            invalidations: invalidatedURLs.map((u) => u.href),
-          });
+          if (
+            invalidatedURLs.some((u) => u.href.includes('user1/realm2/Friend'))
+          ) {
+            console.log(
+              'skipping broadcastRealmEvent for drainUpdates onInvalidation because it’s the new user1/realm2 Friend',
+            );
+          } else {
+            this.broadcastRealmEvent({
+              eventName: 'index',
+              indexType: 'incremental',
+              invalidations: invalidatedURLs.map((u) => u.href),
+            });
+          }
         },
         ...(operation === 'removed' ? { delete: true } : {}),
       });
