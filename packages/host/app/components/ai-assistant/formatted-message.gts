@@ -11,7 +11,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
-import CodeBlock from '@cardstack/host/modifiers/code-block';
+// import CodeBlock from '@cardstack/host/modifiers/code-block';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -25,7 +25,8 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { scheduleOnce } from '@ember/runloop';
 import { action } from '@ember/object';
 import { registerDestructor } from '@ember/destroyable';
-import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
+import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
+import CodeBlock from './code-block';
 interface FormattedMessageSignature {
   html: string;
   monacoSDK: MonacoSDK;
@@ -38,6 +39,12 @@ interface CodeAction {
   containerElement: HTMLDivElement;
   state: 'ready' | 'applying' | 'applied' | 'failed';
 }
+
+interface HtmlPart {
+  type: 'pre_tag' | 'non_pre_tag';
+  content: string;
+}
+
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 function sanitize(html: string): SafeString {
@@ -49,7 +56,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
-  @tracked htmlParts: TrackedArray<ContentPart> = new TrackedArray([]);
+  @tracked htmlParts: TrackedArray<Html> = new TrackedArray([]);
   @tracked copyCodeButtonText: 'Copy' | 'Copied' = 'Copy';
 
   registerCodeBlockContainer = (
@@ -152,14 +159,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     });
   };
 
-  private copyCode = restartableTask(async (preTagCode: string) => {
-    let code = extractCodeData(preTagCode).content;
-    this.copyCodeButtonText = 'Copied';
-    await navigator.clipboard.writeText(code);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    this.copyCodeButtonText = 'Copy';
-  });
-
   <template>
     {{#if @renderCodeBlocks}}
       <div
@@ -167,53 +166,16 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         {{HtmlDidUpdate html=@html onHtmlUpdate=this.onHtmlUpdate}}
       >
         {{#each this.htmlParts as |part|}}
-          {{#if (eq part.type 'code_html')}}
-            {{! TODO: make a new component so that copy action is contained }}
-            <div class='ai-assistant-code-block-actions'>
-              <button
-                class='code-copy-button'
-                {{on 'click' (fn (perform this.copyCode) part.content)}}
-              >
-                {{! <svg
-                  xmlns='http://www.w3.org/2000/svg'
-                  width='16'
-                  height='16'
-                  fill='none'
-                  stroke='currentColor'
-                  stroke-linecap='round'
-                  stroke-linejoin='round'
-                  stroke-width='3'
-                  class='lucide lucide-copy'
-                  viewBox='0 0 24 24'
-                  role='presentation'
-                  aria-hidden='true'
-                  ...attributes
-                ><rect width='14' height='14' x='8' y='8' rx='2' ry='2' /><path
-                    d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'
-                  />
-                </svg> }}
-                <CopyIcon
-                  width='16'
-                  height='16'
-                  role='presentation'
-                  aria-hidden='true'
-                  class='copy-icon'
-                />
-                <span class='copy-text'>{{this.copyCodeButtonText}}</span>
-              </button>
-            </div>
-            <div
-              {{PreTagToMonacoEditor
-                monacoSDK=@monacoSDK
-                editorDisplayOptions=this.editorDisplayOptions
-                content=part.content
-              }}
-              class='code-block'
-              style='height: 120px;'
-            >
-              {{! Dont put anything in this div as monaco modifier will override this element }}
-            </div>
-
+          {{#if (eq part.type 'pre_tag')}}
+            {{#let (extractCodeData part.content) as |codeData|}}
+              <CodeBlock
+                @monacoSDK={{@monacoSDK}}
+                @editorDisplayOptions={{this.editorDisplayOptions}}
+                @code={{codeData.content}}
+                @language={{codeData.language}}
+                class='code-block'
+              />
+            {{/let}}
           {{else}}
             {{#if @isStreaming}}
               {{wrapLastTextNodeInStreamingTextSpan (sanitize part.content)}}
@@ -221,16 +183,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
               {{sanitize part.content}}
             {{/if}}
           {{/if}}
-        {{/each}}
-
-        {{#each this.codeActions as |codeAction|}}
-          {{#in-element codeAction.containerElement}}
-            <ApplyButton
-              data-test-apply-code-button
-              @state={{codeAction.state}}
-              {{on 'click' (fn (perform this.patchCodeTask) codeAction)}}
-            />
-          {{/in-element}}
         {{/each}}
       </div>
     {{else}}
@@ -268,9 +220,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
       /* code blocks can be rendered inline and as blocks,
          this is the styling for when it is rendered as a block */
-      .message > :deep(.code-block) {
-        width: calc(100% + 2 * var(--boxel-sp));
-      }
 
       .code-block {
         --spacing: var(--boxel-sp-sm);
@@ -352,82 +301,8 @@ class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
   }
 }
 
-interface ContentPart {
-  type: 'non_code_html' | 'code_html';
-  content: string;
-}
-
-interface PreTagToMonacoEditorSignature {
-  Args: {
-    Named: {
-      content: string;
-    };
-  };
-}
-
-class PreTagToMonacoEditor extends Modifier<PreTagToMonacoEditorSignature> {
-  private monacoState: {
-    editor: MonacoSDK.editor.IStandaloneCodeEditor;
-  } = null;
-  modify(
-    element: HTMLElement,
-    _positional: [],
-    {
-      content,
-      monacoSDK,
-      editorDisplayOptions,
-    }: PreTagToMonacoEditorSignature['Args']['Named'],
-  ) {
-    let { language, content: codeContent } = extractCodeData(
-      content.toString(),
-    );
-    let monacoEditor = element.querySelector('.monaco-editor') as HTMLElement;
-    if (this.monacoState) {
-      let { editor } = this.monacoState;
-      let model = editor.getModel()!;
-
-      // find .monaco-editor of monaco container
-
-      // monacoEditor.setAttribute(
-      //   'style',
-      //   `height: ${codeContent.split('\n').length + 4}rem`,
-      // );
-      model.setValue(codeContent);
-      // Here lies an opportunity to be smarter around code
-      // appending during code streaming - setValue will retrigger tokenization and the code will
-      // flicker. Perhaps we should get a delta from the old/new value and
-      // use pushEditOperations/executeEdits to append the delta when
-      // we are ready to polish the streaming experience for the viewer
-    } else {
-      let monacoContainer = element;
-
-      let editor = monacoSDK.editor.create(
-        monacoContainer,
-        editorDisplayOptions,
-      );
-      let model = editor.getModel()!;
-      monacoSDK.editor.setModelLanguage(model, language);
-      // monacoEditor.setAttribute(
-      //   'style',
-      //   `height: ${codeContent.split('\n').length + 4}rem`,
-      // );
-      model.setValue(codeContent);
-      this.monacoState = {
-        editor,
-        model,
-        language,
-      };
-    }
-
-    registerDestructor(this, () => {
-      let editor = this.monacoState.editor;
-      editor.dispose();
-    });
-  }
-}
-
-function parseHtmlContent(htmlString: string): ContentPart[] {
-  const result: ContentPart[] = [];
+function parseHtmlContent(htmlString: string): HtmlPart[] {
+  const result: HtmlPart[] = [];
 
   // Regular expression to match <pre> tags and their content
   const regex = /(<pre[\s\S]*?<\/pre>)|([\s\S]+?)(?=<pre|$)/g;
@@ -437,13 +312,13 @@ function parseHtmlContent(htmlString: string): ContentPart[] {
     if (match[1]) {
       // This is a code block (pre tag)
       result.push({
-        type: 'code_html',
+        type: 'pre_tag',
         content: match[1],
       });
     } else if (match[2] && match[2].trim() !== '') {
       // This is non <pre> tag HTML
       result.push({
-        type: 'non_code_html',
+        type: 'non_pre_tag',
         content: match[2],
       });
     }
