@@ -23,13 +23,22 @@ export function markedSync(markdown: string) {
           // also note that since we are in common, we don't have ember-window-mock
           // available to us.
           globalThis.localStorage?.setItem(id, code);
-          return `<pre id="${id}" class="language-${language}" data-codeblock="${language}">${escapeHtmlTags(code)}</pre></div>`;
+          return `<pre id="${id}" class="language-${language}" data-codeblock="${language}">${code}</pre></div>`;
         },
       },
     })
     .parse(markdown, { async: false }) as string;
 }
 
-export function markdownToHtml(markdown: string | null | undefined): string {
-  return markdown ? sanitizeHtml(markedSync(markdown)) : '';
+export function markdownToHtml(
+  markdown: string | null | undefined,
+  sanitize = true,
+): string {
+  let a = markdown
+    ? sanitize
+      ? sanitizeHtml(markedSync(markdown))
+      : markedSync(markdown)
+    : '';
+
+  return a;
 }

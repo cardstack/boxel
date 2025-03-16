@@ -9,6 +9,7 @@ import * as MonacoSDK from 'monaco-editor';
 import { MonacoEditorOptions } from './monaco';
 
 import '@cardstack/requirejs-monaco-ember-polyfill';
+import { scheduleOnce } from '@ember/runloop';
 
 interface Signature {
   Args: {
@@ -41,11 +42,16 @@ export default class CodeBlock extends Modifier<Signature> {
       monacoSDK,
       editorDisplayOptions,
       registerCodeBlockContainer,
+      sanitizedHtml,
     }: Signature['Args']['Named'],
   ) {
     let codeBlocks = element.querySelectorAll(codeBlockSelector);
     if (!codeBlocks || codeBlocks.length === 0) {
       return;
+    }
+
+    if (sanitizedHtml) {
+      // console.log('sanitizedHtml', sanitizedHtml);
     }
 
     for (let [index, codeBlockNode] of [...codeBlocks].entries()) {
@@ -79,7 +85,27 @@ export default class CodeBlock extends Modifier<Signature> {
           monacoSDK.editor.setModelLanguage(model, language);
         }
         if (content !== model.getValue()) {
+          debugger;
           model.setValue(content);
+        }
+
+        // find n-th data-codeblock
+        let codeBlock = document.querySelectorAll(`pre[data-codeblock]`)[index];
+        let monacoContainer = document.querySelectorAll(
+          '.preview-code.monaco-container',
+        )[index];
+
+        if (codeBlock && monacoContainer) {
+          // debugger;
+          // move the monaco editor after the code block
+          scheduleOnce('afterRender', () => {
+            // make a copy of monacoContainer
+            let monacoContainerCopy = monacoContainer.cloneNode(true);
+            setTimeout(() => {
+              codeBlock.after(monacoContainerCopy);
+            }, 1000);
+            monacoContainer.style.display = 'none';
+          });
         }
       } else {
         // The light theme editor is used for the main editor in code mode,
@@ -121,43 +147,47 @@ export default class CodeBlock extends Modifier<Signature> {
         );
         monacoContainer.setAttribute('style', `height: ${lines + 4}rem`);
 
-        codeBlock.replaceWith(monacoContainer);
+        // codeBlock.replaceWith(monacoContainer);
+        codeBlock.after(monacoContainer);
+
+        debugger;
         let editor = monacoSDK.editor.create(monacoContainer, editorOptions);
         let model = editor.getModel()!;
-
-        let codeActionsContainer = makeCodeActionsContainerDiv();
-        monacoContainer.insertBefore(
-          codeActionsContainer,
-          monacoContainer.firstChild,
-        );
-
-        registerCodeBlockContainer(
-          fileUrl ?? '',
-          model.getValue(),
-          codeActionsContainer,
-        );
         this.monacoState.push({ editor, model, language });
 
-        let copyButton = makeCopyButton();
-        monacoContainer.insertBefore(copyButton, monacoContainer.firstChild);
-        copyButton.onclick = (event) => {
-          let buttonElement = event.currentTarget as HTMLElement;
-          let codeBlock = buttonElement.nextElementSibling;
-          if (codeBlock) {
-            navigator.clipboard.writeText(content).then(() => {
-              let svg = buttonElement.children[0];
-              let copyText = buttonElement.children[1];
-              buttonElement.replaceChildren(
-                svg,
-                document.createTextNode('Copied'),
-              );
-              setTimeout(
-                () => buttonElement.replaceChildren(svg, copyText),
-                2000,
-              );
-            });
-          }
-        };
+        let codeActionsContainer = makeCodeActionsContainerDiv();
+        // monacoContainer.insertBefore(
+        //   codeActionsContainer,
+        //   monacoContainer.firstChild,
+        // );
+
+        // registerCodeBlockContainer(
+        //   fileUrl ?? '',
+        //   model.getValue(),
+        //   codeActionsContainer,
+        // );
+        // this.monacoState.push({ editor, model, language });
+
+        // let copyButton = makeCopyButton();
+        // monacoContainer.insertBefore(copyButton, monacoContainer.firstChild);
+        // copyButton.onclick = (event) => {
+        //   let buttonElement = event.currentTarget as HTMLElement;
+        //   let codeBlock = buttonElement.nextElementSibling;
+        //   if (codeBlock) {
+        //     navigator.clipboard.writeText(content).then(() => {
+        //       let svg = buttonElement.children[0];
+        //       let copyText = buttonElement.children[1];
+        //       buttonElement.replaceChildren(
+        //         svg,
+        //         document.createTextNode('Copied'),
+        //       );
+        //       setTimeout(
+        //         () => buttonElement.replaceChildren(svg, copyText),
+        //         2000,
+        //       );
+        //     });
+        //   }
+        // };
       }
     }
 

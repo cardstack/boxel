@@ -3,9 +3,9 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import Component from '@glimmer/component';
-
+import { restartableTask } from 'ember-concurrency';
 import { tracked } from '@glimmer/tracking';
-
+import { htmlSafe } from '@ember/template';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -20,9 +20,14 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
-
+import Modifier from 'ember-modifier';
+import { eq } from '@cardstack/boxel-ui/helpers';
+import { scheduleOnce } from '@ember/runloop';
+import { action } from '@ember/object';
+import { registerDestructor } from '@ember/destroyable';
+import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 interface FormattedMessageSignature {
-  sanitizedHtml: SafeString;
+  html: string;
   monacoSDK: MonacoSDK;
   renderCodeBlocks: boolean;
 }
@@ -33,12 +38,19 @@ interface CodeAction {
   containerElement: HTMLDivElement;
   state: 'ready' | 'applying' | 'applied' | 'failed';
 }
+import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
+
+function sanitize(html: string): SafeString {
+  return htmlSafe(sanitizeHtml(html));
+}
 
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
   @tracked codeActions: TrackedArray<CodeAction> = new TrackedArray([]);
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
+  @tracked htmlParts: TrackedArray<ContentPart> = new TrackedArray([]);
+  @tracked copyCodeButtonText: 'Copy' | 'Copied' = 'Copy';
 
   registerCodeBlockContainer = (
     fileUrl: string,
@@ -93,19 +105,123 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     }
   });
 
+  // When html is streamed, we need to update htmlParts accordingly,
+  // but only the parts that have changed so that we don't needlesly re-render
+  // parts of the message that haven't changed. Parts are: <pre> html code, and
+  // non-<pre> html. <pre> gets special treatment because we will render it as a
+  // (readonly) Monaco editor
+  updateHtmlParts = (html: string) => {
+    let htmlParts = parseHtmlContent(html);
+    if (!this.htmlParts.length) {
+      this.htmlParts = new TrackedArray(
+        htmlParts.map((part) => {
+          return new TrackedObject({
+            type: part.type,
+            content: part.content,
+          });
+        }),
+      );
+    } else {
+      this.htmlParts.forEach((oldPart, index) => {
+        let newPart = htmlParts[index];
+        if (oldPart.content !== newPart.content) {
+          oldPart.content = newPart.content;
+        }
+      });
+      if (htmlParts.length > this.htmlParts.length) {
+        this.htmlParts.push(
+          ...htmlParts.slice(this.htmlParts.length).map((part) => {
+            return new TrackedObject({
+              type: part.type,
+              content: part.content,
+            });
+          }),
+        );
+      }
+    }
+  };
+
+  onHtmlUpdate = (html: string) => {
+    // The reason why reacting to html argument this way is because we want to
+    // have full control of when the @html argument changes so that we can
+    // properly fragment it into htmlParts, and in our reactive structure, only update
+    // the parts that have changed.
+    // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
+    scheduleOnce('afterRender', () => {
+      this.updateHtmlParts(html);
+    });
+  };
+
+  private copyCode = restartableTask(async (preTagCode: string) => {
+    let code = extractCodeData(preTagCode).content;
+    this.copyCodeButtonText = 'Copied';
+    await navigator.clipboard.writeText(code);
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    this.copyCodeButtonText = 'Copy';
+  });
+
   <template>
     {{#if @renderCodeBlocks}}
       <div
         class='message'
-        {{CodeBlock
-          codeBlockSelector='pre[data-codeblock]'
-          languageAttr='data-codeblock'
-          monacoSDK=@monacoSDK
-          editorDisplayOptions=this.editorDisplayOptions
-          registerCodeBlockContainer=this.registerCodeBlockContainer
-        }}
+        {{HtmlDidUpdate html=@html onHtmlUpdate=this.onHtmlUpdate}}
       >
-        {{@sanitizedHtml}}
+        {{#each this.htmlParts as |part|}}
+          {{#if (eq part.type 'code_html')}}
+            {{! TODO: make a new component so that copy action is contained }}
+            <div class='ai-assistant-code-block-actions'>
+              <button
+                class='code-copy-button'
+                {{on 'click' (fn (perform this.copyCode) part.content)}}
+              >
+                {{! <svg
+                  xmlns='http://www.w3.org/2000/svg'
+                  width='16'
+                  height='16'
+                  fill='none'
+                  stroke='currentColor'
+                  stroke-linecap='round'
+                  stroke-linejoin='round'
+                  stroke-width='3'
+                  class='lucide lucide-copy'
+                  viewBox='0 0 24 24'
+                  role='presentation'
+                  aria-hidden='true'
+                  ...attributes
+                ><rect width='14' height='14' x='8' y='8' rx='2' ry='2' /><path
+                    d='M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2'
+                  />
+                </svg> }}
+                <CopyIcon
+                  width='16'
+                  height='16'
+                  role='presentation'
+                  aria-hidden='true'
+                  class='copy-icon'
+                />
+                <span class='copy-text'>{{this.copyCodeButtonText}}</span>
+              </button>
+            </div>
+            <div
+              {{PreTagToMonacoEditor
+                monacoSDK=@monacoSDK
+                editorDisplayOptions=this.editorDisplayOptions
+                content=part.content
+              }}
+              class='code-block'
+              style='height: 120px;'
+            >
+              {{! Dont put anything in this div as monaco modifier will override this element }}
+            </div>
+
+          {{else}}
+            {{#if @isStreaming}}
+              {{wrapLastTextNodeInStreamingTextSpan (sanitize part.content)}}
+            {{else}}
+              {{sanitize part.content}}
+            {{/if}}
+          {{/if}}
+        {{/each}}
 
         {{#each this.codeActions as |codeAction|}}
           {{#in-element codeAction.containerElement}}
@@ -119,27 +235,44 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       </div>
     {{else}}
       <div class='message'>
-        {{@sanitizedHtml}}
+        {{sanitize @html}}
       </div>
     {{/if}}
 
     <style scoped>
-      /* code blocks can be rendered inline and as blocks,
-         this is the styling for when it is rendered as a block */
-      .message > :deep(.preview-code.code-block) {
-        width: calc(100% + 2 * var(--boxel-sp));
+      .copy-icon {
+        --icon-color: var(--boxel-highlight);
+      }
+      .message {
+        position: relative;
       }
 
       .message > :deep(*) {
         margin-top: 0;
-        margin-bottom: 0;
       }
 
-      .message > :deep(* + *) {
-        margin-top: var(--boxel-sp);
+      .message > :deep(.code-block + :not(.code-block)) {
+        margin-top: 25px;
       }
 
-      :deep(.preview-code) {
+      .ai-assistant-code-block-actions {
+        position: absolute;
+        width: calc(100% + 2 * var(--ai-assistant-message-padding));
+        margin-left: -16px;
+        background: black;
+        margin-top: 5px !important;
+        z-index: 1;
+        height: 39px;
+        padding: 18px 25px;
+      }
+
+      /* code blocks can be rendered inline and as blocks,
+         this is the styling for when it is rendered as a block */
+      .message > :deep(.code-block) {
+        width: calc(100% + 2 * var(--boxel-sp));
+      }
+
+      .code-block {
         --spacing: var(--boxel-sp-sm);
         --fill-container-spacing: calc(
           -1 * var(--ai-assistant-message-padding)
@@ -148,13 +281,22 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           var(--fill-container-spacing);
         padding: var(--spacing) 0;
         background-color: var(--boxel-dark);
-      }
-
-      :deep(.preview-code.code-block) {
-        display: inline-block; /* sometimes the ai bot may place the codeblock within an <li> */
         width: 100%;
         position: relative;
-        padding-top: var(--boxel-sp-xxxl);
+        margin-top: 60px;
+      }
+
+      .code-copy-button {
+        color: var(--boxel-highlight);
+        background: none;
+        border: none;
+        font: 600 var(--boxel-font-xs);
+        padding: 0;
+        display: flex;
+      }
+
+      .code-copy-button svg {
+        margin-right: var(--boxel-sp-xs);
       }
 
       :deep(.monaco-container) {
@@ -171,46 +313,8 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         with hardcoded colors; any instance will override the global style tag, making all code editors look the same,
         effectively disabling multiple themes to be used on the same page)
       */
-      :global(.preview-code .monaco-editor) {
+      :global(.code-block .monaco-editor) {
         filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
-      }
-
-      /* we are cribbing the boxel-ui style here as we have a rather
-      awkward way that we insert the copy button */
-      :deep(.code-copy-button) {
-        --spacing: calc(1rem / 1.333);
-
-        position: absolute;
-        top: var(--boxel-sp);
-        left: var(--boxel-sp-lg);
-        color: var(--boxel-highlight);
-        background: none;
-        border: none;
-        font: 600 var(--boxel-font-xs);
-        padding: 0;
-        margin-bottom: var(--spacing);
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: var(--spacing);
-        letter-spacing: var(--boxel-lsp-xs);
-        justify-content: center;
-        height: min-content;
-        align-items: center;
-        white-space: nowrap;
-        min-height: var(--boxel-button-min-height);
-        min-width: var(--boxel-button-min-width, 5rem);
-      }
-      :deep(.code-copy-button .copy-text) {
-        color: transparent;
-      }
-      :deep(.code-copy-button:hover .copy-text) {
-        color: var(--boxel-highlight);
-      }
-
-      :deep(.code-actions) {
-        position: absolute;
-        top: 10px;
-        right: 10px;
       }
     </style>
   </template>
@@ -223,5 +327,175 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       alwaysConsumeMouseWheel: false,
     },
     lineNumbers: 'off',
+    minimap: {
+      enabled: false,
+    },
   };
+}
+
+interface HtmlDidUpdateSignature {
+  Args: {
+    Named: {
+      html: string;
+      onHtmlUpdate: (html: string) => void;
+    };
+  };
+}
+
+class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    { html, onHtmlUpdate }: HtmlDidUpdateSignature['Args']['Named'],
+  ) {
+    onHtmlUpdate(html);
+  }
+}
+
+interface ContentPart {
+  type: 'non_code_html' | 'code_html';
+  content: string;
+}
+
+interface PreTagToMonacoEditorSignature {
+  Args: {
+    Named: {
+      content: string;
+    };
+  };
+}
+
+class PreTagToMonacoEditor extends Modifier<PreTagToMonacoEditorSignature> {
+  private monacoState: {
+    editor: MonacoSDK.editor.IStandaloneCodeEditor;
+  } = null;
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    {
+      content,
+      monacoSDK,
+      editorDisplayOptions,
+    }: PreTagToMonacoEditorSignature['Args']['Named'],
+  ) {
+    let { language, content: codeContent } = extractCodeData(
+      content.toString(),
+    );
+    let monacoEditor = element.querySelector('.monaco-editor') as HTMLElement;
+    if (this.monacoState) {
+      let { editor } = this.monacoState;
+      let model = editor.getModel()!;
+
+      // find .monaco-editor of monaco container
+
+      // monacoEditor.setAttribute(
+      //   'style',
+      //   `height: ${codeContent.split('\n').length + 4}rem`,
+      // );
+      model.setValue(codeContent);
+      // Here lies an opportunity to be smarter around code
+      // appending during code streaming - setValue will retrigger tokenization and the code will
+      // flicker. Perhaps we should get a delta from the old/new value and
+      // use pushEditOperations/executeEdits to append the delta when
+      // we are ready to polish the streaming experience for the viewer
+    } else {
+      let monacoContainer = element;
+
+      let editor = monacoSDK.editor.create(
+        monacoContainer,
+        editorDisplayOptions,
+      );
+      let model = editor.getModel()!;
+      monacoSDK.editor.setModelLanguage(model, language);
+      // monacoEditor.setAttribute(
+      //   'style',
+      //   `height: ${codeContent.split('\n').length + 4}rem`,
+      // );
+      model.setValue(codeContent);
+      this.monacoState = {
+        editor,
+        model,
+        language,
+      };
+    }
+
+    registerDestructor(this, () => {
+      let editor = this.monacoState.editor;
+      editor.dispose();
+    });
+  }
+}
+
+function parseHtmlContent(htmlString: string): ContentPart[] {
+  const result: ContentPart[] = [];
+
+  // Regular expression to match <pre> tags and their content
+  const regex = /(<pre[\s\S]*?<\/pre>)|([\s\S]+?)(?=<pre|$)/g;
+
+  let match;
+  while ((match = regex.exec(htmlString)) !== null) {
+    if (match[1]) {
+      // This is a code block (pre tag)
+      result.push({
+        type: 'code_html',
+        content: match[1],
+      });
+    } else if (match[2] && match[2].trim() !== '') {
+      // This is non <pre> tag HTML
+      result.push({
+        type: 'non_code_html',
+        content: match[2],
+      });
+    }
+  }
+
+  return result;
+}
+
+function extractCodeData(preElementString: string) {
+  if (!preElementString) {
+    return {
+      language: null,
+      content: null,
+    };
+  }
+  // Extract language using regex - finds the value of data-codeblock attribute
+  const languageMatch = preElementString.match(/data-codeblock="([^"]+)"/);
+  const language = languageMatch ? languageMatch[1] : null;
+
+  // Extract content using regex - finds everything between the opening and closing pre tags
+  const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
+  const content = contentMatch ? contentMatch[1] : null;
+
+  return {
+    language,
+    content,
+  };
+}
+
+function findLastTextNodeWithContent(parentNode: Node): Text | null {
+  // iterate childNodes in reverse to find the last text node with non-whitespace text
+  for (let i = parentNode.childNodes.length - 1; i >= 0; i--) {
+    let child = parentNode.childNodes[i];
+    if (child.textContent && child.textContent.trim() !== '') {
+      if (child instanceof Text) {
+        return child;
+      }
+      return findLastTextNodeWithContent(child);
+    }
+  }
+  return null;
+}
+
+function wrapLastTextNodeInStreamingTextSpan(html: string): SafeString {
+  let parser = new DOMParser();
+  let doc = parser.parseFromString(html, 'text/html');
+  let lastTextNode = findLastTextNodeWithContent(doc.body);
+  if (lastTextNode) {
+    let span = doc.createElement('span');
+    span.textContent = lastTextNode.textContent;
+    span.classList.add('streaming-text');
+    lastTextNode.replaceWith(span);
+  }
+  return htmlSafe(doc.body.innerHTML);
 }
