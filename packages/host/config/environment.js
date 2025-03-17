@@ -41,7 +41,10 @@ module.exports = function (environment) {
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
-    featureFlags: {},
+    featureFlags: {
+      DISABLE_MATRIX_REALM_EVENTS:
+        process.env.DISABLE_MATRIX_REALM_EVENTS === 'true',
+    },
   };
 
   if (environment === 'development') {

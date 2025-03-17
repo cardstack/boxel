@@ -8,11 +8,16 @@ import window from 'ember-window-mock';
 
 import qs from 'qs';
 
+import ENV from '@cardstack/host/config/environment';
+
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
 import type NetworkService from './network';
+
+const DISABLE_MATRIX_REALM_EVENTS =
+  ENV.featureFlags?.DISABLE_MATRIX_REALM_EVENTS ?? false;
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
@@ -52,15 +57,29 @@ export default class MessageService extends Service {
 
       if (maybeEventSource) {
         maybeEventSource.onerror = () => maybeEventSource?.close();
-        maybeEventSource.onmessage = (ev) => {
-          throw new Error('received unexpected server-sent event: ' + ev);
-        };
+
+        if (DISABLE_MATRIX_REALM_EVENTS) {
+          maybeEventSource.addEventListener('realm-event', (ev) =>
+            this.relayDeprecatedSSE(realmURL, ev),
+          );
+        } else {
+          maybeEventSource.onmessage = (ev) => {
+            throw new Error('received unexpected server-sent event: ' + ev);
+          };
+        }
 
         this.subscriptions.set(realmURL, maybeEventSource);
       }
     }
 
     return () => {};
+  }
+
+  relayDeprecatedSSE(realmURL: string, event: MessageEvent) {
+    let realmEvent = JSON.parse(event.data);
+    this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
+      cb(realmEvent);
+    });
   }
 
   relayMatrixSSE(realmURL: string, event: RealmEventContent) {

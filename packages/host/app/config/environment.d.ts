@@ -28,5 +28,7 @@ declare const config: {
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
-  featureFlags?: {};
+  featureFlags?: {
+    DISABLE_MATRIX_REALM_EVENTS?: boolean;
+  };
 };
