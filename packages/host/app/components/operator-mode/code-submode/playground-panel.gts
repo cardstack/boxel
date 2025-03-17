@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
+// import { modifier } from 'ember-modifier';
 
 import {
   LoadingIndicator,
@@ -16,7 +17,7 @@ import {
   CardContainer,
   CardHeader,
 } from '@cardstack/boxel-ui/components';
-import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { /*and, */ eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
 import {
   Eye,
   IconCode,
@@ -371,6 +372,8 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
     </style>
   </template>;
 
+// const runFn = modifier((_element: HTMLElement, [fn]: [() => void]) => fn());
+
 interface PlaygroundContentSignature {
   Args: {
     codeRef: ResolvedCodeRef;
@@ -415,6 +418,17 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
             @setFormat={{this.setFormat}}
             data-test-playground-format-chooser
           />
+          {{!-- {{else if (and @isFieldDef this.canWriteRealm)}}
+          <div {{runFn this.createNew}}>
+            {{#if
+              (or this.createNewCard.isRunning this.createNewField.isRunning)
+            }}
+              <p class='autogenerating-instance'>
+                <LoadingIndicator />
+                Auto-generating new instance
+              </p>
+            {{/if}}
+          </div> --}}
         {{/if}}
       {{/let}}
     </div>
@@ -464,6 +478,13 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         --boxel-format-chooser-button-bg-color: var(--boxel-light);
         --boxel-format-chooser-button-width: 85px;
         --boxel-format-chooser-button-min-width: 85px;
+      }
+      .autogenerating-instance {
+        display: flex;
+        justify-content: center;
+        gap: var(--boxel-sp-xs);
+        color: var(--boxel-light);
+        margin-block: 0;
       }
     </style>
   </template>
@@ -566,16 +587,11 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private get field(): FieldDef | undefined {
-    if (!this.args.isFieldDef) {
+    if (!this.args.isFieldDef || !this.card) {
       return undefined;
     }
 
-    if (!this.card) {
-      // this.createNew();
-      return undefined;
-    }
-
-    let fieldInstances = (this.card as Spec)?.containedExamples;
+    let fieldInstances = (this.card as Spec).containedExamples;
     if (!fieldInstances?.length) {
       if (this.canWriteRealm) {
         this.createNew();
@@ -705,7 +721,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   });
 
   @action private createNew() {
-    this.args.isFieldDef
+    this.args.isFieldDef && this.card
       ? this.createNewField.perform()
       : this.createNewCard.perform();
   }
@@ -716,25 +732,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 
   // TODO: convert this to @action once we no longer need to await below
   private createNewCard = task(async () => {
-    this.newCardJSON = {
-      data: {
-        meta: {
-          adoptsFrom: this.args.codeRef,
-          realmURL: this.operatorModeStateService.realmURL.href,
-        },
-      },
-    };
-    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
-    if (this.card) {
-      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
-      this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
-    }
-  });
-
-  // TODO: convert this to @action once we no longer need to await below
-  private createNewField = task(async () => {
-    let specCard = this.card as Spec | undefined;
-    if (!specCard) {
+    if (this.args.isFieldDef) {
+      // if field, card is a new Spec instance
       this.newCardJSON = {
         data: {
           attributes: {
@@ -748,21 +747,38 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           },
         },
       };
-      await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
-      if (this.card) {
-        this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
+    } else {
+      this.newCardJSON = {
+        data: {
+          meta: {
+            adoptsFrom: this.args.codeRef,
+            realmURL: this.operatorModeStateService.realmURL.href,
+          },
+        },
+      };
+    }
+
+    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+    if (this.card) {
+      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
+      if (this.args.isFieldDef) {
+        this.createNewField.perform(); // generate new field instance in spec
+      } else {
+        this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
       }
     }
-    if (this.card) {
-      let fieldCard = await loadCard(this.args.codeRef, {
-        loader: this.loaderService.loader,
-      });
-      let examples = (this.card as Spec).containedExamples;
-      examples?.push(new fieldCard());
-      let index = examples?.length ? examples.length - 1 : 0;
-      this.persistSelections(this.card.id, 'edit', index);
-      this.closeInstanceChooser();
-    }
+  });
+
+  private createNewField = task(async () => {
+    let specCard = this.card as Spec;
+    let fieldCard = await loadCard(this.args.codeRef, {
+      loader: this.loaderService.loader,
+    });
+    let examples = specCard.containedExamples;
+    examples?.push(new fieldCard());
+    let index = examples?.length ? examples.length - 1 : 0;
+    this.persistSelections(specCard.id, 'edit', index);
+    this.closeInstanceChooser();
   });
 
   private get realmInfo() {

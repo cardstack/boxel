@@ -536,20 +536,17 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assertFieldExists(assert, 'edit');
   });
 
-  test('can create new field instance (no preexisting Spec)', async function (assert) {
+  test('can auto-generate Spec and new field instance if there is no preexisting Spec', async function (assert) {
+    let selection = getPlaygroundSelections()?.[`${testRealmURL}author/Quote`];
+    assert.strictEqual(selection, undefined);
     await openFileInPlayground('author.gts', testRealmURL, 'Quote');
-    assert.dom('[data-test-quote-field-embedded]').doesNotExist();
-    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-    assert.dom('[data-test-create-spec-button]').exists();
-
-    await createNewInstance();
     assert.dom('[data-test-selected-item]').hasText('Quote');
     assertFieldExists(assert, 'edit');
     assert.dom('[data-test-field="quote"] input').hasNoValue();
-    assert.dom('[data-test-create-spec-button]').doesNotExist();
 
     // TODO: spec panel updates when spec is created from playground
-    // await toggleAccordionPanel('spec-preview');
+    // await toggleSpecPanel();
+    // assert.dom('[data-test-create-spec-button]').doesNotExist();
     // assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Quote');
     // assert
     //   .dom(
@@ -558,7 +555,61 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     //   .hasNoValue();
   });
 
-  test('can create new field instance (has preexisting Spec)', async function (assert) {
+  test('can auto-generate Spec if card from local storage no longer exists', async function (assert) {
+    setPlaygroundSelections({
+      [`${testRealmURL}author/Quote`]: {
+        cardId: `${testRealmURL}no-spec`,
+        format: 'embedded',
+      },
+    });
+    let selection = getPlaygroundSelections()?.[`${testRealmURL}author/Quote`];
+    assert.strictEqual(selection?.cardId, `${testRealmURL}no-spec`);
+    await openFileInPlayground('author.gts', testRealmURL, 'Quote');
+    assert.dom('[data-test-selected-item]').hasText('Quote');
+    assertFieldExists(assert, 'edit');
+    assert.dom('[data-test-field="quote"] input').hasNoValue();
+  });
+
+  test('can auto-generate new field instance when Spec exists but has no examples', async function (assert) {
+    await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
+    assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
+    assert.dom('[data-test-field-preview-header]').containsText('Full Name');
+    assertFieldExists(assert, 'edit');
+    assert
+      .dom('[data-test-field-preview-card] [data-test-field="firstName"] input')
+      .hasNoValue();
+    await fillIn('[data-test-field="firstName"] input', 'Marco');
+    await fillIn('[data-test-field="lastName"] input', 'N.');
+
+    await chooseAnotherInstance();
+    assert
+      .dom('[data-test-field-chooser] [data-test-field-instance]')
+      .exists({ count: 1 });
+    assert
+      .dom('[data-test-field-chooser] [data-test-full-name-embedded]')
+      .hasText('Marco N.');
+    await click('[data-test-field-chooser] [data-test-close-modal]');
+
+    await toggleSpecPanel();
+    assert
+      .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
+      .exists({ count: 1 });
+    assert
+      .dom(
+        '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="firstName"] input',
+      )
+      .hasValue('Marco');
+
+    let selection =
+      getPlaygroundSelections()?.[`${testRealmURL}author/FullNameField`];
+    assert.deepEqual(selection, {
+      cardId: `${testRealmURL}Spec/full-name`,
+      format: 'edit',
+      fieldIndex: 0,
+    });
+  });
+
+  test('can create new field instance (has preexisting Spec and examples)', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
     assert
@@ -598,45 +649,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert
       .dom('[data-test-field-chooser] [data-test-field-instance]')
       .exists({ count: 3 });
-  });
-
-  test('can auto-generate new field instance when spec exists but has no examples', async function (assert) {
-    await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
-    assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
-    assert.dom('[data-test-field-preview-header]').containsText('Full Name');
-    assertFieldExists(assert, 'edit');
-    assert
-      .dom('[data-test-field-preview-card] [data-test-field="firstName"] input')
-      .hasNoValue();
-    await fillIn('[data-test-field="firstName"] input', 'Marco');
-    await fillIn('[data-test-field="lastName"] input', 'N.');
-
-    await chooseAnotherInstance();
-    assert
-      .dom('[data-test-field-chooser] [data-test-field-instance]')
-      .exists({ count: 1 });
-    assert
-      .dom('[data-test-field-chooser] [data-test-full-name-embedded]')
-      .hasText('Marco N.');
-    await click('[data-test-field-chooser] [data-test-close-modal]');
-
-    await toggleSpecPanel();
-    assert
-      .dom('[data-test-contains-many="containedExamples"] [data-test-item]')
-      .exists({ count: 1 });
-    assert
-      .dom(
-        '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="firstName"] input',
-      )
-      .hasValue('Marco');
-
-    let selection =
-      getPlaygroundSelections()?.[`${testRealmURL}author/FullNameField`];
-    assert.deepEqual(selection, {
-      cardId: `${testRealmURL}Spec/full-name`,
-      format: 'edit',
-      fieldIndex: 0,
-    });
   });
 
   test('editing compound field instance live updates the preview', async function (assert) {
