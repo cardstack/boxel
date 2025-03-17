@@ -75,7 +75,7 @@ export class RealmServer {
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
-
+  private disableMatrixRealmEvents: boolean;
   constructor({
     serverURL,
     realms,
@@ -92,6 +92,7 @@ export class RealmServer {
     getRegistrationSecret,
     seedPath,
     seedRealmURL,
+    disableMatrixRealmEvents,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -108,6 +109,7 @@ export class RealmServer {
     seedRealmURL?: URL;
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
+    disableMatrixRealmEvents?: boolean;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -131,6 +133,7 @@ export class RealmServer {
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
+    this.disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
     this.realms = [...realms, ...this.loadRealms()];
   }
 
@@ -143,7 +146,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index',
+            'Authorization, Content-Type, If-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-HTTP-Method-Override',
         }),
       )
       .use(async (ctx, next) => {
@@ -385,6 +388,7 @@ export class RealmServer {
           url: this.matrixClient.matrixURL,
           username,
         },
+        disableMatrixRealmEvents: this.disableMatrixRealmEvents,
       },
       {
         ...(this.seedRealmURL && copyFromSeedRealm
@@ -445,6 +449,7 @@ export class RealmServer {
               url: this.matrixClient.matrixURL,
               username,
             },
+            disableMatrixRealmEvents: this.disableMatrixRealmEvents,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
