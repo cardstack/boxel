@@ -2837,14 +2837,11 @@ export async function recompute(
     model: T,
     stack: BaseDef[] = [],
   ): Promise<void> {
-    let pendingFields = new Set<string>(
-      Object.keys(
-        getFields(model, {
-          includeComputeds: true,
-          usedLinksToFieldsOnly: !opts?.recomputeAllFields,
-        }),
-      ),
-    );
+    let fields = getFields(model, {
+      includeComputeds: true,
+      usedLinksToFieldsOnly: !opts?.recomputeAllFields,
+    });
+    let pendingFields = new Set<string>(Object.keys(fields));
     do {
       for (let fieldName of [...pendingFields]) {
         let value = await getIfReady(

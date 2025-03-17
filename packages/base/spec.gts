@@ -237,7 +237,7 @@ export class Spec extends CardDef {
               <div class='code-ref-row'>
                 <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
                 <span class='code-ref-value' data-test-module-href>
-                  {{@model.moduleHref}}
+                  {{!-- {{@model.moduleHref}} --}}
                 </span>
               </div>
             </FieldContainer>
@@ -245,10 +245,10 @@ export class Spec extends CardDef {
               <div class='code-ref-row'>
                 <ExportArrow class='exported-arrow' width='10' height='10' />
                 <div class='code-ref-value' data-test-exported-name>
-                  {{@model.ref.name}}
+                  {{!-- {{@model.ref.name}} --}}
                 </div>
                 <div class='exported-type' data-test-exported-type>
-                  {{@model.specType}}
+                  {{!-- {{@model.specType}} --}}
                 </div>
               </div>
             </FieldContainer>
@@ -751,6 +751,7 @@ export class Spec extends CardDef {
           <div data-test-readme>
             <@fields.readMe />
           </div>
+          {{@model.readMe}}
         </section>
         <section class='examples section'>
           <header class='row-header' aria-labelledby='examples'>

@@ -4,7 +4,7 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import Brain from '@cardstack/boxel-icons/brain';
@@ -177,7 +177,7 @@ interface ContentSignature {
   Args: {
     showCreateSpec: boolean;
     canWrite: boolean;
-    onSelectCard: (cardId: string) => void;
+    onSelectCard: (card: Spec) => void;
     cards: Spec[];
     spec: Spec | undefined;
     isLoading: boolean;
@@ -279,15 +279,17 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
           <div class='spec-selector-container'>
             <div class='spec-selector' data-test-spec-selector>
               <BoxelSelect
-                @options={{this.cardIds}}
-                @selected={{this.selectedId}}
+                @options={{@cards}}
+                @selected={{@spec}}
                 @onChange={{@onSelectCard}}
                 @matchTriggerWidth={{true}}
                 @disabled={{this.onlyOneInstance}}
-                as |id|
+                as |card|
               >
-                {{#if id}}
-                  {{#let (this.getDropdownData id) as |data|}}
+                {{!-- {{card.id}} --}}
+                {{!-- {{card.id}} --}}
+                {{#if card.id}}
+                  {{#let (this.getDropdownData card.id) as |data|}}
                     {{#if data}}
                       <div class='spec-selector-item'>
                         <RealmIcon
@@ -572,8 +574,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  @action onSelectCard(cardId: string): void {
-    this._selectedCard = this.cards.find((card) => card.id === cardId);
+  @action onSelectCard(card: Spec): void {
+    this._selectedCard = card;
   }
 
   get canWrite() {
@@ -591,25 +593,33 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.search.instances as Spec[];
   }
 
+  // get shouldReturnSelectedCard() {
+  //   if (!this._selectedCard) {
+  //     return false;
+  //   }
+  //   if (
+  //     this._selectedCard?.moduleHref !==
+  //     this.getSelectedDeclarationAsCodeRef.module
+  //   ) {
+  //     return true;
+  //   } else {
+  //     //only return selected card if it has the same name
+  //     //otherwise, just keep selected card
+  //     if (
+  //       this._selectedCard?.ref.name ===
+  //       this.getSelectedDeclarationAsCodeRef.name
+  //     ) {
+  //       return true;
+  //     }
+  //   }
+  //   return false;
+  // }
+
   get card() {
     if (this._selectedCard) {
-      //if different module (or realm) return selected card
-      if (
-        this._selectedCard?.moduleHref !==
-        this.getSelectedDeclarationAsCodeRef.module
-      ) {
-        return this._selectedCard;
-      } else {
-        //only return selected card if it has the same name
-        //otherwise, just keep selected card
-        if (
-          this._selectedCard?.ref.name ===
-          this.getSelectedDeclarationAsCodeRef.name
-        ) {
-          return this._selectedCard;
-        }
-      }
+      return this._selectedCard;
     }
+    // console.log(this.cards[0].ref);
     return this.cards?.[0] as Spec;
   }
 
@@ -621,8 +631,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.cards.length === 0 && this.canWrite;
   }
 
+  get isLoading() {
+    return this.args.isLoadingNewModule;
+  }
+
   <template>
-    {{#if this.search.isLoading}}
+    {{#if this.isLoading}}
       {{yield
         (component
           SpecPreviewTitle

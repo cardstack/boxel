@@ -101,6 +101,15 @@ export class Search extends Resource<Args> {
   }
 
   @cached
+  get getUntrackedInstances() {
+    // Create simple plain object copies without tracking
+    return this.instances.map((card) => {
+      // Create a shallow copy that won't carry reactive tracking
+      return { ...card };
+    });
+  }
+
+  @cached
   get instancesByRealm() {
     return this.realmsToSearch
       .map((realm) => {
