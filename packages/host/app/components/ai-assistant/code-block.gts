@@ -189,14 +189,15 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
         forceMoveMarkers: true,
       };
 
-      let isReadOnly = editorDisplayOptions.readOnly;
-      if (isReadOnly) {
+      let withDisabledReadOnly = (readOnlySetting: boolean, fn: () => void) => {
         editor.updateOptions({ readOnly: false });
+        fn();
+        editor.updateOptions({ readOnly: readOnlySetting });
+      };
+
+      withDisabledReadOnly(editorDisplayOptions.readOnly, () => {
         editor.executeEdits('append-source', [editOperation]);
-        editor.updateOptions({ readOnly: true });
-      } else {
-        editor.executeEdits('append-source', [editOperation]);
-      }
+      });
 
       editor.revealLine(lineCount + 1); // Scroll to the end as the code streams
     } else {
