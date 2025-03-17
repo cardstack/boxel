@@ -537,14 +537,15 @@ module('getModifyPrompt', () => {
       3,
       'downloads only recently attached files, not older ones',
     );
+
     assert.ok(
       prompt[0].content?.includes(
         `
 Attached files:
-spaghetti-recipe.gts: this is the content of the spaghetti-recipe.gts file
-best-friends.txt: this is the content of the best-friends.txt file
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
 file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 404
-example.pdf: Unsupported file type: application/pdf. For now, only text files are supported.
+[example.pdf](http://test.com/my-realm/example.pdf): Unsupported file type: application/pdf. For now, only text files are supported.
       `.trim(),
       ),
     );
