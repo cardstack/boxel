@@ -37,7 +37,7 @@ index 9115598fd769bad15ed23293a68d617d5dbf21a5..95c28e59d8414dbc0837f5c85c98dd96
  }
  function anySignal(signals) {
 diff --git a/lib/sync.js b/lib/sync.js
-index f59265e1089ce832c0be8a23aa19813c2d4738cc..630f58767cbb887620883d075e1b947b9f83b944 100644
+index f59265e1089ce832c0be8a23aa19813c2d4738cc..08ba0b7304ac8011528f86f3c68af416d83ab076 100644
 --- a/lib/sync.js
 +++ b/lib/sync.js
 @@ -719,7 +719,7 @@ class SyncApi {
@@ -68,39 +68,49 @@ index f59265e1089ce832c0be8a23aa19813c2d4738cc..630f58767cbb887620883d075e1b947b
        if (this.syncOpts.crypto) {
          // tell the crypto module we're about to process a sync
          // response
-@@ -798,6 +799,14 @@ class SyncApi {
+@@ -798,6 +799,13 @@ class SyncApi {
          await this.client.store.save();
        }
      }
 +
 +    const throttledSync = throttle(_sync.bind(this), 1000);
-+
++    let i = 0;
 +    while (this.running) {
 +      let abort = await throttledSync();
 +      if (abort) { return; }
 +    }
-+
      if (!this.running) {
        debuglog("Sync no longer running: exiting.");
        if (this.connectionReturnedDefer) {
-@@ -1624,6 +1633,54 @@ class SyncApi {
+@@ -1624,6 +1632,68 @@ class SyncApi {
    }
  }
  
++// Polyfill for Promise.withResolvers from https://gist.github.com/lmammino/ef121da874a80d657379a1cd64bf8166
++if (typeof Promise.withResolvers === 'undefined') {
++  Promise.withResolvers = function () {
++    let resolve, reject
++    const promise = new Promise((res, rej) => {
++      resolve = res
++      reject = rej
++    })
++    return { promise, resolve, reject }
++  }
++}
++
 +// https://chatgpt.com/share/6734ecfd-cab0-8009-bbb9-b0126ed13d6a
 +function throttle(func, wait) {
 +  let lastCall = 0;
 +  let timeoutId = null;
 +  let lastArgs = null;
 +  let lastContext = null;
-+  let pendingPromise = null;
++  let deferred = null;
 +
 +  const invokeFunc = async (time) => {
 +    lastCall = time;
 +    const result = func.apply(lastContext, lastArgs);
 +    lastArgs = lastContext = null;
-+    pendingPromise = result instanceof Promise ? result : Promise.resolve(result);
-+    await pendingPromise;
++    deferred.resolve(result);
 +  };
 +
 +  const throttled = function(...args) {
@@ -111,25 +121,28 @@ index f59265e1089ce832c0be8a23aa19813c2d4738cc..630f58767cbb887620883d075e1b947b
 +    const isLeadingCall = lastCall === 0;
 +
 +    if (isLeadingCall) {
++      deferred = Promise.withResolvers();
 +      invokeFunc(now);
 +    }
 +
 +    const remainingTime = wait - (now - lastCall);
-+
++    
 +    if (remainingTime <= 0 || remainingTime > wait) {
++      deferred = Promise.withResolvers();
 +      if (timeoutId) {
 +        clearTimeout(timeoutId);
 +        timeoutId = null;
 +      }
 +      invokeFunc(now);
 +    } else if (!timeoutId) {
++      deferred = Promise.withResolvers();
 +      timeoutId = setTimeout(() => {
 +        timeoutId = null;
 +        invokeFunc(Date.now());
 +      }, remainingTime);
 +    }
 +
-+    return pendingPromise;
++    return deferred.promise;
 +  };
 +
 +  return throttled;

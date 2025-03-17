@@ -18,6 +18,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { Skill } from '@cardstack/host/components/ai-assistant/skill-menu';
@@ -79,6 +80,9 @@ export default class MessageBuilder {
       eventId: this.builderContext.effectiveEventId,
       index: this.builderContext.index,
       attachedFiles: this.attachedFiles,
+      reasoningContent:
+        (this.event.content as CardMessageContent)['app.boxel.reasoning'] ||
+        null,
     });
   }
 
@@ -156,6 +160,10 @@ export default class MessageBuilder {
 
     message.message = this.event.content.body;
     message.formattedMessage = this.event.content.formatted_body;
+    message.reasoningContent =
+      (this.event.content as CardMessageContent)[
+        APP_BOXEL_REASONING_CONTENT_KEY
+      ] || null;
     message.isStreamingFinished =
       'isStreamingFinished' in this.event.content
         ? this.event.content.isStreamingFinished
@@ -236,11 +244,13 @@ export default class MessageBuilder {
       }) as CommandResultEvent | undefined);
 
     // Find command in skills
-    let commandCodeRef: ResolvedCodeRef | undefined;
+    let skillCommand:
+      | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
+      | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      for (let skillCommand of skill.card.commands) {
-        if (commandRequest.name === skillCommand.functionName) {
-          commandCodeRef = skillCommand.codeRef;
+      for (let candidateSkillCommand of skill.card.commands) {
+        if (commandRequest.name === candidateSkillCommand.functionName) {
+          skillCommand = candidateSkillCommand;
           break findCommand;
         }
       }
@@ -248,8 +258,9 @@ export default class MessageBuilder {
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
-      commandCodeRef,
+      skillCommand?.codeRef,
       this.builderContext.effectiveEventId,
+      skillCommand?.requiresApproval ?? true,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
       commandResultEvent?.content.msgtype ===

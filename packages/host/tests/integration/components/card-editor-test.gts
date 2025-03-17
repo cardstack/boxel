@@ -62,7 +62,8 @@ module('Integration | card-editor', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
@@ -137,6 +138,7 @@ module('Integration | card-editor', function (hooks) {
 
     ({ realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },
         'fancy-pet.gts': { FancyPet },

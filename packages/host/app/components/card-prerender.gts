@@ -5,7 +5,7 @@ import Component from '@glimmer/component';
 
 import { didCancel, enqueueTask } from 'ember-concurrency';
 
-import { type IndexWriter } from '@cardstack/runtime-common';
+import { type IndexWriter, type JobInfo } from '@cardstack/runtime-common';
 import { readFileAsText as _readFileAsText } from '@cardstack/runtime-common/stream';
 import {
   getReader,
@@ -100,11 +100,12 @@ export default class CardPrerender extends Component {
   });
 
   private doFromScratch = enqueueTask(async (realmURL: URL) => {
-    let { reader, indexWriter } = this.getRunnerParams(realmURL);
+    let { reader, indexWriter, jobInfo } = this.getRunnerParams(realmURL);
     let currentRun = new CurrentRun({
       realmURL,
       reader,
       indexWriter,
+      jobInfo,
       renderCard: this.renderService.renderCard,
       render: this.renderService.render,
     });
@@ -122,11 +123,12 @@ export default class CardPrerender extends Component {
       operation: 'delete' | 'update',
       ignoreData: Record<string, string>,
     ) => {
-      let { reader, indexWriter } = this.getRunnerParams(realmURL);
+      let { reader, indexWriter, jobInfo } = this.getRunnerParams(realmURL);
       let currentRun = new CurrentRun({
         realmURL,
         reader,
         indexWriter,
+        jobInfo,
         ignoreData: { ...ignoreData },
         renderCard: this.renderService.renderCard,
         render: this.renderService.render,
@@ -144,15 +146,18 @@ export default class CardPrerender extends Component {
   private getRunnerParams(realmURL: URL): {
     reader: Reader;
     indexWriter: IndexWriter;
+    jobInfo?: JobInfo;
   } {
     if (this.fastboot.isFastBoot) {
       let optsId = (globalThis as any).runnerOptsId;
       if (optsId == null) {
         throw new Error(`Runner Options Identifier was not set`);
       }
+      let { reader, indexWriter, jobInfo } = getRunnerOpts(optsId);
       return {
-        reader: getRunnerOpts(optsId).reader,
-        indexWriter: getRunnerOpts(optsId).indexWriter,
+        reader,
+        indexWriter,
+        jobInfo,
       };
     } else {
       return {

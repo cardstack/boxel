@@ -10,16 +10,13 @@ import { TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  Command,
   type PatchData,
+  Command,
   CommandContext,
   CommandContextStamp,
-  ResolvedCodeRef,
-  isResolvedCodeRef,
   getClass,
+  identifyCard,
 } from '@cardstack/runtime-common';
-
-import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -27,7 +24,6 @@ import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { SearchCardsByTypeAndTitleCommand } from '../commands/search-cards';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
@@ -51,6 +47,7 @@ export default class CommandService extends Service {
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
+  private commandProcessingEventQueue: string[] = [];
 
   private commands: Map<
     string,
@@ -66,60 +63,69 @@ export default class CommandService extends Service {
     return name;
   }
 
-  public async executeCommandEventsIfNeeded(event: Partial<IEvent>) {
+  public async queueEventForCommandProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
     if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content?.['m.relates_to']!.event_id;
     }
     if (!eventId) {
       throw new Error(
-        'No event id found for command event, this should not happen',
+        'No event id found for event with commands, this should not happen',
       );
     }
-    // examine the tool_call and see if it's a command that we know how to run
-    let commandRequest = event?.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.[0];
-    if (!commandRequest) {
+    let roomId = event.room_id;
+    if (!roomId) {
+      throw new Error(
+        'No room id found for event with commands, this should not happen',
+      );
+    }
+    let compoundKey = `${roomId}|${eventId}`;
+    if (this.commandProcessingEventQueue.includes(compoundKey)) {
       return;
     }
-    // TODO: check whether this commandRequest  was already executed and exit if so
-    let { name } = commandRequest;
-    let { command, autoExecute } = this.commands.get(name) ?? {};
-    if (!command || !autoExecute) {
-      return;
-    }
-    this.currentlyExecutingCommandRequestIds.add(commandRequest.id);
-    try {
-      // Get the input type and validate/construct the payload
-      let InputType = await command.getInputType();
 
-      // Construct a new instance of the input type with the
-      // The input is undefined if the command has no input type
-      let typedInput;
-      if (InputType) {
-        typedInput = new InputType({
-          ...commandRequest.arguments.attributes,
-          ...commandRequest.arguments.relationships,
-        });
-      } else {
-        typedInput = undefined;
+    this.commandProcessingEventQueue.push(compoundKey);
+    let roomResource = this.matrixService.roomResources.get(event.room_id!);
+    await roomResource?.loading;
+
+    this.drainCommandProcessingQueue();
+  }
+
+  private async drainCommandProcessingQueue() {
+    while (this.commandProcessingEventQueue.length > 0) {
+      let [roomId, eventId] = this.commandProcessingEventQueue
+        .shift()!
+        .split('|');
+
+      let roomResource = this.matrixService.roomResources.get(roomId!);
+      if (!roomResource) {
+        throw new Error(
+          `Room resource not found for room id ${roomId}, this should not happen`,
+        );
       }
-      let resultCard = await command.execute(typedInput as any);
-      await this.matrixService.sendCommandResultEvent(
-        event.room_id!,
-        eventId,
-        commandRequest.id,
-        resultCard,
-      );
-    } catch (e) {
-      console.error(e);
-      this.matrixService.failedCommandState.set(
-        commandRequest.id,
-        e instanceof Error
-          ? e
-          : new Error('Command failed. ' + (e as any).toString?.()),
-      );
-    } finally {
-      this.currentlyExecutingCommandRequestIds.delete(commandRequest.id);
+      let message = roomResource.messages.find((m) => m.eventId === eventId);
+      if (!message) {
+        continue;
+      }
+      for (let messageCommand of message.commands) {
+        if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
+          continue;
+        }
+        if (messageCommand.commandResultCardEventId) {
+          continue;
+        }
+        if (!messageCommand.name) {
+          continue;
+        }
+        let { command, autoExecute } =
+          this.commands.get(messageCommand.name) ?? {};
+        if (
+          messageCommand.requiresApproval === false ||
+          (command && autoExecute)
+        ) {
+          this.run.perform(messageCommand);
+        }
+      }
     }
   }
 
@@ -158,19 +164,11 @@ export default class CommandService extends Service {
       }
 
       if (commandToRun) {
-        // Get the input type and validate/construct the payload
-        let InputType = await commandToRun.getInputType();
-        // Construct a new instance of the input type with the payload
-        // The input is undefined if the command has no input type
-        let typedInput;
-        if (InputType) {
-          typedInput = new InputType({
-            ...payload!.attributes,
-            ...payload!.relationships,
-          });
-        } else {
-          typedInput = undefined;
-        }
+        let typedInput = await this.instantiateCommandInput(
+          commandToRun,
+          payload?.attributes,
+          payload?.relationships,
+        );
         [resultCard] = await all([
           await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
@@ -188,18 +186,6 @@ export default class CommandService extends Service {
             relationships: payload?.attributes?.patch?.relationships,
           },
         );
-      } else if (command.name === 'searchCardsByTypeAndTitle') {
-        if (!hasSearchData(payload)) {
-          throw new Error(
-            "Search command can't run because it doesn't have all the arguments returned by open ai",
-          );
-        }
-        let command = new SearchCardsByTypeAndTitleCommand(this.commandContext);
-        resultCard = await command.execute({
-          title: payload.attributes.title,
-          cardType: payload.attributes.cardType,
-          type: payload.attributes.type,
-        });
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
@@ -226,25 +212,52 @@ export default class CommandService extends Service {
       this.currentlyExecutingCommandRequestIds.delete(commandRequestId!);
     }
   });
+
+  // Construct a new instance of the input type with the
+  // The input is undefined if the command has no input type
+  private async instantiateCommandInput(
+    command: GenericCommand,
+    attributes: Record<string, any> | undefined,
+    relationships: Record<string, any> | undefined,
+  ) {
+    // Get the input type and validate/construct the payload
+    let typedInput;
+    let InputType = await command.getInputType();
+    if (InputType) {
+      let adoptsFrom = identifyCard(InputType);
+      if (adoptsFrom) {
+        let inputDoc = {
+          type: 'card',
+          data: {
+            meta: {
+              adoptsFrom,
+            },
+            attributes: attributes ?? {},
+            relationships: relationships ?? {},
+          },
+        };
+        typedInput = await this.cardService.createFromSerialized(
+          inputDoc.data,
+          inputDoc,
+        );
+      } else {
+        // identifyCard can fail in some circumstances where the input type is not exported
+        // in that case, we'll fall back to this less reliable method of constructing the input type
+        typedInput = new InputType({ ...attributes, ...relationships });
+      }
+    } else {
+      typedInput = undefined;
+    }
+    return typedInput;
+  }
 }
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
-type SearchPayload = {
-  attributes: { cardType?: string; title?: string; type?: ResolvedCodeRef };
-};
 
 function hasPatchData(payload: any): payload is PatchPayload {
   return (
     payload.attributes?.cardId &&
     (payload.attributes?.patch?.attributes ||
       payload.attributes?.patch?.relationships)
-  );
-}
-
-function hasSearchData(payload: any): payload is SearchPayload {
-  return (
-    isResolvedCodeRef(payload.attributes?.type) ||
-    payload.attributes?.title ||
-    payload.attributes?.cardType
   );
 }

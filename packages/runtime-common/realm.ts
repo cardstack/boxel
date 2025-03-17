@@ -45,7 +45,6 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
-  writeToStream,
   waitForClose,
   type TextFileRef,
 } from './stream';
@@ -60,7 +59,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { assertQuery, parseQuery } from './query';
+import { InvalidQueryError, assertQuery, parseQuery } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -81,6 +80,11 @@ import {
   MatrixBackendAuthentication,
   Utils,
 } from './matrix-backend-authentication';
+
+import type {
+  RealmEventContent,
+  UpdateRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -158,11 +162,21 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
-  subscribe(cb: (message: UpdateEventData) => void): Promise<void>;
+  subscribe(
+    cb: (message: UpdateRealmEventContent) => void,
+    options?: {
+      watcher?: string;
+    },
+  ): Promise<void>;
 
   unsubscribe(): void;
 
   setLoader?(loader: Loader): void;
+
+  broadcastRealmEvent(
+    event: RealmEventContent,
+    matrixClient: MatrixClient,
+  ): Promise<void>;
 }
 
 interface Options {
@@ -175,72 +189,9 @@ interface UpdateItem {
   url: URL;
 }
 
-type ServerEvents = UpdateEvent | IndexEvent | MessageEvent;
-
-interface UpdateEvent {
-  type: 'update';
-  data: UpdateEventData;
-  id?: string;
-}
-
 export interface MatrixConfig {
   url: URL;
   username: string;
-}
-
-export type UpdateEventData =
-  | FileAddedEventData
-  | FileUpdatedEventData
-  | FileRemovedEventData;
-
-interface FileAddedEventData {
-  added: string;
-}
-interface FileUpdatedEventData {
-  updated: string;
-}
-interface FileRemovedEventData {
-  removed: string;
-}
-
-export type IndexEventData =
-  | IncrementalIndexInitiation
-  | IncrementalIndexEventData
-  | FullIndexEventData
-  | CopiedIndexEventData;
-
-interface IndexEvent {
-  type: 'index';
-  data: IndexEventData;
-  id?: string;
-  clientRequestId?: string | null;
-}
-interface IncrementalIndexEventData {
-  type: 'incremental';
-  realmURL: string;
-  invalidations: string[];
-  clientRequestId?: string | null;
-}
-interface FullIndexEventData {
-  type: 'full';
-  realmURL: string;
-}
-interface CopiedIndexEventData {
-  type: 'copy';
-  sourceRealmURL: string;
-  destRealmURL: string;
-}
-
-interface IncrementalIndexInitiation {
-  type: 'incremental-index-initiation';
-  realmURL: string;
-  updatedFile: string;
-}
-
-interface MessageEvent {
-  type: 'message';
-  data: Record<string, string>;
-  id?: string;
 }
 
 interface WriteResult {
@@ -365,6 +316,7 @@ export class Realm {
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .query('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
@@ -439,6 +391,10 @@ export class Realm {
     });
   }
 
+  async logInToMatrix() {
+    await this.#matrixClient.login();
+  }
+
   private async readinessCheck(
     _request: Request,
     requestContext: RequestContext,
@@ -505,14 +461,11 @@ export class Realm {
     let results = await this.#adapter.write(path, contents);
     await this.#realmIndexUpdater.update(url, {
       onInvalidation: (invalidatedURLs: URL[]) => {
-        this.sendServerEvent({
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: invalidatedURLs.map((u) => u.href),
-            realmURL: this.url,
-            clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
-          },
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: invalidatedURLs.map((u) => u.href),
+          clientRequestId: clientRequestId ?? null, // use null instead of undefined for valid JSON serialization
         });
       },
     });
@@ -536,7 +489,7 @@ export class Realm {
   }
 
   private getTrackedWrite(
-    data: UpdateEventData,
+    data: UpdateRealmEventContent,
   ): { isTracked: boolean; url: URL } | undefined {
     let file: string | undefined;
     let type: string | undefined;
@@ -573,13 +526,10 @@ export class Realm {
     await this.#realmIndexUpdater.update(url, {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
-        this.sendServerEvent({
-          type: 'index',
-          data: {
-            type: 'incremental',
-            realmURL: this.url,
-            invalidations: invalidatedURLs.map((u) => u.href),
-          },
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: invalidatedURLs.map((u) => u.href),
         });
       },
     });
@@ -613,9 +563,9 @@ export class Realm {
 
   async reindex() {
     await this.#realmIndexUpdater.run();
-    this.sendServerEvent({
-      type: 'index',
-      data: { type: 'full', realmURL: this.url },
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'full',
     });
   }
 
@@ -624,13 +574,10 @@ export class Realm {
     let startTime = Date.now();
     if (this.#copiedFromRealm) {
       await this.#realmIndexUpdater.copy(this.#copiedFromRealm);
-      this.sendServerEvent({
-        type: 'index',
-        data: {
-          type: 'copy',
-          sourceRealmURL: this.#copiedFromRealm.href,
-          destRealmURL: this.url,
-        },
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'copy',
+        sourceRealmURL: this.#copiedFromRealm.href,
       });
     } else {
       let isNewIndex = await this.#realmIndexUpdater.isNewIndex();
@@ -639,9 +586,9 @@ export class Realm {
         // we only await the full indexing at boot if this is a brand new index
         await promise;
       }
-      this.sendServerEvent({
-        type: 'index',
-        data: { type: 'full', realmURL: this.url },
+      this.broadcastRealmEvent({
+        eventName: 'index',
+        indexType: 'full',
       });
     }
     this.#perfLog.debug(
@@ -1617,9 +1564,37 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Building-Index'),
     );
+    let cardsQuery;
+    if (request.method === 'QUERY') {
+      cardsQuery = await request.json();
+    } else {
+      cardsQuery = parseQuery(new URL(request.url).search.slice(1));
+    }
 
-    let cardsQuery = parseQuery(new URL(request.url).search.slice(1));
-    assertQuery(cardsQuery);
+    try {
+      assertQuery(cardsQuery);
+    } catch (e) {
+      if (e instanceof InvalidQueryError) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '400',
+                title: 'Invalid Query',
+                message: `Invalid query: ${e.message}`,
+              },
+            ],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      // Re-throw other errors
+      throw e;
+    }
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,
@@ -1843,7 +1818,8 @@ export class Realm {
       iconURL: null,
       showAsCatalog: null,
       visibility: await this.visibility(),
-      realmUserId: this.#matrixClient.getUserId()!,
+      realmUserId:
+        this.#matrixClient.getUserId()! || this.#matrixClient.username,
     };
     if (!realmConfig) {
       return realmInfo;
@@ -1858,6 +1834,9 @@ export class Realm {
         realmInfo.iconURL = realmConfigJson.iconURL ?? realmInfo.iconURL;
         realmInfo.showAsCatalog =
           realmConfigJson.showAsCatalog ?? realmInfo.showAsCatalog;
+        realmInfo.realmUserId =
+          realmConfigJson.realmUserId ??
+          (this.#matrixClient.getUserId()! || this.#matrixClient.username);
       } catch (e) {
         this.#log.warn(`failed to parse realm config: ${e}`);
       }
@@ -1932,15 +1911,20 @@ export class Realm {
         this.listeningClients = this.listeningClients.filter(
           (w) => w !== writable,
         );
-        this.sendServerEvent({
-          type: 'message',
-          data: { cleanup: `${this.listeningClients.length} clients` },
-        });
         if (this.listeningClients.length === 0) {
           this.#adapter.unsubscribe();
         }
       },
     );
+
+    // To remove as part of CS-8104, a workaround for a file watcher irregularity in tests
+    let subscribeOptions: { watcher?: string } = {};
+
+    if (new URL(request.url).searchParams.has('testFileWatcher')) {
+      subscribeOptions.watcher = new URL(request.url).searchParams.get(
+        'testFileWatcher',
+      )!;
+    }
 
     if (this.listeningClients.length === 0) {
       await this.#adapter.subscribe((data) => {
@@ -1948,7 +1932,7 @@ export class Realm {
         if (!tracked || tracked.isTracked) {
           return;
         }
-        this.sendServerEvent({ type: 'update', data });
+        this.broadcastRealmEvent(data);
         this.#updateItems.push({
           operation: ('added' in data
             ? 'add'
@@ -1958,14 +1942,10 @@ export class Realm {
           url: tracked.url,
         });
         this.drainUpdates();
-      });
+      }, subscribeOptions);
     }
 
     this.listeningClients.push(writable);
-    this.sendServerEvent({
-      type: 'message',
-      data: { count: `${this.listeningClients.length} clients` },
-    });
 
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
@@ -1988,13 +1968,10 @@ export class Realm {
       this.sendIndexInitiationEvent(url.href);
       await this.#realmIndexUpdater.update(url, {
         onInvalidation: (invalidatedURLs: URL[]) => {
-          this.sendServerEvent({
-            type: 'index',
-            data: {
-              type: 'incremental',
-              realmURL: this.url,
-              invalidations: invalidatedURLs.map((u) => u.href),
-            },
+          this.broadcastRealmEvent({
+            eventName: 'index',
+            indexType: 'incremental',
+            invalidations: invalidatedURLs.map((u) => u.href),
           });
         },
         ...(operation === 'removed' ? { delete: true } : {}),
@@ -2004,29 +1981,15 @@ export class Realm {
   }
 
   private sendIndexInitiationEvent(updatedFile: string) {
-    this.sendServerEvent({
-      type: 'index',
-      data: {
-        type: 'incremental-index-initiation',
-        realmURL: this.url,
-        updatedFile,
-      },
+    this.broadcastRealmEvent({
+      eventName: 'index',
+      indexType: 'incremental-index-initiation',
+      updatedFile,
     });
   }
 
-  private async sendServerEvent(event: ServerEvents): Promise<void> {
-    this.#log.debug(
-      `sending updates to ${this.listeningClients.length} clients`,
-    );
-    let { type, data, id } = event;
-    let chunkArr = [];
-    for (let item in data) {
-      chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
-    }
-    let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
-    await Promise.allSettled(
-      this.listeningClients.map((client) => writeToStream(client, chunk)),
-    );
+  private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
+    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
   }
 
   private async createRequestContext(): Promise<RequestContext> {
@@ -2126,14 +2089,6 @@ export interface CardDefinitionResource {
       };
     };
   };
-}
-
-function sseToChunkData(type: string, data: string, id?: string): string {
-  let info = [`event: ${type}`, `data: ${data}`];
-  if (id) {
-    info.push(`id: ${id}`);
-  }
-  return info.join('\n') + '\n\n';
 }
 
 function assertRealmPermissions(

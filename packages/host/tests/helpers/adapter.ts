@@ -1,3 +1,5 @@
+import type Owner from '@ember/owner';
+
 import {
   Loader,
   LocalPath,
@@ -10,17 +12,28 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+
 import {
   FileRef,
   Kind,
   RequestContext,
   TokenClaims,
-  UpdateEventData,
 } from '@cardstack/runtime-common/realm';
+
+import type {
+  FileAddedEventContent,
+  FileUpdatedEventContent,
+  RealmEventContent,
+  UpdateRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import { WebMessageStream, messageCloseHandler } from './stream';
 
 import { createJWT, testRealmURL } from '.';
+
+import type { MockUtils } from './mock-matrix/_utils';
 
 interface Dir {
   kind: 'directory';
@@ -48,13 +61,24 @@ export class TestRealmAdapter implements RealmAdapter {
   #lastModified: Map<string, number> = new Map();
   #resourceCreatedAt: Map<string, number> = new Map();
   #paths: RealmPaths;
-  #subscriber: ((message: UpdateEventData) => void) | undefined;
+  #subscriber: ((message: UpdateRealmEventContent) => void) | undefined;
   #loader: Loader | undefined; // Will be set in the realm's constructor - needed for openFile for shimming purposes
   #ready = new Deferred<void>();
   #potentialModulesAndInstances: { content: any; url: URL }[] = [];
+  #mockMatrixUtils: MockUtils;
 
-  constructor(contents: TestAdapterContents, realmURL = new URL(testRealmURL)) {
+  owner?: Owner;
+
+  constructor(
+    contents: TestAdapterContents,
+    realmURL = new URL(testRealmURL),
+    mockMatrixUtils: MockUtils,
+    owner?: Owner,
+  ) {
+    this.owner = owner;
     this.#paths = new RealmPaths(realmURL);
+    this.#mockMatrixUtils = mockMatrixUtils;
+
     let now = unixTime(Date.now());
 
     for (let [path, content] of Object.entries(contents)) {
@@ -80,6 +104,27 @@ export class TestRealmAdapter implements RealmAdapter {
 
   get ready() {
     return this.#ready.promise;
+  }
+
+  async broadcastRealmEvent(
+    event: RealmEventContent,
+    matrixClient: MatrixClient,
+  ) {
+    if (!this.owner) {
+      return;
+    }
+
+    let { getRoomIds, simulateRemoteMessage } = this.#mockMatrixUtils;
+
+    let realmMatrixUsername = matrixClient.username;
+
+    for (let roomId of getRoomIds()) {
+      if (roomId.startsWith('test-session-room-realm-')) {
+        simulateRemoteMessage(roomId, realmMatrixUsername, event, {
+          type: APP_BOXEL_REALM_EVENT_TYPE,
+        });
+      }
+    }
   }
 
   // We are eagerly establishing shims and preparing instances to be able to be
@@ -275,7 +320,25 @@ export class TestRealmAdapter implements RealmAdapter {
       );
     }
 
-    let type = dir.contents[name] ? 'updated' : 'added';
+    let updateEvent: FileAddedEventContent | FileUpdatedEventContent;
+
+    let lastModified = unixTime(Date.now());
+    this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
+
+    if (dir.contents[name]) {
+      updateEvent = {
+        eventName: 'update',
+        updated: path,
+      };
+    } else {
+      updateEvent = {
+        eventName: 'update',
+        added: path,
+      };
+
+      this.#resourceCreatedAt.set(this.#paths.fileURL(path).href, lastModified);
+    }
+
     dir.contents[name] = {
       kind: 'file',
       content:
@@ -283,20 +346,13 @@ export class TestRealmAdapter implements RealmAdapter {
           ? contents
           : JSON.stringify(contents, null, 2),
     };
-    let lastModified = unixTime(Date.now());
-    this.#lastModified.set(this.#paths.fileURL(path).href, lastModified);
-    if (type === 'added') {
-      this.#resourceCreatedAt.set(this.#paths.fileURL(path).href, lastModified);
-    }
 
-    this.postUpdateEvent({ [type]: path } as
-      | { added: string }
-      | { updated: string });
+    this.postUpdateEvent(updateEvent);
 
     return { lastModified };
   }
 
-  postUpdateEvent(data: UpdateEventData) {
+  postUpdateEvent(data: UpdateRealmEventContent) {
     this.#subscriber?.(data);
   }
 
@@ -308,7 +364,11 @@ export class TestRealmAdapter implements RealmAdapter {
       throw new Error(`tried to use file as directory`);
     }
     delete dir.contents[name];
-    this.postUpdateEvent({ removed: path });
+
+    this.postUpdateEvent({
+      eventName: 'update',
+      removed: path,
+    });
   }
 
   #traverse(
@@ -358,7 +418,9 @@ export class TestRealmAdapter implements RealmAdapter {
     return { response, writable: s.writable };
   }
 
-  async subscribe(cb: (message: UpdateEventData) => void): Promise<void> {
+  async subscribe(
+    cb: (message: UpdateRealmEventContent) => void,
+  ): Promise<void> {
     this.#subscriber = cb;
   }
 

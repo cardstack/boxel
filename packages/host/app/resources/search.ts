@@ -8,7 +8,6 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
 
-import { stringify } from 'qs';
 import { TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -20,6 +19,8 @@ import {
 import type { Query } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import { asURL } from '../services/store';
 
@@ -64,23 +65,22 @@ export class Search extends Resource<Args> {
     if (isLive) {
       this.subscriptions = this.realmsToSearch.map((realm) => ({
         url: `${realm}_message`,
-        unsubscribe: subscribeToRealm(
-          realm,
-          ({ type, data }: { type: string; data: string }) => {
-            if (query === undefined) {
-              return;
-            }
-            let eventData = JSON.parse(data);
-            // we are only interested in incremental index events
-            if (type !== 'index' || eventData.type !== 'incremental') {
-              return;
-            }
-            this.search.perform(query);
-            if (doWhileRefreshing) {
-              this.doWhileRefreshing.perform(doWhileRefreshing);
-            }
-          },
-        ),
+        unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
+          if (query === undefined) {
+            return;
+          }
+          // we are only interested in incremental index events
+          if (
+            event.eventName !== 'index' ||
+            event.indexType !== 'incremental'
+          ) {
+            return;
+          }
+          this.search.perform(query);
+          if (doWhileRefreshing) {
+            this.doWhileRefreshing.perform(doWhileRefreshing);
+          }
+        }),
       }));
 
       registerDestructor(this, () => {
@@ -167,11 +167,13 @@ export class Search extends Resource<Args> {
       let results = flatMap(
         await Promise.all(
           this.realmsToSearch.map(async (realm) => {
-            let json = await this.cardService.fetchJSON(
-              `${realm}_search?${stringify(query, {
-                strictNullHandling: true,
-              })}`,
-            );
+            let json = await this.cardService.fetchJSON(`${realm}_search`, {
+              method: 'QUERY',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(query),
+            });
             if (!isCardCollectionDocument(json)) {
               throw new Error(
                 `The realm search response was not a card collection document:

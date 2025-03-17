@@ -29,7 +29,7 @@ import { File } from '@cardstack/boxel-ui/icons';
 
 import {
   identifyCard,
-  isCardDef,
+  isFieldDef,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
@@ -469,11 +469,8 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  private get selectedCardRef(): ResolvedCodeRef | undefined {
+  private get selectedCodeRef(): ResolvedCodeRef | undefined {
     let baseDefType = this.selectedCardOrField?.cardOrField;
-    if (!isCardDef(baseDefType)) {
-      return undefined;
-    }
     let codeRef = identifyCard(baseDefType);
     if (!isResolvedCodeRef(codeRef)) {
       return undefined;
@@ -783,6 +780,7 @@ export default class CodeSubmode extends Component<Signature> {
     {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
+      @selectedCardRef={{this.selectedCodeRef}}
       as |search|
     >
       <div
@@ -987,7 +985,7 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.selectedCardRef}}
+                      {{#if this.selectedCodeRef}}
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
@@ -997,10 +995,16 @@ export default class CodeSubmode extends Component<Signature> {
                         >
                           <:title>Playground</:title>
                           <:content>
-                            <PlaygroundPanel
-                              @codeRef={{this.selectedCardRef}}
-                              @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
-                            />
+                            {{#if (eq this.selectedAccordionItem 'playground')}}
+                              <PlaygroundPanel
+                                @codeRef={{this.selectedCodeRef}}
+                                @isUpdating={{this.moduleContentsResource.isLoading}}
+                                @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
+                                @isFieldDef={{isFieldDef
+                                  this.selectedCardOrField.cardOrField
+                                }}
+                              />
+                            {{/if}}
                           </:content>
                         </A.Item>
                       {{/if}}
@@ -1099,6 +1103,7 @@ export default class CodeSubmode extends Component<Signature> {
       {{/if}}
       <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
       <FromElseWhere @name='schema-editor-modal' />
+      <FromElseWhere @name='playground-field-picker' />
     </SubmodeLayout>
 
     <style scoped>

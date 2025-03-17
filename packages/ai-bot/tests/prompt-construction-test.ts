@@ -1,8 +1,5 @@
 import { module, test, assert } from 'qunit';
-import {
-  getPatchTool,
-  getSearchTool,
-} from '@cardstack/runtime-common/helpers/ai';
+import { getPatchTool } from '@cardstack/runtime-common/helpers/ai';
 
 import {
   getModifyPrompt,
@@ -540,14 +537,15 @@ module('getModifyPrompt', () => {
       3,
       'downloads only recently attached files, not older ones',
     );
+
     assert.ok(
       prompt[0].content?.includes(
         `
 Attached files:
-spaghetti-recipe.gts: this is the content of the spaghetti-recipe.gts file
-best-friends.txt: this is the content of the best-friends.txt file
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
 file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 404
-example.pdf: Unsupported file type: application/pdf. For now, only text files are supported.
+[example.pdf](http://test.com/my-realm/example.pdf): Unsupported file type: application/pdf. For now, only text files are supported.
       `.trim(),
       ),
     );
@@ -1345,40 +1343,6 @@ test('if tool calls are required, ensure they are set', async () => {
   });
 });
 
-test('Create search function calls', () => {
-  const history: DiscreteMatrixEvent[] = [
-    {
-      type: 'm.room.message',
-      room_id: 'room-id-1',
-      sender: '@ian:localhost',
-      content: {
-        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        body: 'set the name to dave',
-        format: 'org.matrix.custom.html',
-        formatted_body: '<p>set the name to dave</p>\n',
-        data: {
-          context: {
-            openCardIds: ['http://localhost:4201/drafts/Friend/1'],
-            tools: [getSearchTool()],
-            submode: 'interact',
-          },
-        },
-      },
-      origin_server_ts: 1696813813166,
-      unsigned: {
-        age: 115498,
-        transaction_id: 'm1722242836705.8',
-      },
-      event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
-      status: EventStatus.SENT,
-    },
-  ];
-
-  const functions = getTools(history, [], '@aibot:localhost');
-  assert.equal(functions.length, 1);
-  assert.deepEqual(functions[0], getSearchTool());
-});
-
 test('Return host result of tool call back to open ai', async () => {
   const history: DiscreteMatrixEvent[] = [
     {
@@ -1441,7 +1405,6 @@ test('Return host result of tool call back to open ai', async () => {
                   },
                 },
               },
-              getSearchTool(),
             ],
             submode: 'interact',
           },
@@ -1582,7 +1545,6 @@ test('Return host result of tool call back to open ai', async () => {
                   },
                 },
               },
-              getSearchTool(),
             ],
             submode: 'interact',
           },
@@ -1619,6 +1581,29 @@ test('Return host result of tool call back to open ai', async () => {
                   title: 'Card Editing',
                   description: null,
                   thumbnailURL: null,
+                  commands: [
+                    {
+                      codeRef: {
+                        module: '@cardstack/boxel-host/commands/show-card',
+                        name: 'default',
+                      },
+                      requiresApproval: false,
+                    },
+                    {
+                      codeRef: {
+                        module: '@cardstack/boxel-host/commands/search-cards',
+                        name: 'SearchCardsByTypeAndTitleCommand',
+                      },
+                      requiresApproval: false,
+                    },
+                    {
+                      codeRef: {
+                        module: '@cardstack/boxel-host/commands/search-cards',
+                        name: 'SearchCardsByQueryCommand',
+                      },
+                      requiresApproval: false,
+                    },
+                  ],
                 },
                 meta: {
                   adoptsFrom: {

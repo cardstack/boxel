@@ -22,6 +22,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -38,7 +39,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   type TestContextWithSave,
   getMonacoContent,
@@ -79,13 +79,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
-  let {
-    createAndJoinRoom,
-    simulateRemoteMessage,
-    getRoomEvents,
-    setReadReceipt,
-  } = setupMockMatrix(hooks, {
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
@@ -96,6 +91,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       return () => (clock += 10);
     })(),
   });
+
+  let {
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    getRoomEvents,
+    setReadReceipt,
+  } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -236,6 +238,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },
         'shipping-info.gts': { ShippingInfo },
@@ -1323,6 +1326,196 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-past-sessions]').exists();
     await click('[data-test-message-field]');
     assert.dom('[data-test-past-sessions]').doesNotExist();
+  });
+
+  test('it can render reasoning from ai bot', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+  });
+
+  test('by default reasoning content expands when reasoning starts streaming, then collapses when body starts streaming', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    let eventId = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    assert
+      .dom('[data-test-message-idx="0"] .reasoning-content')
+      .containsText('Thinking...');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotExist();
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await waitUntil(() => {
+      const element = document.querySelector(
+        '[data-test-message-idx="0"] details[data-test-reasoning]',
+      );
+      return element?.textContent?.includes?.(
+        'they want to know what kind of dog to get',
+      );
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: 'You should get a',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a',
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await waitUntil(() => {
+      const element = document.querySelector('[data-test-message-idx="0"]');
+      return element?.textContent?.includes?.('You should get a');
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+  });
+
+  test('if user explicity collapses or expands reasoning content, that state is remembered', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let eventId = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    assert
+      .dom('[data-test-message-idx="0"] .reasoning-content')
+      .containsText('Thinking...');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotExist();
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await waitUntil(() => {
+      const element = document.querySelector(
+        '[data-test-message-idx="0"] details[data-test-reasoning]',
+      );
+      return element?.textContent?.includes?.(
+        'they want to know what kind of dog to get',
+      );
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    await click(
+      '[data-test-message-idx="0"] details[data-test-reasoning] summary',
+    );
+    await waitFor(
+      `[data-test-message-idx="0"] details[data-test-reasoning]:not([open])`,
+    );
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: 'You should get a beagle.',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a beagle.',
+      isStreamingFinished: false,
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+    await click(
+      '[data-test-message-idx="0"] details[data-test-reasoning] summary',
+    );
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: 'You should get a beagle. They are great companions.',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a beagle. They are great companions.',
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
   });
 
   test('it can render a markdown message from ai bot', async function (assert) {
@@ -2427,10 +2620,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'search1',
-          name: 'searchCardsByTypeAndTitle',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
             attributes: {
               description: 'Searching for card',
@@ -2442,10 +2636,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
@@ -2477,22 +2667,19 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'search1',
-          name: 'searchCardsByTypeAndTitle',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               title: 'Mango',
             },
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: 'search1',
-      },
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
@@ -2522,9 +2709,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'searchCardsByTypeAndTitle',
+          id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
             attributes: {
               description: 'Searching for card',
@@ -2536,10 +2725,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     await waitFor('[data-test-command-apply]');
     await click('[data-test-message-idx="0"] [data-test-command-apply]');
@@ -2588,16 +2773,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'searchCardsByTypeAndTitle',
+          id: 'fd4515fb-ed4d-4005-9782-4e844d7d4d9c',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: toolArgs,
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
 
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
@@ -2661,16 +2844,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'searchCardsByTypeAndTitle',
+          id: 'ffd1a3d0-0bd4-491a-a907-b96ec9d8902c',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: toolArgs,
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
@@ -2830,6 +3011,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('button.code-copy-button')
       .exists('the copy code to clipboard button exists');
+
+    assert.dom('[data-test-apply-code-button]').doesNotExist(); // no apply for code that is not a search/replace block
 
     // the chrome security model prevents the clipboard API
     // from working when tests are run in a headless mode, so we are unable to

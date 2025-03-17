@@ -25,6 +25,7 @@ import {
   codeRefWithAbsoluteURL,
   getClass,
   LooseCardResource,
+  logger,
   markdownToHtml,
   ResolvedCodeRef,
   splitStringIntoChunks,
@@ -34,7 +35,6 @@ import {
 import {
   basicMappings,
   generateJsonSchemaForCardType,
-  getSearchTool,
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
@@ -50,6 +50,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
@@ -82,6 +83,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
+  RealmEventContent,
   CommandDefinitionsContent,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -102,15 +104,19 @@ import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
+
+const realmEventsLogger = logger('realm:events');
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -123,6 +129,7 @@ export default class MatrixService extends Service {
   @service declare private commandService: CommandService;
   @service declare private realm: RealmService;
   @service declare private matrixSdkLoader: MatrixSDKLoader;
+  @service declare private messageService: MessageService;
   @service declare private realmServer: RealmServerService;
   @service declare private router: RouterService;
   @service declare private reset: ResetService;
@@ -142,6 +149,7 @@ export default class MatrixService extends Service {
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+  reasoningExpandedState: TrackedMap<string, boolean> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   flushRoomState: Promise<void> | undefined;
@@ -732,7 +740,7 @@ export default class MatrixService extends Service {
   ): Promise<void> {
     let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
 
-    let tools: Tool[] = [getSearchTool()];
+    let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
@@ -887,7 +895,8 @@ export default class MatrixService extends Service {
     let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}SkillCard/code-module-editing`,
+      `${baseRealm.url}SkillCard/boxel-coding`,
+      `${baseRealm.url}SkillCard/source-code-editing`,
     ];
 
     let defaultSkills;
@@ -1438,14 +1447,41 @@ export default class MatrixService extends Service {
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
     ) {
       await this.realmServer.handleEvent(event);
+    } else if (
+      event.type === APP_BOXEL_REALM_EVENT_TYPE &&
+      event.sender &&
+      event.content
+    ) {
+      realmEventsLogger.debug('Received realm event', event);
+
+      let realmResourceForEvent = this.realm.realmForSessionRoomId(
+        event.room_id!,
+      );
+      if (!realmResourceForEvent) {
+        realmEventsLogger.debug(
+          'Ignoring realm event because no realm found',
+          event,
+        );
+      } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
+        realmEventsLogger.debug(
+          `Ignoring realm event because sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
+          event,
+        );
+      } else {
+        this.messageService.relayMatrixSSE(
+          realmResourceForEvent.url,
+          event.content as RealmEventContent,
+        );
+      }
     }
     await this.addRoomEvent(event, oldEventId);
 
     if (
       event.type === 'm.room.message' &&
-      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length
+      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
+      event.content?.isStreamingFinished
     ) {
-      this.commandService.executeCommandEventsIfNeeded(event);
+      this.commandService.queueEventForCommandProcessing(event);
     }
 
     if (room.oldState.paginationToken != null) {

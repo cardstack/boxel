@@ -416,46 +416,6 @@ export function getPatchTool(
   };
 }
 
-export function getSearchTool(): Tool {
-  return {
-    type: 'function',
-    function: {
-      name: 'searchCardsByTypeAndTitle',
-      description:
-        'Propose a query to search for card instances filtered by type. \
-  If a card was shared with you, always prioritise search based upon the card that was last shared. \
-  If you do not have information on card module and name, do the search using the `cardType` attribute.',
-      parameters: {
-        type: 'object',
-        properties: {
-          description: {
-            type: 'string',
-          },
-          attributes: {
-            type: 'object',
-            properties: {
-              cardType: {
-                type: 'string',
-                description: 'name of the card type',
-              },
-              title: { type: 'string', description: 'title of the card' },
-              type: {
-                type: 'object',
-                description: 'CodeRef of the card type',
-                properties: {
-                  module: { type: 'string' },
-                  name: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-        required: ['attributes', 'description'],
-      },
-    },
-  };
-}
-
 export interface FunctionToolCall {
   id: string;
   name: string;

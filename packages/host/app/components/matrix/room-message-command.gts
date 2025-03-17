@@ -190,6 +190,9 @@ export default class RoomMessageCommand extends Component<Signature> {
       data-test-command-id={{@messageCommand.commandRequest.id}}
       ...attributes
     >
+      {{#if @messageCommand.description}}
+        <div class='command-description'>{{@messageCommand.description}}</div>
+      {{/if}}
       <div
         class='command-button-bar'
         {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
@@ -287,6 +290,17 @@ export default class RoomMessageCommand extends Component<Signature> {
     {{! template-lint-disable no-whitespace-for-layout  }}
     {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
+      .command-description {
+        font-size: var(--boxel-font-sm);
+        font-weight: 500;
+        line-height: 1.25rem;
+        letter-spacing: var(--boxel-lsp-xs);
+        color: var(--boxel-light);
+        /* the below font-smoothing options are only recommended for light-colored
+          text on dark background (otherwise not good for accessibility) */
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
       .is-pending .view-code-button,
       .is-error .view-code-button {
         background: var(--boxel-200);

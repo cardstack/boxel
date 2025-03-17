@@ -63,6 +63,7 @@ export class Responder {
 
   initialMessageSent = false;
   responseEventId: string | undefined;
+  latestReasoning = '';
   latestContent = '';
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   isStreamingFinished = false;
@@ -90,6 +91,7 @@ export class Responder {
       this.toolCalls.map((toolCall) =>
         this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
       ),
+      this.latestReasoning,
     );
     this.messagePromises.push(messagePromise);
     await messagePromise;
@@ -100,9 +102,11 @@ export class Responder {
       let initialMessage = await sendMessageEvent(
         this.client,
         this.roomId,
-        thinkingMessage,
+        '',
         undefined,
         { isStreamingFinished: false },
+        [],
+        thinkingMessage,
       );
       this.responseEventId = initialMessage.event_id;
       this.initialMessageSent = true;
@@ -113,7 +117,7 @@ export class Responder {
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
     snapshot: ChatCompletionSnapshot,
   ) {
-    const toolCallsSnapshot = snapshot.choices[0].message.tool_calls;
+    const toolCallsSnapshot = snapshot.choices?.[0]?.message?.tool_calls;
     if (toolCallsSnapshot?.length) {
       let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
       if (this.toolCallsJson !== latestToolCallsJson) {
@@ -123,16 +127,29 @@ export class Responder {
       }
     }
 
-    let contentSnapshot = snapshot.choices[0].message.content;
+    let contentSnapshot = snapshot.choices?.[0]?.message?.content;
     if (contentSnapshot?.length) {
       contentSnapshot = cleanContent(contentSnapshot);
       if (this.latestContent !== contentSnapshot) {
+        if (this.latestReasoning === thinkingMessage) {
+          this.latestReasoning = '';
+        }
         this.latestContent = contentSnapshot;
         await this.sendMessageEventWithThrottling();
       }
     }
 
-    if (snapshot.choices[0].finish_reason === 'stop') {
+    // reasoning does not support snapshots, so we need to handle the delta
+    let newReasoningContent = chunk.choices?.[0]?.delta?.reasoning;
+    if (newReasoningContent?.length) {
+      if (this.latestReasoning === thinkingMessage) {
+        this.latestReasoning = '';
+      }
+      this.latestReasoning = this.latestReasoning + newReasoningContent;
+      await this.sendMessageEventWithThrottling();
+    }
+
+    if (snapshot.choices?.[0]?.finish_reason === 'stop') {
       if (!this.isStreamingFinished) {
         this.isStreamingFinished = true;
         await this.sendMessageEventWithThrottling();

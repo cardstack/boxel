@@ -13,6 +13,7 @@ import {
   fileContentToText,
   unixTime,
   logger,
+  jobIdentity,
   type QueueRunner,
   type TextFileRef,
   type VirtualNetwork,
@@ -40,6 +41,11 @@ export interface Reader {
   mtimes: () => Promise<{ [url: string]: number }>;
 }
 
+export interface JobInfo extends JSONTypes.Object {
+  jobId: number;
+  reservationId: number;
+}
+
 export type RunnerRegistration = (
   fromScratch: (realmURL: URL) => Promise<IndexResults>,
   incremental: (
@@ -55,6 +61,7 @@ export interface RunnerOpts {
   reader: Reader;
   registerRunner: RunnerRegistration;
   indexWriter: IndexWriter;
+  jobInfo?: JobInfo;
 }
 
 export interface WorkerArgs extends JSONTypes.Object {
@@ -216,13 +223,14 @@ export class Worker {
   }
 
   private async prepareAndRunJob<T>(
-    args: WorkerArgs,
+    args: WorkerArgs & { jobInfo?: JobInfo },
     run: () => Promise<T>,
   ): Promise<T> {
     let deferred = new Deferred<T>();
     let _fetch = await this.makeAuthedFetch(args);
     let optsId = this.runnerOptsMgr.setOptions({
       _fetch,
+      jobInfo: args.jobInfo,
       reader: getReader(_fetch, new URL(args.realmURL)),
       indexWriter: this.#indexWriter,
       registerRunner: async (fromScratch, incremental) => {
@@ -241,7 +249,7 @@ export class Worker {
           // longer usable.
           reportError(e);
           this.#log.error(
-            `Error raised during indexing has likely stopped the indexer`,
+            `${jobIdentity(args.jobInfo)} Error raised during indexing has likely stopped the indexer`,
             e,
           );
           deferred.reject(
@@ -258,8 +266,10 @@ export class Worker {
     return result;
   }
 
-  private copy = async (args: CopyArgs) => {
-    this.#log.debug(`starting copy indexing for job: ${JSON.stringify(args)}`);
+  private copy = async (args: CopyArgs & { jobInfo?: JobInfo }) => {
+    this.#log.debug(
+      `${jobIdentity(args.jobInfo)} starting copy indexing for job: ${JSON.stringify(args)}`,
+    );
     let authedFetch = await this.makeAuthedFetch(args);
     let realmInfoResponse = await authedFetch(`${args.realmURL}_info`, {
       headers: { Accept: SupportedMimeType.RealmInfo },
@@ -272,7 +282,7 @@ export class Worker {
     let result = await batch.done();
     let invalidations = batch.invalidations;
     this.#log.debug(
-      `completed copy indexing for realm ${args.realmURL}:\n${JSON.stringify(
+      `${jobIdentity(args.jobInfo)} completed copy indexing for realm ${args.realmURL}:\n${JSON.stringify(
         result,
         null,
         2,
@@ -285,9 +295,11 @@ export class Worker {
     };
   };
 
-  private fromScratch = async (args: FromScratchArgs) => {
+  private fromScratch = async (
+    args: FromScratchArgs & { jobInfo?: JobInfo },
+  ) => {
     this.#log.debug(
-      `starting from-scratch indexing for job: ${JSON.stringify(args)}`,
+      `${jobIdentity(args.jobInfo)} starting from-scratch indexing for job: ${JSON.stringify(args)}`,
     );
     return await this.prepareAndRunJob<FromScratchResult>(args, async () => {
       if (!this.#fromScratch) {
@@ -297,7 +309,7 @@ export class Worker {
         new URL(args.realmURL),
       );
       this.#log.debug(
-        `completed from-scratch indexing for realm ${
+        `${jobIdentity(args.jobInfo)} completed from-scratch indexing for realm ${
           args.realmURL
         }:\n${JSON.stringify(stats, null, 2)}`,
       );
@@ -308,9 +320,11 @@ export class Worker {
     });
   };
 
-  private incremental = async (args: IncrementalArgs) => {
+  private incremental = async (
+    args: IncrementalArgs & { jobInfo?: JobInfo },
+  ) => {
     this.#log.debug(
-      `starting incremental indexing for job: ${JSON.stringify(args)}`,
+      `${jobIdentity(args.jobInfo)} starting incremental indexing for job: ${JSON.stringify(args)}`,
     );
     return await this.prepareAndRunJob<IncrementalResult>(args, async () => {
       if (!this.#incremental) {
@@ -323,7 +337,7 @@ export class Worker {
         { ...args.ignoreData },
       );
       this.#log.debug(
-        `completed incremental indexing for  ${args.url}:\n${JSON.stringify(
+        `${jobIdentity(args.jobInfo)} completed incremental indexing for  ${args.url}:\n${JSON.stringify(
           { ...stats, invalidations },
           null,
           2,

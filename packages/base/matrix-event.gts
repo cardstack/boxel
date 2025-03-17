@@ -6,17 +6,20 @@ import type {
 } from '@cardstack/runtime-common/helpers/ai';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
+  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REALM_EVENT_TYPE,
+  APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { type SerializedFile } from './file-api';
 
@@ -167,6 +170,7 @@ export interface CardMessageContent {
   body: string;
   formatted_body: string;
   isStreamingFinished?: boolean;
+  [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
   [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
@@ -274,6 +278,75 @@ export interface CommandResultWithNoOutputContent {
   commandRequestId: string;
 }
 
+export interface RealmServerEvent extends BaseMatrixEvent {
+  type: 'm.room.message';
+  content: RealmServerEventContent;
+}
+
+export interface RealmServerEventContent {
+  msgtype: typeof APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
+  body: string;
+}
+
+export interface RealmEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_REALM_EVENT_TYPE;
+  content: RealmEventContent;
+}
+
+export type RealmEventContent =
+  | IndexRealmEventContent
+  | UpdateRealmEventContent;
+
+export type IndexRealmEventContent =
+  | IncrementalIndexEventContent
+  | FullIndexEventContent
+  | CopiedIndexEventContent
+  | IncrementalIndexInitiationContent;
+
+export interface IncrementalIndexEventContent {
+  eventName: 'index';
+  indexType: 'incremental';
+  invalidations: string[];
+  clientRequestId?: string | null;
+}
+
+interface FullIndexEventContent {
+  eventName: 'index';
+  indexType: 'full';
+}
+
+interface CopiedIndexEventContent {
+  eventName: 'index';
+  indexType: 'copy';
+  sourceRealmURL: string;
+}
+
+interface IncrementalIndexInitiationContent {
+  eventName: 'index';
+  indexType: 'incremental-index-initiation';
+  updatedFile: string;
+}
+
+export type UpdateRealmEventContent =
+  | FileAddedEventContent
+  | FileUpdatedEventContent
+  | FileRemovedEventContent;
+
+export interface FileAddedEventContent {
+  eventName: 'update';
+  added: string;
+}
+
+export interface FileUpdatedEventContent {
+  eventName: 'update';
+  updated: string;
+}
+
+export interface FileRemovedEventContent {
+  eventName: 'update';
+  removed: string;
+}
+
 export type MatrixEvent =
   | RoomCreateEvent
   | RoomJoinRules
@@ -282,6 +355,8 @@ export type MatrixEvent =
   | CommandResultEvent
   | CommandDefinitionsEvent
   | CardMessageEvent
+  | RealmServerEvent
+  | RealmEvent
   | RoomNameEvent
   | RoomTopicEvent
   | InviteEvent
