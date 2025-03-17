@@ -126,7 +126,7 @@ class Isolated extends Component<typeof Spec> {
           <h2 id='examples'>Examples</h2>
         </header>
         {{#if (eq @model.specType 'field')}}
-          <@fields.containedExamples />
+          <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
         {{else}}
           <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
         {{/if}}
@@ -620,7 +620,7 @@ class Edit extends Component<typeof Spec> {
           <h2 id='examples'>Examples</h2>
         </header>
         {{#if (eq @model.specType 'field')}}
-          <@fields.containedExamples />
+          <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
         {{else}}
           <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
         {{/if}}
