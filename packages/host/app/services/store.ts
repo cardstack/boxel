@@ -251,6 +251,13 @@ export default class StoreService extends Service {
             !this.cardService.clientRequestIds.has(event.clientRequestId)
           ) {
             this.reload.perform(liveCard);
+          } else {
+            if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
+              console.log(
+                'ignoring invalidation for card because clientRequestId is ours',
+                event,
+              );
+            }
           }
         } else if (!this.identityContext.get(invalidation)) {
           // load the card using just the ID because we don't have a running card on hand
