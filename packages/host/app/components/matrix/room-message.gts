@@ -1,6 +1,7 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
@@ -28,7 +29,6 @@ import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
 import RoomMessageCommand from './room-message-command';
-import { registerDestructor } from '@ember/destroyable';
 
 interface Signature {
   Element: HTMLDivElement;

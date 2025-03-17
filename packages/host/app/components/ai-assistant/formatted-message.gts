@@ -1,36 +1,29 @@
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
+import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
-import Component from '@glimmer/component';
-import { restartableTask } from 'ember-concurrency';
-import { tracked } from '@glimmer/tracking';
 import { htmlSafe } from '@ember/template';
-import { task } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import Modifier from 'ember-modifier';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
-// import CodeBlock from '@cardstack/host/modifiers/code-block';
-import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import { eq } from '@cardstack/boxel-ui/helpers';
+
+import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import ApplyButton from '../ai-assistant/apply-button';
-import Modifier from 'ember-modifier';
-import { eq } from '@cardstack/boxel-ui/helpers';
-import { scheduleOnce } from '@ember/runloop';
-import { action } from '@ember/object';
-import { registerDestructor } from '@ember/destroyable';
-import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 import CodeBlock from './code-block';
+
 interface FormattedMessageSignature {
   html: string;
   monacoSDK: MonacoSDK;
   renderCodeBlocks: boolean;
+  isStreaming: boolean;
 }
 
 interface CodeAction {
@@ -40,12 +33,10 @@ interface CodeAction {
   state: 'ready' | 'applying' | 'applied' | 'failed';
 }
 
-interface HtmlPart {
+interface HtmlTagGroup {
   type: 'pre_tag' | 'non_pre_tag';
   content: string;
 }
-
-import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 function sanitize(html: string): SafeString {
   return htmlSafe(sanitizeHtml(html));
@@ -56,72 +47,19 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
-  @tracked htmlParts: TrackedArray<Html> = new TrackedArray([]);
+  @tracked htmlGroups: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
   @tracked copyCodeButtonText: 'Copy' | 'Copied' = 'Copy';
-
-  registerCodeBlockContainer = (
-    fileUrl: string,
-    code: string,
-    codeActionContainerElement: HTMLDivElement,
-  ) => {
-    let searchReplaceRegex =
-      /<<<<<<< SEARCH\n(.*)\n=======\n(.*)\n>>>>>>> REPLACE/s;
-    let codeIsSearchReplaceBlock = searchReplaceRegex.test(code);
-
-    if (!codeIsSearchReplaceBlock) {
-      return; // only show apply button for search/replace code blocks
-    }
-
-    this.codeActions.push(
-      new TrackedObject({
-        fileUrl,
-        code,
-        containerElement: codeActionContainerElement,
-        state: 'ready' as CodeAction['state'],
-      }),
-    );
-  };
-
-  private patchCodeTask = task(async (codeAction: CodeAction) => {
-    codeAction.state = 'applying';
-    try {
-      let source = await this.cardService.getSource(
-        new URL(codeAction.fileUrl),
-      );
-
-      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
-        this.commandService.commandContext,
-      );
-
-      let { resultContent: patchedCode } =
-        await applySearchReplaceBlockCommand.execute({
-          fileContent: source,
-          codeBlock: codeAction.code,
-        });
-
-      await this.cardService.saveSource(
-        new URL(codeAction.fileUrl),
-        patchedCode,
-      );
-      this.loaderService.reset();
-
-      codeAction.state = 'applied';
-    } catch (error) {
-      console.error(error);
-      codeAction.state = 'failed';
-    }
-  });
 
   // When html is streamed, we need to update htmlParts accordingly,
   // but only the parts that have changed so that we don't needlesly re-render
   // parts of the message that haven't changed. Parts are: <pre> html code, and
   // non-<pre> html. <pre> gets special treatment because we will render it as a
   // (readonly) Monaco editor
-  updateHtmlParts = (html: string) => {
-    let htmlParts = parseHtmlContent(html);
-    if (!this.htmlParts.length) {
-      this.htmlParts = new TrackedArray(
-        htmlParts.map((part) => {
+  updateHtmlGroups = (html: string) => {
+    let htmlGroups = parseHtmlContent(html);
+    if (!this.htmlGroups.length) {
+      this.htmlGroups = new TrackedArray(
+        htmlGroups.map((part) => {
           return new TrackedObject({
             type: part.type,
             content: part.content,
@@ -129,15 +67,15 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         }),
       );
     } else {
-      this.htmlParts.forEach((oldPart, index) => {
-        let newPart = htmlParts[index];
+      this.htmlGroups.forEach((oldPart, index) => {
+        let newPart = htmlGroups[index];
         if (oldPart.content !== newPart.content) {
           oldPart.content = newPart.content;
         }
       });
-      if (htmlParts.length > this.htmlParts.length) {
-        this.htmlParts.push(
-          ...htmlParts.slice(this.htmlParts.length).map((part) => {
+      if (htmlGroups.length > this.htmlGroups.length) {
+        this.htmlGroups.push(
+          ...htmlGroups.slice(this.htmlGroups.length).map((part) => {
             return new TrackedObject({
               type: part.type,
               content: part.content,
@@ -155,7 +93,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     // the parts that have changed.
     // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
     scheduleOnce('afterRender', () => {
-      this.updateHtmlParts(html);
+      this.updateHtmlGroups(html);
     });
   };
 
@@ -165,22 +103,30 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         class='message'
         {{HtmlDidUpdate html=@html onHtmlUpdate=this.onHtmlUpdate}}
       >
-        {{#each this.htmlParts as |part|}}
-          {{#if (eq part.type 'pre_tag')}}
-            {{#let (extractCodeData part.content) as |codeData|}}
+        {{! We are splitting the html into parts so that we can target the
+        code blocks and apply Monaco editor to them. Here is an example of the html argument:
+        <p>Here is some code for you.</p>
+        <pre ></pre>
+        <p>I hope you like this code. But here is some more!</p>
+        <pre></pre>
+        <p>Feel free to use it in your project.</p>
+        }}
+        {{#each this.htmlGroups as |htmlGroup|}}
+          {{#if (eq htmlGroup.type 'pre_tag')}}
+            {{#let (extractCodeData htmlGroup.content) as |codeData|}}
               <CodeBlock
                 @monacoSDK={{@monacoSDK}}
-                @editorDisplayOptions={{this.editorDisplayOptions}}
                 @code={{codeData.content}}
                 @language={{codeData.language}}
-                class='code-block'
               />
             {{/let}}
           {{else}}
             {{#if @isStreaming}}
-              {{wrapLastTextNodeInStreamingTextSpan (sanitize part.content)}}
+              {{wrapLastTextNodeInStreamingTextSpan
+                (sanitize htmlGroup.content)
+              }}
             {{else}}
-              {{sanitize part.content}}
+              {{sanitize htmlGroup.content}}
             {{/if}}
           {{/if}}
         {{/each}}
@@ -212,27 +158,10 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         width: calc(100% + 2 * var(--ai-assistant-message-padding));
         margin-left: -16px;
         background: black;
-        margin-top: 5px !important;
+        margin-top: 5px;
         z-index: 1;
         height: 39px;
         padding: 18px 25px;
-      }
-
-      /* code blocks can be rendered inline and as blocks,
-         this is the styling for when it is rendered as a block */
-
-      .code-block {
-        --spacing: var(--boxel-sp-sm);
-        --fill-container-spacing: calc(
-          -1 * var(--ai-assistant-message-padding)
-        );
-        margin: var(--boxel-sp) var(--fill-container-spacing) 0
-          var(--fill-container-spacing);
-        padding: var(--spacing) 0;
-        background-color: var(--boxel-dark);
-        width: 100%;
-        position: relative;
-        margin-top: 60px;
       }
 
       .code-copy-button {
@@ -267,19 +196,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       }
     </style>
   </template>
-
-  private editorDisplayOptions: MonacoEditorOptions = {
-    wordWrap: 'on',
-    wrappingIndent: 'indent',
-    fontWeight: 'bold',
-    scrollbar: {
-      alwaysConsumeMouseWheel: false,
-    },
-    lineNumbers: 'off',
-    minimap: {
-      enabled: false,
-    },
-  };
 }
 
 interface HtmlDidUpdateSignature {
@@ -301,8 +217,8 @@ class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
   }
 }
 
-function parseHtmlContent(htmlString: string): HtmlPart[] {
-  const result: HtmlPart[] = [];
+function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
+  const result: HtmlTagGroup[] = [];
 
   // Regular expression to match <pre> tags and their content
   const regex = /(<pre[\s\S]*?<\/pre>)|([\s\S]+?)(?=<pre|$)/g;
@@ -330,8 +246,8 @@ function parseHtmlContent(htmlString: string): HtmlPart[] {
 function extractCodeData(preElementString: string) {
   if (!preElementString) {
     return {
-      language: null,
-      content: null,
+      language: '',
+      content: '',
     };
   }
   // Extract language using regex - finds the value of data-codeblock attribute
@@ -343,8 +259,8 @@ function extractCodeData(preElementString: string) {
   const content = contentMatch ? contentMatch[1] : null;
 
   return {
-    language,
-    content,
+    language: language ?? '',
+    content: content ?? '',
   };
 }
 
