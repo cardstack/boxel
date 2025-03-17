@@ -189,7 +189,15 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
         forceMoveMarkers: true,
       };
 
-      editor.executeEdits('append-source', [editOperation]);
+      let isReadOnly = editorDisplayOptions.readOnly;
+      if (isReadOnly) {
+        editor.updateOptions({ readOnly: false });
+        editor.executeEdits('append-source', [editOperation]);
+        editor.updateOptions({ readOnly: true });
+      } else {
+        editor.executeEdits('append-source', [editOperation]);
+      }
+
       editor.revealLine(lineCount + 1); // Scroll to the end as the code streams
     } else {
       let monacoContainer = element;
