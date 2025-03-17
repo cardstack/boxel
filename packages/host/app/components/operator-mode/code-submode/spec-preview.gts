@@ -58,10 +58,15 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import { CardContext, type CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  CardContext,
+  type CardDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -196,6 +201,7 @@ type SpecPreviewCardContext = Omit<
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare recentFilesService: RecentFilesService;
 
   constructor(owner: Owner, args: ContentSignature['Args']) {
     super(owner, args);
@@ -448,6 +454,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service private declare recentFilesService: RecentFilesService;
   @tracked private _selectedCardId?: string;
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
 
@@ -624,13 +631,13 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   /**
    * Updates playground selections in localStorage if needed
    * @param id The card ID to select
-   * @param format The display format to use ('embedded' or 'isolated')
+   * @param defaultFormat The display format to use
    * @param isFieldSpec Whether we're checking for a field spec (true) or card (false)
    * @param fieldIndex The index of the field to select
    */
   private updatePlaygroundSelection(
     id: string,
-    format: 'embedded' | 'isolated',
+    defaultFormat: Format,
     isFieldSpec: boolean,
     fieldIndex?: number,
   ) {
@@ -656,16 +663,22 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     const cardId = id.replace(/\.json$/, '');
 
     const selections = window.localStorage.getItem(PlaygroundSelections);
+    let existingFormat = defaultFormat;
+
     if (selections) {
       const selection = JSON.parse(selections)[moduleId];
+      // If we already have selections for this module, preserve the format
+      existingFormat = selection?.format || defaultFormat;
+
       if (selection?.cardId === cardId) {
         return;
       }
     }
+
     this.playgroundPanelService.persistSelections(
       moduleId,
       cardId,
-      format,
+      existingFormat,
       fieldIndex,
     );
   }
@@ -677,6 +690,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   // Updates playground selection when a linkedExample card is selected
   private updatePlaygroundSelections = (id: string) => {
+    this.recentFilesService.addRecentFileUrl(
+      id.endsWith('.json') ? id : `${id}.json`,
+    );
     this.updatePlaygroundSelection(id, 'isolated', false);
   };
 
