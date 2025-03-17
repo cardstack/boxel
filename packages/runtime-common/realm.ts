@@ -46,6 +46,7 @@ import {
   readFileAsText,
   getFileWithFallbacks,
   waitForClose,
+  writeToStream,
   type TextFileRef,
 } from './stream';
 import { transpileJS } from './transpile';
@@ -228,6 +229,8 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
 
+  #disableMatrixRealmEvents = false;
+
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -248,6 +251,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
+      disableMatrixRealmEvents,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -256,6 +260,7 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
+      disableMatrixRealmEvents?: boolean;
     },
     opts?: Options,
   ) {
@@ -286,6 +291,12 @@ export class Realm {
 
     // TODO: remove after running in all environments; CS-7875
     this.backfillRetentionPolicies();
+
+    this.#disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
+    console.log(
+      `disableMatrixRealmEvents for realm url ${url}`,
+      this.#disableMatrixRealmEvents,
+    );
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
@@ -1988,8 +1999,30 @@ export class Realm {
     });
   }
 
+  private async sendServerEvent(event: Partial<MessageEvent>): Promise<void> {
+    this.#log.info(
+      `sending updates to ${this.listeningClients.length} clients`,
+    );
+    let { type, data } = event;
+    let chunkArr = [];
+    for (let item in data) {
+      chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
+    }
+    let chunk = sseToChunkData(type!, `{${chunkArr.join(', ')}}`);
+    await Promise.allSettled(
+      this.listeningClients.map((client) => writeToStream(client, chunk)),
+    );
+  }
+
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
+    if (this.#disableMatrixRealmEvents) {
+      this.sendServerEvent({
+        type: 'realm-event',
+        data: event,
+      });
+    } else {
+      this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
+    }
   }
 
   private async createRequestContext(): Promise<RequestContext> {
@@ -2112,4 +2145,12 @@ function assertRealmPermissions(
       }
     }
   }
+}
+
+function sseToChunkData(type: string, data: string, id?: string): string {
+  let info = [`event: ${type}`, `data: ${data}`];
+  if (id) {
+    info.push(`id: ${id}`);
+  }
+  return info.join('\n') + '\n\n';
 }
