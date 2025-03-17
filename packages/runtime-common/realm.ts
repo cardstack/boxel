@@ -1999,16 +1999,16 @@ export class Realm {
     });
   }
 
-  private async sendServerEvent(event: ServerEvents): Promise<void> {
+  private async sendServerEvent(event: Partial<MessageEvent>): Promise<void> {
     this.#log.info(
       `sending updates to ${this.listeningClients.length} clients`,
     );
-    let { type, data, id } = event;
+    let { type, data } = event;
     let chunkArr = [];
     for (let item in data) {
       chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
     }
-    let chunk = sseToChunkData(type, `{${chunkArr.join(', ')}}`, id);
+    let chunk = sseToChunkData(type!, `{${chunkArr.join(', ')}}`);
     await Promise.allSettled(
       this.listeningClients.map((client) => writeToStream(client, chunk)),
     );
