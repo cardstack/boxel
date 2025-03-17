@@ -278,9 +278,11 @@ function findLastTextNodeWithContent(parentNode: Node): Text | null {
   return null;
 }
 
-function wrapLastTextNodeInStreamingTextSpan(html: string): SafeString {
+function wrapLastTextNodeInStreamingTextSpan(
+  html: string | SafeString,
+): SafeString {
   let parser = new DOMParser();
-  let doc = parser.parseFromString(html, 'text/html');
+  let doc = parser.parseFromString(html.toString(), 'text/html');
   let lastTextNode = findLastTextNodeWithContent(doc.body);
   if (lastTextNode) {
     let span = doc.createElement('span');

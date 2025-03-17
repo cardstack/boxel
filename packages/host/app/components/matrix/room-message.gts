@@ -1,4 +1,3 @@
-import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { service } from '@ember/service';
 
@@ -7,8 +6,6 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-
-import { trackedFunction } from 'ember-resources/util/function';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
@@ -24,6 +21,8 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
@@ -59,12 +58,7 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
-    this._loadMessageResources.perform();
-    // this.loadMessageResources();
-    registerDestructor(this, () => {
-      // debugger;
-      // not here
-    });
+    this.loadMessageResources.perform();
   }
 
   resourcesLoaded = false;
@@ -107,7 +101,7 @@ export default class RoomMessage extends Component<Signature> {
       In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
       If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
     }}
-    {{#if this.eagerlyLoadedResources}}
+    {{#if this.loadedResources}}
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
@@ -125,7 +119,7 @@ export default class RoomMessage extends Component<Signature> {
           userId=this.message.author.userId
           displayName=this.message.author.displayName
         }}
-        @resources={{this.eagerlyLoadedResources}}
+        @resources={{this.loadedResources}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
@@ -158,7 +152,7 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service declare commandService: CommandService;
-  @tracked eagerlyLoadedResources:
+  @tracked loadedResources:
     | {
         cards: CardDef[] | undefined;
         files: FileDef[] | undefined;
@@ -166,7 +160,7 @@ export default class RoomMessage extends Component<Signature> {
       }
     | undefined;
 
-  loadMessageResources = trackedFunction(this, async () => {
+  loadMessageResources = task(async () => {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
 
@@ -187,39 +181,7 @@ export default class RoomMessage extends Component<Signature> {
       await Promise.all(promises);
     }
 
-    this.resourcesLoaded = true;
-
-    return {
-      cards: cards.length ? cards : undefined,
-      files: this.message.attachedFiles?.length
-        ? this.message.attachedFiles
-        : undefined,
-      errors: errors.length ? errors : undefined,
-    };
-  });
-
-  _loadMessageResources = task(async () => {
-    let cards: CardDef[] = [];
-    let errors: { id: string; error: Error }[] = [];
-
-    let promises = this.message.attachedResources?.map(async (resource) => {
-      await resource.loaded;
-      if (resource.card) {
-        cards.push(resource.card);
-      } else if (resource.cardError) {
-        let { id, error } = resource.cardError;
-        errors.push({
-          id,
-          error,
-        });
-      }
-    });
-
-    if (promises) {
-      await Promise.all(promises);
-    }
-
-    this.eagerlyLoadedResources = {
+    this.loadedResources = {
       cards: cards.length ? cards : undefined,
       files: this.message.attachedFiles?.length
         ? this.message.attachedFiles
@@ -230,8 +192,7 @@ export default class RoomMessage extends Component<Signature> {
 
   @cached
   get resources() {
-    // return this.loadMessageResources.value;
-    return this.eagerlyLoadedResources;
+    return this.loadedResources;
   }
 
   private get errorMessage() {

@@ -11,7 +11,7 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance } from '@cardstack/runtime-common';

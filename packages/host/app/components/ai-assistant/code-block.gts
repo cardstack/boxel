@@ -4,7 +4,7 @@ import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
@@ -46,7 +46,7 @@ export default class CodeBlock extends Component<Signature> {
   private copyCode = restartableTask(async (code: string) => {
     this.copyCodeButtonText = 'Copied';
     await navigator.clipboard.writeText(code);
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await timeout(1000);
     this.copyCodeButtonText = 'Copy';
   });
 
@@ -76,7 +76,7 @@ export default class CodeBlock extends Component<Signature> {
         language=@language
       }}
       class='code-block'
-      style='height: 150px;'
+      style='height: 120px;'
     >
       {{! Dont put anything here in this div as monaco modifier will override this element }}
     </div>
@@ -189,9 +189,7 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
         forceMoveMarkers: true,
       };
 
-      editor.executeEdits('artifical-id-not-used-elsewhere-but-required-here', [
-        editOperation,
-      ]);
+      editor.executeEdits('append-source', [editOperation]);
       editor.revealLine(lineCount + 1); // Scroll to the end as the code streams
     } else {
       let monacoContainer = element;
