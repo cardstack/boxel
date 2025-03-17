@@ -1,13 +1,11 @@
 import { fn } from '@ember/helper';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-
-import { trackedFunction } from 'ember-resources/util/function';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
@@ -24,10 +22,13 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
+import { type FileDef } from 'https://cardstack.com/base/file-api';
+
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
 import RoomMessageCommand from './room-message-command';
+import { htmlSafe } from '@ember/template';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -58,6 +59,7 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
+    this.loadMessageResources.perform();
   }
 
   @tracked private streamingTimeout = false;
@@ -98,7 +100,7 @@ export default class RoomMessage extends Component<Signature> {
       In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
       If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
     }}
-    {{#if this.resources}}
+    {{#if this.loadedResources}}
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
@@ -118,7 +120,7 @@ export default class RoomMessage extends Component<Signature> {
           userId=this.message.author.userId
           displayName=this.message.author.displayName
         }}
-        @resources={{this.resources}}
+        @resources={{this.loadedResources}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
@@ -151,8 +153,15 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service declare commandService: CommandService;
+  @tracked loadedResources:
+    | {
+        cards: CardDef[] | undefined;
+        files: FileDef[] | undefined;
+        errors: { id: string; error: Error }[] | undefined;
+      }
+    | undefined;
 
-  private loadMessageResources = trackedFunction(this, async () => {
+  loadMessageResources = task(async () => {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
 
@@ -173,7 +182,7 @@ export default class RoomMessage extends Component<Signature> {
       await Promise.all(promises);
     }
 
-    return {
+    this.loadedResources = {
       cards: cards.length ? cards : undefined,
       files: this.message.attachedFiles?.length
         ? this.message.attachedFiles
@@ -182,10 +191,6 @@ export default class RoomMessage extends Component<Signature> {
     };
   });
 
-  private get resources() {
-    return this.loadMessageResources.value;
-  }
-
   private get errorMessage() {
     if (this.message.errorMessage) {
       return this.message.errorMessage;
@@ -193,16 +198,16 @@ export default class RoomMessage extends Component<Signature> {
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';
     }
-    if (!this.resources?.errors) {
+    if (!this.loadedResources?.errors) {
       return undefined;
     }
 
-    let hasResourceErrors = this.resources.errors.length > 0;
+    let hasResourceErrors = this.loadedResources.errors.length > 0;
     if (hasResourceErrors) {
       return 'Error rendering attached cards.';
     }
 
-    return this.resources.errors
+    return this.loadedResources.errors
       .map((e: { id: string; error: Error }) => `${e.id}: ${e.error.message}`)
       .join(', ');
   }
