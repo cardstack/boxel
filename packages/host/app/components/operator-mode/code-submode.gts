@@ -1011,6 +1011,10 @@ export default class CodeSubmode extends Component<Signature> {
                       {{#if this.showSpecPreview}}
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
+                          @onPlaygroundAccordionToggle={{fn
+                            this.selectAccordionItem
+                            'playground'
+                          }}
                           as |SpecPreviewTitle SpecPreviewContent|
                         >
                           <A.Item

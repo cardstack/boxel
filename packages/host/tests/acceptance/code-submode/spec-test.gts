@@ -649,8 +649,6 @@ module('Acceptance | Spec preview', function (hooks) {
     const petModuleId = `${testRealmURL}pet/Pet`;
     const petId = `${testRealmURL}Pet/mango`;
 
-    await togglePlaygroundPanel();
-
     assert.deepEqual(
       getPlaygroundSelections()?.[petModuleId],
       {
@@ -659,6 +657,7 @@ module('Acceptance | Spec preview', function (hooks) {
       },
       'local storage is updated',
     );
+    await waitFor('[data-test-selected-item]');
     assert.dom('[data-test-selected-item]').hasText('Mango');
   });
 });

@@ -80,6 +80,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     selectedDeclaration?: ModuleDeclaration;
+    onPlaygroundAccordionToggle?: () => void;
   };
   Blocks: {
     default: [
@@ -688,12 +689,14 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     this.updatePlaygroundSelection(id, 'embedded', true, 0);
   };
 
-  // Updates playground selection when a linkedExample card is selected
+  // Action triggered when a linkedExample card is selected
+  // Updates playground selection & adds to recent files
+  // Toggles the playground accordion open
   private updatePlaygroundSelections = (id: string) => {
-    this.recentFilesService.addRecentFileUrl(
-      id.endsWith('.json') ? id : `${id}.json`,
-    );
+    const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
+    this.recentFilesService.addRecentFileUrl(fileUrl);
     this.updatePlaygroundSelection(id, 'isolated', false);
+    this.args.onPlaygroundAccordionToggle();
   };
 
   <template>
