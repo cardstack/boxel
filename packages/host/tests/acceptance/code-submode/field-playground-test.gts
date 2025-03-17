@@ -372,6 +372,10 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-embedded-comment]').exists();
   });
 
+  // TODO
+  test('can populate instance chooser dropdown options with containedExamples from Spec', async function (_assert) {});
+  test('can update the instance chooser when selected declaration changes', async function (_assert) {});
+
   test('can display selected field in the chosen format', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert
