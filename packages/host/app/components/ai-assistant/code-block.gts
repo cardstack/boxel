@@ -27,7 +27,7 @@ interface Signature {
 import type * as _MonacoSDK from 'monaco-editor';
 
 export default class CodeBlock extends Component<Signature> {
-  @tracked copyCodeButtonText: 'Copy' | 'Copied' = 'Copy';
+  @tracked copyCodeButtonText: 'Copy' | 'Copied!' = 'Copy';
 
   private editorDisplayOptions: MonacoEditorOptions = {
     wordWrap: 'on',
@@ -44,7 +44,7 @@ export default class CodeBlock extends Component<Signature> {
   };
 
   private copyCode = restartableTask(async (code: string) => {
-    this.copyCodeButtonText = 'Copied';
+    this.copyCodeButtonText = 'Copied!';
     await navigator.clipboard.writeText(code);
     await timeout(1000);
     this.copyCodeButtonText = 'Copy';
