@@ -132,7 +132,13 @@ export default class CardService extends Service {
         ...headers,
       },
       ...argsExceptHeaders,
-    };
+    } as RequestInit;
+    if (requestInit.method === 'QUERY') {
+      requestInit.method = 'POST';
+      (requestInit.headers as Record<string, string>)[
+        'X-HTTP-Method-Override'
+      ] = 'QUERY';
+    }
     let response = await this.network.authedFetch(url, requestInit);
     if (!response.ok) {
       let responseText = await response.text();
