@@ -195,7 +195,7 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
         editor.updateOptions({ readOnly: readOnlySetting });
       };
 
-      withDisabledReadOnly(editorDisplayOptions.readOnly, () => {
+      withDisabledReadOnly(!!editorDisplayOptions.readOnly, () => {
         editor.executeEdits('append-source', [editOperation]);
       });
 
