@@ -41,7 +41,10 @@ import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { SearchQuery, getSearch } from '@cardstack/host/resources/search';
+import {
+  type SearchResource,
+  getSearch,
+} from '@cardstack/host/resources/search';
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -366,7 +369,7 @@ export default class InteractSubmode extends Component<Signature> {
       getCards: (
         getQuery: () => Query | undefined,
         getRealms: () => string[] | undefined,
-      ): SearchQuery => {
+      ): SearchResource => {
         return getSearch(here, getQuery, getRealms);
       },
     };

@@ -43,7 +43,7 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { getSearch, type SearchQuery } from '../../resources/search';
+import { getSearch, type SearchResource } from '../../resources/search';
 
 import {
   suggestCardChooserTitle,
@@ -71,7 +71,7 @@ interface Signature {
 }
 
 type Request = {
-  search: SearchQuery;
+  search: SearchResource;
   deferred: Deferred<CardDef | undefined>;
   opts?: {
     offerToCreate?: {

@@ -150,6 +150,8 @@ export class CardResource extends Resource<Args> {
             resource: this,
             urlOrDoc,
             relativeTo,
+            isAutoSaved: this.isAutoSaved,
+            isLive: this.isLive,
             setCard: (card) => {
               if (card !== this.card) {
                 this._card = card;
