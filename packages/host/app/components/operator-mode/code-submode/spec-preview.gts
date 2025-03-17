@@ -80,7 +80,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     selectedDeclaration?: ModuleDeclaration;
-    onPlaygroundAccordionToggle?: () => void;
+    onPlaygroundAccordionToggle: () => void;
   };
   Blocks: {
     default: [
@@ -275,7 +275,8 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   @action viewCardInPlayground(card: CardDef | string) {
-    this.args.updatePlaygroundSelections(card.id);
+    const cardId = typeof card === 'string' ? card : card.id;
+    this.args.updatePlaygroundSelections(cardId);
   }
 
   <template>

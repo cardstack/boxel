@@ -16,10 +16,7 @@ import {
 } from '../../helpers';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
-import {
-  getPlaygroundSelections,
-  togglePlaygroundPanel,
-} from '../../helpers/playground';
+import { getPlaygroundSelections } from '../../helpers/playground';
 
 import { setupApplicationTest } from '../../helpers/setup';
 
