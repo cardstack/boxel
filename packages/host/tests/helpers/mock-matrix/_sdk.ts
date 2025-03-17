@@ -1,3 +1,5 @@
+import { MatrixEvent as MatrixEventClass } from 'matrix-js-sdk';
+
 import type { ExtendedMatrixSDK } from '@cardstack/host/services/matrix-sdk-loader';
 
 import { MockClient } from './_client';
@@ -57,4 +59,10 @@ export class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
     BeaconLiveness: 'RoomState.BeaconLiveness',
     Marker: 'RoomState.Marker',
   } as ExtendedMatrixSDK['RoomStateEvent'];
+
+  MatrixEvent = class MatrixEvent {
+    constructor(event: any) {
+      return new MatrixEventClass(event);
+    }
+  } as ExtendedMatrixSDK['MatrixEvent'];
 }

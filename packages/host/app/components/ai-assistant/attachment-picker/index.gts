@@ -8,7 +8,7 @@ import { restartableTask } from 'ember-concurrency';
 import { TrackedSet } from 'tracked-built-ins';
 
 import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
-import { and, cn, eq, gt, not } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq, gt, not, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   chooseCard,
@@ -39,6 +39,7 @@ interface Signature {
     submode: Submode;
     maxNumberOfItemsToAttach?: number;
     autoAttachedCardTooltipMessage?: string;
+    disabled?: boolean;
   };
 }
 
@@ -119,7 +120,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
             @iconWidth='14'
             @iconHeight='14'
             {{on 'click' this.chooseFile}}
-            @disabled={{this.doChooseFile.isRunning}}
+            @disabled={{(or this.doChooseFile.isRunning @disabled)}}
             data-test-choose-file-btn
           >
             <span class={{if this.files.length 'boxel-sr-only'}}>
@@ -133,7 +134,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
             @iconWidth='14'
             @iconHeight='14'
             {{on 'click' this.chooseCard}}
-            @disabled={{this.doChooseCard.isRunning}}
+            @disabled={{(or this.doChooseCard.isRunning @disabled)}}
             data-test-choose-card-btn
           >
             <span class={{if this.cards.length 'boxel-sr-only'}}>

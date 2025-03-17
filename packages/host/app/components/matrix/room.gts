@@ -27,8 +27,8 @@ import { TrackedObject, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { eq, not, or } from '@cardstack/boxel-ui/helpers';
 
 import { ResolvedCodeRef, internalKeyFor } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
@@ -104,7 +104,14 @@ export default class Room extends Component<Signature> {
               data-test-message-idx={{i}}
             />
           {{else}}
-            <NewSession @sendPrompt={{this.sendMessage}} />
+            {{#if this.matrixService.isLoadingTimeline}}
+              <LoadingIndicator
+                @color='var(--boxel-light)'
+                class='loading-indicator'
+              />
+            {{else}}
+              <NewSession @sendPrompt={{this.sendMessage}} />
+            {{/if}}
           {{/each}}
           {{#if this.room}}
             {{#if this.showUnreadIndicator}}
@@ -154,12 +161,16 @@ export default class Room extends Component<Signature> {
                   'Current card is shared automatically'
                   'Topmost card is shared automatically'
                 }}
+                @disabled={{this.matrixService.isLoadingTimeline}}
               />
               <LLMSelect
                 @selected={{@roomResource.activeLLM}}
                 @onChange={{@roomResource.activateLLM}}
                 @options={{this.supportedLLMs}}
-                @disabled={{@roomResource.isActivatingLLM}}
+                @disabled={{(or
+                  @roomResource.isActivatingLLM
+                  this.matrixService.isLoadingTimeline
+                )}}
               />
             </div>
           </div>
@@ -212,6 +223,12 @@ export default class Room extends Component<Signature> {
       }
       :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
         padding-bottom: var(--boxel-sp-xl);
+      }
+      .loading-indicator {
+        margin-top: auto;
+        margin-bottom: auto;
+        margin-left: auto;
+        margin-right: auto;
       }
     </style>
   </template>
@@ -798,7 +815,8 @@ export default class Room extends Component<Signature> {
           this.autoAttachedCards.size !== 0,
       ) &&
       !!this.room &&
-      !this.messages.some((m) => this.isPendingMessage(m))
+      !this.messages.some((m) => this.isPendingMessage(m)) &&
+      !this.matrixService.isLoadingTimeline
     );
   }
 

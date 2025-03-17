@@ -4,7 +4,7 @@ import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { task, timeout, restartableTask } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash';
 import {
@@ -14,12 +14,7 @@ import {
   type EmittedEvents,
   type ISendEventResponse,
 } from 'matrix-js-sdk';
-import {
-  SlidingSync,
-  MSC3575List,
-  SlidingSyncEvent,
-} from 'matrix-js-sdk/lib/sliding-sync';
-import { SlidingSyncState } from 'matrix-js-sdk/lib/sliding-sync';
+import { SlidingSync, MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
 import stringify from 'safe-stable-stringify';
 import { md5 } from 'super-fast-md5';
 import { TrackedMap } from 'tracked-built-ins';
@@ -123,7 +118,7 @@ const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
-const SLIDING_SYNC_LIST_RANGE_SIZE = 2;
+const SLIDING_SYNC_LIST_RANGE_SIZE = 10;
 const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 
 const realmEventsLogger = logger('realm:events');
@@ -151,10 +146,6 @@ export default class MatrixService extends Service {
   @tracked private _currentRoomId: string | undefined;
   @tracked private timelineLoadingState: Map<string, boolean> =
     new TrackedMap();
-  @tracked private currentAiRoomListRange = SLIDING_SYNC_LIST_RANGE_SIZE;
-  @tracked private totalAiRooms?: number;
-  @tracked private totalAuthRooms?: number;
-  @tracked private currentAuthRoomListRange = SLIDING_SYNC_LIST_RANGE_SIZE;
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -198,7 +189,7 @@ export default class MatrixService extends Service {
   set currentRoomId(value: string | undefined) {
     this._currentRoomId = value;
     if (value) {
-      this.loadAllTimelineEvents(value);
+      this.loadAllTimelineEvents.perform(value);
       window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
     } else {
       window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
@@ -545,97 +536,8 @@ export default class MatrixService extends Service {
       3000,
     );
 
-    this.slidingSync.on(SlidingSyncEvent.Lifecycle, (state, response) => {
-      if (state !== SlidingSyncState.Complete || !response) {
-        return;
-      }
-
-      // Handle AI rooms
-      if (
-        response.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME]?.ops?.[0].op === 'SYNC'
-      ) {
-        if (
-          response.lists?.[SLIDING_SYNC_AI_ROOM_LIST_NAME]?.count !== undefined
-        ) {
-          this.totalAiRooms =
-            response.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME].count;
-          const currentRange =
-            response.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME].ops?.[0]?.range;
-
-          if (currentRange) {
-            this.currentAiRoomListRange = currentRange[1];
-            this.maybeLoadMoreAiRooms.perform();
-          }
-        }
-      }
-
-      // Handle Auth rooms
-      if (
-        response.lists[SLIDING_SYNC_AUTH_ROOM_LIST_NAME]?.ops?.[0].op === 'SYNC'
-      ) {
-        if (
-          response.lists?.[SLIDING_SYNC_AUTH_ROOM_LIST_NAME]?.count !==
-          undefined
-        ) {
-          this.totalAuthRooms =
-            response.lists[SLIDING_SYNC_AUTH_ROOM_LIST_NAME].count;
-          const currentAuthRange =
-            response.lists[SLIDING_SYNC_AUTH_ROOM_LIST_NAME].ops?.[0]?.range;
-
-          if (currentAuthRange) {
-            this.currentAuthRoomListRange = currentAuthRange[1];
-            this.maybeLoadMoreAuthRooms.perform();
-          }
-        }
-      }
-    });
-
     return this.slidingSync;
   }
-
-  private maybeLoadMoreAiRooms = restartableTask(async () => {
-    if (!this.totalAiRooms || !this.slidingSync) {
-      return;
-    }
-
-    while (this.currentAiRoomListRange < this.totalAiRooms) {
-      const nextRange = Math.min(
-        this.currentAiRoomListRange + 2,
-        this.totalAiRooms,
-      );
-
-      try {
-        await this.slidingSync.setListRanges('ai-room', [[0, nextRange]]);
-        this.currentAiRoomListRange = nextRange;
-        await timeout(500);
-      } catch (error) {
-        console.error('Error expanding room range:', error);
-        break;
-      }
-    }
-  });
-
-  private maybeLoadMoreAuthRooms = restartableTask(async () => {
-    if (!this.totalAuthRooms || !this.slidingSync) {
-      return;
-    }
-
-    while (this.currentAuthRoomListRange < this.totalAuthRooms) {
-      const nextRange = Math.min(
-        this.currentAuthRoomListRange + 2,
-        this.totalAuthRooms,
-      );
-
-      try {
-        await this.slidingSync.setListRanges('auth-room', [[0, nextRange]]);
-        this.currentAuthRoomListRange = nextRange;
-        await timeout(500);
-      } catch (error) {
-        console.error('Error expanding auth room range:', error);
-        break;
-      }
-    }
-  });
 
   private async loginToRealms() {
     // This is where we would actually load user-specific choices out of the
@@ -1270,7 +1172,7 @@ export default class MatrixService extends Service {
     return await this.client.isUsernameAvailable(username);
   }
 
-  private async loadAllTimelineEvents(roomId: string) {
+  private loadAllTimelineEvents = restartableTask(async (roomId: string) => {
     let roomData = this.ensureRoomData(roomId);
     let room = this.client.getRoom(roomId);
 
@@ -1282,25 +1184,15 @@ export default class MatrixService extends Service {
     try {
       while (room.oldState.paginationToken != null) {
         await this.client.scrollback(room);
-        await timeout(1000);
         let rs = room.getLiveTimeline().getState('f' as MatrixSDK.Direction);
         if (rs) {
           roomData.notifyRoomStateUpdated(rs);
         }
       }
-
-      const timeline = room.getLiveTimeline();
-      const events = timeline.getEvents();
-      for (let event of events) {
-        await this.processDecryptedEvent(this.buildEventForProcessing(event));
-      }
-    } catch (error) {
-      console.error('Error loading timeline events:', error);
-      throw error;
     } finally {
       this.timelineLoadingState.set(roomId, false);
     }
-  }
+  });
 
   get isLoadingTimeline() {
     if (!this.currentRoomId) {
@@ -1575,7 +1467,7 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let roomData = await this.getRoomData(roomId);
+    let roomData = this.getRoomData(roomId);
     // patch in any missing room events--this will support dealing with local
     // echoes, migrating older histories as well as handle any matrix syncing gaps
     // that might occur
