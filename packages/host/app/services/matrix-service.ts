@@ -1189,6 +1189,24 @@ export default class MatrixService extends Service {
           roomData.notifyRoomStateUpdated(rs);
         }
       }
+
+      let timeline = room.getLiveTimeline();
+      let events = timeline.getEvents();
+      await new Promise<void>((resolve) => {
+        let checkEvents = () => {
+          let allEventsConsumed = events.every((event) =>
+            roomData.events.some((e) => e.event_id === event.getId()),
+          );
+
+          if (allEventsConsumed) {
+            resolve();
+          } else {
+            setTimeout(checkEvents, 100);
+          }
+        };
+
+        checkEvents();
+      });
     } finally {
       this.timelineLoadingState.set(roomId, false);
     }
