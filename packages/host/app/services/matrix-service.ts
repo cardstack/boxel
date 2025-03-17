@@ -1454,7 +1454,7 @@ export default class MatrixService extends Service {
       event.sender &&
       event.content
     ) {
-      realmEventsLogger.debug('Received realm event', event);
+      console.log('Received realm event', event);
 
       let realmResourceForEvent = this.realm.realmForSessionRoomId(
         event.room_id!,

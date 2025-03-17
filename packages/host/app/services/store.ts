@@ -238,6 +238,10 @@ export default class StoreService extends Service {
       let subscriber = this.subscribers.get(invalidation);
       if (subscriber) {
         let liveCard = this.identityContext.get(invalidation);
+        console.log('handleInvalidations', {
+          'event.clientRequestId': event.clientRequestId,
+          event: event,
+        });
         if (liveCard) {
           // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
           // the inputs with past values. This can happen if the user makes edits in the time between the auto
