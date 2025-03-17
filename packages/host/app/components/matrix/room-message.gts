@@ -28,7 +28,6 @@ import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
 
 import RoomMessageCommand from './room-message-command';
-import { htmlSafe } from '@ember/template';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -104,9 +103,7 @@ export default class RoomMessage extends Component<Signature> {
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
-        @formattedMessage={{htmlSafe
-          (markdownToHtml this.message.formattedMessage)
-        }}
+        @formattedMessage={{markdownToHtml this.message.formattedMessage false}}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
