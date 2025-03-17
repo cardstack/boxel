@@ -9,13 +9,7 @@ import {
   IconPlus,
   IconSearchThick,
 } from '@cardstack/boxel-ui/icons';
-import {
-  type getCard,
-  type Query,
-  primitive,
-  GetCardContextName,
-} from '@cardstack/runtime-common';
-import { consume } from 'ember-provide-consume-context';
+import { type getCard, type Query, primitive } from '@cardstack/runtime-common';
 import {
   BaseDef,
   CardDef,
@@ -136,7 +130,6 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
 class SearchCardsResultEmbeddedView extends Component<
   typeof SearchCardsResult
 > {
-  @consume(GetCardContextName) private declare getCard: getCard;
   @tracked showAllResults = false;
 
   @cached
@@ -144,7 +137,9 @@ class SearchCardsResultEmbeddedView extends Component<
     if (!this.cardIdsToDisplay.length) {
       return [];
     }
-    let cards = this.cardIdsToDisplay.map((id) => this.getCard(this, () => id));
+    let cards = this.cardIdsToDisplay
+      .map((id) => this.args.context?.getCard(this, () => id))
+      .filter(Boolean) as AttachedCardResource[];
     return cards;
   }
 
