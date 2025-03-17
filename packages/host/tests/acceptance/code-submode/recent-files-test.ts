@@ -568,6 +568,13 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       .containsText('code-ref.gts');
     assert.dom('[data-test-recent-file]:nth-child(3)').containsText('spec.gts');
 
+    console.log(
+      JSON.stringify(
+        JSON.parse(window.localStorage.getItem('recent-files')!),
+        null,
+        2,
+      ),
+    );
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
