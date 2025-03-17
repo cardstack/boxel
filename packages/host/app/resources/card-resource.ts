@@ -6,7 +6,7 @@ import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, dropTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
 
@@ -130,7 +130,7 @@ export class CardResource extends Resource<Args> {
     return this._loading?.promise;
   }
 
-  private load = restartableTask(
+  private load = dropTask(
     async (
       urlOrDoc: string | LooseSingleCardDocument | undefined,
       relativeTo?: URL,

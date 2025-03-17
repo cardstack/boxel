@@ -95,12 +95,6 @@ const petCardSource = `
         <h2 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h2>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
       </template>
     }
   }
@@ -118,7 +112,7 @@ const employeeCardSource = `
     static displayName = 'Employee';
     @field name = contains(StringCard);
     @field title = contains(StringCard, {
-      computeVia: function (this: Pet) {
+      computeVia: function (this: Employee) {
         return this.name;
       },
     });
@@ -585,6 +579,7 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
+    await this.pauseTest();
     let readMeInput = 'This is a spec for a person';
     this.onSave((_, json) => {
       if (typeof json === 'string') {
@@ -600,6 +595,16 @@ module('Acceptance | Spec preview', function (hooks) {
       `[data-test-card='${testRealmURL}person-entry']`,
     )?.id;
     assert.strictEqual(cardComponentIdAfter, cardComponentId);
+  });
+
+  test<TestContextWithSave>('adhoc', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await this.pauseTest();
   });
 
   test('clicking view instance button correctly navigates to spec file and displays content in editor', async function (assert) {

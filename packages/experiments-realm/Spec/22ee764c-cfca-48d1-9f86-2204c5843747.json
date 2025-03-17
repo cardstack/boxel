@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "hih",
+      "ref": {
+        "name": "Seller",
+        "module": "../seller"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Seller",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

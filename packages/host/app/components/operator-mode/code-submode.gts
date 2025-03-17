@@ -60,6 +60,7 @@ import type { FileView } from '@cardstack/host/services/operator-mode-state-serv
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { type SpecType } from 'https://cardstack.com/base/spec';
@@ -149,6 +150,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
   @service private declare loaderService: LoaderService;
+  @service private declare specPanelService: SpecPanelService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -523,6 +525,7 @@ export default class CodeSubmode extends Component<Signature> {
       fieldName,
       onLocalSelection: this.updateCursorByName,
     });
+    this.specPanelService.setSelection(null);
   }
 
   private loadScopedCSS = restartableTask(async () => {

@@ -95,7 +95,9 @@ export class Search extends Resource<Args> {
 
   @cached
   get instances() {
-    return [...this.currentResults.values()]
+    console.log('being run instances');
+    //removed this to make sure the instances are not new
+    return Array.from(this.currentResults.values())
       .filter((r) => r.card)
       .map((r) => r.card) as CardDef[];
   }

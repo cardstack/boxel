@@ -751,6 +751,7 @@ export class Spec extends CardDef {
           <div data-test-readme>
             <@fields.readMe />
           </div>
+          {{@model.readMe}}
         </section>
         <section class='examples section'>
           <header class='row-header' aria-labelledby='examples'>
