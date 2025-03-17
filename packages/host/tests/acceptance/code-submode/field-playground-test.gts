@@ -533,7 +533,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
     await togglePlaygroundPanel();
     assert.dom('[data-test-embedded-comment]').doesNotExist();
-    assert.dom('[data-test-add-field-instance]').exists();
+    assertFieldExists(assert, 'edit');
   });
 
   test('can create new field instance (no preexisting Spec)', async function (assert) {
@@ -600,12 +600,9 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .exists({ count: 3 });
   });
 
-  test('can create new field instance when spec exists but has no examples', async function (assert) {
+  test('can auto-generate new field instance when spec exists but has no examples', async function (assert) {
     await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
     assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
-    assert.dom('[data-test-field-preview-header]').doesNotExist();
-
-    await click('[data-test-add-field-instance]');
     assert.dom('[data-test-field-preview-header]').containsText('Full Name');
     assertFieldExists(assert, 'edit');
     assert

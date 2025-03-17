@@ -11,13 +11,12 @@ import { task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import {
-  AddButton,
   LoadingIndicator,
   BoxelSelect,
   CardContainer,
   CardHeader,
 } from '@cardstack/boxel-ui/components';
-import { and, bool, eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
 import {
   Eye,
   IconCode,
@@ -416,17 +415,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
             @setFormat={{this.setFormat}}
             data-test-playground-format-chooser
           />
-        {{else if (and (bool this.card) this.canWriteRealm)}}
-          <AddButton
-            class='add-field-button'
-            @variant='full-width'
-            @iconWidth='12px'
-            @iconHeight='12px'
-            {{on 'click' this.createNew}}
-            data-test-add-field-instance
-          >
-            Add Field
-          </AddButton>
         {{/if}}
       {{/let}}
     </div>
@@ -476,10 +464,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         --boxel-format-chooser-button-bg-color: var(--boxel-light);
         --boxel-format-chooser-button-width: 85px;
         --boxel-format-chooser-button-min-width: 85px;
-      }
-      .add-field-button {
-        max-width: 500px;
-        margin-inline: auto;
       }
     </style>
   </template>
@@ -582,12 +566,20 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   }
 
   private get field(): FieldDef | undefined {
-    if (!this.args.isFieldDef || !this.card) {
+    if (!this.args.isFieldDef) {
       return undefined;
     }
 
-    let fieldInstances = (this.card as Spec).containedExamples;
+    if (!this.card) {
+      // this.createNew();
+      return undefined;
+    }
+
+    let fieldInstances = (this.card as Spec)?.containedExamples;
     if (!fieldInstances?.length) {
+      if (this.canWriteRealm) {
+        this.createNew();
+      }
       return undefined;
     }
 
