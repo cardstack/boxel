@@ -14,6 +14,7 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { Loader, CardContextName, type Query } from '@cardstack/runtime-common';
 
 import { getSearch } from '@cardstack/host/resources/search';
+import { getCard } from '@cardstack/host/resources/card-resource';
 import LoaderService from '@cardstack/host/services/loader-service';
 
 import {
@@ -161,7 +162,6 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
         },
       });
     });
-
     test(`changing query updates search resource`, async function (assert) {
       class Isolated extends Component<typeof AuthorSearch> {
         @tracked name = 'Jane';
@@ -252,6 +252,109 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
       assert
         .dom('[data-test-author-search] [data-test-title]')
         .exists({ count: 2 });
+    });
+  });
+
+  module('getCard', function (_) {
+    hooks.beforeEach(async function (this: RenderingTestContext) {
+      class StringFieldWithValue extends StringField {
+        static displayName = 'StringFieldWithValue';
+
+        static edit = class Edit extends Component<
+          typeof StringFieldWithValue
+        > {
+          <template>
+            {{@model}}
+            <BoxelInput @value={{@model}} @onInput={{@set}} />
+          </template>
+        };
+      }
+
+      class SimpleCard extends CardDef {
+        static displayName = 'SimpleCard';
+        @field name = contains(StringFieldWithValue);
+
+        static edit = class Edit extends Component<typeof this> {
+          <template>
+            <@fields.name />
+          </template>
+        };
+      }
+      await setupIntegrationTestRealm({
+        loader,
+        mockMatrixUtils,
+        contents: {
+          'simple-card.gts': { SimpleCard },
+          'simple-card.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                name: 'Jane Doe',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}simple-card`,
+                  name: 'SimpleCard',
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    test('accessing property of card in getter should not cause re-render of the component', async function (assert) {
+      class SampleUsageWithGetCard extends CardDef {
+        static displayName = 'SampleUsageWithGetCard';
+        @field name = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: SampleUsageWithGetCard) {
+            return this.name;
+          },
+        });
+
+        static edit = class Edit extends Component<
+          typeof SampleUsageWithGetCard
+        > {
+          get id() {
+            return `${testRealmURL}simple-card`;
+          }
+
+          private resource = getCard(this, () => this.id);
+
+          get card() {
+            // console.log(this.resource.card.name); //<- this will cause a re-render
+            return this.resource.card;
+          }
+
+          <template>
+            {{#if this.card}}
+              {{#let (getComponent this.card) as |CardComponent|}}
+                <CardComponent />
+              {{/let}}
+            {{else}}
+              <div>
+                Loading...
+              </div>
+            {{/if}}
+          </template>
+        };
+      }
+      let card = new SampleUsageWithGetCard();
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <CardContextProvider>
+              <CardContextConsumer>
+                {{#let (getComponent card) as |Card|}}
+                  <Card @format='edit' />
+                {{/let}}
+              </CardContextConsumer>
+            </CardContextProvider>
+          </template>
+        },
+      );
+      assert.ok(true);
     });
   });
 });
