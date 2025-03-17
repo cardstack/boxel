@@ -17,6 +17,11 @@ interface Signature {
       languageAttr: string;
       monacoSDK: typeof MonacoSDK;
       editorDisplayOptions?: MonacoEditorOptions;
+      registerCodeBlockContainer: (
+        fileUrl: string,
+        content: string,
+        containerElement: HTMLDivElement,
+      ) => void;
     };
   };
 }
@@ -35,6 +40,7 @@ export default class CodeBlock extends Modifier<Signature> {
       languageAttr,
       monacoSDK,
       editorDisplayOptions,
+      registerCodeBlockContainer,
     }: Signature['Args']['Named'],
   ) {
     let codeBlocks = element.querySelectorAll(codeBlockSelector);
@@ -57,6 +63,14 @@ export default class CodeBlock extends Modifier<Signature> {
       }
       let content = maybeContent;
       let lines = content.split('\n').length;
+
+      // When the model responds with a code patch block, the source code editing skill
+      // will dictate that the first comment in the search/replace file block
+      // is a file url comment, like this: // File url: http://localhost:4201/user/realm/card.gts
+      // We need this url so that we know which file the code patch applies to
+      let fileUrl = undefined;
+      ({ content, fileUrl } = extractFileUrlAndOverrideContent(content));
+
       let language = codeBlock.getAttribute(languageAttr) ?? undefined;
       let state = this.monacoState[index];
       if (state) {
@@ -106,9 +120,22 @@ export default class CodeBlock extends Modifier<Signature> {
           'preview-code monaco-container code-block',
         );
         monacoContainer.setAttribute('style', `height: ${lines + 4}rem`);
+
         codeBlock.replaceWith(monacoContainer);
         let editor = monacoSDK.editor.create(monacoContainer, editorOptions);
         let model = editor.getModel()!;
+
+        let codeActionsContainer = makeCodeActionsContainerDiv();
+        monacoContainer.insertBefore(
+          codeActionsContainer,
+          monacoContainer.firstChild,
+        );
+
+        registerCodeBlockContainer(
+          fileUrl ?? '',
+          model.getValue(),
+          codeActionsContainer,
+        );
         this.monacoState.push({ editor, model, language });
 
         let copyButton = makeCopyButton();
@@ -142,6 +169,16 @@ export default class CodeBlock extends Modifier<Signature> {
   }
 }
 
+function makeCodeActionsContainerDiv() {
+  let template = document.createElement('template');
+  let randomId = Math.random().toString(36).substring(2, 15);
+  template.innerHTML = `
+    <div id=${randomId} class="code-actions">
+    </div>
+  `.trim();
+  return template.content.firstChild as HTMLDivElement;
+}
+
 function makeCopyButton() {
   let template = document.createElement('template');
   template.innerHTML = `
@@ -168,4 +205,19 @@ function makeCopyButton() {
     </button>
   `.trim();
   return template.content.firstChild as HTMLButtonElement;
+}
+
+function extractFileUrlAndOverrideContent(content: string) {
+  let fileUrl = undefined;
+  if (content.startsWith('// File url: ')) {
+    let firstLine = content.split('\n')[0];
+    let fileUrlRegex = /File url: (.*)/;
+    let fileUrlMatch = firstLine.match(fileUrlRegex);
+    if (fileUrlMatch) {
+      fileUrl = fileUrlMatch[1];
+    }
+    content = content.slice(firstLine.length).trimStart();
+  }
+
+  return { content, fileUrl };
 }
