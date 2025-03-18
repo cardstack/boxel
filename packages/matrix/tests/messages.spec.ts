@@ -1065,6 +1065,25 @@ test.describe('Room messages', () => {
     expect(cardFragmentEvents.length).toEqual(2);
   });
 
+  test('it escapes html code sent by the user', async ({ page }) => {
+    await login(page, 'user1', 'pass', { url: appURL });
+    await page
+      .locator('[data-test-message-field]')
+      .fill('<h1>Hello, world!</h1><script>alert("Hello, world!")</script>');
+
+    await page.locator('[data-test-send-message-btn]').click();
+
+    // assert that message innerHTML is escaped
+    let messageParagraph = await page.locator(
+      '[data-test-ai-message-content] p',
+    );
+    let messageHTML = await messageParagraph.innerHTML();
+
+    expect(messageHTML).toContain(
+      '&lt;h1&gt;Hello, world!&lt;/h1&gt;&lt;script&gt;alert("Hello, world!")&lt;/script&gt;',
+    );
+  });
+
   test('displays error message if message is too large', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
 
