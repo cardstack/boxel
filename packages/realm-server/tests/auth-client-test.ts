@@ -38,7 +38,7 @@ module(basename(__filename), function () {
           throw new Error('Method not implemented.');
         },
         async getAccountData() {
-          return Promise.resolve({});
+          return {};
         },
         async setAccountData() {
           return Promise.resolve();

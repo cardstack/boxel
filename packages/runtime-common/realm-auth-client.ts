@@ -14,7 +14,7 @@ export interface RealmAuthMatrixClientInterface {
   joinRoom(room: string): Promise<any>;
   sendEvent(room: string, type: string, content: any): Promise<any>;
   hashMessageWithSecret(message: string): Promise<string>;
-  getAccountData(type: string): Promise<any>;
+  getAccountData(type: string): any;
   setAccountData(type: string, data: any): Promise<any>;
 }
 
@@ -103,7 +103,7 @@ export class RealmAuthClient {
         await this.matrixClient.joinRoom(room);
       }
 
-      let directRooms = await this.matrixClient.getAccountData('m.direct');
+      let directRooms = this.matrixClient.getAccountData('m.direct');
       let userId = this.matrixClient.getUserId() as string;
       if (!directRooms?.[userId]?.includes(room)) {
         await this.matrixClient.setAccountData('m.direct', {

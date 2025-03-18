@@ -121,6 +121,8 @@ export class MockClient implements ExtendedClient {
   setAccountData<T>(type: string, data: T): Promise<{}> {
     if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
       this.sdkOpts.activeRealms = (data as any).realms;
+    } else if (type === 'm.direct') {
+      this.sdkOpts.directRooms = data as any;
     } else {
       throw new Error(
         'Support for updating this event type in account data is not yet implemented in this mock.',
@@ -129,8 +131,22 @@ export class MockClient implements ExtendedClient {
     return Promise.resolve({});
   }
 
-  getAccountData<T>(_type: string): Promise<T> {
-    throw new Error('Method not implemented.');
+  getAccountData(eventType: string): MatrixEvent | undefined {
+    if (eventType === 'm.direct') {
+      return new MatrixEvent({
+        type: 'm.direct',
+        content: this.sdkOpts.directRooms || {},
+      });
+    }
+    if (eventType === APP_BOXEL_REALMS_EVENT_TYPE) {
+      return new MatrixEvent({
+        type: APP_BOXEL_REALMS_EVENT_TYPE,
+        content: {
+          realms: this.sdkOpts.activeRealms || [],
+        },
+      });
+    }
+    return undefined;
   }
 
   addThreePidOnly(_data: MatrixSDK.IAddThreePidOnlyBody): Promise<{}> {

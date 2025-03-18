@@ -16,6 +16,7 @@ export interface Config {
   expiresInSec?: number;
   autostart?: boolean;
   now?: () => number;
+  directRooms?: Record<string, string[]>;
 }
 
 export function setupMockMatrix(
