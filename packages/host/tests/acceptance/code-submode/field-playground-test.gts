@@ -400,6 +400,10 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-incompatible-nonexports]').exists();
   });
 
+  // TODO
+  test('can populate instance chooser dropdown options with containedExamples from Spec', async function (_assert) {});
+  test('can update the instance chooser when selected declaration changes', async function (_assert) {});
+
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
