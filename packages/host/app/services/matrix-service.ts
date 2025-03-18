@@ -15,7 +15,13 @@ import {
   type EmittedEvents,
   type ISendEventResponse,
 } from 'matrix-js-sdk';
-import { SlidingSync, MSC3575List } from 'matrix-js-sdk/lib/sliding-sync';
+import {
+  SlidingSync,
+  MSC3575List,
+  SlidingSyncEvent,
+  SlidingSyncState,
+  MSC3575SlidingSyncResponse,
+} from 'matrix-js-sdk/lib/sliding-sync';
 import stringify from 'safe-stable-stringify';
 import { md5 } from 'super-fast-md5';
 import { TrackedMap } from 'tracked-built-ins';
@@ -114,7 +120,7 @@ import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL } = ENV;
+const { matrixURL, environment } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
@@ -173,7 +179,10 @@ export default class MatrixService extends Service {
     new TrackedMap();
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
   private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
+
   private slidingSync: SlidingSync | undefined;
+  private aiRoomIds: Set<string> = new Set();
+  @tracked private isLoadingMoreAIRooms = false;
 
   constructor(owner: Owner) {
     super(owner);
@@ -191,7 +200,7 @@ export default class MatrixService extends Service {
   set currentRoomId(value: string | undefined) {
     this._currentRoomId = value;
     if (value) {
-      this.loadAllTimelineEvents.perform(value);
+      this.loadAllTimelineEvents(value);
       window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
     } else {
       window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
@@ -243,6 +252,7 @@ export default class MatrixService extends Service {
               e.event.content.realms,
             );
             await this.loginToRealms();
+            await this.maybeLoadMoreAuthRooms(e.event.content.realms);
           }
         },
       ],
@@ -486,7 +496,7 @@ export default class MatrixService extends Service {
       this.bindEventListeners();
 
       try {
-        this.initSlidingSync();
+        await this.initSlidingSync();
         await this.client.startClient({ slidingSync: this.slidingSync });
         let accountDataContent = await this.client.getAccountDataFromServer<{
           realms: string[];
@@ -510,7 +520,11 @@ export default class MatrixService extends Service {
     }
   }
 
-  private initSlidingSync() {
+  private async initSlidingSync() {
+    let accountData = await this.client.getAccountDataFromServer<{
+      realms: string[];
+    }>(APP_BOXEL_REALMS_EVENT_TYPE);
+
     let lists: Map<string, MSC3575List> = new Map();
     lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
       ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
@@ -521,7 +535,14 @@ export default class MatrixService extends Service {
       required_state: [['*', '*']],
     });
     lists.set(SLIDING_SYNC_AUTH_ROOM_LIST_NAME, {
-      ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
+      ranges: [
+        [
+          0,
+          accountData
+            ? accountData?.realms.length
+            : SLIDING_SYNC_LIST_RANGE_END,
+        ],
+      ],
       filters: {
         is_dm: true,
       },
@@ -535,7 +556,25 @@ export default class MatrixService extends Service {
         timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       },
       this.client as any,
-      3000,
+      environment === 'test' ? 200 : 30000,
+    );
+    this.slidingSync.on(
+      SlidingSyncEvent.Lifecycle,
+      (
+        state: SlidingSyncState | null,
+        resp: MSC3575SlidingSyncResponse | null,
+      ) => {
+        if (
+          state === SlidingSyncState.Complete &&
+          resp &&
+          resp.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME].ops?.[0]?.op === 'SYNC'
+        ) {
+          for (let roomId of resp.lists[SLIDING_SYNC_AI_ROOM_LIST_NAME].ops[0]
+            .room_ids) {
+            this.aiRoomIds.add(roomId);
+          }
+        }
+      },
     );
 
     return this.slidingSync;
@@ -1174,7 +1213,7 @@ export default class MatrixService extends Service {
     return await this.client.isUsernameAvailable(username);
   }
 
-  private loadAllTimelineEvents = restartableTask(async (roomId: string) => {
+  private async loadAllTimelineEvents(roomId: string) {
     let roomData = this.ensureRoomData(roomId);
     let room = this.client.getRoom(roomId);
 
@@ -1214,7 +1253,7 @@ export default class MatrixService extends Service {
       this.timelineLoadingState.set(roomId, false);
       waiter.endAsync(token);
     }
-  });
+  }
 
   get isLoadingTimeline() {
     if (!this.currentRoomId) {
@@ -1596,6 +1635,61 @@ export default class MatrixService extends Service {
     }
     await roomResource.loading;
     roomResource.activateLLM(model);
+  }
+
+  loadMoreAIRooms() {
+    this.loadMoreAIRoomsTask.perform();
+  }
+
+  private loadMoreAIRoomsTask = restartableTask(async () => {
+    if (!this.slidingSync) return;
+
+    let currentList = this.slidingSync.getListParams(
+      SLIDING_SYNC_AI_ROOM_LIST_NAME,
+    );
+    if (!currentList) return;
+
+    let currentRange = currentList.ranges[0];
+    if (!currentRange) return;
+
+    if (this.aiRoomIds.size < currentRange[1] - 1) {
+      return;
+    }
+
+    let newEndRange = currentRange[1] + 10;
+
+    this.isLoadingMoreAIRooms = true;
+    try {
+      await this.slidingSync.setListRanges(SLIDING_SYNC_AI_ROOM_LIST_NAME, [
+        [0, newEndRange],
+      ]);
+    } finally {
+      this.isLoadingMoreAIRooms = false;
+    }
+  });
+
+  get loadingMoreAIRooms() {
+    return this.isLoadingMoreAIRooms;
+  }
+
+  async maybeLoadMoreAuthRooms(realms: string[]) {
+    if (!this.slidingSync) return;
+
+    let currentList = this.slidingSync.getListParams(
+      SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
+    );
+    if (!currentList) return;
+
+    let currentRange = currentList.ranges[0];
+    if (!currentRange) return;
+    if (realms.length - 1 <= currentRange[1]) {
+      return;
+    }
+
+    let newEndRange = realms.length - 1;
+    await this.slidingSync.setListRanges(SLIDING_SYNC_AUTH_ROOM_LIST_NAME, [
+      [0, newEndRange],
+    ]);
   }
 }
 
