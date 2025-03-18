@@ -200,6 +200,11 @@ const fieldDescriptions = initSharedState(
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
 );
 
+const boxCache = initSharedState(
+  'boxCache',
+  () => new WeakMap<BaseDef, Box<BaseDef>>(),
+);
+
 // our place for notifying Glimmer when a card is ready to re-render (which will
 // involve rerunning async computed fields)
 const cardTracking = initSharedState(
@@ -2800,7 +2805,10 @@ export function getComponent(
   field?: Field,
   opts?: { componentCodeRef?: CodeRef },
 ): BoxComponent {
-  let box = Box.create(model);
+  let box = boxCache.get(model);
+  if (!box) {
+    box = Box.create(model);
+  }
   let boxComponent = getBoxComponent(
     model.constructor as BaseDefConstructor,
     box,
@@ -3024,7 +3032,12 @@ function getComputedFields<T extends BaseDef>(
 
 export class Box<T> {
   static create<T>(model: T): Box<T> {
-    return new Box({ type: 'root', model });
+    let box = boxCache.get(model as BaseDef);
+    if (!box) {
+      box = new Box({ type: 'root', model });
+      boxCache.set(model as BaseDef, box);
+    }
+    return box as Box<T>;
   }
 
   private state:
