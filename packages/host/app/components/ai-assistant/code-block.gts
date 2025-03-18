@@ -1,10 +1,10 @@
+import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout, task } from 'ember-concurrency';
@@ -21,7 +21,8 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
-import { TemplateOnlyComponent } from '@ember/component/template-only';
+
+import type { ComponentLike } from '@glint/template';
 interface CopyCodeButtonSignature {
   Args: {};
 }
