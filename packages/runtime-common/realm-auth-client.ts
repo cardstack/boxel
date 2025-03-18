@@ -104,8 +104,8 @@ export class RealmAuthClient {
       }
 
       let directRooms = await this.matrixClient.getAccountData('m.direct');
-      if (!directRooms?.includes(room)) {
-        let userId = this.matrixClient.getUserId() as string;
+      let userId = this.matrixClient.getUserId() as string;
+      if (!directRooms?.[userId]?.includes(room)) {
         await this.matrixClient.setAccountData('m.direct', {
           [userId]: [...(directRooms?.[userId] ?? []), room],
         });

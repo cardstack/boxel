@@ -119,7 +119,7 @@ const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
 const SLIDING_SYNC_AUTH_ROOM_LIST_NAME = 'auth-room';
-const SLIDING_SYNC_LIST_RANGE_SIZE = 10;
+const SLIDING_SYNC_LIST_RANGE_END = 9;
 const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 
 const realmEventsLogger = logger('realm:events');
@@ -513,7 +513,7 @@ export default class MatrixService extends Service {
   private initSlidingSync() {
     let lists: Map<string, MSC3575List> = new Map();
     lists.set(SLIDING_SYNC_AI_ROOM_LIST_NAME, {
-      ranges: [[0, SLIDING_SYNC_LIST_RANGE_SIZE]],
+      ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
       filters: {
         is_dm: false,
       },
@@ -521,7 +521,7 @@ export default class MatrixService extends Service {
       required_state: [['*', '*']],
     });
     lists.set(SLIDING_SYNC_AUTH_ROOM_LIST_NAME, {
-      ranges: [[0, SLIDING_SYNC_LIST_RANGE_SIZE]],
+      ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
       filters: {
         is_dm: true,
       },
