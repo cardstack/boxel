@@ -1,14 +1,27 @@
-import { MatrixEvent } from 'matrix-js-sdk';
 import * as MatrixSDK from 'matrix-js-sdk';
 import {
   SlidingSync,
   SlidingSyncEvent,
   SlidingSyncState,
+  MSC3575List,
+  MSC3575RoomSubscription,
 } from 'matrix-js-sdk/lib/sliding-sync';
 
 export class MockSlidingSync extends SlidingSync {
+  private _client: MatrixSDK.MatrixClient;
   private lifecycleCallbacks: Function[] = [];
   private listCallbacks: Function[] = [];
+
+  constructor(
+    proxyBaseUrl: string,
+    lists: Map<string, MSC3575List>,
+    roomSubscriptionInfo: MSC3575RoomSubscription,
+    client: MatrixSDK.MatrixClient,
+    timeoutMS: number,
+  ) {
+    super(proxyBaseUrl, lists, roomSubscriptionInfo, client, timeoutMS);
+    this._client = client;
+  }
 
   on(event: string, callback: Function) {
     if (event === SlidingSyncEvent.Lifecycle) {
@@ -35,7 +48,7 @@ export class MockSlidingSync extends SlidingSync {
     if (!aiRoomList) {
       return;
     }
-    let slidingResponse = await this.client.slidingSync(
+    let slidingResponse = await this._client.slidingSync(
       {
         lists: { ['ai-room']: aiRoomList },
         room_subscriptions: undefined,
@@ -49,17 +62,10 @@ export class MockSlidingSync extends SlidingSync {
       SlidingSyncState.Complete,
       slidingResponse,
     );
-
-    Object.values(slidingResponse.rooms ?? {}).forEach(
-      (room: MSC3575RoomData) => {
-        room.timeline.forEach((event: MatrixSDK.IRoomEvent) => {
-          this.client.emitEvent(new MatrixEvent(event));
-        });
-      },
-    );
   }
 
-  resend() {
-    this.start();
+  async resend() {
+    await this.start();
+    return '';
   }
 }

@@ -668,18 +668,23 @@ export class MockClient implements ExtendedClient {
     };
 
     roomsInRange.forEach((room) => {
+      let timeline = this.serverState.getRoomEvents(room.id);
       response.rooms[room.id] = {
         name:
           this.serverState.getRoomState(room.id, 'm.room.name', '')?.content
             ?.name ?? 'room',
         required_state: [],
-        timeline: this.serverState.getRoomEvents(room.id),
+        timeline,
         notification_count: 0,
         highlight_count: 0,
         joined_count: 1,
         invited_count: 0,
         initial: true,
       };
+
+      timeline.forEach((event: MatrixSDK.IRoomEvent) => {
+        this.emitEvent(new MatrixEvent(event));
+      });
     });
 
     return Promise.resolve(response);

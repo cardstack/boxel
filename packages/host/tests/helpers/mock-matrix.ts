@@ -28,12 +28,10 @@ export function setupMockMatrix(
     owner?: Owner;
     sdk?: MockSDK;
     opts?: Config;
-    slidingSync?: SlidingSync;
   } = {
     owner: undefined,
     sdk: undefined,
     opts: undefined,
-    slidingSync: undefined,
   };
 
   let mockUtils = new MockUtils(testState);
