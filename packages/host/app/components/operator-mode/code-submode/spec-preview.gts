@@ -593,30 +593,30 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.search.instances as Spec[];
   }
 
-  // get shouldReturnSelectedCard() {
-  //   if (!this._selectedCard) {
-  //     return false;
-  //   }
-  //   if (
-  //     this._selectedCard?.moduleHref !==
-  //     this.getSelectedDeclarationAsCodeRef.module
-  //   ) {
-  //     return true;
-  //   } else {
-  //     //only return selected card if it has the same name
-  //     //otherwise, just keep selected card
-  //     if (
-  //       this._selectedCard?.ref.name ===
-  //       this.getSelectedDeclarationAsCodeRef.name
-  //     ) {
-  //       return true;
-  //     }
-  //   }
-  //   return false;
-  // }
+  get shouldReturnSelectedCard() {
+    if (!this._selectedCard) {
+      return false;
+    }
+    if (
+      this._selectedCard?.moduleHref !==
+      this.getSelectedDeclarationAsCodeRef.module
+    ) {
+      return true;
+    } else {
+      //only return selected card if it has the same name
+      //otherwise, just keep selected card
+      if (
+        this._selectedCard?.ref.name ===
+        this.getSelectedDeclarationAsCodeRef.name
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }
 
   get card() {
-    if (this._selectedCard) {
+    if (this.shouldReturnSelectedCard) {
       return this._selectedCard;
     }
     // console.log(this.cards[0].ref);
@@ -631,12 +631,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.cards.length === 0 && this.canWrite;
   }
 
-  get isLoading() {
-    return this.args.isLoadingNewModule;
-  }
+  // get isLoading() {
+  //   return this.args.isLoadingNewModule;
+  // }
 
   <template>
-    {{#if this.isLoading}}
+    {{!-- {{#if this.isLoading}}
       {{yield
         (component
           SpecPreviewTitle
@@ -648,27 +648,27 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         )
         (component SpecPreviewLoading)
       }}
-    {{else}}
-      {{yield
-        (component
-          SpecPreviewTitle
-          showCreateSpec=this.showCreateSpec
-          createSpec=this.createSpec
-          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-          specType=this.specType
-          numberOfInstances=this.cards.length
-        )
-        (component
-          SpecPreviewContent
-          showCreateSpec=this.showCreateSpec
-          canWrite=this.canWrite
-          onSelectCard=this.onSelectCard
-          spec=this.card
-          isLoading=false
-          cards=this.cards
-        )
-      }}
-    {{/if}}
+    {{else}} --}}
+    {{yield
+      (component
+        SpecPreviewTitle
+        showCreateSpec=this.showCreateSpec
+        createSpec=this.createSpec
+        isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+        specType=this.specType
+        numberOfInstances=this.cards.length
+      )
+      (component
+        SpecPreviewContent
+        showCreateSpec=this.showCreateSpec
+        canWrite=this.canWrite
+        onSelectCard=this.onSelectCard
+        spec=this.card
+        isLoading=false
+        cards=this.cards
+      )
+    }}
+    {{!-- {{/if}} --}}
   </template>
 }
 
