@@ -8,26 +8,22 @@ import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
 
-import { TrackedMap } from 'tracked-built-ins';
+import { TrackedArray } from 'tracked-built-ins';
 
 import {
   subscribeToRealm,
   isCardCollectionDocument,
-  SingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
-import { asURL } from '../services/store';
-
-import { type CardResource, getCard } from './card-resource';
-
 import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-resource:search-waiter');
 
@@ -35,29 +31,33 @@ interface Args {
   named: {
     query: Query | undefined;
     realms: string[] | undefined;
-    isLive?: true;
+    isLive: boolean;
+    isAutoSaved: boolean;
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
   };
 }
 
-// TODO refactor this so that it is a resource that holds a list of CardDefs,
-// not a resource that holds a list of CardResources. All the loading should
-// happen at the same time. Please make a ticket for this.
-export class Search extends Resource<Args> {
+export class SearchResource extends Resource<Args> {
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
   @tracked private realmsToSearch: string[] = [];
+  // This is deprecated. consumers of this resource need to be reactive such
+  // that they can deal with a resource that doesn't have a search results yet.
   loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
-  private cardResources = new Map<string, CardResource>();
-  private seenCardResource = new TrackedMap<string, CardResource>();
-  private currentResults = new TrackedMap<string, CardResource>();
+  // declare private store: StoreService;
+  private _instances = new TrackedArray<CardDef>();
+  #isLive = false;
+  #isAutoSaved = false;
 
   modify(_positional: never[], named: Args['named']) {
-    let { query, realms, isLive, doWhileRefreshing } = named;
+    let { query, realms, isLive, doWhileRefreshing, isAutoSaved } = named;
     if (query === undefined) {
       return;
     }
+    this.#isLive = isLive;
+    this.#isAutoSaved = isAutoSaved;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
         ? this.realmServer.availableRealmURLs
@@ -94,11 +94,17 @@ export class Search extends Resource<Args> {
     }
   }
 
+  get isLive() {
+    return this.#isLive;
+  }
+
+  get isAutoSaved() {
+    return this.#isAutoSaved;
+  }
+
   @cached
   get instances() {
-    return [...this.currentResults.values()]
-      .filter((r) => r.card)
-      .map((r) => r.card) as CardDef[];
+    return this._instances;
   }
 
   @cached
@@ -118,49 +124,6 @@ export class Search extends Resource<Args> {
       await doWhileRefreshing(this.loaded);
     },
   );
-
-  // By default, this does a tracked read from seenCards so that your
-  // answer can be invalidated if a new card is discovered. Internally, we also
-  // use it untracked to implement the read-through cache.
-  private seenCard(url: string, tracked = true): CardResource | undefined {
-    let resource = this.cardResources.get(url);
-    if (resource) {
-      return resource;
-    }
-    if (tracked) {
-      this.seenCardResource.has(url);
-    }
-    return undefined;
-  }
-
-  private getOrCreateCardResource(
-    urlOrDoc: string | SingleCardDocument,
-  ): CardResource {
-    let url = asURL(urlOrDoc);
-    if (!url) {
-      throw new Error(
-        `bug: expected card doc to have an id: ${JSON.stringify(
-          urlOrDoc,
-          null,
-          2,
-        )}`,
-      );
-    }
-    // this should be the only place we do the untracked read. It needs to be
-    // untracked so our `this.cardResources.set` below will not be an assertion.
-    let resource = this.seenCard(url, false);
-    if (!resource) {
-      // TODO refactor this out--we don't want to hold CardResources at this layer
-      resource = getCard(this, () => urlOrDoc, {
-        isLive: true,
-      });
-      this.cardResources.set(url, resource);
-      // only after the set has happened can we safely do the tracked read to
-      // establish our dependency.
-      this.seenCardResource.set(url, resource);
-    }
-    return resource;
-  }
 
   private search = restartableTask(async (query: Query) => {
     // we cannot use the `waitForPromise` test waiter helper as that will cast
@@ -191,35 +154,41 @@ export class Search extends Resource<Args> {
               (
                 (
                   await Promise.allSettled(
-                    collectionDoc.data.map(async (doc) =>
-                      this.getOrCreateCardResource({ data: doc }),
+                    collectionDoc.data.map(async (jsonAPIResource) =>
+                      this.store.createSubscriber({
+                        resource: this,
+                        urlOrDoc: { data: jsonAPIResource },
+                        relativeTo: undefined,
+                        isAutoSaved: this.isAutoSaved,
+                        isLive: this.isLive,
+                      }),
                     ),
                   )
                 ).filter(
                   (p) => p.status === 'fulfilled',
-                ) as PromiseFulfilledResult<CardResource>[]
+                ) as PromiseFulfilledResult<{ card: CardDef }>[]
               ).map((p) => p.value)
             );
           }),
         ),
       );
 
-      await Promise.all(results.map((r) => r.loaded));
-      let resultsWithoutErrors = results.filter((r) => r.card && r.url);
-      let resultMap = new Map<string, CardResource>();
-      for (let resource of resultsWithoutErrors) {
-        resultMap.set(resource.url!, resource);
-      }
-      for (let url of this.currentResults.keys()) {
-        if (!resultMap.has(url)) {
-          this.currentResults.delete(url);
-        }
-      }
-      for (let [url, resource] of resultMap) {
-        if (!this.currentResults.has(url)) {
-          this.currentResults.set(url, resource);
-        }
-      }
+      // Please note 3 things there:
+      // 1. we are mutating this._instances, not replacing it
+      // 2. the items in this array come from an identity map, so we are never
+      //    recreating an instance that already exist.
+      // 3. The ordering of the results is important, we need to retain that.
+      //
+      //  As such, removing all the items in-place in our tracked
+      //  this._instances array, and then re-adding the new results back into
+      //  the array in the correct order synchronously is a stable operation.
+      //  glimmer understands the delta and will only rerender the components
+      //  tied to the instances that are added (or removed) from the array
+      this._instances.splice(
+        0,
+        this._instances.length,
+        ...results.map(({ card }) => card),
+      );
     } finally {
       waiter.endAsync(token);
     }
@@ -230,27 +199,24 @@ export class Search extends Resource<Args> {
   }
 }
 
-export interface SearchQuery {
-  instances: CardDef[];
-  isLoading: boolean;
-  loaded: Promise<void>;
-}
-
 export function getSearch(
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
   opts?: {
-    isLive?: true;
+    isLive?: boolean;
+    isAutoSaved?: boolean;
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
   },
 ) {
-  return Search.from(parent, () => ({
+  return SearchResource.from(parent, () => ({
     named: {
       query: getQuery(),
       realms: getRealms ? getRealms() : undefined,
-      isLive: opts?.isLive,
+      isLive: opts?.isLive != null ? opts.isLive : true,
+      isAutoSaved: opts?.isAutoSaved != null ? opts.isAutoSaved : false,
+      // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
     },
-  })) as SearchQuery;
+  }));
 }
