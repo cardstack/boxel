@@ -105,25 +105,42 @@ class EditView extends Component<typeof CodeRefField> {
   );
 }
 
+function codeRefAdjustments(
+  codeRef: any,
+  relativeTo?: string,
+  opts?: SerializeOpts,
+) {
+  if (!codeRef) {
+    return {};
+  }
+  if (!isResolvedCodeRef(codeRef)) {
+    return {};
+  }
+  if (!isUrlLike(codeRef.module)) {
+    return {};
+  }
+  if (opts?.useAbsoluteURL && relativeTo) {
+    return { module: new URL(codeRef.module, relativeTo).href };
+  }
+  if (!opts?.maybeRelativeURL) {
+    return {};
+  }
+  return { module: opts.maybeRelativeURL(codeRef.module) };
+}
+
 export default class CodeRefField extends FieldDef {
   static icon = CodeIcon;
   static [primitive]: ResolvedCodeRef;
 
   static [serialize](
     codeRef: ResolvedCodeRef | {},
-    _doc: JSONAPISingleResourceDocument,
+    doc: JSONAPISingleResourceDocument,
     _visited?: Set<string>,
     opts?: SerializeOpts,
   ) {
     return {
       ...codeRef,
-      ...(opts?.maybeRelativeURL &&
-      codeRef &&
-      isResolvedCodeRef(codeRef) &&
-      !opts?.useAbsoluteURL &&
-      isUrlLike(codeRef.module)
-        ? { module: opts.maybeRelativeURL(codeRef.module) }
-        : {}),
+      ...codeRefAdjustments(codeRef, doc.data.id, opts),
     };
   }
   static async [deserialize]<T extends BaseDefConstructor>(

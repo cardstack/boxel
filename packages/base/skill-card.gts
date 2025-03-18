@@ -5,6 +5,7 @@ import {
   field,
   contains,
   containsMany,
+  relativeTo,
 } from './card-api';
 import BooleanField from './boolean';
 import CodeRefField from './code-ref';
@@ -12,14 +13,7 @@ import MarkdownField from './markdown';
 import StringField from './string';
 import RobotIcon from '@cardstack/boxel-icons/robot';
 import SquareChevronRightIcon from '@cardstack/boxel-icons/square-chevron-right';
-import { simpleHash } from '@cardstack/runtime-common';
-
-function friendlyModuleName(fullModuleUrl: string) {
-  return fullModuleUrl
-    .split('/')
-    .pop()!
-    .replace(/\.gts$/, '');
-}
+import { buildCommandFunctionName } from '@cardstack/runtime-common';
 
 export class CommandField extends FieldDef {
   static displayName = 'CommandField';
@@ -36,16 +30,10 @@ export class CommandField extends FieldDef {
   @field functionName = contains(StringField, {
     description: 'The name of the function to be executed',
     computeVia: function (this: CommandField) {
-      if (!this.codeRef?.module || !this.codeRef?.name) {
-        return '';
-      }
-
-      const hashed = simpleHash(`${this.codeRef.module}#${this.codeRef.name}`);
-      let name =
-        this.codeRef.name === 'default'
-          ? friendlyModuleName(this.codeRef.module)
-          : this.codeRef.name;
-      return `${name}_${hashed.slice(0, 4)}`;
+      return buildCommandFunctionName(
+        this.codeRef,
+        this[Symbol.for('cardstack-relative-to') as typeof relativeTo],
+      );
     },
   });
 
