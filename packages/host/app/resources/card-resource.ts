@@ -32,7 +32,14 @@ interface Args {
     // different instances don't result in re-running the resource
     urlOrDoc: string | LooseSingleCardDocument | undefined;
     isLive: boolean;
-    // this is not always constructed within a container so we pass in our services
+
+    // TODO the fact this is not always constructed in a container is super
+    // problematic since only components should be consuming this. After we have
+    // refactored this so that it is not consumed by things outside of a
+    // container, then start injecting our services instead of passing them in.
+
+    // this is not always constructed within a container so we pass in our
+    // services
     storeService: StoreService;
     cardService: CardService;
     relativeTo?: URL;
