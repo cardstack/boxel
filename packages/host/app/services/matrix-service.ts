@@ -623,7 +623,7 @@ export default class MatrixService extends Service {
       const command = new Command(this.commandService.commandContext);
       const name = commandDef.functionName;
       commandDefinitionSchemas.push({
-        codeRef: commandDef.codeRef,
+        codeRef: absoluteCodeRef,
         tool: {
           type: 'function',
           function: {

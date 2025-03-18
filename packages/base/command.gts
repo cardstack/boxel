@@ -42,7 +42,7 @@ export class PatchCardInput extends CardDef {
 }
 
 export class ShowCardInput extends CardDef {
-  @field cardToShow = linksTo(CardDef);
+  @field cardIdToShow = contains(StringField);
 }
 
 export class SwitchSubmodeInput extends CardDef {
