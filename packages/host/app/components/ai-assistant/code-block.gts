@@ -93,58 +93,6 @@ export default class CodeBlock extends Component<Signature> {
         actions=(component CodeBlockActionsComponent code=@code)
       )
     }}
-
-    <style>
-      .code-block,
-      .code-block-actions {
-        width: calc(100% + 2 * var(--boxel-sp));
-        margin-left: calc(-1 * var(--boxel-sp));
-      }
-
-      .code-block {
-        margin-bottom: 15px;
-      }
-
-      .code-block-actions {
-        background: black;
-        height: 50px;
-        padding: var(--boxel-sp-sm) 27px;
-        padding-right: var(--boxel-sp);
-        display: flex;
-        justify-content: flex-start;
-      }
-
-      .code-copy-button {
-        color: var(--boxel-highlight);
-        background: none;
-        border: none;
-        font: 600 var(--boxel-font-xs);
-        padding: 0;
-        display: flex;
-        margin: auto;
-        width: 100%;
-      }
-
-      .code-copy-button svg {
-        margin-right: var(--boxel-sp-xs);
-      }
-
-      .copy-icon {
-        --icon-color: var(--boxel-highlight);
-      }
-
-      .copy-text {
-        display: none;
-      }
-
-      .code-copy-button:hover .copy-text {
-        display: block;
-      }
-
-      .code-copy-button .copy-text.shown {
-        display: block;
-      }
-    </style>
   </template>
 }
 
@@ -257,6 +205,13 @@ class CodeBlockEditor extends Component<Signature> {
   };
 
   <template>
+    <style scoped>
+      .code-block {
+        margin-bottom: 15px;
+        width: calc(100% + 2 * var(--boxel-sp));
+        margin-left: calc(-1 * var(--boxel-sp));
+      }
+    </style>
     <div
       {{MonacoEditor
         monacoSDK=@monacoSDK
@@ -276,6 +231,18 @@ class CodeBlockEditor extends Component<Signature> {
 
 let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> =
   <template>
+    <style scoped>
+      .code-block-actions {
+        background: black;
+        height: 50px;
+        padding: var(--boxel-sp-sm) 27px;
+        padding-right: var(--boxel-sp);
+        display: flex;
+        justify-content: flex-start;
+        width: calc(100% + 2 * var(--boxel-sp));
+        margin-left: calc(-1 * var(--boxel-sp));
+      }
+    </style>
     <div class='code-block-actions'>
       {{yield
         (hash
@@ -297,6 +264,39 @@ class CopyCodeButton extends Component<CopyCodeButtonSignature> {
   });
 
   <template>
+    <style scoped>
+      .code-copy-button {
+        color: var(--boxel-highlight);
+        background: none;
+        border: none;
+        font: 600 var(--boxel-font-xs);
+        padding: 0;
+        display: flex;
+        margin: auto;
+        width: 100%;
+      }
+
+      .code-copy-button svg {
+        margin-right: var(--boxel-sp-xs);
+      }
+
+      .copy-icon {
+        --icon-color: var(--boxel-highlight);
+      }
+
+      .copy-text {
+        display: none;
+      }
+
+      .code-copy-button:hover .copy-text {
+        display: block;
+      }
+
+      .code-copy-button .copy-text.shown {
+        display: block;
+      }
+    </style>
+
     <button
       class='code-copy-button'
       {{on 'click' (fn (perform this.copyCode) @code)}}
