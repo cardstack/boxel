@@ -602,6 +602,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
           {{#if this.query}}
             <div class='content-header-deal-summary'>
               <DealSummary
+                @context={{@context}}
                 @query={{this.query}}
                 @realmHrefs={{this.realmHrefs}}
               />

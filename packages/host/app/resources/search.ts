@@ -103,6 +103,10 @@ export class SearchResource extends Resource<Args> {
     }
   }
 
+  get isLoading() {
+    return this.search.isRunning;
+  }
+
   get isLive() {
     return this.#isLive;
   }
@@ -190,12 +194,18 @@ export class SearchResource extends Resource<Args> {
       waiter.endAsync(token);
     }
   });
-
-  get isLoading() {
-    return this.search.isRunning;
-  }
 }
 
+// WARNING! please don't import this directly into your component's module.
+// Rather please instead use:
+// ```
+//   import { consume } from 'ember-provide-consume-context';
+//   import { type getCards, GetCardsContextName } from '@cardstack/runtime-common';
+//    ...
+//   @consume(GetCardisContextName) private declare getCards: getCards;
+// ```
+// If you need to use `getSearch()`/`getCards()` in something that is not a Component, then
+// let's talk.
 export function getSearch(
   parent: object,
   getQuery: () => Query | undefined,

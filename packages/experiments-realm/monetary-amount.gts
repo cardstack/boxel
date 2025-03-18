@@ -9,7 +9,6 @@ import { Component } from 'https://cardstack.com/base/card-api';
 import { Currency } from './asset';
 import { action } from '@ember/object';
 import { BoxelInputGroup } from '@cardstack/boxel-ui/components';
-import { getCards } from '@cardstack/runtime-common';
 import { guidFor } from '@ember/object/internals';
 import GlimmerComponent from '@glimmer/component';
 
@@ -36,8 +35,8 @@ class Edit extends Component<typeof MonetaryAmount> {
     return guidFor(this);
   }
 
-  // TODO refactor to use <PrerenderedCardSearch> component from the @context if you want live search
-  liveCurrencyQuery = getCards(
+  liveCurrencyQuery = this.args.context?.getCards(
+    this,
     () => {
       return {
         filter: {

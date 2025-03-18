@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
@@ -18,8 +17,7 @@ import { or, not, and } from '@cardstack/boxel-ui/helpers';
 
 import {
   GetCardContextName,
-  type Query,
-  type SearchQuery,
+  GetCardsContextName,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
@@ -61,35 +59,23 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    // TODO remove this
-    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
-
     this.messageService.register();
 
     registerDestructor(this, () => {
-      // TODO remove this
-      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
-  }
-
-  // TODO remove this
-  @action
-  getCards(
-    getQuery: () => Query | undefined,
-    getRealms: () => string[] | undefined,
-    opts: {
-      isLive?: true;
-      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-    },
-  ): SearchQuery {
-    return getSearch(this, getQuery, getRealms, opts);
   }
 
   @provide(GetCardContextName)
   // @ts-ignore "getCard" is declared but not used
   private get getCard() {
     return getCard;
+  }
+
+  @provide(GetCardsContextName)
+  // @ts-ignore "getCard" is declared but not used
+  private get getCards() {
+    return getSearch;
   }
 
   private saveSource = task(async (url: URL, content: string) => {
