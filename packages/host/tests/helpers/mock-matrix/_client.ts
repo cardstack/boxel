@@ -2,6 +2,11 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import * as MatrixSDK from 'matrix-js-sdk';
 
+import {
+  MSC3575SlidingSyncRequest,
+  MSC3575SlidingSyncResponse,
+} from 'matrix-js-sdk/lib/sliding-sync';
+
 import { baseRealm, unixTime } from '@cardstack/runtime-common';
 
 import {
@@ -57,8 +62,12 @@ export class MockClient implements ExtendedClient {
   }
 
   async startClient(
-    _opts?: MatrixSDK.IStartClientOpts | undefined,
+    opts?: MatrixSDK.IStartClientOpts | undefined,
   ): Promise<void> {
+    if (opts?.slidingSync) {
+      await opts.slidingSync.start();
+    }
+
     this.serverState.onEvent((serverEvent: IEvent) => {
       this.emitEvent(new MatrixEvent(serverEvent));
     });
@@ -618,5 +627,61 @@ export class MockClient implements ExtendedClient {
 
   mxcUrlToHttp(mxcUrl: string): string {
     return mxcUrl.replace('mxc://', 'http://mock-server/');
+  }
+
+  async slidingSync(
+    req: MSC3575SlidingSyncRequest,
+    _proxyBaseUrl: string,
+    _signal: AbortSignal,
+  ): Promise<MSC3575SlidingSyncResponse> {
+    let listKey = Object.keys(req.lists || {})[0];
+    if (!listKey || !req.lists?.[listKey]?.ranges?.[0]) {
+      return Promise.resolve({
+        pos: '0',
+        lists: {},
+        rooms: {},
+        extensions: {},
+      });
+    }
+
+    let [start, end] = req.lists[listKey].ranges[0];
+    let roomsInRange = this.serverState.rooms
+      .filter((r) => r.id.includes('mock'))
+      .slice(start, end + 1);
+
+    let response: MSC3575SlidingSyncResponse = {
+      pos: String(Date.now()),
+      lists: {
+        [listKey]: {
+          count: this.serverState.rooms.length,
+          ops: [
+            {
+              op: 'SYNC',
+              range: [start, end],
+              room_ids: roomsInRange.map((r) => r.id),
+            },
+          ],
+        },
+      },
+      rooms: {},
+      extensions: {},
+    };
+
+    roomsInRange.forEach((room) => {
+      response.rooms[room.id] = {
+        name:
+          this.serverState.getRoomState(room.id, 'm.room.name', '')?.content
+            ?.name ?? 'room',
+        required_state: [],
+        timeline: this.serverState.getRoomEvents(room.id),
+        notification_count: 0,
+        highlight_count: 0,
+        joined_count: 1,
+        invited_count: 0,
+        initial: true,
+      };
+    });
+
+    return Promise.resolve(response);
   }
 }

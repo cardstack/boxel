@@ -1,4 +1,4 @@
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -430,5 +430,42 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
+  });
+
+  test('loads more AI rooms when scrolling', async function (assert) {
+    for (let i = 1; i <= 15; i++) {
+      createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: `AI Room ${i}`,
+      });
+    }
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await click('[data-test-past-sessions-button]');
+
+    assert.dom('[data-test-past-sessions]').exists();
+    assert.dom('[data-test-joined-room]').exists({ count: 10 });
+
+    let pastSessionsElement = document.querySelector(
+      '[data-test-past-sessions] .body ul',
+    );
+    if (pastSessionsElement) {
+      pastSessionsElement.scrollTop = pastSessionsElement.scrollHeight;
+    }
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-joined-room]').length === 16,
+    );
+    assert.dom('[data-test-joined-room]').exists({ count: 16 });
   });
 });

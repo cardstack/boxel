@@ -16,11 +16,11 @@ import {
   type ISendEventResponse,
 } from 'matrix-js-sdk';
 import {
-  SlidingSync,
-  MSC3575List,
+  type SlidingSync,
+  type MSC3575List,
   SlidingSyncEvent,
   SlidingSyncState,
-  MSC3575SlidingSyncResponse,
+  type MSC3575SlidingSyncResponse,
 } from 'matrix-js-sdk/lib/sliding-sync';
 import stringify from 'safe-stable-stringify';
 import { md5 } from 'super-fast-md5';
@@ -252,7 +252,7 @@ export default class MatrixService extends Service {
               e.event.content.realms,
             );
             await this.loginToRealms();
-            await this.maybeLoadMoreAuthRooms(e.event.content.realms);
+            await this.loadMoreAuthRooms(e.event.content.realms);
           }
         },
       ],
@@ -549,14 +549,14 @@ export default class MatrixService extends Service {
       timeline_limit: 1,
       required_state: [['*', '*']],
     });
-    this.slidingSync = new SlidingSync(
+    this.slidingSync = new this.matrixSdkLoader.SlidingSync(
       this.client.baseUrl,
       lists,
       {
         timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       },
       this.client as any,
-      environment === 'test' ? 200 : 30000,
+      environment === 'test' ? 200 : 2000,
     );
     this.slidingSync.on(
       SlidingSyncEvent.Lifecycle,
@@ -1675,7 +1675,7 @@ export default class MatrixService extends Service {
     return this.isLoadingMoreAIRooms;
   }
 
-  async maybeLoadMoreAuthRooms(realms: string[]) {
+  async loadMoreAuthRooms(realms: string[]) {
     if (!this.slidingSync) return;
 
     let currentList = this.slidingSync.getListParams(
