@@ -317,7 +317,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
           private resource = getCard(this, () => this.id);
 
           get card() {
-            // console.log(this.resource.card.name); //<- this will cause a re-render
+            console.log(this.resource?.card?.name); //<- this will cause a re-render
             return this.resource.card;
           }
 
