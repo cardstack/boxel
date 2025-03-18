@@ -202,7 +202,7 @@ export class SearchResource extends Resource<Args> {
 //   import { consume } from 'ember-provide-consume-context';
 //   import { type getCards, GetCardsContextName } from '@cardstack/runtime-common';
 //    ...
-//   @consume(GetCardisContextName) private declare getCards: getCards;
+//   @consume(GetCardsContextName) private declare getCards: getCards;
 // ```
 // If you need to use `getSearch()`/`getCards()` in something that is not a Component, then
 // let's talk.
