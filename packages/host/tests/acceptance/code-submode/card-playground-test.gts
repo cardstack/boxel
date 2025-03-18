@@ -291,9 +291,6 @@ module('Acceptance | code-submode | card playground', function (hooks) {
 
   test('can populate instance chooser dropdown options from recent files', async function (assert) {
     removeRecentFiles();
-    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
-    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-
     setRecentFiles([
       [testRealmURL, 'BlogPost/mad-hatter.json'],
       [testRealmURL, 'Category/future-tech.json'],
@@ -302,6 +299,9 @@ module('Acceptance | code-submode | card playground', function (hooks) {
       [testRealmURL, 'BlogPost/urban-living.json'],
       [testRealmURL, 'Author/jane-doe.json'],
     ]);
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+
     await click('[data-test-instance-chooser]');
     assert
       .dom('[data-option-index] [data-test-category-fitted]')

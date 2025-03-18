@@ -42,6 +42,9 @@ export default class Index extends Route<void> {
   didMatrixServiceStart = false;
 
   async fetchCard(url: string) {
+    // TODO this seems dubious. I don't think we want a CardResource at this
+    // layer. Refactor this out as part of refactoring out the
+    // CardResource.loaded promise.
     let resource = getCard(this, () => url);
     await resource.loaded;
     if (resource.cardError) {

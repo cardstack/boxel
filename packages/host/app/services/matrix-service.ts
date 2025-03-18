@@ -705,7 +705,7 @@ export default class MatrixService extends Service {
       const command = new Command(this.commandService.commandContext);
       const name = commandDef.functionName;
       commandDefinitionSchemas.push({
-        codeRef: commandDef.codeRef,
+        codeRef: absoluteCodeRef,
         tool: {
           type: 'function',
           function: {
@@ -991,6 +991,8 @@ export default class MatrixService extends Service {
 
     return await Promise.all(
       defaultSkills.map(async (skillCardURL) => {
+        // WARNING This card is not part of the identity map!
+        // TODO refactor this to use CardResource (please make ticket)
         return await this.cardService.getCard<SkillCard>(skillCardURL);
       }),
     );
@@ -1598,9 +1600,10 @@ export default class MatrixService extends Service {
 
     if (
       event.type === 'm.room.message' &&
-      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length
+      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
+      event.content?.isStreamingFinished
     ) {
-      this.commandService.executeCommandEventsIfNeeded(event);
+      this.commandService.queueEventForCommandProcessing(event);
     }
   }
 

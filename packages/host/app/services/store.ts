@@ -11,8 +11,11 @@ import {
   hasExecutableExtension,
   isCardInstance,
   isSingleCardDocument,
+  type AutoSaveState,
   type SingleCardDocument,
   type LooseSingleCardDocument,
+  type CardErrorJSONAPI as CardError,
+  type CardErrorsJSONAPI as CardErrors,
 } from '@cardstack/runtime-common';
 
 import {
@@ -31,6 +34,8 @@ import type MessageService from './message-service';
 import type RealmService from './realm';
 
 import type { CardResource } from '../resources/card-resource';
+
+export { CardError };
 
 class ResettableIdentityContext implements IdentityContext {
   #cards = new Map<
@@ -56,30 +61,6 @@ class ResettableIdentityContext implements IdentityContext {
   }
 }
 
-interface CardErrors {
-  errors: {
-    id?: string; // 404 errors won't necessarily have an id
-    status: number;
-    title: string;
-    message: string;
-    realm: string | undefined;
-    meta: {
-      lastKnownGoodHtml: string | null;
-      cardTitle: string | null;
-      scopedCssUrls: string[];
-      stack: string | null;
-    };
-  }[];
-}
-
-export type CardError = CardErrors['errors'][0];
-type AutoSaveState = {
-  isSaving: boolean;
-  hasUnsavedChanges: boolean;
-  lastSaved: number | undefined;
-  lastSaveError: Error | undefined;
-  lastSavedErrorMsg: string | undefined;
-};
 export default class StoreService extends Service {
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
@@ -202,7 +183,7 @@ export default class StoreService extends Service {
       subscriber.resources.push({
         resourceState: {
           resource,
-          onCardChange: resource.isAutoSave
+          onCardChange: resource.isAutoSaved
             ? () => {
                 if (card) {
                   // Using the card ID instead, so this function doesn't need to be updated
@@ -258,7 +239,6 @@ export default class StoreService extends Service {
       if (subscriber) {
         let liveCard = this.identityContext.get(invalidation);
         if (liveCard) {
-          // TODO Add test in CS-8015
           // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
           // the inputs with past values. This can happen if the user makes edits in the time between the auto
           // save request and the arrival SSE event.

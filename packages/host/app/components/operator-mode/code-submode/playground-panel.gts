@@ -2,13 +2,17 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+
 import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import Folder from '@cardstack/boxel-icons/folder';
 import { task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
+
+import { consume } from 'ember-provide-consume-context';
 
 import {
   AddButton,
@@ -32,12 +36,14 @@ import {
   internalKeyFor,
   loadCard,
   specRef,
+  GetCardContextName,
+  type getCard,
   type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import consumeContext from '@cardstack/host/modifiers/consume-context';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -381,7 +387,10 @@ interface PlaygroundContentSignature {
 }
 class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   <template>
-    <div class='playground-panel-content'>
+    <div
+      class='playground-panel-content'
+      {{consumeContext consume=this.makeCardResource}}
+    >
       <div class='instance-chooser-container'>
         <InstanceSelectDropdown
           @query={{this.query}}
@@ -484,7 +493,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     </style>
   </template>
 
-  fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -492,17 +502,28 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
   @service private declare realmServer: RealmServerService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
-  @tracked newCardJSON: LooseSingleCardDocument | undefined;
-  @tracked fieldChooserIsOpen = false;
+  @tracked private newCardJSON: LooseSingleCardDocument | undefined;
+  @tracked private fieldChooserIsOpen = false;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  get recentCardIds() {
+  private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
+
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(
+      this,
+      () => this.newCardJSON ?? this.playgroundSelection?.cardId,
+      { isAutoSaved: true },
+    );
+  };
+
+  private get recentCardIds() {
     return this.recentFilesService.recentFiles
       .map((f) => `${f.realmURL}${f.filePath}`)
       .filter((id) => id.endsWith('.json'))
       .map((id) => id.slice(0, -1 * '.json'.length));
   }
 
-  get recentRealms() {
+  private get recentRealms() {
     return [
       ...new Set(
         this.recentFilesService.recentFiles.map((f) => f.realmURL.href),
@@ -510,7 +531,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     ];
   }
 
-  get query(): Query {
+  private get query(): Query {
     if (this.args.isFieldDef) {
       // TODO
     }
@@ -539,14 +560,8 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
     return this.playgroundPanelService.getSelection(this.args.moduleId);
   }
 
-  private cardResource = getCard(
-    this,
-    () => this.newCardJSON ?? this.playgroundSelection?.cardId,
-    { isAutoSave: () => true },
-  );
-
   private get card(): CardDef | undefined {
-    return this.cardResource.card;
+    return this.cardResource?.card;
   }
 
   private get defaultFormat() {
@@ -732,7 +747,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
         },
       },
     };
-    await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+    await this.cardResource?.loaded; // TODO: remove await when card-resource is refactored
     if (this.card) {
       this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
       this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
@@ -756,7 +771,7 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
           },
         },
       };
-      await this.cardResource.loaded; // TODO: remove await when card-resource is refactored
+      await this.cardResource?.loaded; // TODO: remove await when card-resource is refactored
       if (this.card) {
         this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
       }
@@ -833,11 +848,11 @@ export default class PlaygroundPanel extends Component<Signature> {
     </style>
   </template>
 
-  get moduleId() {
+  private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
   }
 
-  get isLoading() {
+  private get isLoading() {
     // TODO: improve live updating UX for fields
     return (
       this.args.isLoadingNewModule ||

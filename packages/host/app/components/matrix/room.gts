@@ -16,6 +16,7 @@ import {
 } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { consume } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import max from 'lodash/max';
 
@@ -30,7 +31,12 @@ import { v4 as uuidv4 } from 'uuid';
 import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq, not, or } from '@cardstack/boxel-ui/helpers';
 
-import { ResolvedCodeRef, internalKeyFor } from '@cardstack/runtime-common';
+import {
+  type getCard,
+  GetCardContextName,
+  ResolvedCodeRef,
+  internalKeyFor,
+} from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
@@ -38,7 +44,6 @@ import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { getCard } from '@cardstack/host/resources/card-resource';
 import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -233,6 +238,8 @@ export default class Room extends Component<Signature> {
     </style>
   </template>
 
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
@@ -355,7 +362,7 @@ export default class Room extends Component<Signature> {
     });
 
     (async () => {
-      let cardResource = getCard(this, () => {
+      let cardResource = this.getCard(this, () => {
         if (!this.args.selectedCardRef) {
           return;
         }
@@ -624,7 +631,7 @@ export default class Room extends Component<Signature> {
     }
     let myLastMessage = myMessages[myMessages.length - 1];
 
-    let attachedCards = (myLastMessage!.attachedResources || [])
+    let attachedCards = (myLastMessage!.attachedResources(this) || [])
       .map((resource) => resource.card)
       .filter((card) => card !== undefined) as CardDef[];
 

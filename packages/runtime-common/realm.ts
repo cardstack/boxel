@@ -36,7 +36,6 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
-  type ResolvedCodeRef,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -46,6 +45,7 @@ import {
   readFileAsText,
   getFileWithFallbacks,
   waitForClose,
+  writeToStream,
   type TextFileRef,
 } from './stream';
 import { transpileJS } from './transpile';
@@ -59,7 +59,7 @@ import {
   SupportedMimeType,
   lookupRouteTable,
 } from './router';
-import { assertQuery, parseQuery } from './query';
+import { InvalidQueryError, assertQuery, parseQuery } from './query';
 import type { Readable } from 'stream';
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -228,6 +228,8 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
 
+  #disableMatrixRealmEvents = false;
+
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -248,6 +250,7 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
+      disableMatrixRealmEvents,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -256,6 +259,7 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
+      disableMatrixRealmEvents?: boolean;
     },
     opts?: Options,
   ) {
@@ -287,6 +291,12 @@ export class Realm {
     // TODO: remove after running in all environments; CS-7875
     this.backfillRetentionPolicies();
 
+    this.#disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
+    console.log(
+      `disableMatrixRealmEvents for realm url ${url}`,
+      this.#disableMatrixRealmEvents,
+    );
+
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
 
@@ -316,7 +326,13 @@ export class Realm {
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .get('/_mtimes', SupportedMimeType.Mtimes, this.realmMtimes.bind(this))
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
+      .query('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
+        '/_search-prerendered',
+        SupportedMimeType.CardJson,
+        this.searchPrerendered.bind(this),
+      )
+      .query(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
@@ -665,6 +681,18 @@ export class Realm {
     let redirectResponse = this.rootRealmRedirect(request);
     if (redirectResponse) {
       return redirectResponse;
+    }
+
+    if (
+      request.method === 'POST' &&
+      request.headers.get('X-HTTP-Method-Override') === 'QUERY'
+    ) {
+      request = new Request(request.url, {
+        method: 'QUERY',
+        headers: request.headers,
+        body: await request.clone().text(),
+      });
+      request.headers.delete('X-HTTP-Method-Override');
     }
 
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
@@ -1563,9 +1591,37 @@ export class Realm {
     let useWorkInProgressIndex = Boolean(
       request.headers.get('X-Boxel-Building-Index'),
     );
+    let cardsQuery;
+    if (request.method === 'QUERY') {
+      cardsQuery = await request.json();
+    } else {
+      cardsQuery = parseQuery(new URL(request.url).search.slice(1));
+    }
 
-    let cardsQuery = parseQuery(new URL(request.url).search.slice(1));
-    assertQuery(cardsQuery);
+    try {
+      assertQuery(cardsQuery);
+    } catch (e) {
+      if (e instanceof InvalidQueryError) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '400',
+                title: 'Invalid Query',
+                message: `Invalid query: ${e.message}`,
+              },
+            ],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      // Re-throw other errors
+      throw e;
+    }
 
     let doc = await this.#realmIndexQueryEngine.search(cardsQuery, {
       loadLinks: true,
@@ -1588,29 +1644,76 @@ export class Realm {
       request.headers.get('X-Boxel-Building-Index'),
     );
 
-    let href = new URL(request.url).search.slice(1);
-    let parsedQueryString = parseQuery(href);
-    let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
-    let cardUrls = parsedQueryString.cardUrls as string[];
-    let renderType = parsedQueryString.renderType as ResolvedCodeRef;
+    let payload;
+    let htmlFormat;
+    let cardUrls;
+    let renderType;
+
+    // Handle QUERY method
+    if (request.method === 'QUERY') {
+      payload = await request.json();
+      htmlFormat = payload.prerenderedHtmlFormat;
+      cardUrls = payload.cardUrls;
+      renderType = payload.renderType;
+    } else {
+      // Handle GET method (existing logic)
+      let href = new URL(request.url).search.slice(1);
+      payload = parseQuery(href);
+      htmlFormat = payload.prerenderedHtmlFormat;
+      cardUrls = payload.cardUrls;
+      renderType = payload.renderType;
+    }
 
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
-      return badRequest(
-        JSON.stringify({
+      return createResponse({
+        body: JSON.stringify({
           errors: [
-            `Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint.`,
+            {
+              status: '400',
+              title: 'Bad Request',
+              message:
+                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+            },
           ],
         }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
         requestContext,
-      );
+      });
     }
-    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
-    delete parsedQueryString.prerenderedHtmlFormat;
-    delete parsedQueryString.cardUrls;
-    delete parsedQueryString.renderType;
 
-    let cardsQuery = parsedQueryString;
-    assertQuery(parsedQueryString);
+    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
+    delete payload.prerenderedHtmlFormat;
+    delete payload.cardUrls;
+    delete payload.renderType;
+
+    let cardsQuery = payload;
+
+    try {
+      assertQuery(cardsQuery);
+    } catch (e) {
+      if (e instanceof InvalidQueryError) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '400',
+                title: 'Invalid Query',
+                message: `Invalid query: ${e.message}`,
+              },
+            ],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      throw e;
+    }
 
     let results = await this.#realmIndexQueryEngine.searchPrerendered(
       cardsQuery,
@@ -1959,8 +2062,30 @@ export class Realm {
     });
   }
 
+  private async sendServerEvent(event: Partial<MessageEvent>): Promise<void> {
+    this.#log.info(
+      `sending updates to ${this.listeningClients.length} clients`,
+    );
+    let { type, data } = event;
+    let chunkArr = [];
+    for (let item in data) {
+      chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
+    }
+    let chunk = sseToChunkData(type!, `{${chunkArr.join(', ')}}`);
+    await Promise.allSettled(
+      this.listeningClients.map((client) => writeToStream(client, chunk)),
+    );
+  }
+
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
+    if (this.#disableMatrixRealmEvents) {
+      this.sendServerEvent({
+        type: 'realm-event',
+        data: event,
+      });
+    } else {
+      this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
+    }
   }
 
   private async createRequestContext(): Promise<RequestContext> {
@@ -2083,4 +2208,12 @@ function assertRealmPermissions(
       }
     }
   }
+}
+
+function sseToChunkData(type: string, data: string, id?: string): string {
+  let info = [`event: ${type}`, `data: ${data}`];
+  if (id) {
+    info.push(`id: ${id}`);
+  }
+  return info.join('\n') + '\n\n';
 }

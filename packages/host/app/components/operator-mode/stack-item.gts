@@ -21,7 +21,7 @@ import {
 } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
-import { provide } from 'ember-provide-consume-context';
+import { provide, consume } from 'ember-provide-consume-context';
 
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -38,9 +38,13 @@ import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 import {
   type Actions,
   type Permissions,
+  type getCard,
+  type getCards,
   cardTypeDisplayName,
   PermissionsContextName,
   RealmURLContextName,
+  GetCardContextName,
+  GetCardsContextName,
   Deferred,
   cardTypeIcon,
   CommandContext,
@@ -48,21 +52,18 @@ import {
 
 import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
 
-import type {
-  CardContext,
-  CardDef,
-  Format,
-  FieldType,
-} from 'https://cardstack.com/base/card-api';
+import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import { htmlComponent } from '../../lib/html-component';
-import ElementTracker from '../../resources/element-tracker';
+import ElementTracker, {
+  type RenderedCardForOverlayActions,
+} from '../../resources/element-tracker';
 import Preview from '../preview';
 
 import CardError from './card-error';
 import CardErrorDetail from './card-error-detail';
 
-import OperatorModeOverlays from './overlays';
+import OperatorModeOverlays from './operator-mode-overlays';
 
 import type CardService from '../../services/card-service';
 import type EnvironmentService from '../../services/environment-service';
@@ -102,17 +103,17 @@ interface Signature {
 
 export type CardDefOrId = CardDef | string;
 
-export interface RenderedCardForOverlayActions {
-  element: HTMLElement;
-  cardDefOrId: CardDefOrId;
-  fieldType: FieldType | undefined;
-  fieldName: string | undefined;
-  format: Format | 'data';
+export interface StackItemRenderedCardForOverlayActions
+  extends RenderedCardForOverlayActions {
   stackItem: StackItem;
-  overlayZIndexStyle?: SafeString;
 }
 
+type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
+
 export default class OperatorModeStackItem extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -141,13 +142,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.card[api.realmURL];
   }
 
-  cardTracker = new ElementTracker<{
-    cardId?: string;
-    card?: CardDef;
-    format: Format | 'data';
-    fieldType: FieldType | undefined;
-    fieldName: string | undefined;
-  }>();
+  cardTracker = new ElementTracker();
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
@@ -160,21 +155,18 @@ export default class OperatorModeStackItem extends Component<Signature> {
     });
   }
 
-  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
-    return this.cardTracker.elements
-      .filter((entry) => {
-        return (
-          entry.meta.format === 'data' ||
-          entry.meta.fieldType === 'linksTo' ||
-          entry.meta.fieldType === 'linksToMany'
-        );
-      })
+  private get renderedCardsForOverlayActions(): StackItemRenderedCardForOverlayActions[] {
+    return this.cardTracker
+      .filter(
+        [
+          { format: 'data' },
+          { fieldType: 'linksTo' },
+          { fieldType: 'linksToMany' },
+        ],
+        'or',
+      )
       .map((entry) => ({
-        element: entry.element,
-        cardDefOrId: entry.meta.card || entry.meta.cardId!,
-        fieldType: entry.meta.fieldType,
-        fieldName: entry.meta.fieldName,
-        format: entry.meta.format,
+        ...entry,
         stackItem: this.args.item,
       }));
   }
@@ -230,14 +222,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried;
   }
 
-  private get cardContext(): Omit<
-    CardContext,
-    'prerenderedCardSearchComponent'
-  > {
+  private get cardContext(): StackItemCardContext {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
       actions: this.args.publicAPI,
       commandContext: this.args.commandContext,
+      getCard: this.getCard,
+      getCards: this.getCards,
     };
   }
 

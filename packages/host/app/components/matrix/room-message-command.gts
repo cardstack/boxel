@@ -166,7 +166,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
     let showCardCommand = new ShowCardCommand(commandContext);
     await showCardCommand.execute({
-      cardToShow: newCard,
+      cardIdToShow: newCard.id,
     });
   }
 

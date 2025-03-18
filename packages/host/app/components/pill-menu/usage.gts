@@ -6,13 +6,19 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+import { consume } from 'ember-provide-consume-context';
 import { TrackedObject } from 'tracked-built-ins';
 
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import { baseRealm, getPlural } from '@cardstack/runtime-common';
+import {
+  type getCard,
+  GetCardContextName,
+  baseRealm,
+  getPlural,
+} from '@cardstack/runtime-common';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import consumeContext from '@cardstack/host/modifiers/consume-context';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -28,22 +34,28 @@ const sampleCardURLs = [
 ];
 
 export default class PillMenuUsage extends Component {
-  headerIconURL = headerIcon;
-  resources = sampleCardURLs.map((url) =>
-    getCard(this, () => url, {
-      isLive: () => false,
-    }),
-  );
-  @tracked title = 'Pill Menu';
-  @tracked isExpandableHeader = false;
-  @tracked items: PillMenuItem[] = [];
-  @tracked itemDisplayName = 'Card';
-  @tracked canAttachCard = false;
+  @consume(GetCardContextName) private declare getCard: getCard;
+
+  @tracked private title = 'Pill Menu';
+  @tracked private isExpandableHeader = false;
+  @tracked private items: PillMenuItem[] = [];
+  @tracked private itemDisplayName = 'Card';
+  @tracked private canAttachCard = false;
+  @tracked private resources: ReturnType<getCard>[] = [];
+  private headerIconURL = headerIcon;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
     this.attachSampleCards.perform();
   }
+
+  private makeCardResources = () => {
+    this.resources = sampleCardURLs.map((url) =>
+      this.getCard(this, () => url, {
+        isLive: false,
+      }),
+    );
+  };
 
   private attachSampleCards = restartableTask(async () => {
     let cards: CardDef[] = [];
@@ -69,20 +81,23 @@ export default class PillMenuUsage extends Component {
     return this.items.filter((item) => item.isActive);
   }
 
-  @action headerAction() {
+  @action private headerAction() {
     console.log('Header button clicked');
   }
 
-  @action onChooseCard(card: CardDef) {
+  @action private onChooseCard(card: CardDef) {
     this.items = [...this.items, new TrackedObject({ card, isActive: true })];
   }
 
-  @action onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {
+  @action private onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {
     item.isActive = isActive;
   }
 
   <template>
-    <FreestyleUsage @name='PillMenu'>
+    <FreestyleUsage
+      @name='PillMenu'
+      {{consumeContext consume=this.makeCardResources}}
+    >
       <:description>
         Component with a header and a list of card pills.
       </:description>

@@ -126,7 +126,11 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   });
   virtualNetwork.shimModule('lodash', lodash);
   virtualNetwork.shimModule('date-fns', dateFns);
-  virtualNetwork.shimModule('ember-resources', { Resource: class {} });
+  virtualNetwork.shimModule('ember-resources', {
+    Resource: class {},
+    use() {},
+    resource() {},
+  });
   virtualNetwork.shimModule('@ember/destroyable', {});
   virtualNetwork.shimModule('marked', { marked: () => {} });
   virtualNetwork.shimModule('ethers', ethers);

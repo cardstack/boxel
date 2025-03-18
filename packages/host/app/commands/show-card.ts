@@ -31,7 +31,7 @@ export default class ShowCardCommand extends HostBaseCommand<
       1,
     );
     let newStackItem = await this.operatorModeStateService.createStackItem(
-      new URL(input.cardToShow.id),
+      new URL(input.cardIdToShow),
       newStackIndex,
     );
     this.operatorModeStateService.addItemToStack(newStackItem);

@@ -327,7 +327,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
 
       let showCardCommand = new ShowCardCommand(commandContext);
       await showCardCommand.execute({
-        cardToShow: myAppCard,
+        cardIdToShow: myAppCard.id,
       });
 
       if (!myAppCard) {
