@@ -27,7 +27,7 @@ import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-resource:search-waiter');
 
-interface Args {
+export interface Args {
   named: {
     query: Query | undefined;
     realms: string[] | undefined;
@@ -42,9 +42,7 @@ export class SearchResource extends Resource<Args> {
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @tracked private realmsToSearch: string[] = [];
-  // This is deprecated. consumers of this resource need to be reactive such
-  // that they can deal with a resource that doesn't have a search results yet.
-  loaded: Promise<void> | undefined;
+  private loaded: Promise<void> | undefined; // This should _always_ be private--do not make this public
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   // declare private store: StoreService;
   private _instances = new TrackedArray<CardDef>();

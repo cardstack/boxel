@@ -298,8 +298,6 @@ export type getCards = (
   instances: CardDef[];
   instancesByRealm: { realm: string; cards: CardDef[] }[];
   isLoading: boolean;
-  // TODO remove this
-  loaded: Promise<void>;
 };
 
 export interface CardCatalogQuery extends Query {
