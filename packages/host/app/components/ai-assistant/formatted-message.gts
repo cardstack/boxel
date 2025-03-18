@@ -108,10 +108,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     return searchReplaceRegex.test(code);
   };
 
-  private codePatchDataValid = (codePatch: string, fileUrl?: string | null) => {
-    return this.isCodePatch(codePatch) && fileUrl && fileUrl.trim() !== '';
-  };
-
   private fileUrlIsPresent = (fileUrl?: string | null): fileUrl is string => {
     return typeof fileUrl === 'string' && fileUrl.trim() !== '';
   };
