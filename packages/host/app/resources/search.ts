@@ -44,7 +44,6 @@ export class SearchResource extends Resource<Args> {
   @tracked private realmsToSearch: string[] = [];
   private loaded: Promise<void> | undefined; // This should _always_ be private--do not make this public
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
-  // declare private store: StoreService;
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
   #isAutoSaved = false;
@@ -178,7 +177,7 @@ export class SearchResource extends Resource<Args> {
       // Please note 3 things there:
       // 1. we are mutating this._instances, not replacing it
       // 2. the items in this array come from an identity map, so we are never
-      //    recreating an instance that already exist.
+      //    recreating an instance that already exists.
       // 3. The ordering of the results is important, we need to retain that.
       //
       //  As such, removing all the items in-place in our tracked
