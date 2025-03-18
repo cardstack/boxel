@@ -284,25 +284,11 @@ interface PlaygroundPreviewSignature {
 }
 const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
   <template>
-    {{#if @isFieldDef}}
-      <CardContainer class='preview-container full-height-preview'>
-        <CardHeader
-          class='preview-header'
-          @cardTypeDisplayName={{cardTypeDisplayName @card}}
-          @cardTypeIcon={{cardTypeIcon @card}}
-          @realmInfo={{@realmInfo}}
-          @onEdit={{@onEdit}}
-          @onFinishEditing={{@onFinishEditing}}
-          @isTopCard={{true}}
-          data-test-field-preview-header
-        />
-        <CardContainer class='field-preview-card' data-test-field-preview-card>
-          <Preview @card={{@card}} @format={{@format}} />
-        </CardContainer>
-      </CardContainer>
-    {{else}}
-      {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
-        <CardContainer class='preview-container full-height-preview'>
+    {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
+      <CardContainer
+        class={{if @isFieldDef 'field-preview-container' 'full-height-preview'}}
+      >
+        {{#unless @isFieldDef}}
           <CardHeader
             class='preview-header'
             @cardTypeDisplayName={{cardTypeDisplayName @card}}
@@ -313,27 +299,29 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
             @isTopCard={{true}}
             @moreOptionsMenuItems={{@contextMenuItems}}
           />
-          <Preview class='preview' @card={{@card}} @format={{@format}} />
-        </CardContainer>
-      {{else if (eq @format 'embedded')}}
-        <CardContainer class='preview-container'>
-          <Preview class='preview' @card={{@card}} @format={{@format}} />
-        </CardContainer>
-      {{else if (eq @format 'atom')}}
-        <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum
-          dolor sit amet, consectetur adipiscing elit, sed do
-          <Preview
-            class='atom-preview'
-            @card={{@card}}
-            @format={{@format}}
-            @displayContainer={{false}}
-          />
-          tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
-          veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex
-          ea commodo consequat.</div>
-      {{else if (eq @format 'fitted')}}
-        <FittedFormatGallery @card={{@card}} @isDarkMode={{true}} />
-      {{/if}}
+        {{/unless}}
+        <Preview class='preview' @card={{@card}} @format={{@format}} />
+      </CardContainer>
+    {{else if (eq @format 'embedded')}}
+      <CardContainer
+        class={{if @isFieldDef 'field-preview-container' 'preview-container'}}
+      >
+        <Preview class='preview' @card={{@card}} @format={{@format}} />
+      </CardContainer>
+    {{else if (eq @format 'atom')}}
+      <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum
+        dolor sit amet, consectetur adipiscing elit, sed do
+        <Preview
+          class='atom-preview'
+          @card={{@card}}
+          @format={{@format}}
+          @displayContainer={{false}}
+        />
+        tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+        veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+        commodo consequat.</div>
+    {{else if (eq @format 'fitted')}}
+      <FittedFormatGallery @card={{@card}} @isDarkMode={{true}} />
     {{/if}}
 
     <style scoped>
@@ -352,7 +340,8 @@ const PlaygroundPreview: TemplateOnlyComponent<PlaygroundPreviewSignature> =
       .preview-header:not(.is-editing) {
         background-color: var(--boxel-100);
       }
-      .field-preview-card {
+      .field-preview-container {
+        height: auto;
         padding: var(--boxel-sp);
       }
       .preview {
@@ -404,7 +393,10 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
       </div>
       {{#let (if @isFieldDef this.field this.card) as |card|}}
         {{#if card}}
-          <div class='preview-area'>
+          <div
+            class='preview-area'
+            data-test-field-preview-card={{@isFieldDef}}
+          >
             <PlaygroundPreview
               @card={{card}}
               @format={{this.format}}
@@ -811,7 +803,6 @@ class PlaygroundPanelContent extends Component<PlaygroundContentSignature> {
 interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
-    isLoadingNewModule?: boolean;
     isFieldDef?: boolean;
     isUpdating?: boolean;
   };
@@ -854,9 +845,6 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private get isLoading() {
     // TODO: improve live updating UX for fields
-    return (
-      this.args.isLoadingNewModule ||
-      (this.args.isFieldDef && this.args.isUpdating)
-    );
+    return this.args.isFieldDef && this.args.isUpdating;
   }
 }
