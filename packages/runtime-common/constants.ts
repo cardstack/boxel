@@ -27,6 +27,8 @@ export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
 export const DefaultFormatsContextName = 'default-format-context';
+export const GetCardContextName = 'get-card-context';
+export const GetCardsContextName = 'get-cards-context';
 
 export const PermissionsContextName = 'permissions-context';
 

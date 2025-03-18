@@ -33,6 +33,8 @@ import {
   humanReadable,
   maybeURL,
   maybeRelativeURL,
+  CodeRef,
+  CommandContext,
   type Meta,
   type CardFields,
   type Relationship,
@@ -42,9 +44,9 @@ import {
   type CardResource,
   type Actions,
   type CardResourceMeta,
-  CodeRef,
-  CommandContext,
   type ResolvedCodeRef,
+  type getCard,
+  type getCards,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -130,7 +132,7 @@ interface NotLoadedValue {
   reference: string;
 }
 
-export interface CardContext {
+export interface CardContext<T extends CardDef = CardDef> {
   actions?: Actions;
   commandContext?: CommandContext;
   cardComponentModifier?: typeof Modifier<{
@@ -145,6 +147,8 @@ export interface CardContext {
     };
   }>;
   prerenderedCardSearchComponent: any;
+  getCard: getCard<T>;
+  getCards: getCards;
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {
