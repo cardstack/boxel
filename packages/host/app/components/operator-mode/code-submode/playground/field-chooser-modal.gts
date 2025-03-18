@@ -7,10 +7,10 @@ import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import type { FieldDef } from 'https://cardstack.com/base/card-api';
+import ModalContainer from '@cardstack/host/components/modal-container';
+import Preview from '@cardstack/host/components/preview';
 
-import ModalContainer from '../modal-container';
-import Preview from '../preview';
+import type { FieldDef } from 'https://cardstack.com/base/card-api';
 
 interface Signature {
   Args: {
