@@ -210,6 +210,7 @@ class CodeBlockEditor extends Component<Signature> {
         margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
         margin-left: calc(-1 * var(--boxel-sp));
+        height: 120px;
       }
     </style>
     <div
@@ -220,7 +221,6 @@ class CodeBlockEditor extends Component<Signature> {
         language=@language
       }}
       class='code-block'
-      style='height: 120px;'
       data-test-editor
       data-test-percy-hide
     >
