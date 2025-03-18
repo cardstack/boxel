@@ -4,6 +4,7 @@ import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, timeout, task } from 'ember-concurrency';
@@ -20,16 +21,48 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
+import { TemplateOnlyComponent } from '@ember/component/template-only';
+interface CopyCodeButtonSignature {
+  Args: {};
+}
+
+interface ApplyCodePatchButtonSignature {
+  Args: {
+    codePatch: string;
+    fileUrl: string;
+  };
+}
+
+interface CodeBlockActionsSignature {
+  Args: {};
+  Blocks: {
+    default: [
+      {
+        copyCode: ComponentLike<CopyCodeButtonSignature>;
+        applyCodePatch: ComponentLike<ApplyCodePatchButtonSignature>;
+      },
+    ];
+  };
+  actions: [];
+}
+
+interface CodeBlockEditorSignature {
+  Args: {};
+}
+
 interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
     code: string;
     language: string;
-    applyCodePatch: () => void;
-    isStreaming: boolean;
   };
   Blocks: {
-    default: [];
+    default: [
+      {
+        editor: ComponentLike<CodeBlockEditorSignature>;
+        actions: ComponentLike<CodeBlockActionsSignature>;
+      },
+    ];
   };
   Element: HTMLElement;
 }
@@ -50,13 +83,9 @@ export default class CodeBlock extends Component<Signature> {
     {{yield
       (hash
         editor=(component
-          CodeBlockEditor
-          monacoSDK=@monacoSDK
-          editorDisplayOptions=this.editorDisplayOptions
-          code=@code
-          language=@language
+          CodeBlockEditor monacoSDK=@monacoSDK code=@code language=@language
         )
-        actions=(component CodeBlockActions code=@code)
+        actions=(component CodeBlockActionsComponent code=@code)
       )
     }}
 
@@ -238,7 +267,7 @@ class CodeBlockEditor extends Component<Signature> {
   </template>
 }
 
-class CodeBlockActions extends Component<Signature> {
+let CodeBlockActionsComponent: TemplateOnlyComponent<Signature> = class CodeBlockActions extends Component<Signature> {
   <template>
     <div class='code-block-actions'>
       {{yield
@@ -249,7 +278,7 @@ class CodeBlockActions extends Component<Signature> {
       }}
     </div>
   </template>
-}
+};
 
 class CopyCodeButton extends Component<Signature> {
   @tracked copyCodeButtonText: 'Copy' | 'Copied!' = 'Copy';

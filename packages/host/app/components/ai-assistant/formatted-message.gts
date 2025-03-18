@@ -108,6 +108,10 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     return searchReplaceRegex.test(code);
   };
 
+  private codePatchDataValid = (codePatch: string, fileUrl?: string | null) => {
+    return this.isCodePatch(codePatch) && fileUrl && fileUrl.trim() !== '';
+  };
+
   <template>
     {{#if @renderCodeBlocks}}
       <div
@@ -140,9 +144,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
               >
                 <codeBlock.actions as |actions|>
                   <actions.copyCode />
-                  {{#if (this.isCodePatch codeData.content)}}
+                  {{#if
+                    (this.codePatchDataValid codeData.content codeData.fileUrl)
+                  }}
                     <actions.applyCodePatch
                       @codePatch={{codeData.content}}
+                      {{! @glint-ignore  glint complains about mandatory fileUrl being null but it's not since we check for it in this.codePatchDataValid }}
                       @fileUrl={{codeData.fileUrl}}
                     />
                   {{/if}}
