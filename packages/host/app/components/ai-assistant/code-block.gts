@@ -24,7 +24,9 @@ import ApplyButton from '../ai-assistant/apply-button';
 
 import type { ComponentLike } from '@glint/template';
 interface CopyCodeButtonSignature {
-  Args: {};
+  Args: {
+    code?: string;
+  };
 }
 
 interface ApplyCodePatchButtonSignature {
@@ -35,7 +37,9 @@ interface ApplyCodePatchButtonSignature {
 }
 
 interface CodeBlockActionsSignature {
-  Args: {};
+  Args: {
+    code?: string;
+  };
   Blocks: {
     default: [
       {
@@ -270,7 +274,7 @@ class CodeBlockEditor extends Component<Signature> {
   </template>
 }
 
-let CodeBlockActionsComponent: TemplateOnlyComponent<Signature> = class CodeBlockActions extends Component<Signature> {
+let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> =
   <template>
     <div class='code-block-actions'>
       {{yield
@@ -280,10 +284,9 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<Signature> = class CodeBloc
         )
       }}
     </div>
-  </template>
-};
+  </template>;
 
-class CopyCodeButton extends Component<Signature> {
+class CopyCodeButton extends Component<CopyCodeButtonSignature> {
   @tracked copyCodeButtonText: 'Copy' | 'Copied!' = 'Copy';
 
   copyCode = restartableTask(async (code: string) => {
@@ -313,7 +316,7 @@ class CopyCodeButton extends Component<Signature> {
   </template>
 }
 
-class ApplyCodePatchButton extends Component<Signature> {
+class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
   @service private declare cardService: CardService;

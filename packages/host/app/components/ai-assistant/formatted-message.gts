@@ -112,6 +112,10 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     return this.isCodePatch(codePatch) && fileUrl && fileUrl.trim() !== '';
   };
 
+  private fileUrlIsPresent = (fileUrl?: string | null): fileUrl is string => {
+    return typeof fileUrl === 'string' && fileUrl.trim() !== '';
+  };
+
   <template>
     {{#if @renderCodeBlocks}}
       <div
@@ -145,11 +149,14 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                 <codeBlock.actions as |actions|>
                   <actions.copyCode />
                   {{#if
-                    (this.codePatchDataValid codeData.content codeData.fileUrl)
+                    (and
+                      (this.isCodePatch codeData.content)
+                      (this.fileUrlIsPresent codeData.fileUrl)
+                    )
                   }}
                     <actions.applyCodePatch
                       @codePatch={{codeData.content}}
-                      {{! @glint-ignore  glint complains about mandatory fileUrl being null but it's not since we check for it in this.codePatchDataValid }}
+                      {{! @glint-ignore -- we know fileUrl is string here due to fileUrlIsPresent type guard }}
                       @fileUrl={{codeData.fileUrl}}
                     />
                   {{/if}}
