@@ -306,12 +306,6 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
     test('accessing property of card in getter should not cause re-render of the component', async function (assert) {
       class SampleUsageWithGetCard extends CardDef {
         static displayName = 'SampleUsageWithGetCard';
-        @field name = contains(StringField);
-        @field title = contains(StringField, {
-          computeVia: function (this: SampleUsageWithGetCard) {
-            return this.name;
-          },
-        });
 
         static edit = class Edit extends Component<
           typeof SampleUsageWithGetCard
@@ -354,6 +348,7 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
           </template>
         },
       );
+      await this.pauseTest();
       assert.ok(true);
     });
   });
