@@ -667,7 +667,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
-    <div class='hidden' {{consumeContext consume=this.makeCardResource}}></div>
+    <div
+      class='item hidden'
+      {{consumeContext consume=this.makeCardResource}}
+    ></div>
     <PrerenderedCardSearch
       @query={{this.specQuery}}
       @format='fitted'
