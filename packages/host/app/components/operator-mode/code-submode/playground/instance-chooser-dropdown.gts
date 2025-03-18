@@ -149,7 +149,7 @@ interface Signature {
   Args: {
     prerenderedCardQuery?: { query: Query | undefined; realms: string[] };
     fieldOptions?: FieldOption[];
-    selection: { card?: CardDef; fieldIndex?: number };
+    selection: { card: CardDef; fieldIndex?: number } | undefined;
     onSelect: (item: PrerenderedCard | FieldOption) => void;
     chooseCard: () => void;
     createNew?: () => void;
@@ -172,7 +172,7 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
           class='instance-chooser'
           @dropdownClass='instances-dropdown-content'
           @options={{cards}}
-          @selected={{@selection.card}}
+          @selected={{findSelected @selection cards}}
           @selectedItemComponent={{if
             @selection
             (component SelectedItem title=(getItemTitle @selection))
@@ -202,7 +202,7 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       class='instance-chooser'
       @dropdownClass='instances-dropdown-content'
       @options={{@fieldOptions}}
-      @selected={{@selection}}
+      @selected={{findSelected @selection undefined @fieldOptions}}
       @selectedItemComponent={{if
         @selection
         (component SelectedItem title=(getItemTitle @selection))
@@ -265,5 +265,23 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
     }
   </style>
 </template>;
+
+function findSelected(
+  selection: { card: CardDef; fieldIndex?: number } | undefined,
+  cards: PrerenderedCard[] | undefined,
+  fields?: FieldOption[],
+) {
+  if (!selection || !selection.card) {
+    return;
+  }
+  if (cards) {
+    return cards.find(
+      (c) => c.url.replace(/\.json$/, '') === selection.card.id,
+    );
+  } else if (fields) {
+    return fields.find((f) => f.index === selection.fieldIndex);
+  }
+  return;
+}
 
 export default InstanceSelectDropdown;
