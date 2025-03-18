@@ -99,30 +99,4 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .dom('[data-test-ai-message-content] span.streaming-text')
       .includesText('Hello,');
   });
-
-  test('it escapes html code that is in code tags', async function (assert) {
-    let testScenario = await setupTestScenario(
-      true,
-      0,
-      0,
-      `
-\`\`\`typescript
-<template>
-  <h1>Hello, world!</h1>
-</template>
-\`\`\`
-`,
-    );
-    await renderRoomMessageComponent(testScenario);
-
-    let content = document.querySelector(
-      '[data-test-ai-message-content]',
-    )?.innerHTML;
-    assert.ok(
-      content?.includes(`&lt;template&gt;
-  &lt;h1&gt;Hello, world!&lt;/h1&gt;
-&lt;/template&gt;`),
-      'rendered code snippet in a streaming message should contain escaped HTML template so that we see code, not rendered html',
-    );
-  });
 });

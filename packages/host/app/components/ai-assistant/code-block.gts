@@ -261,6 +261,8 @@ class CodeBlockEditor extends Component<Signature> {
       }}
       class='code-block'
       style='height: 120px;'
+      data-test-editor
+      data-test-percy-hide
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
     </div>
@@ -294,6 +296,7 @@ class CopyCodeButton extends Component<Signature> {
     <button
       class='code-copy-button'
       {{on 'click' (fn (perform this.copyCode) @code)}}
+      data-test-copy-code
     >
       <CopyIcon
         width='16'
