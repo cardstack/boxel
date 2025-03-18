@@ -1,22 +1,32 @@
 import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { restartableTask, timeout, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import type CardService from '@cardstack/host/services/card-service';
+import CommandService from '@cardstack/host/services/command-service';
+import LoaderService from '@cardstack/host/services/loader-service';
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
+
+import ApplyButton from '../ai-assistant/apply-button';
 interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
     code: string;
     language: string;
+    applyCodePatch: () => void;
+    isStreaming: boolean;
   };
   Blocks: {
     default: [];
@@ -29,21 +39,7 @@ import type * as _MonacoSDK from 'monaco-editor';
 export default class CodeBlock extends Component<Signature> {
   @tracked copyCodeButtonText: 'Copy' | 'Copied!' = 'Copy';
 
-  private editorDisplayOptions: MonacoEditorOptions = {
-    wordWrap: 'on',
-    wrappingIndent: 'indent',
-    fontWeight: 'bold',
-    scrollbar: {
-      alwaysConsumeMouseWheel: false,
-    },
-    lineNumbers: 'off',
-    minimap: {
-      enabled: false,
-    },
-    readOnly: true,
-  };
-
-  private copyCode = restartableTask(async (code: string) => {
+  copyCode = restartableTask(async (code: string) => {
     this.copyCodeButtonText = 'Copied!';
     await navigator.clipboard.writeText(code);
     await timeout(1000);
@@ -51,35 +47,18 @@ export default class CodeBlock extends Component<Signature> {
   });
 
   <template>
-    <div class='code-block-actions'>
-      <button
-        class='code-copy-button'
-        {{on 'click' (fn (perform this.copyCode) @code)}}
-      >
-        <CopyIcon
-          width='16'
-          height='16'
-          role='presentation'
-          aria-hidden='true'
-          class='copy-icon'
-        />
-        <span
-          class='copy-text {{if this.copyCode.isRunning "shown"}}'
-        >{{this.copyCodeButtonText}}</span>
-      </button>
-    </div>
-    <div
-      {{MonacoEditor
-        monacoSDK=@monacoSDK
-        editorDisplayOptions=this.editorDisplayOptions
-        code=@code
-        language=@language
-      }}
-      class='code-block'
-      style='height: 120px;'
-    >
-      {{! Dont put anything here in this div as monaco modifier will override this element }}
-    </div>
+    {{yield
+      (hash
+        editor=(component
+          CodeBlockEditor
+          monacoSDK=@monacoSDK
+          editorDisplayOptions=this.editorDisplayOptions
+          code=@code
+          language=@language
+        )
+        actions=(component CodeBlockActions code=@code)
+      )
+    }}
 
     <style>
       .code-block,
@@ -96,6 +75,7 @@ export default class CodeBlock extends Component<Signature> {
         background: black;
         height: 50px;
         padding: var(--boxel-sp-sm) 27px;
+        padding-right: var(--boxel-sp);
         display: flex;
         justify-content: flex-start;
       }
@@ -225,4 +205,118 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
       }
     });
   }
+}
+
+class CodeBlockEditor extends Component<Signature> {
+  editorDisplayOptions: MonacoEditorOptions = {
+    wordWrap: 'on',
+    wrappingIndent: 'indent',
+    fontWeight: 'bold',
+    scrollbar: {
+      alwaysConsumeMouseWheel: false,
+    },
+    lineNumbers: 'off',
+    minimap: {
+      enabled: false,
+    },
+    readOnly: true,
+  };
+
+  <template>
+    <div
+      {{MonacoEditor
+        monacoSDK=@monacoSDK
+        editorDisplayOptions=this.editorDisplayOptions
+        code=@code
+        language=@language
+      }}
+      class='code-block'
+      style='height: 120px;'
+    >
+      {{! Don't put anything here in this div as monaco modifier will override this element }}
+    </div>
+  </template>
+}
+
+class CodeBlockActions extends Component<Signature> {
+  <template>
+    <div class='code-block-actions'>
+      {{yield
+        (hash
+          copyCode=(component CopyCodeButton code=@code)
+          applyCodePatch=(component ApplyCodePatchButton)
+        )
+      }}
+    </div>
+  </template>
+}
+
+class CopyCodeButton extends Component<Signature> {
+  @tracked copyCodeButtonText: 'Copy' | 'Copied!' = 'Copy';
+
+  copyCode = restartableTask(async (code: string) => {
+    this.copyCodeButtonText = 'Copied!';
+    await navigator.clipboard.writeText(code);
+    await timeout(1000);
+    this.copyCodeButtonText = 'Copy';
+  });
+
+  <template>
+    <button
+      class='code-copy-button'
+      {{on 'click' (fn (perform this.copyCode) @code)}}
+    >
+      <CopyIcon
+        width='16'
+        height='16'
+        role='presentation'
+        aria-hidden='true'
+        class='copy-icon'
+      />
+      <span
+        class='copy-text {{if this.copyCode.isRunning "shown"}}'
+      >{{this.copyCodeButtonText}}</span>
+    </button>
+  </template>
+}
+
+class ApplyCodePatchButton extends Component<Signature> {
+  @service private declare loaderService: LoaderService;
+  @service private declare commandService: CommandService;
+  @service private declare cardService: CardService;
+  @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
+    'ready';
+
+  private patchCodeTask = task(async (codePatch: string, fileUrl: string) => {
+    this.patchCodeTaskState = 'applying';
+    try {
+      let source = await this.cardService.getSource(new URL(fileUrl));
+
+      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+        this.commandService.commandContext,
+      );
+
+      let { resultContent: patchedCode } =
+        await applySearchReplaceBlockCommand.execute({
+          fileContent: source,
+          codeBlock: codePatch,
+        });
+
+      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
+      this.loaderService.reset();
+
+      this.patchCodeTaskState = 'applied';
+    } catch (error) {
+      console.error(error);
+      this.patchCodeTaskState = 'failed';
+    }
+  });
+
+  <template>
+    <ApplyButton
+      data-test-apply-code-button
+      @state={{this.patchCodeTaskState}}
+      {{on 'click' (fn (perform this.patchCodeTask) @codePatch @fileUrl)}}
+    />
+  </template>
 }

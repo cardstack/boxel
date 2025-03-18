@@ -55,7 +55,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   // parts of the message that haven't changed. Parts are: <pre> html code, and
   // non-<pre> html. <pre> gets special treatment because we will render it as a
   // (readonly) Monaco editor
-  updateHtmlGroups = (html: string) => {
+  private updateHtmlGroups = (html: string) => {
     let htmlGroups = parseHtmlContent(html);
     if (!this.htmlGroups.length) {
       this.htmlGroups = new TrackedArray(
@@ -86,19 +86,26 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     }
   };
 
-  onHtmlUpdate = (html: string) => {
+  private onHtmlUpdate = (html: string) => {
     // The reason why reacting to html argument this way is because we want to
     // have full control of when the @html argument changes so that we can
     // properly fragment it into htmlParts, and in our reactive structure, only update
     // the parts that have changed.
+
     // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
     scheduleOnce('afterRender', () => {
       this.updateHtmlGroups(html);
     });
   };
 
-  isLastHtmlGroup = (index: number) => {
+  private isLastHtmlGroup = (index: number) => {
     return index === this.htmlGroups.length - 1;
+  };
+
+  private isCodePatch = (code: string) => {
+    let searchReplaceRegex =
+      /<<<<<<< SEARCH\n(.*)\n=======\n(.*)\n>>>>>>> REPLACE/s;
+    return searchReplaceRegex.test(code);
   };
 
   <template>
@@ -116,6 +123,11 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         <p>I hope you like this code. But here is some more!</p>
         <pre data-codeblock="javascript">const y = 2;</pre>
         <p>Feel free to use it in your project.</p>
+
+        A drawback of this approach is that we can't render monaco editors for
+        code blocks that are nested inside other elements. We should make sure
+        our skills teach the model to respond with code blocks that are not nested
+        inside other elements.
         }}
         {{#each this.htmlGroups as |htmlGroup index|}}
           {{#if (eq htmlGroup.type 'pre_tag')}}
@@ -124,7 +136,19 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                 @monacoSDK={{@monacoSDK}}
                 @code={{codeData.content}}
                 @language={{codeData.language}}
-              />
+                as |codeBlock|
+              >
+                <codeBlock.actions as |actions|>
+                  <actions.copyCode />
+                  {{#if (this.isCodePatch codeData.content)}}
+                    <actions.applyCodePatch
+                      @codePatch={{codeData.content}}
+                      @fileUrl={{codeData.fileUrl}}
+                    />
+                  {{/if}}
+                </codeBlock.actions>
+                <codeBlock.editor />
+              </CodeBlock>
             {{/let}}
           {{else}}
             {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -262,11 +286,28 @@ function extractCodeData(preElementString: string) {
 
   // Extract content using regex - finds everything between the opening and closing pre tags
   const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-  const content = contentMatch ? contentMatch[1] : null;
+  let content = contentMatch ? contentMatch[1] : null;
+
+  // When the model responds with a code patch block, the source-code-editing.json skill
+  // will dictate that the first comment in the search/replace file block
+  // is a file url comment, like this: // File url: http://localhost:4201/user/realm/card.gts
+  // We need this url so that we know which file the code patch applies to.
+  // We extract this url and remove it from the content.
+  let fileUrl = null;
+  if (content?.startsWith('// File url: ')) {
+    let firstLine = content.split('\n')[0];
+    let fileUrlRegex = /File url: (.*)/;
+    let fileUrlMatch = firstLine.match(fileUrlRegex);
+    if (fileUrlMatch) {
+      fileUrl = fileUrlMatch[1];
+    }
+    content = content.slice(firstLine.length).trimStart();
+  }
 
   return {
     language: language ?? '',
     content: content ?? '',
+    fileUrl: fileUrl ?? null,
   };
 }
 

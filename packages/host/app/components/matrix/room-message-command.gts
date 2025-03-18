@@ -194,7 +194,13 @@ export default class RoomMessageCommand extends Component<Signature> {
           @monacoSDK={{@monacoSDK}}
           @code={{this.previewCommandCode}}
           @language='json'
-        />
+          as |codeBlock|
+        >
+          <codeBlock.actions as |actions|>
+            <actions.copyCode />
+          </codeBlock.actions>
+          <codeBlock.editor />
+        </CodeBlock>
       {{/if}}
       {{#if this.failedCommandState}}
         <div class='failed-command-result'>
