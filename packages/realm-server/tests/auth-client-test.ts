@@ -37,6 +37,12 @@ module(basename(__filename), function () {
         async hashMessageWithSecret(_message: string): Promise<string> {
           throw new Error('Method not implemented.');
         },
+        async getAccountData() {
+          return Promise.resolve({});
+        },
+        async setAccountData() {
+          return Promise.resolve();
+        },
       } as RealmAuthMatrixClientInterface;
 
       let virtualNetwork = new VirtualNetwork();
