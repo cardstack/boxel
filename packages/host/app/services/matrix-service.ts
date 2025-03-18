@@ -1465,12 +1465,12 @@ export default class MatrixService extends Service {
       event.sender &&
       event.content
     ) {
-      console.log('Received realm event', event);
+      realmEventsLogger.debug('Received realm event', event);
       if (
         this.startedAtTs === -1 ||
         (event.origin_server_ts || 0) < this.startedAtTs
       ) {
-        console.log(
+        realmEventsLogger.debug(
           'Ignoring realm event because it occurred before the client started',
           event,
         );
