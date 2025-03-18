@@ -912,7 +912,14 @@ module('Integration | card-copy', function (hooks) {
 
     lookupNetworkService().mount(
       async (req) => {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
+        if (
+          req.method !== 'GET' &&
+          req.method !== 'HEAD' &&
+          !(
+            req.method === 'POST' &&
+            req.headers.get('X-HTTP-Method-Override') === 'QUERY'
+          )
+        ) {
           let token = waiter.beginAsync();
           let json = JSON.parse(await req.clone().text());
           waiter.endAsync(token);
@@ -1055,7 +1062,14 @@ module('Integration | card-copy', function (hooks) {
 
     lookupNetworkService().mount(
       async (req) => {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
+        if (
+          req.method !== 'GET' &&
+          req.method !== 'HEAD' &&
+          !(
+            req.method === 'POST' &&
+            req.headers.get('X-HTTP-Method-Override') === 'QUERY'
+          )
+        ) {
           let token = waiter.beginAsync();
           let json = JSON.parse(await req.clone().text());
           waiter.endAsync(token);

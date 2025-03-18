@@ -162,18 +162,27 @@ export default class RoomMessage extends Component<Signature> {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
 
-    let promises = this.message.attachedResources?.map(async (resource) => {
-      await resource.loaded;
-      if (resource.card) {
-        cards.push(resource.card);
-      } else if (resource.cardError) {
-        let { id, error } = resource.cardError;
-        errors.push({
-          id,
-          error,
-        });
-      }
-    });
+    let promises = this.message
+      .attachedResources(this)
+      ?.map(async (resource) => {
+        await resource.loaded;
+        if (resource.card) {
+          cards.push(resource.card);
+        } else if (resource.cardError) {
+          let {
+            id,
+            message,
+            title: name,
+            meta: { stack },
+          } = resource.cardError;
+          if (id) {
+            errors.push({
+              id,
+              error: { name, message, stack: stack ?? undefined },
+            });
+          }
+        }
+      });
 
     if (promises) {
       await Promise.all(promises);

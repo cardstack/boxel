@@ -41,7 +41,10 @@ module.exports = function (environment) {
     hostsOwnAssets: true,
     resolvedBaseRealmURL:
       process.env.RESOLVED_BASE_REALM_URL || 'http://localhost:4201/base/',
-    featureFlags: {},
+    featureFlags: {
+      DISABLE_MATRIX_REALM_EVENTS:
+        process.env.DISABLE_MATRIX_REALM_EVENTS === 'true',
+    },
   };
 
   if (environment === 'development') {
@@ -50,7 +53,6 @@ module.exports = function (environment) {
     // ENV.APP.LOG_TRANSITIONS = true;
     // ENV.APP.LOG_TRANSITIONS_INTERNAL = true;
     // ENV.APP.LOG_VIEW_LOOKUPS = true;
-    ENV.featureFlags = {};
   }
 
   if (environment === 'test') {

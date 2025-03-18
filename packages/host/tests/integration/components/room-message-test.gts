@@ -34,6 +34,9 @@ module('Integration | Component | RoomMessage', function (hooks) {
       formattedMessage: messageContent,
       created: new Date(new Date().getTime() - timeAgoForCreated * 60 * 1000),
       updated: new Date(new Date().getTime() - timeAgoForUpdated * 60 * 1000),
+      attachedResources() {
+        return undefined;
+      },
     };
 
     let testScenario = {
