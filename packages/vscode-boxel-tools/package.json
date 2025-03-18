@@ -2,7 +2,7 @@
   "name": "boxel-tools",
   "displayName": "Boxel Tools",
   "description": "Access boxel workspace data and code from your vscode workspace.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "cardstack",
   "private": true,
   "license": "MIT",
@@ -168,12 +168,6 @@
           "command": "boxel-tools.disableFileWatching",
           "when": "view == boxelRealmList && viewItem == realm-watched",
           "group": "inline"
-        }
-      ],
-      "explorer/context": [
-        {
-          "command": "boxel-tools.pushFile",
-          "when": "resourceScheme == file"
         }
       ]
     },

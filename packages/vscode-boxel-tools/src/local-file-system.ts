@@ -416,6 +416,8 @@ export class LocalFileSystem {
           `Successfully pulled changes for Boxel workspace "${realmName}" (${filesProcessed.size} files, ${filesDownloaded} downloaded, ${filesSkipped} unchanged)`,
         );
       }
+
+      this.enableFileWatching(localPath);
     } catch (error: unknown) {
       console.error(`Error pulling changes from remote:`, error);
       const errorMessage =
@@ -489,16 +491,14 @@ export class LocalFileSystem {
         console.log('Processing JSON API format directory listing');
 
         for (const [name, info] of Object.entries(data.data.relationships)) {
-          // Skip our metadata file
-          if (name === '.boxel-realm.json') {
-            continue;
-          }
-
           const entry = info as {
             meta: { kind: string; lastModified?: number };
           };
           const isFile = entry.meta.kind === 'file';
           const entryPath = path.posix.join(remotePath, name);
+          if (!this.shouldSyncFile(vscode.Uri.file(entryPath))) {
+            continue;
+          }
           console.log(
             `Processing entry: ${entryPath}, meta: ${JSON.stringify(
               entry.meta,
@@ -806,8 +806,21 @@ export class LocalFileSystem {
     }
   }
 
+  shouldSyncFile(fileUri: vscode.Uri): boolean {
+    // Skip dot files
+    const pathParts = fileUri.fsPath.split('/');
+    for (const part of pathParts) {
+      if (part.startsWith('.')) {
+        console.log(`Skipping dotfile/dot folder: ${fileUri.fsPath}`);
+        return false;
+      }
+    }
+    return true;
+  }
+
   // Enable file watching for a realm folder
   enableFileWatching(folderPath: string): void {
+    console.log(`Enabling file watching for ${folderPath}`);
     // Update metadata first
     this.updateFileWatchingStatus(folderPath, true);
 
@@ -827,7 +840,9 @@ export class LocalFileSystem {
         if (this.syncInProgress) {
           return; // Skip during sync
         }
-        console.log(`File changed: ${uri.fsPath}`);
+        if (!this.shouldSyncFile(uri)) {
+          return;
+        }
         await this.pushFile(uri.fsPath);
       });
 
@@ -835,6 +850,9 @@ export class LocalFileSystem {
       watcher.onDidCreate(async (uri) => {
         if (this.syncInProgress) {
           return; // Skip during sync
+        }
+        if (!this.shouldSyncFile(uri)) {
+          return;
         }
         console.log(`File created: ${uri.fsPath}`);
         await this.pushFile(uri.fsPath);
@@ -1259,12 +1277,11 @@ export class LocalFileSystem {
       const items = fs.readdirSync(localDirPath);
 
       for (const item of items) {
-        // Skip the metadata file
-        if (item === '.boxel-realm.json') {
+        const localItemPath = path.join(localDirPath, item);
+
+        if (!this.shouldSyncFile(vscode.Uri.file(localItemPath))) {
           continue;
         }
-
-        const localItemPath = path.join(localDirPath, item);
         const relativeItemPath = path
           .join(relativePath, item)
           .replace(/\\/g, '/');
