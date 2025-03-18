@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { getOwner } from '@ember/owner';
 
 import { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
@@ -35,36 +34,28 @@ interface Args {
     isLive: boolean;
     isAutoSaved: boolean;
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-    storeService: StoreService;
   };
 }
 
 export class SearchResource extends Resource<Args> {
   @service declare private cardService: CardService;
   @service declare private realmServer: RealmServerService;
+  @service declare private store: StoreService;
   @tracked private realmsToSearch: string[] = [];
   // This is deprecated. consumers of this resource need to be reactive such
   // that they can deal with a resource that doesn't have a search results yet.
   loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
-  declare private store: StoreService;
+  // declare private store: StoreService;
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
   #isAutoSaved = false;
 
   modify(_positional: never[], named: Args['named']) {
-    let {
-      query,
-      realms,
-      isLive,
-      doWhileRefreshing,
-      storeService,
-      isAutoSaved,
-    } = named;
+    let { query, realms, isLive, doWhileRefreshing, isAutoSaved } = named;
     if (query === undefined) {
       return;
     }
-    this.store = storeService;
     this.#isLive = isLive;
     this.#isAutoSaved = isAutoSaved;
     this.realmsToSearch =
@@ -185,6 +176,18 @@ export class SearchResource extends Resource<Args> {
           }),
         ),
       );
+
+      // Please note 3 things there:
+      // 1. we are mutating this._instances, not replacing it
+      // 2. the items in this array come from an identity map, so we are never
+      //    recreating an instance that already exist.
+      // 3. The ordering of the results is important, we need to retain that.
+      //
+      //  As such, removing all the items in-place in our tracked
+      //  this._instances array, and then re-adding the new results back into
+      //  the array in the correct order synchronously is a stable operation.
+      //  glimmer understands the delta and will only rerender the components
+      //  tied to the instances that are added (or removed) from the array
       this._instances.splice(
         0,
         this._instances.length,
@@ -222,9 +225,6 @@ export function getSearch(
       realms: getRealms ? getRealms() : undefined,
       isLive: opts?.isLive != null ? opts.isLive : true,
       isAutoSaved: opts?.isAutoSaved != null ? opts.isAutoSaved : false,
-      storeService: (getOwner(parent) as any).lookup(
-        'service:store',
-      ) as StoreService,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
     },
