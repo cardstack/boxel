@@ -222,7 +222,7 @@ export default class StoreService extends Service {
 
   // This method is used for specific scenarios where you just want an instance
   // that is _not_ part of the identity map and detached from the store. This
-  // may include things like tests, freestyle guide, etc.
+  // may include things like tests, freestyle usage guide, etc.
   async getInstanceDetachedFromStore(
     url: string,
   ): Promise<CardDef | undefined> {
