@@ -499,7 +499,7 @@ export class Realm {
       messageHash,
       setTimeout(() => {
         this.#recentWrites.delete(messageHash);
-      }, 500) as unknown as number, // don't use NodeJS Timeout type
+      }, 2000) as unknown as number, // don't use NodeJS Timeout type
     );
   }
 
