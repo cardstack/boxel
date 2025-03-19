@@ -73,7 +73,7 @@ export default class OperatorModeContainer extends Component<Signature> {
   }
 
   @provide(GetCardsContextName)
-  // @ts-ignore "getCard" is declared but not used
+  // @ts-ignore "getCards" is declared but not used
   private get getCards() {
     return getSearch;
   }
