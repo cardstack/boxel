@@ -134,7 +134,7 @@
     "ember-window-mock": "^1.0.1",
     "eslint": "^8.52.0",
     "eslint-config-prettier": "^9.0.0",
-    "eslint-plugin-ember": "^12.1.1",
+    "eslint-plugin-ember": "ember-cli/eslint-plugin-ember#870ee2fa24ae826d431fca8e6109dbc389f368f6",
     "eslint-plugin-import": "^2.28.1",
     "eslint-plugin-n": "^16.2.0",
     "eslint-plugin-prettier": "^5.0.1",
