@@ -106,6 +106,8 @@ export type ExtendedClient = Pick<
   | 'startClient'
   | 'getAccountDataFromServer'
   | 'setAccountData'
+  | 'getDeviceId'
+  | 'getDevice'
 > & {
   requestEmailToken(
     type: 'registration' | 'threepid',

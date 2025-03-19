@@ -11,11 +11,14 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import { Search } from '@cardstack/host/resources/search';
+import {
+  SearchResource,
+  Args as SearchResourceArgs,
+} from '@cardstack/host/resources/search';
 
-import LoaderService from '@cardstack/host/services/loader-service';
-
+import type LoaderService from '@cardstack/host/services/loader-service';
 import RealmService from '@cardstack/host/services/realm';
+import type StoreService from '@cardstack/host/services/store';
 
 import {
   CardDocFiles,
@@ -34,9 +37,23 @@ class StubRealmService extends RealmService {
   }
 }
 
+function getSearchResourceForTest(
+  owner: object,
+  args: () => SearchResourceArgs,
+) {
+  return SearchResource.from(owner, args) as unknown as Omit<
+    SearchResource,
+    'loaded'
+  > & {
+    // we expose the private loaded promise just for our tests
+    loaded: Promise<void>;
+  };
+}
+
 module(`Integration | search resource`, function (hooks) {
   let loader: Loader;
   let loaderService: LoaderService;
+  let storeService: StoreService;
   let realm: Realm;
   let cardApi: typeof import('https://cardstack.com/base/card-api');
   let string: typeof import('https://cardstack.com/base/string');
@@ -46,6 +63,7 @@ module(`Integration | search resource`, function (hooks) {
     getOwner(this)!.register('service:realm', StubRealmService);
     loaderService = lookupLoaderService();
     loader = loaderService.loader;
+    storeService = getOwner(this)!.lookup('service:store') as StoreService;
   });
 
   setupLocalIndexing(hooks);
@@ -294,12 +312,15 @@ module(`Integration | search resource`, function (hooks) {
         },
       },
     };
-    let search = Search.from(loaderService, () => ({
+    let search = getSearchResourceForTest(loaderService, () => ({
       named: {
         query,
         realms: [testRealmURL],
+        isLive: false,
+        isAutoSaved: false,
+        storeService,
       },
-    })) as Search;
+    }));
     await search.loaded;
     assert.strictEqual(search.instances[0].id, `${testRealmURL}card-2`);
     assert.strictEqual(search.instances[0].constructor.name, 'Book');
@@ -317,13 +338,15 @@ module(`Integration | search resource`, function (hooks) {
         },
       },
     };
-    let search = Search.from(loaderService, () => ({
+    let search = getSearchResourceForTest(loaderService, () => ({
       named: {
         query,
         realms: [testRealmURL],
         isLive: true,
+        isAutoSaved: false,
+        storeService,
       },
-    })) as Search;
+    }));
     await search.loaded;
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
@@ -372,13 +395,15 @@ module(`Integration | search resource`, function (hooks) {
         },
       },
     };
-    let search = Search.from(loaderService, () => ({
+    let search = getSearchResourceForTest(loaderService, () => ({
       named: {
         query,
         realms: [testRealmURL],
         isLive: true,
+        isAutoSaved: false,
+        storeService,
       },
-    })) as Search;
+    }));
     await search.loaded;
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual((search.instances[0] as any).author.firstName, `Mango`);

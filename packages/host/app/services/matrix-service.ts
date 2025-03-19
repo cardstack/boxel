@@ -158,6 +158,7 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.userId);
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
+  private startedAtTs = -1;
 
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -496,9 +497,19 @@ export default class MatrixService extends Service {
       this.bindEventListeners();
 
       try {
+        let deviceId = this._client.getDeviceId();
+        if (deviceId) {
+          let { last_seen_ts } = await this._client.getDevice(deviceId);
+          if (last_seen_ts) {
+            this.startedAtTs = last_seen_ts;
+          }
+        }
+        if (this.startedAtTs === -1) {
+          this.startedAtTs = 0;
+        }
         await this.initSlidingSync();
         await this.client.startClient({ slidingSync: this.slidingSync });
-        let accountDataContent = await this.client.getAccountDataFromServer<{
+        let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
         await this.realmServer.setAvailableRealmURLs(
@@ -1594,6 +1605,16 @@ export default class MatrixService extends Service {
       event.content
     ) {
       realmEventsLogger.debug('Received realm event', event);
+      if (
+        this.startedAtTs === -1 ||
+        (event.origin_server_ts || 0) < this.startedAtTs
+      ) {
+        realmEventsLogger.debug(
+          'Ignoring realm event because it occurred before the client started',
+          event,
+        );
+        return;
+      }
 
       let realmResourceForEvent = this.realm.realmForSessionRoomId(
         event.room_id!,
@@ -1609,11 +1630,13 @@ export default class MatrixService extends Service {
           event,
         );
       } else {
+        (event.content as any).origin_server_ts = event.origin_server_ts;
         this.messageService.relayMatrixSSE(
           realmResourceForEvent.url,
           event.content as RealmEventContent,
         );
       }
+      return;
     }
     await this.addRoomEvent(event, oldEventId);
 

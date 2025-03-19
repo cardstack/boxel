@@ -4,7 +4,6 @@ import GlimmerComponent from '@glimmer/component';
 import { TaskPlanner, TaskCard } from '../components/base-task-planner';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { Query, Filter } from '@cardstack/runtime-common/query';
-import { getCards } from '@cardstack/runtime-common';
 import { DndItem } from '@cardstack/boxel-ui/components';
 import { AppCard } from '../app-card';
 import { CRMTask } from './task';
@@ -141,7 +140,8 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
     return [this.args.realmURL.href];
   }
 
-  assigneeQuery = getCards(
+  assigneeQuery = this.args.context?.getCards(
+    this,
     () => {
       return {
         filter: {

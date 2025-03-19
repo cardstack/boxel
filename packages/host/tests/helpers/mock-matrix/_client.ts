@@ -689,4 +689,12 @@ export class MockClient implements ExtendedClient {
 
     return Promise.resolve(response);
   }
+
+  getDeviceId(): string | null {
+    return null;
+  }
+
+  getDevice(deviceId: string): Promise<MatrixSDK.IMyDevice> {
+    throw new Error(`Method not implemented: getDevice ${deviceId}`);
+  }
 }

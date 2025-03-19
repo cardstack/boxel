@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 import type { Realm } from '@cardstack/runtime-common';
 
 import {
+  percySnapshot,
   setupAcceptanceTestRealm,
   setupLocalIndexing,
   setupOnSave,
@@ -19,6 +20,7 @@ import {
   getPlaygroundSelections,
   openFileInPlayground,
   removePlaygroundSelections,
+  selectDeclaration,
   selectFormat,
   setPlaygroundSelections,
   setRecentFiles,
@@ -347,33 +349,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
   test('can preview compound field instance', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
-    assert.dom('[data-test-field-preview-header]').containsText('Comment');
-    assert
-      .dom('[data-test-embedded-comment-title]')
-      .hasText(
-        'Terrible product',
-        'preview defaults to embedded view of first example',
-      );
-
-    await selectFormat('atom');
-    assertFieldExists(assert, 'atom');
-
-    await click('[data-test-edit-button]'); // toggle via header button
-    assertFieldExists(assert, 'edit');
-    assert
-      .dom('[data-test-field-preview-card] [data-test-field]')
-      .exists({ count: 3 });
-    assert
-      .dom('[data-test-field-preview-card] [data-test-field="name"] input')
-      .hasValue('Marco');
-
-    await click('[data-test-edit-button]'); // toggle via header button
-    assert.dom('[data-test-embedded-comment]').exists();
-  });
-
-  test('can display selected field in the chosen format', async function (assert) {
-    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert
       .dom('[data-test-playground-format-chooser] button')
       .exists({ count: 4 });
@@ -383,6 +358,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
     assert.dom('[data-test-embedded-comment]').containsText('0 stars');
+    await percySnapshot(assert);
 
     await selectFormat('atom');
     assert.dom('[data-test-format-chooser="embedded"]').hasNoClass('active');
@@ -392,6 +368,9 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     await selectFormat('edit');
     assertFieldExists(assert, 'edit');
     assert
+      .dom('[data-test-field-preview-card] [data-test-field]')
+      .exists({ count: 3 });
+    assert
       .dom('[data-test-field-preview-card] [data-test-field="name"] input')
       .hasValue('Marco');
 
@@ -400,10 +379,30 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-fitted-comment]').containsText('by Marco');
   });
 
+  test('can not preview non-exports or primitives', async function (assert) {
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+    assert.dom('[data-test-playground-panel]').exists();
+
+    await selectDeclaration('Status');
+    assert.dom('[data-test-playground-panel]').doesNotExist('primitive field');
+    assert.dom('[data-test-incompatible-primitives]').exists();
+
+    await selectDeclaration('LocalStatusField');
+    assert
+      .dom('[data-test-playground-panel]')
+      .doesNotExist('local primitive field');
+    assert.dom('[data-test-incompatible-primitives]').exists();
+
+    await selectDeclaration('LocalCommentField');
+    assert
+      .dom('[data-test-playground-panel]')
+      .doesNotExist('local compound field');
+    assert.dom('[data-test-incompatible-nonexports]').exists();
+  });
+
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec');
-    assert.dom('[data-test-field-preview-header]').hasText('Comment');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
@@ -603,10 +602,8 @@ module('Acceptance | code-submode | field playground', function (hooks) {
   test('can create new field instance when spec exists but has no examples', async function (assert) {
     await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
     assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
-    assert.dom('[data-test-field-preview-header]').doesNotExist();
 
     await click('[data-test-add-field-instance]');
-    assert.dom('[data-test-field-preview-header]').containsText('Full Name');
     assertFieldExists(assert, 'edit');
     assert
       .dom('[data-test-field-preview-card] [data-test-field="firstName"] input')

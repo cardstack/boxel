@@ -8,7 +8,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import GlimmerComponent from '@glimmer/component';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 import { action } from '@ember/object';
-import { getCards } from '@cardstack/runtime-common';
+import { type getCards } from '@cardstack/runtime-common';
 import { FilterDropdown } from './filter/filter-dropdown';
 import { StatusPill } from './filter/filter-dropdown-item';
 import { FilterTrigger } from './filter/filter-trigger';
@@ -178,15 +178,8 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
       options: () => any[];
     }
   >;
-  cards: {
-    instances: CardDef[]; // possible can be generic type
-    isLoading?: boolean;
-  };
-  assigneeQuery: {
-    // should be assignee
-    instances: CardDef[];
-    isLoading?: boolean;
-  };
+  cards: ReturnType<getCards> | undefined;
+  assigneeQuery: ReturnType<getCards> | undefined;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -215,7 +208,8 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
     };
 
     // Initialize cards and assignee query
-    this.cards = getCards(
+    this.cards = this.args.context?.getCards(
+      this,
       () => this.getTaskQuery,
       () => this.realmHrefs,
       {
@@ -223,7 +217,8 @@ export class TaskPlanner extends GlimmerComponent<TaskPlannerArgs> {
       },
     );
 
-    this.assigneeQuery = getCards(
+    this.assigneeQuery = this.args.context?.getCards(
+      this,
       () => {
         return {
           filter: {

@@ -34,14 +34,12 @@ import {
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
-  type Query,
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { SearchQuery, getSearch } from '@cardstack/host/resources/search';
 import { stackBackgroundsResource } from '@cardstack/host/resources/stack-backgrounds';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -361,13 +359,6 @@ export default class InteractSubmode extends Component<Signature> {
       changeSubmode: (url: URL, submode: Submode = 'code'): void => {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
-      },
-      // TODO remove this, it will move into dynamic context
-      getCards: (
-        getQuery: () => Query | undefined,
-        getRealms: () => string[] | undefined,
-      ): SearchQuery => {
-        return getSearch(here, getQuery, getRealms);
       },
     };
   }

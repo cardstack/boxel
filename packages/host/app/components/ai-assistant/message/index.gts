@@ -11,7 +11,7 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import { isCardInstance } from '@cardstack/runtime-common';
@@ -32,37 +32,10 @@ import FormattedMessage from '../formatted-message';
 
 import type { ComponentLike } from '@glint/template';
 
-function findLastTextNodeWithContent(parentNode: Node): Text | null {
-  // iterate childNodes in reverse to find the last text node with non-whitespace text
-  for (let i = parentNode.childNodes.length - 1; i >= 0; i--) {
-    let child = parentNode.childNodes[i];
-    if (child.textContent && child.textContent.trim() !== '') {
-      if (child instanceof Text) {
-        return child;
-      }
-      return findLastTextNodeWithContent(child);
-    }
-  }
-  return null;
-}
-
-function wrapLastTextNodeInStreamingTextSpan(html: SafeString): SafeString {
-  let parser = new DOMParser();
-  let doc = parser.parseFromString(html.toString(), 'text/html');
-  let lastTextNode = findLastTextNodeWithContent(doc.body);
-  if (lastTextNode) {
-    let span = doc.createElement('span');
-    span.textContent = lastTextNode.textContent;
-    span.classList.add('streaming-text');
-    lastTextNode.replaceWith(span);
-  }
-  return htmlSafe(doc.body.innerHTML);
-}
-
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    formattedMessage: SafeString;
+    formattedMessage: string;
     reasoningContent?: string | null;
     datetime: Date;
     isFromAssistant: boolean;
@@ -286,21 +259,13 @@ export default class AiAssistantMessage extends Component<Signature> {
               {{/if}}
             </div>
           {{/if}}
-          {{#if (and @isFromAssistant @isStreaming)}}
-            <FormattedMessage
-              @renderCodeBlocks={{false}}
-              @monacoSDK={{@monacoSDK}}
-              @sanitizedHtml={{wrapLastTextNodeInStreamingTextSpan
-                @formattedMessage
-              }}
-            />
-          {{else if @formattedMessage}}
-            <FormattedMessage
-              @renderCodeBlocks={{true}}
-              @monacoSDK={{@monacoSDK}}
-              @sanitizedHtml={{@formattedMessage}}
-            />
-          {{/if}}
+
+          <FormattedMessage
+            @renderCodeBlocks={{@isFromAssistant}}
+            @monacoSDK={{@monacoSDK}}
+            @html={{@formattedMessage}}
+            @isStreaming={{@isStreaming}}
+          />
 
           {{yield}}
 
