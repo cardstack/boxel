@@ -1,6 +1,6 @@
 import { click, fillIn, waitUntil } from '@ember/test-helpers';
 
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
@@ -108,7 +108,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     import DatetimeField from 'https://cardstack.com/base/datetime';
     import MarkdownField from 'https://cardstack.com/base/markdown';
     import StringField from "https://cardstack.com/base/string";
-    import { Sparkle } from '@cardstack/boxel-ui/icons';
     import { Author } from './author';
 
     export class Status extends StringField {
@@ -119,7 +118,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
     export class Comment extends FieldDef {
       static displayName = 'Comment';
-      static icon = Sparkle;
       @field title = contains(StringField);
       @field name = contains(StringField);
       @field message = contains(StringField);
@@ -141,6 +139,24 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     }
 
     class LocalCommentField extends Comment {}
+
+    export class ContactInfo extends FieldDef {
+      @field email = contains(StringField);
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div data-test-atom-contact-info>
+            <@fields.email />
+          </div>
+        </template>
+      }
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-embedded-contact-info>
+            <@fields.email />
+          </div>
+        </template>
+      }
+    }
 
     export class BlogPost extends CardDef {
       static displayName = 'Blog Post';
@@ -331,6 +347,52 @@ module('Acceptance | code-submode | field playground', function (hooks) {
             },
           },
         },
+        'Spec/contact-info.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'ContactInfo',
+                module: '../blog-post',
+              },
+              specType: 'field',
+              containedExamples: [
+                { email: 'marcelius@email.com' },
+                { email: 'lilian@email.com' },
+                { email: 'susie@email.com' },
+              ],
+              title: 'Contact Info',
+            },
+            meta: {
+              fields: {
+                containedExamples: [
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'ContactInfo',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'ContactInfo',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'ContactInfo',
+                    },
+                  },
+                ],
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
       },
     }));
     setRecentFiles([
@@ -400,9 +462,47 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-incompatible-nonexports]').exists();
   });
 
-  // TODO
-  test('can populate instance chooser dropdown options with containedExamples from Spec', async function (_assert) {});
-  test('can update the instance chooser when selected declaration changes', async function (_assert) {});
+  test('can populate instance chooser dropdown options with containedExamples from Spec', async function (assert) {
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'ContactInfo');
+    assertFieldExists(assert, 'embedded');
+    assert.dom('[data-test-selected-item]').hasText('Contact Info - Example 1');
+    assert
+      .dom('[data-test-embedded-contact-info]')
+      .hasText('marcelius@email.com');
+
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 3 });
+    assert.dom('[data-option-index="0"]').hasText('1. marcelius@email.com');
+    assert.dom('[data-option-index="1"]').hasText('2. lilian@email.com');
+    assert.dom('[data-option-index="2"]').hasText('3. susie@email.com');
+
+    await click('[data-option-index="2"]');
+    assert.dom('[data-test-selected-item]').hasText('Contact Info - Example 3');
+    assert.dom('[data-test-embedded-contact-info]').hasText('susie@email.com');
+  });
+
+  // TODO: this currently does not work because it requires the spec panel to update when selected declaration changes
+  skip('can update the instance chooser when selected declaration changes', async function (assert) {
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'ContactInfo');
+    assertFieldExists(assert, 'embedded');
+    assert.dom('[data-test-selected-item]').hasText('Contact Info - Example 1');
+    assert
+      .dom('[data-test-embedded-contact-info]')
+      .hasText('marcelius@email.com');
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 3 });
+    assert.dom('[data-option-index="0"]').hasText('1. marcelius@email.com');
+
+    await selectDeclaration('Comment');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
+    assert
+      .dom('[data-test-embedded-comment-title]')
+      .hasText('Terrible product');
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 2 });
+    assert.dom('[data-option-index="0"]').hasText('1. Terrible product');
+    assert.dom('[data-option-index="1"]').hasText('2. Needs better packaging');
+  });
 
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
