@@ -19,7 +19,7 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 
-import { MenuItem, bool, cn } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
@@ -201,10 +201,9 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{else}}
         <div
           class='command-button-bar'
-          {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
-              Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
-          {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
-          data-test-command-card-idle={{this.commandService.run.isIdle}}
+          data-test-command-card-idle={{not
+            (eq @messageCommand.status 'applying')
+          }}
         >
           <Button
             class='view-code-button'
