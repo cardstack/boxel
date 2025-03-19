@@ -8,7 +8,7 @@ import { tracked } from '@glimmer/tracking';
 import Modifier from 'ember-modifier';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { and, eq } from '@cardstack/boxel-ui/helpers';
+import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
@@ -148,6 +148,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                     (and
                       (this.isCodePatch codeData.content)
                       (this.fileUrlIsPresent codeData.fileUrl)
+                      (not @isStreaming)
                     )
                   }}
                     <actions.applyCodePatch
