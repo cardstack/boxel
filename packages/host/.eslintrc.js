@@ -96,6 +96,14 @@ module.exports = {
         'deprecation/deprecation': 'off',
         'window-mock/mock-window-only': 'error',
         'window-mock/wrapped-setup-helpers-only': 'error',
+        'ember/template-missing-invokable': [
+          'error',
+          {
+            invokables: {
+              eq: ['eq', '@cardstack/boxel-ui/helpers'],
+            },
+          },
+        ],
       },
     },
     // node files
