@@ -65,10 +65,12 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       border-radius: var(--boxel-border-radius-sm);
       max-width: 100%;
       width: 100%;
-      padding: var(--boxel-sp-xs);
     }
     .boxel-select:hover {
       cursor: pointer;
+    }
+    .ember-power-select-trigger {
+      padding: 0;
     }
   </style>
   {{! template-lint-disable require-scoped-style }}
