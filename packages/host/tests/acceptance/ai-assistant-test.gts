@@ -275,7 +275,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-llm-select-item="google/gemini-pro-1.5"]');
     assert.dom('[data-test-llm-select-selected]').hasText('gemini-pro-1.5');
 
-    let roomState = getRoomState('mock_room_1', APP_BOXEL_ACTIVE_LLM, '');
+    let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, 'google/gemini-pro-1.5');
   });
 
@@ -291,9 +291,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
 
+    await click('[data-test-open-ai-assistant]');
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await click('[data-test-open-ai-assistant]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
 
     createAndJoinRoom({
@@ -302,8 +302,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     await click('[data-test-past-sessions-button]');
-    await waitFor("[data-test-enter-room='mock_room_2']");
-    await click('[data-test-enter-room="mock_room_2"]');
+    await waitFor("[data-test-enter-room='mock_room_1']");
+    await click('[data-test-enter-room="mock_room_1"]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
   });
 

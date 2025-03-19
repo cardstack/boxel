@@ -1234,15 +1234,34 @@ export default class MatrixService extends Service {
         }
       }
 
+      let startTime = Date.now();
+      let checkCount = 0;
+
       let timeline = room.getLiveTimeline();
       let events = timeline.getEvents();
       await new Promise<void>((resolve) => {
         let checkEvents = () => {
+          checkCount++;
+          let elapsedTime = Date.now() - startTime;
           let allEventsConsumed = events.every((event) =>
             roomData.events.some((e) => e.event_id === event.getId()),
           );
 
+          console.log(
+            `[Matrix Service] Waiting for events... (${elapsedTime}ms, attempt ${checkCount})`,
+            `\n  - Events to consume: ${events.length}`,
+            `\n  - Events consumed: ${
+              events.filter((event) =>
+                roomData.events.some((e) => e.event_id === event.getId()),
+              ).length
+            }`,
+            `\n  - All consumed: ${allEventsConsumed}`,
+          );
+
           if (allEventsConsumed) {
+            console.log(
+              `[Matrix Service] All events consumed after ${elapsedTime}ms and ${checkCount} checks`,
+            );
             resolve();
           } else {
             setTimeout(checkEvents, 100);

@@ -10,6 +10,8 @@ import {
   settled,
 } from '@ember/test-helpers';
 
+import { fillIn } from '@ember/test-helpers';
+
 import { module, test } from 'qunit';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
@@ -317,7 +319,7 @@ module('Acceptance | Commands tests', function (hooks) {
           );
           await sendAiAssistantMessageCommand.execute({
             prompt: 'Please delay',
-            roomId: 'mock_room_1',
+            roomId: getRoomIds().pop()!,
             commands: [{ command: sleepCommand, autoExecute: true }],
           });
           await sleepCommand.execute(new ScheduleMeetingInput());
@@ -359,7 +361,7 @@ module('Acceptance | Commands tests', function (hooks) {
             commandContext,
           );
           await openAiAssistantRoomCommand.execute({
-            roomId: 'mock_room_1',
+            roomId: getRoomIds().pop()!,
           });
         };
 
@@ -681,8 +683,8 @@ module('Acceptance | Commands tests', function (hooks) {
       `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testCard}"]`,
     );
     await click('[data-test-delay-button]');
-    await waitUntil(() => getRoomIds().includes('mock_room_1'));
-    let roomId = 'mock_room_1';
+    await waitUntil(() => getRoomIds().length > 0);
+    let roomId = getRoomIds().pop()!;
     let message = getRoomEvents(roomId).pop()!;
     let boxelMessageData = JSON.parse(message.content.data);
     let toolName = boxelMessageData.context.tools[0].function.name;
@@ -1105,11 +1107,20 @@ module('Acceptance | Commands tests', function (hooks) {
         ],
       ],
     });
+    let roomId = getRoomIds().pop()!;
     // open assistant, ShowCard command is part of default CardEditing skill
     await click('[data-test-open-ai-assistant]');
 
+    // Need to create a new room so this new room will include skills card
+    await fillIn(
+      '[data-test-message-field]',
+      'Test message to enable new session button',
+    );
+    await click('[data-test-send-message-btn]');
+    await click('[data-test-create-room-btn]');
+
     // simulate message
-    let roomId = getRoomIds().pop()!;
+    roomId = getRoomIds().pop()!;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
