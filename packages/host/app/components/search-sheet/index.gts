@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { modifier } from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
@@ -20,7 +21,8 @@ import {
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
+
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import RealmServerService from '@cardstack/host/services/realm-server';
@@ -68,12 +70,13 @@ let elementCallback = modifier(
 );
 
 export default class SearchSheet extends Component<Signature> {
-  @tracked private searchKey = '';
-  @tracked cardURL = '';
+  @consume(GetCardContextName) private declare getCard: getCard;
 
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare loaderService: LoaderService;
-  @service declare realmServer: RealmServerService;
+  @tracked private searchKey = '';
+
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare loaderService: LoaderService;
+  @service private declare realmServer: RealmServerService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -161,11 +164,11 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  get isCompact() {
+  private get isCompact() {
     return this.sheetSize === 'prompt';
   }
 
-  get isSearchKeyEmpty() {
+  private get isSearchKeyEmpty() {
     return (this.searchKey?.trim() || '') === '';
   }
 
@@ -178,8 +181,8 @@ export default class SearchSheet extends Component<Signature> {
     let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
       (u) => u === cardURL + '/',
     );
-    let cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
-      isLive: () => false,
+    let cardResource = this.getCard(this, () => maybeIndexCardURL ?? cardURL, {
+      isLive: false,
     });
 
     await cardResource.loaded;

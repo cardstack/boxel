@@ -16,7 +16,7 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
-import { provide } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
@@ -24,19 +24,22 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
   identifyCard,
   isFieldDef,
   isCardDocumentString,
+  isPrimitive,
   hasExecutableExtension,
   RealmPaths,
   isResolvedCodeRef,
-  type ResolvedCodeRef,
   PermissionsContextName,
+  GetCardContextName,
   CodeRef,
+  type ResolvedCodeRef,
+  type getCard,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -44,7 +47,7 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import consumeContext from '@cardstack/host/modifiers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
@@ -80,7 +83,7 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import PlaygroundPanel from './code-submode/playground-panel';
+import PlaygroundPanel from './code-submode/playground/playground-panel';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import SpecPreview from './code-submode/spec-preview';
 import CreateFileModal, { type FileType } from './create-file-modal';
@@ -143,6 +146,8 @@ function urlToFilename(url: URL) {
 }
 
 export default class CodeSubmode extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
@@ -156,6 +161,7 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
@@ -165,21 +171,6 @@ export default class CodeSubmode extends Component<Signature> {
   private panelSelections: Record<string, SelectedAccordionItem>;
 
   private createFileModal: CreateFileModal | undefined;
-  private cardResource = getCard(
-    this,
-    () => {
-      if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
-        return undefined;
-      }
-      // this includes all JSON files, but the card resource is smart enough
-      // to skip JSON that are not card instances
-      let url = this.codePath.href.replace(/\.json$/, '');
-      return url;
-    },
-    {
-      isAutoSave: () => true,
-    },
-  );
   private moduleContentsResource = moduleContentsResource(
     this,
     () => {
@@ -239,12 +230,32 @@ export default class CodeSubmode extends Component<Signature> {
     });
   }
 
+  // you cannot consume context in the constructor. the provider is wired up
+  //  as part of the DOM rendering
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(
+      this,
+      () => {
+        if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
+          return undefined;
+        }
+        // this includes all JSON files, but the card resource is smart enough
+        // to skip JSON that are not card instances
+        let url = this.codePath.href.replace(/\.json$/, '');
+        return url;
+      },
+      {
+        isAutoSaved: true,
+      },
+    );
+  };
+
   private get card() {
-    return this.cardResource.card;
+    return this.cardResource?.card;
   }
 
   private get cardError() {
-    return this.cardResource.cardError;
+    return this.cardResource?.cardError;
   }
 
   private backgroundURLStyle(backgroundURL: string | null) {
@@ -470,12 +481,8 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
-    let baseDefType = this.selectedCardOrField?.cardOrField;
-    let codeRef = identifyCard(baseDefType);
-    if (!isResolvedCodeRef(codeRef)) {
-      return undefined;
-    }
-    return codeRef;
+    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
+    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
   }
 
   get showSpecPreview() {
@@ -537,7 +544,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isSaving() {
     return (
-      this.sourceFileIsSaving || !!this.cardResource.autoSaveState?.isSaving
+      this.sourceFileIsSaving || !!this.cardResource?.autoSaveState?.isSaving
     );
   }
 
@@ -774,6 +781,7 @@ export default class CodeSubmode extends Component<Signature> {
     <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
       <div
+        {{consumeContext consume=this.makeCardResource}}
         class='code-mode-background'
         style={{this.backgroundURLStyle realmInfo.backgroundURL}}
       ></div>
@@ -786,10 +794,7 @@ export default class CodeSubmode extends Component<Signature> {
       <div
         class='code-mode'
         data-test-code-mode
-        data-test-save-idle={{and
-          (not this.sourceFileIsSaving)
-          (not this.cardResource.autoSaveState.isSaving)
-        }}
+        data-test-save-idle={{not this.isSaving}}
       >
         <div class='code-mode-top-bar'>
           <CardURLBar
@@ -985,29 +990,47 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.selectedCodeRef}}
-                        <A.Item
-                          class='accordion-item'
-                          @contentClass='accordion-item-content'
-                          @onClick={{fn this.selectAccordionItem 'playground'}}
-                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                          data-test-accordion-item='playground'
-                        >
-                          <:title>Playground</:title>
-                          <:content>
-                            {{#if (eq this.selectedAccordionItem 'playground')}}
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'playground'}}
+                        @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                        data-test-accordion-item='playground'
+                      >
+                        <:title>Playground</:title>
+                        <:content>
+                          {{#if (eq this.selectedAccordionItem 'playground')}}
+                            {{#if
+                              (isPrimitive this.selectedCardOrField.cardOrField)
+                            }}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-primitives
+                              >
+                                <span>Playground is not currently supported for
+                                  primitive fields.</span>
+                              </p>
+                            {{else if this.selectedCodeRef}}
                               <PlaygroundPanel
                                 @codeRef={{this.selectedCodeRef}}
                                 @isUpdating={{this.moduleContentsResource.isLoading}}
-                                @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
                                 @isFieldDef={{isFieldDef
                                   this.selectedCardOrField.cardOrField
                                 }}
                               />
+                            {{else}}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-nonexports
+                              >
+                                <span>Playground is not currently supported for
+                                  card or field definitions that are not
+                                  exported.</span>
+                              </p>
                             {{/if}}
-                          </:content>
-                        </A.Item>
-                      {{/if}}
+                          {{/if}}
+                        </:content>
+                      </A.Item>
                       {{#if this.showSpecPreview}}
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
@@ -1203,6 +1226,10 @@ export default class CodeSubmode extends Component<Signature> {
         color: var(--boxel-450);
         font-weight: 500;
         padding: var(--boxel-sp-xl);
+        margin-block: 0;
+      }
+      .file-incompatible-message > span {
+        max-width: 400px;
       }
       .empty-container {
         background-color: var(--boxel-light-100);

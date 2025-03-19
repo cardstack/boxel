@@ -118,21 +118,37 @@ export default class CardService extends Service {
     url: string | URL,
     args?: RequestInit,
   ): Promise<CardDocument | undefined> {
-    let clientRequestId = uuidv4();
-    this.clientRequestIds.add(clientRequestId);
-
     let { headers, ...argsExceptHeaders } = args ?? {
       headers: {},
       argsExceptHeaders: {},
     };
+    let isReadOperation =
+      !args ||
+      ['GET', 'QUERY', 'OPTIONS'].includes(
+        args.method?.toUpperCase?.() ?? '',
+      ) ||
+      (args.method === 'POST' &&
+        (headers as Record<string, string>)?.['X-HTTP-Method-Override'] ===
+          'QUERY');
+
+    if (!isReadOperation) {
+      let clientRequestId = uuidv4();
+      this.clientRequestIds.add(clientRequestId);
+      headers = { ...headers, 'X-Boxel-Client-Request-Id': clientRequestId };
+    }
+
+    headers = { ...headers, Accept: SupportedMimeType.CardJson };
     let requestInit = {
-      headers: {
-        Accept: SupportedMimeType.CardJson,
-        'X-Boxel-Client-Request-Id': clientRequestId,
-        ...headers,
-      },
+      headers,
       ...argsExceptHeaders,
-    };
+    } as RequestInit;
+    if (requestInit.method === 'QUERY') {
+      requestInit.method = 'POST';
+      requestInit.headers = {
+        ...requestInit.headers,
+        'X-HTTP-Method-Override': 'QUERY',
+      };
+    }
     let response = await this.network.authedFetch(url, requestInit);
     if (!response.ok) {
       let responseText = await response.text();
@@ -360,6 +376,8 @@ export default class CardService extends Service {
     return card;
   }
 
+  // Warning! this is a low level API for getting a card that bypasses the
+  // store's identity map. Cards from here are divorced from the store.
   async getCard<T extends CardDef = CardDef>(url: URL | string): Promise<T> {
     if (typeof url === 'string') {
       url = new URL(url);

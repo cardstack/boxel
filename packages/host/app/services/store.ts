@@ -11,8 +11,11 @@ import {
   hasExecutableExtension,
   isCardInstance,
   isSingleCardDocument,
+  type AutoSaveState,
   type SingleCardDocument,
   type LooseSingleCardDocument,
+  type CardErrorJSONAPI as CardError,
+  type CardErrorsJSONAPI as CardErrors,
 } from '@cardstack/runtime-common';
 
 import {
@@ -31,6 +34,9 @@ import type MessageService from './message-service';
 import type RealmService from './realm';
 
 import type { CardResource } from '../resources/card-resource';
+import type { SearchResource } from '../resources/search';
+
+export { CardError };
 
 class ResettableIdentityContext implements IdentityContext {
   #cards = new Map<
@@ -56,30 +62,6 @@ class ResettableIdentityContext implements IdentityContext {
   }
 }
 
-interface CardErrors {
-  errors: {
-    id?: string; // 404 errors won't necessarily have an id
-    status: number;
-    title: string;
-    message: string;
-    realm: string | undefined;
-    meta: {
-      lastKnownGoodHtml: string | null;
-      cardTitle: string | null;
-      scopedCssUrls: string[];
-      stack: string | null;
-    };
-  }[];
-}
-
-export type CardError = CardErrors['errors'][0];
-type AutoSaveState = {
-  isSaving: boolean;
-  hasUnsavedChanges: boolean;
-  lastSaved: number | undefined;
-  lastSaveError: Error | undefined;
-  lastSavedErrorMsg: string | undefined;
-};
 export default class StoreService extends Service {
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
@@ -94,9 +76,12 @@ export default class StoreService extends Service {
       // it's possible to have the same card instance used in different
       // resources as the owners of the resources can differ
       resources: {
-        resourceState: { resource: CardResource; onCardChange?: () => void };
-        setCard: (card: CardDef | undefined) => void;
-        setCardError: (error: CardError | undefined) => void;
+        resourceState: {
+          resource: CardResource | SearchResource;
+          onCardChange?: () => void;
+        };
+        setCard?: (card: CardDef | undefined) => void;
+        setCardError?: (error: CardError | undefined) => void;
       }[];
       realm: string;
     }
@@ -155,12 +140,16 @@ export default class StoreService extends Service {
     setCard,
     setCardError,
     relativeTo,
+    isLive,
+    isAutoSaved,
   }: {
-    resource: CardResource;
+    resource: CardResource | SearchResource;
     urlOrDoc: string | LooseSingleCardDocument;
-    setCard: (card: CardDef | undefined) => void;
-    setCardError: (error: CardError | undefined) => void;
+    setCard?: (card: CardDef | undefined) => void;
+    setCardError?: (error: CardError | undefined) => void;
     relativeTo?: URL;
+    isLive?: boolean;
+    isAutoSaved?: boolean;
   }): Promise<{
     url: string | undefined;
     card: CardDef | undefined;
@@ -171,17 +160,18 @@ export default class StoreService extends Service {
     let error = !isCardInstance(cardOrError) ? cardOrError : undefined;
 
     let url = cardOrError.id;
-    if (!url || !resource.isLive) {
+    if (!url || !isLive) {
       await this.handleUpdatedCard(undefined, cardOrError);
       // when there is no 'url' it is likely a card error for a doc without an ID
-      return { url: url ?? resource.url, card, error };
+      return {
+        url: url ?? ('url' in resource ? resource.url : undefined),
+        card,
+        error,
+      };
     }
 
     if (!isCardInstance(cardOrError)) {
-      console.warn(
-        `cannot load card ${cardOrError.id ?? resource.url}`,
-        cardOrError,
-      );
+      console.warn(`cannot load card ${url}`, cardOrError);
     }
 
     let realmURL = this.realm.realmOfURL(new URL(url));
@@ -202,7 +192,7 @@ export default class StoreService extends Service {
       subscriber.resources.push({
         resourceState: {
           resource,
-          onCardChange: resource.isAutoSave
+          onCardChange: isAutoSaved
             ? () => {
                 if (card) {
                   // Using the card ID instead, so this function doesn't need to be updated
@@ -266,6 +256,13 @@ export default class StoreService extends Service {
             !this.cardService.clientRequestIds.has(event.clientRequestId)
           ) {
             this.reload.perform(liveCard);
+          } else {
+            if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
+              console.debug(
+                'ignoring invalidation for card because clientRequestId is ours',
+                event,
+              );
+            }
           }
         } else if (!this.identityContext.get(invalidation)) {
           // load the card using just the ID because we don't have a running card on hand
@@ -359,6 +356,9 @@ export default class StoreService extends Service {
   ) {
     for (let { setCard, setCardError } of this.subscribers.get(url)
       ?.resources ?? []) {
+      if (!setCard || !setCardError) {
+        continue;
+      }
       if (!maybeCard) {
         setCard(undefined);
         setCardError(undefined);

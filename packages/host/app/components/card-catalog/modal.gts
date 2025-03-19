@@ -43,7 +43,7 @@ import {
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { getSearch, type SearchQuery } from '../../resources/search';
+import { getSearch, type SearchResource } from '../../resources/search';
 
 import {
   suggestCardChooserTitle,
@@ -71,7 +71,7 @@ interface Signature {
 }
 
 type Request = {
-  search: SearchQuery;
+  search: SearchResource;
   deferred: Deferred<CardDef | undefined>;
   opts?: {
     offerToCreate?: {
@@ -542,6 +542,8 @@ export default class CardCatalogModal extends Component<Signature> {
           realmOfSelectedCard = (await this.cardService.getRealmURL(card))
             ?.href;
         } else if (typeof selectedItem === 'string') {
+          // WARNING This card is not part of the identity map!
+          // TODO refactor this to use CardResource (please make ticket)
           card = await this.cardService.getCard(selectedItem);
           realmOfSelectedCard = (
             card ? await this.cardService.getRealmURL(card) : undefined

@@ -273,10 +273,11 @@ module('Acceptance | code-submode | card playground', function (hooks) {
 
     await selectDeclaration('LocalCategoryCard');
     assert
-      .dom('[data-test-accordion-item="playground"]')
+      .dom('[data-test-playground-panel]')
       .doesNotExist(
-        'playground does not exist for LocalCategory (local card def)',
+        'playground preview is not available for LocalCategory (local card def)',
       );
+    assert.dom('[data-test-incompatible-nonexports]').exists();
 
     await selectDeclaration('RandomClass');
     assert
@@ -291,9 +292,6 @@ module('Acceptance | code-submode | card playground', function (hooks) {
 
   test('can populate instance chooser dropdown options from recent files', async function (assert) {
     removeRecentFiles();
-    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
-    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-
     setRecentFiles([
       [testRealmURL, 'BlogPost/mad-hatter.json'],
       [testRealmURL, 'Category/future-tech.json'],
@@ -302,6 +300,9 @@ module('Acceptance | code-submode | card playground', function (hooks) {
       [testRealmURL, 'BlogPost/urban-living.json'],
       [testRealmURL, 'Author/jane-doe.json'],
     ]);
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+
     await click('[data-test-instance-chooser]');
     assert
       .dom('[data-option-index] [data-test-category-fitted]')
