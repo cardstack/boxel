@@ -74,37 +74,39 @@ export class NodeAdapter implements RealmAdapter {
     }
 
     // TODO remove with CS-8014
-    let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
+    // let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
 
-    this.watcher = sane(join(this.realmDir, '/'), watcherOptions);
-    this.watcher.on('change', (path, _root, stat) => {
-      if (stat.isFile()) {
-        cb({
-          eventName: 'update',
-          updated: path,
-        });
-      }
-    });
-    this.watcher.on('add', (path, _root, stat) => {
-      if (stat.isFile()) {
-        cb({
-          eventName: 'update',
-          added: path,
-        });
-      }
-    });
-    this.watcher.on('delete', (path) =>
-      cb({
-        eventName: 'update',
-        removed: path,
-      }),
-    );
-    this.watcher.on('error', (err) => {
-      throw new Error(`watcher error: ${err}`);
-    });
-    await new Promise<void>((resolve) => {
-      this.watcher!.on('ready', resolve);
-    });
+    return Promise.resolve();
+
+    // this.watcher = sane(join(this.realmDir, '/'), watcherOptions);
+    // this.watcher.on('change', (path, _root, stat) => {
+    //   if (stat.isFile()) {
+    //     cb({
+    //       eventName: 'update',
+    //       updated: path,
+    //     });
+    //   }
+    // });
+    // this.watcher.on('add', (path, _root, stat) => {
+    //   if (stat.isFile()) {
+    //     cb({
+    //       eventName: 'update',
+    //       added: path,
+    //     });
+    //   }
+    // });
+    // this.watcher.on('delete', (path) =>
+    //   cb({
+    //     eventName: 'update',
+    //     removed: path,
+    //   }),
+    // );
+    // this.watcher.on('error', (err) => {
+    //   throw new Error(`watcher error: ${err}`);
+    // });
+    // await new Promise<void>((resolve) => {
+    //   this.watcher!.on('ready', resolve);
+    // });
   }
 
   unsubscribe(): void {
