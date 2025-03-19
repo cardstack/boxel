@@ -14,8 +14,6 @@ import { cardTypeDisplayName, type Query } from '@cardstack/runtime-common';
 
 import Preview from '@cardstack/host/components/preview';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import PrerenderedCardSearch, {
   type PrerenderedCard,
 } from '../../../prerendered-card-search';
@@ -146,7 +144,7 @@ interface Signature {
   Args: {
     prerenderedCardQuery?: { query: Query | undefined; realms: string[] };
     fieldOptions?: FieldOption[];
-    selection: { card: CardDef; fieldIndex: number | undefined } | undefined;
+    selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCard | FieldOption) => void;
     chooseCard: () => void;
     createNew?: () => void;
@@ -170,9 +168,9 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
           @dropdownClass='instances-dropdown-content'
           @options={{cards}}
           @selected={{findSelected @selection cards}}
-          @selectedItemComponent={{if
-            @selection
-            (component SelectedItem title=(getItemTitle @selection))
+          @selectedItemComponent={{component
+            SelectedItem
+            title=(getItemTitle @selection)
           }}
           @renderInPlace={{true}}
           @onChange={{@onSelect}}
@@ -200,9 +198,9 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       @dropdownClass='instances-dropdown-content'
       @options={{@fieldOptions}}
       @selected={{findSelected @selection undefined @fieldOptions}}
-      @selectedItemComponent={{if
-        @selection
-        (component SelectedItem title=(getItemTitle @selection))
+      @selectedItemComponent={{component
+        SelectedItem
+        title=(getItemTitle @selection)
       }}
       @renderInPlace={{true}}
       @onChange={{@onSelect}}
@@ -215,7 +213,7 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
         createNewIsRunning=@createNewIsRunning
       }}
       data-playground-instance-chooser
-      data-test-field-instance-chooser
+      data-test-instance-chooser
       as |item|
     >
       <div class='field-option'>
@@ -269,7 +267,7 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
 </template>;
 
 function findSelected(
-  selection: { card: CardDef; fieldIndex?: number } | undefined,
+  selection: SelectedInstance | undefined,
   cards: PrerenderedCard[] | undefined,
   fields?: FieldOption[],
 ) {

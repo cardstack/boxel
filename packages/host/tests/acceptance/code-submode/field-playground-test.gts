@@ -406,7 +406,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
@@ -442,7 +442,9 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .hasValue('Comment spec II');
 
     await togglePlaygroundPanel();
-    assert.dom('[data-test-selected-item]').hasText('Comment spec II');
+    assert
+      .dom('[data-test-selected-item]')
+      .hasText('Comment spec II - Example 1');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Spec 2 Example 1');
@@ -456,7 +458,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
   test("can select a different instance to preview from the spec's containedExamples collection", async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
@@ -500,7 +502,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       },
     });
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 2');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Needs better packaging');
@@ -546,7 +548,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-create-spec-button]').exists();
 
     await createNewInstance();
-    assert.dom('[data-test-selected-item]').hasText('Quote');
+    assert.dom('[data-test-selected-item]').hasText('Quote - Example 1');
     assertFieldExists(assert, 'edit');
     assert.dom('[data-test-field="quote"] input').hasNoValue();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
@@ -563,7 +565,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
   test('can create new field instance (has preexisting Spec)', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
@@ -605,7 +607,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
   test('can create new field instance when spec exists but has no examples', async function (assert) {
     await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
-    assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
+    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
 
     await click('[data-test-add-field-instance]');
     assertFieldExists(assert, 'edit');
