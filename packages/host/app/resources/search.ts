@@ -42,7 +42,10 @@ export class SearchResource extends Resource<Args> {
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @tracked private realmsToSearch: string[] = [];
-  private loaded: Promise<void> | undefined; // This should _always_ be private--do not make this public
+  // Resist the urge to expose this property publicly as that may entice
+  // consumers of this resource  to use it in a non-reactive manner (pluck off
+  // the instances and throw away the resource).
+  private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
