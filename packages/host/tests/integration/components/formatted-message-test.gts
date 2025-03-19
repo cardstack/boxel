@@ -1,4 +1,4 @@
-import { render } from '@ember/test-helpers';
+import { RenderingTestContext, render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -6,7 +6,6 @@ import FormattedMessage from '@cardstack/host/components/ai-assistant/formatted-
 
 import MonacoService from '@cardstack/host/services/monaco-service';
 
-import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Component | FormattedMessage', function (hooks) {
@@ -14,8 +13,10 @@ module('Integration | Component | FormattedMessage', function (hooks) {
 
   let monacoService: MonacoService;
 
-  hooks.beforeEach(async function () {
-    monacoService = this.owner.lookup('service:monaco-service');
+  hooks.beforeEach(async function (this: RenderingTestContext) {
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
   });
 
   async function renderFormattedMessage(testScenario: any) {
@@ -46,7 +47,9 @@ main = putStrLn "🖤"
       isStreaming: false,
     });
 
-    let messageElement = this.element.querySelector('.message');
+    let messageElement = (this as RenderingTestContext).element.querySelector(
+      '.message',
+    );
 
     assert.ok(
       messageElement?.innerHTML.includes(
@@ -75,8 +78,10 @@ puts "💎"
       isStreaming: false,
     });
 
-    let messageElement = this.element.querySelector('.message');
-    let directChildren = messageElement?.children;
+    let messageElement = (this as RenderingTestContext).element.querySelector(
+      '.message',
+    ) as HTMLElement;
+    let directChildren = messageElement.children;
 
     assert.ok(directChildren[0]?.tagName == 'P');
     assert.ok(

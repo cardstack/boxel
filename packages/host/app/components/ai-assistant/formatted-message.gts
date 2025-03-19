@@ -307,7 +307,7 @@ function extractCodeData(preElementString: string) {
   let fileUrl = null;
 
   let trimmedContent = content?.trim();
-  if (trimmedContent.trim().startsWith('// File url: ')) {
+  if (trimmedContent?.trim().startsWith('// File url: ')) {
     let firstLine = trimmedContent.trim().split('\n')[0];
     let fileUrlRegex = /File url: (.*)/;
     let fileUrlMatch = firstLine.match(fileUrlRegex);
