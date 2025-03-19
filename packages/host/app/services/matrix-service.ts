@@ -1234,8 +1234,12 @@ export default class MatrixService extends Service {
       throw new Error(`Cannot find room with id ${roomId}`);
     }
 
-    this.timelineLoadingState.set(roomId, true);
+    if (this.timelineLoadingState.get(roomId)) {
+      return;
+    }
+
     let token = waiter.beginAsync();
+    this.timelineLoadingState.set(roomId, true);
     try {
       while (room.oldState.paginationToken != null) {
         await this.client.scrollback(room);
