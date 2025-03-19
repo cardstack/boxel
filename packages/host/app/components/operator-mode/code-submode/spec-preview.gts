@@ -63,10 +63,15 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import { CardContext } from 'https://cardstack.com/base/card-api';
+import {
+  CardContext,
+  type CardDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -80,6 +85,7 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     selectedDeclaration?: ModuleDeclaration;
+    onPlaygroundAccordionToggle: () => void;
   };
   Blocks: {
     default: [
@@ -101,6 +107,7 @@ interface Signature {
             | 'spec'
             | 'isLoading'
             | 'cards'
+            | 'updatePlaygroundSelections'
           >
         | WithBoundArgs<typeof SpecPreviewLoading, never>
       ),
@@ -206,6 +213,7 @@ interface ContentSignature {
     cards: PrerenderedCard[];
     spec: Spec | undefined;
     isLoading: boolean;
+    updatePlaygroundSelections: (cardId: string) => void;
   };
 }
 
@@ -287,6 +295,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     this.operatorModeStateService.updateCodePath(selectedUrl);
   }
 
+  @action viewCardInPlayground(card: CardDef | string) {
+    const cardId = typeof card === 'string' ? card : card.id;
+    this.args.updatePlaygroundSelections(cardId);
+  }
+
   <template>
     <div
       {{DidInsert onDidInsert=this.initializeCardSelection}}
@@ -349,6 +362,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             <Overlays
               @overlayClassName='spec-preview-overlay'
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+              @onSelectCard={{this.viewCardInPlayground}}
             />
             {{#if this.displayIsolated}}
               <Preview
@@ -466,6 +480,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare realmServer: RealmServerService;
   @service private declare cardService: CardService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service private declare recentFilesService: RecentFilesService;
   @tracked private _selectedCardId?: string;
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
@@ -635,39 +650,81 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return cards.length === 0 && this.canWrite;
   };
 
-  // When previewing a field spec, changing the spec in Spec panel should
-  // change the selected spec in Playground panel
-  private updateFieldSpecForPlayground = (id: string) => {
-    let declaration = this.args.selectedDeclaration;
-    if (
-      !declaration?.exportName ||
-      !isCardOrFieldDeclaration(declaration) ||
-      !isFieldDef(declaration.cardOrField)
-    ) {
+  /**
+   * Updates playground selections in localStorage if needed
+   * @param id The card ID to select
+   * @param defaultFormat The display format to use
+   * @param isFieldSpec Whether we're checking for a field spec (true) or card (false)
+   * @param fieldIndex The index of the field to select
+   */
+  private updatePlaygroundSelection(
+    id: string,
+    defaultFormat: Format,
+    isFieldSpec: boolean,
+    fieldIndex?: number,
+  ) {
+    const declaration = this.args.selectedDeclaration;
+
+    if (!declaration?.exportName || !isCardOrFieldDeclaration(declaration)) {
       return;
     }
-    let moduleId = internalKeyFor(
+
+    // Check if we have the right kind of definition (field or card)
+    const hasExpectedDefType = isFieldSpec
+      ? isFieldDef(declaration.cardOrField)
+      : isCardDef(declaration.cardOrField);
+
+    if (!hasExpectedDefType) {
+      return;
+    }
+
+    const moduleId = internalKeyFor(
       this.getSelectedDeclarationAsCodeRef,
       undefined,
     );
-    let cardId = id.replace(/\.json$/, '');
-    let selections = window.localStorage.getItem(PlaygroundSelections);
+    const cardId = id.replace(/\.json$/, '');
+
+    const selections = window.localStorage.getItem(PlaygroundSelections);
+    let existingFormat = defaultFormat;
+
     if (selections) {
-      let selection = JSON.parse(selections)[moduleId];
+      const selection = JSON.parse(selections)[moduleId];
+      // If we already have selections for this module, preserve the format
+      existingFormat = selection?.format || defaultFormat;
+
       if (selection?.cardId === cardId) {
         return;
       }
     }
+
     this.playgroundPanelService.persistSelections(
       moduleId,
       cardId,
-      'embedded',
-      0,
+      existingFormat,
+      fieldIndex,
     );
+  }
+
+  // Updates playground selection when a field spec is selected
+  private updateFieldSpecForPlayground = (id: string) => {
+    this.updatePlaygroundSelection(id, 'embedded', true, 0);
+  };
+
+  // Action triggered when a linkedExample card is selected
+  // Updates playground selection & adds to recent files
+  // Toggles the playground accordion open
+  private updatePlaygroundSelections = (id: string) => {
+    const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
+    this.recentFilesService.addRecentFileUrl(fileUrl);
+    this.updatePlaygroundSelection(id, 'isolated', false);
+    this.args.onPlaygroundAccordionToggle();
   };
 
   <template>
-    <div class='hidden' {{consumeContext consume=this.makeCardResource}}></div>
+    <div
+      class='item hidden'
+      {{consumeContext consume=this.makeCardResource}}
+    ></div>
     <PrerenderedCardSearch
       @query={{this.specQuery}}
       @format='fitted'
@@ -693,6 +750,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
               spec=this.card
               isLoading=false
               cards=cards
+              updatePlaygroundSelections=this.updatePlaygroundSelections
             )
           }}
         {{/let}}
