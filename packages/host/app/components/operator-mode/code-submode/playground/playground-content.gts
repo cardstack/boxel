@@ -59,6 +59,11 @@ export type FieldOption = {
   field: FieldDef;
 };
 
+export type SelectedInstance = {
+  card: CardDef;
+  fieldIndex: number | undefined;
+};
+
 interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
@@ -80,7 +85,7 @@ export default class PlaygroundContent extends Component<Signature> {
             realms=this.recentRealms
           }}
           @fieldOptions={{this.fieldInstances}}
-          @selection={{hash card=this.card fieldIndex=this.fieldIndex}}
+          @selection={{this.dropdownSelection}}
           @onSelect={{this.onSelect}}
           @chooseCard={{this.chooseInstance}}
           @createNew={{if this.canWriteRealm this.createNew}}
@@ -377,6 +382,22 @@ export default class PlaygroundContent extends Component<Signature> {
         (item as PrerenderedCard).url.replace(/\.json$/, ''),
       );
     }
+  }
+
+  private get dropdownSelection(): SelectedInstance | undefined {
+    if (!this.card) {
+      return undefined;
+    }
+    if (this.args.isFieldDef) {
+      return {
+        card: this.card,
+        fieldIndex: this.fieldIndex,
+      };
+    }
+    return {
+      card: this.card,
+      fieldIndex: undefined,
+    };
   }
 
   @action private setFormat(format: Format) {

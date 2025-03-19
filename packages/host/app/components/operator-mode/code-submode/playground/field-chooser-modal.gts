@@ -38,7 +38,7 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
         <ol class='instances'>
           {{#each @instances as |instance i|}}
             <li class='field-option'>
-              {{instance.displayIndex}}.
+              <span class='field-option-index'>{{instance.displayIndex}}.</span>
               <CardContainer
                 class={{cn 'instance-container' selected=(eq i @selectedIndex)}}
                 @tag='button'
@@ -86,6 +86,10 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
     .field-option {
       display: flex;
       gap: var(--boxel-sp-xs);
+    }
+    .field-option-index {
+      width: var(--boxel-sp);
+      text-align: center;
     }
   </style>
 </template>;

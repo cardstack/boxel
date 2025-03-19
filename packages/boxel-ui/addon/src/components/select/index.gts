@@ -65,9 +65,10 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       border-radius: var(--boxel-border-radius-sm);
       max-width: 100%;
       width: 100%;
+      padding: var(--boxel-sp-xs);
     }
-    .ember-power-select-trigger {
-      padding: 0;
+    .boxel-select:hover {
+      cursor: pointer;
     }
   </style>
   {{! template-lint-disable require-scoped-style }}
@@ -85,14 +86,20 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       overflow: auto;
     }
     .boxel-select__dropdown .ember-power-select-option {
-      padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+      padding: var(--boxel-sp-xs);
+      background-color: var(--boxel-light);
+      color: var(--boxel-dark);
+      transition: background-color var(--boxel-transition);
     }
     .boxel-select__dropdown .ember-power-select-option[aria-selected='true'] {
-      background-color: var(--boxel-100);
+      background-color: var(--boxel-highlight);
     }
-    .boxel-select__dropdown .ember-power-select-option[aria-current='true'] {
+    .boxel-select__dropdown
+      .ember-power-select-option[aria-selected='true']:hover {
+      background-color: var(--boxel-highlight-hover);
+    }
+    .boxel-select__dropdown .ember-power-select-option:hover {
       background-color: var(--boxel-100);
-      color: black;
     }
     .boxel-select__dropdown .ember-power-select-search-input:focus {
       border: 1px solid var(--boxel-outline-color);
@@ -100,7 +107,7 @@ const BoxelSelect: TemplateOnlyComponent<Signature> = <template>
       outline: var(--boxel-outline);
     }
     .boxel-select__dropdown .ember-power-select-option--no-matches-message {
-      padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+      padding: var(--boxel-sp-sm);
     }
   </style>
 </template>;

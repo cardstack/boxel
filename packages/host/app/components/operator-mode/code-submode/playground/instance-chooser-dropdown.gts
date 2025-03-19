@@ -20,13 +20,13 @@ import PrerenderedCardSearch, {
   type PrerenderedCard,
 } from '../../../prerendered-card-search';
 
-import type { FieldOption } from './playground-content';
+import type { FieldOption, SelectedInstance } from './playground-content';
 
-const getItemTitle = (selection: { card?: CardDef; fieldIndex?: number }) => {
-  let { card, fieldIndex } = selection;
-  if (!card) {
+const getItemTitle = (selection: SelectedInstance | undefined) => {
+  if (!selection) {
     return;
   }
+  let { card, fieldIndex } = selection;
   let title = card.title ?? `Untitled ${cardTypeDisplayName(card)}`;
   if (fieldIndex === undefined) {
     return title;
@@ -36,44 +36,31 @@ const getItemTitle = (selection: { card?: CardDef; fieldIndex?: number }) => {
 
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
   <template>
-    <div class='selected-item'>
-      Instance:
-      <span class='title' data-test-selected-item>
-        {{@title}}
-      </span>
+    <div class='selected-item' data-test-selected-item>
+      {{@title}}
     </div>
     <style scoped>
       .selected-item {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        overflow: hidden;
-        font: 600 var(--boxel-font-xs);
+        font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-sm);
-      }
-      .title {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
     </style>
   </template>;
 
 const BeforeOptions: TemplateOnlyComponent = <template>
   <div class='before-options'>
-    <span class='title'>
-      Recent
-    </span>
+    Recent
   </div>
   <style scoped>
     .before-options {
       width: 100%;
       background-color: var(--boxel-light);
-      padding: var(--boxel-sp-xs) calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs))
-        0 calc(var(--boxel-sp-xxs) + var(--boxel-sp-xs));
-    }
-    .title {
-      font: 600 var(--boxel-font-sm);
+      padding: var(--boxel-sp-xs) var(--boxel-sp);
+      font: 500 var(--boxel-font-sm);
+      letter-spacing: var(--boxel-lsp-xs);
     }
   </style>
 </template>;
@@ -101,7 +88,7 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
         {{else}}
           <IconPlusThin width='16px' height='16px' />
         {{/if}}
-        Create new instance
+        <span>Create new instance</span>
       </button>
     {{/if}}
     <button
@@ -110,7 +97,7 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       data-test-choose-another-instance
     >
       <Folder width='16px' height='16px' />
-      Choose another instance
+      <span>Choose another instance</span>
     </button>
   </div>
   <style scoped>
@@ -119,25 +106,35 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       flex-direction: column;
       border-top: var(--boxel-border);
       background-color: var(--boxel-light);
-      padding: var(--boxel-sp-xs);
-      gap: var(--boxel-sp-xxs);
     }
     .title {
-      font: 600 var(--boxel-font-sm);
-      padding: 0 var(--boxel-sp-xxs);
+      padding: var(--boxel-sp-xs) var(--boxel-sp);
+      font: 500 var(--boxel-font-sm);
+      letter-spacing: var(--boxel-lsp-xs);
     }
     .action {
-      display: flex;
-      align-items: center;
+      display: inline-block;
       font: 500 var(--boxel-font-sm);
       border: none;
       background-color: transparent;
       gap: var(--boxel-sp-xs);
+      height: var(--boxel-form-control-height);
       padding: var(--boxel-sp-xs);
       border-radius: var(--boxel-border-radius);
+      text-align: left;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      transition: background-color var(--boxel-transition);
     }
     .action:hover {
       background-color: var(--boxel-100);
+    }
+    .action > span {
+      margin-left: var(--boxel-sp-xxs);
+    }
+    .action > * {
+      vertical-align: middle;
     }
     .action-running {
       --boxel-loading-indicator-size: 16px;
@@ -149,7 +146,7 @@ interface Signature {
   Args: {
     prerenderedCardQuery?: { query: Query | undefined; realms: string[] };
     fieldOptions?: FieldOption[];
-    selection: { card: CardDef; fieldIndex?: number } | undefined;
+    selection: { card: CardDef; fieldIndex: number | undefined } | undefined;
     onSelect: (item: PrerenderedCard | FieldOption) => void;
     chooseCard: () => void;
     createNew?: () => void;
@@ -197,7 +194,7 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
         </BoxelSelect>
       </:response>
     </PrerenderedCardSearch>
-  {{else if @fieldOptions}}
+  {{else}}
     <BoxelSelect
       class='instance-chooser'
       @dropdownClass='instances-dropdown-content'
@@ -222,9 +219,9 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       as |item|
     >
       <div class='field-option'>
-        {{item.displayIndex}}.
+        <span class='field-option-index'>{{item.displayIndex}}.</span>
         <CardContainer class='field' @displayBoundaries={{true}}>
-          <Preview @card={{item.field}} @format='fitted' />
+          <Preview @card={{item.field}} @format='atom' />
         </CardContainer>
       </div>
     </BoxelSelect>
@@ -240,19 +237,19 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       height: var(--boxel-form-control-height);
       box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
     }
-    :deep(
-      .boxel-select__dropdown .ember-power-select-option[aria-current='true']
-    ),
-    :deep(.instances-dropdown-content .ember-power-select-option) {
-      background-color: var(--boxel-light);
-    }
-    :deep(.ember-power-select-option:hover .card) {
-      background-color: var(--boxel-100);
+    .instance-chooser :deep(.boxel-trigger-content) {
+      overflow: hidden;
     }
     .field-option {
       display: flex;
       align-items: center;
       gap: var(--boxel-sp-xs);
+      width: 375px;
+      max-width: 100%;
+    }
+    .field-option-index {
+      width: var(--boxel-sp);
+      text-align: center;
     }
     .card,
     .field {
@@ -262,6 +259,11 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       container-name: fitted-card;
       container-type: size;
       background-color: var(--boxel-light);
+    }
+    .field {
+      padding: var(--boxel-sp-xs);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   </style>
 </template>;
