@@ -305,14 +305,16 @@ function extractCodeData(preElementString: string) {
   // We need this url so that we know which file the code patch applies to.
   // We extract this url and remove it from the content.
   let fileUrl = null;
-  if (content?.startsWith('// File url: ')) {
-    let firstLine = content.split('\n')[0];
+
+  let trimmedContent = content?.trim();
+  if (trimmedContent.trim().startsWith('// File url: ')) {
+    let firstLine = trimmedContent.trim().split('\n')[0];
     let fileUrlRegex = /File url: (.*)/;
     let fileUrlMatch = firstLine.match(fileUrlRegex);
     if (fileUrlMatch) {
       fileUrl = fileUrlMatch[1];
     }
-    content = content.slice(firstLine.length).trimStart();
+    content = trimmedContent.slice(firstLine.length).trimStart();
   }
 
   return {
