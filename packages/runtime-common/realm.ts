@@ -520,7 +520,7 @@ export class Realm {
     } else {
       return;
     }
-    let messageHash = `${type}-${JSON.stringify(data)}`;
+    let messageHash = `${type}-${JSON.stringify({ [type]: file })}`;
     let url = this.paths.fileURL(file);
     let timeout = this.#recentWrites.get(messageHash);
     if (timeout) {
