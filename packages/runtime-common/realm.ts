@@ -490,19 +490,23 @@ export class Realm {
       : (await this.#adapter.exists(path))
         ? 'updated'
         : 'added';
-    let messageHash = `${type}-${JSON.stringify({ [type]: path })}`;
+    let recentWritesKey = this.constructRecentWritesKey(type, path);
     this.#recentWrites.set(
-      messageHash,
+      recentWritesKey,
       setTimeout(() => {
-        this.#recentWrites.delete(messageHash);
+        this.#recentWrites.delete(recentWritesKey);
       }, 500) as unknown as number, // don't use NodeJS Timeout type
     );
+  }
+
+  private constructRecentWritesKey(operation: string, path: string) {
+    return `${operation}-${JSON.stringify({ [operation]: path })}`;
   }
 
   private getTrackedWrite(
     data: UpdateRealmEventContent,
   ): { isTracked: boolean; url: URL } | undefined {
-    let file: string | undefined;
+    let file: string;
     let type: string | undefined;
     if ('updated' in data) {
       file = data.updated;
@@ -516,14 +520,14 @@ export class Realm {
     } else {
       return;
     }
-    let messageHash = `${type}-${JSON.stringify({ [type]: file })}`;
+    let recentWritesKey = this.constructRecentWritesKey(type, file);
     let url = this.paths.fileURL(file);
-    let timeout = this.#recentWrites.get(messageHash);
+    let timeout = this.#recentWrites.get(recentWritesKey);
     if (timeout) {
       // This is a best attempt to eliminate an echo here since it's unclear whether this update is one
       // that we wrote or one that was created outside of us
       clearTimeout(timeout);
-      this.#recentWrites.delete(messageHash);
+      this.#recentWrites.delete(recentWritesKey);
       return { isTracked: true, url };
     }
     return { isTracked: false, url };
