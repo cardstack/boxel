@@ -96,10 +96,10 @@ export class RoomResource extends Resource<Args> {
     return this.processRoomTask.isRunning;
   }
 
-  processingLastStarteAt = 0;
+  processingLastStartedAt = 0;
 
   private processRoomTask = restartableTask(async (roomId: string) => {
-    this.processingLastStarteAt = Date.now();
+    this.processingLastStartedAt = Date.now();
     try {
       this.matrixRoom = roomId
         ? await this.matrixService.getRoomData(roomId)
