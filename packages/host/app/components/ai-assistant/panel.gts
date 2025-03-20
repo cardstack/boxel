@@ -7,7 +7,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { allSettled, restartableTask, timeout } from 'ember-concurrency';
 import { Velcro } from 'ember-velcro';
 import window from 'ember-window-mock';
 
@@ -446,9 +446,7 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private loadRoomsTask = restartableTask(async () => {
     await this.matrixService.flushAll;
-    await Promise.allSettled(
-      [...this.roomResources.values()].map((r) => r.loading),
-    );
+    await allSettled([...this.roomResources.values()].map((r) => r.processing));
     await this.enterRoomInitially();
   });
 

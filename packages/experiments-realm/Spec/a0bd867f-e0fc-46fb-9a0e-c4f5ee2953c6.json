@@ -1,0 +1,62 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Toy",
+        "module": "../pet"
+      },
+      "specType": "field",
+      "containedExamples": [
+        {
+          "title": "Dragon"
+        },
+        {
+          "title": "Tug rope"
+        },
+        {
+          "title": "Lambchop"
+        }
+      ],
+      "title": "Toy Spec I",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../pet",
+              "name": "Toy"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../pet",
+              "name": "Toy"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../pet",
+              "name": "Toy"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Toy",
+        "module": "../pet"
+      },
+      "specType": "field",
+      "containedExamples": [
+        {
+          "title": "Orange ball"
+        },
+        {
+          "title": "Large yellow ball"
+        },
+        {
+          "title": "Small red ball"
+        }
+      ],
+      "title": "Toy Spec II",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "fields": {
+        "containedExamples": [
+          {
+            "adoptsFrom": {
+              "module": "../pet",
+              "name": "Toy"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../pet",
+              "name": "Toy"
+            }
+          },
+          {
+            "adoptsFrom": {
+              "module": "../pet",
+              "name": "Toy"
+            }
+          }
+        ]
+      },
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
