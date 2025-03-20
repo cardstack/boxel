@@ -14,7 +14,14 @@ import {
   type TestContextWithSave,
   setupOnSave,
 } from '../../helpers';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import {
+  getPlaygroundSelections,
+  getRecentFiles,
+  assertCardExists,
+} from '../../helpers/playground';
+
 import { setupApplicationTest } from '../../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -765,5 +772,181 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-edit]').exists({ count: 1 });
     assert.dom('[data-test-item="0"] [data-test-edit]').containsText('Edit');
     await percySnapshot(assert);
+  });
+
+  test('updatePlaygroundSelections persists card selection in playground when clicking an example card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+
+    // Open the spec preview panel
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+
+    // Select the pet-entry-2 spec which has linked examples
+    await waitFor('[data-test-spec-selector]');
+    await click('[data-test-spec-selector] > div');
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2.json');
+    await click('[data-option-index="0"]');
+
+    // Wait for linked examples to appear
+    const petId = `${testRealmURL}Pet/mango`;
+    await waitFor(`[data-test-links-to-many="linkedExamples"]`);
+    assert.dom(`[data-test-card="${petId}"]`).exists();
+
+    // Click on the first linked example
+    await triggerEvent(`[data-test-card="${petId}"]`, 'mouseenter');
+    await waitFor('[data-test-card-overlay]');
+    await click(`[data-test-card="${petId}"]`);
+
+    // Verify the card was persisted in playground selections
+    const petModuleId = `${testRealmURL}pet/Pet`;
+    assert.deepEqual(
+      getPlaygroundSelections()?.[petModuleId],
+      {
+        cardId: petId,
+        format: 'isolated', // Default format
+      },
+      'Card selection is persisted in localStorage',
+    );
+
+    // Verify the playground panel shows the selected card
+    await waitFor('[data-test-selected-item]');
+    assert.dom('[data-test-selected-item]').hasText('Mango');
+    assertCardExists(
+      assert,
+      petId,
+      'isolated',
+      'Card is displayed in isolated format',
+    );
+  });
+
+  test('updatePlaygroundSelections adds card to recent files storage when clicking an example card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+
+    // Open the spec preview panel
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+
+    // Select the pet-entry-2 spec which has linked examples
+    await waitFor('[data-test-spec-selector]');
+    await click('[data-test-spec-selector] > div');
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2.json');
+    await click('[data-option-index="0"]');
+
+    // Wait for linked examples to appear
+    const petId = `${testRealmURL}Pet/mango`;
+    await waitFor(`[data-test-links-to-many="linkedExamples"]`);
+    assert.dom(`[data-test-card="${petId}"]`).exists();
+
+    // Click on the first linked example
+    await triggerEvent(`[data-test-card="${petId}"]`, 'mouseenter');
+    await waitFor('[data-test-card-overlay]');
+    await click(`[data-test-card="${petId}"]`);
+
+    // Verify the card was added to recent files
+    assert.deepEqual(
+      getRecentFiles()?.[0],
+      [testRealmURL, 'Pet/mango.json', null],
+      'Card is added to recent files storage',
+    );
+    // Verify the card appears in the playground
+    assertCardExists(
+      assert,
+      petId,
+      'isolated',
+      'Card appears in playground panel',
+    );
+  });
+
+  test('updatePlaygroundSelections preserves existing format when selecting different examples card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+
+    // Open the spec preview panel
+    await waitFor('[data-test-accordion-item="spec-preview"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+
+    // Select the pet-entry-2 spec which has linked examples
+    await waitFor('[data-test-spec-selector]');
+    await click('[data-test-spec-selector] > div');
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2.json');
+    await click('[data-option-index="0"]');
+
+    // Wait for linked examples to appear
+    const firstPetId = `${testRealmURL}Pet/mango`;
+    const secondPetId = `${testRealmURL}Pet/pudding`;
+    await waitFor(`[data-test-links-to-many="linkedExamples"]`);
+    assert.dom(`[data-test-card="${firstPetId}"]`).exists();
+    assert.dom(`[data-test-card="${secondPetId}"]`).exists();
+
+    // Click on the first linked example
+    await triggerEvent(`[data-test-card="${firstPetId}"]`, 'mouseenter');
+    await waitFor('[data-test-card-overlay]');
+    await click(`[data-test-card="${firstPetId}"]`);
+
+    assertCardExists(
+      assert,
+      firstPetId,
+      'isolated',
+      'First card initially shown in isolated format',
+    );
+
+    await click('[data-test-format-chooser="embedded"]');
+    assertCardExists(
+      assert,
+      firstPetId,
+      'embedded',
+      'Format changed to embedded for first card',
+    );
+
+    // Verify format was changed
+    const petModuleId = `${testRealmURL}pet/Pet`;
+    assert.deepEqual(
+      getPlaygroundSelections()?.[petModuleId],
+      {
+        cardId: firstPetId,
+        format: 'embedded',
+      },
+      'Format is set to embedded',
+    );
+
+    // Go back to spec preview and click the second card
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await triggerEvent(`[data-test-card="${secondPetId}"]`, 'mouseenter');
+    await waitFor('[data-test-card-overlay]');
+    await click(`[data-test-card="${secondPetId}"]`);
+
+    // Verify the format was preserved when selecting the second card
+    assert.deepEqual(
+      getPlaygroundSelections()?.[petModuleId],
+      {
+        cardId: secondPetId,
+        format: 'embedded',
+      },
+      'The embedded format is preserved when selecting another card',
+    );
+
+    // Verify the second card is shown in embedded format
+    await waitFor('[data-test-selected-item]');
+    assert.dom('[data-test-selected-item]').hasText('Pudding');
+    assertCardExists(
+      assert,
+      secondPetId,
+      'embedded',
+      'Second card is displayed in the embedded format',
+    );
   });
 });

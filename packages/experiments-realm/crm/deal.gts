@@ -16,7 +16,7 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 
-import { getCards, Query } from '@cardstack/runtime-common';
+import { type Query } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
@@ -217,7 +217,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
     };
   }
 
-  query = getCards(
+  query = this.args.context?.getCards(
+    this,
     () => this.dealQuery,
     () => this.realmHrefs,
     {
@@ -225,7 +226,8 @@ class IsolatedTemplate extends Component<typeof Deal> {
     },
   );
 
-  activeTasks = getCards(
+  activeTasks = this.args.context?.getCards(
+    this,
     () => this.activeTasksQuery,
     () => this.realmHrefs,
     {
