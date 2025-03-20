@@ -5,8 +5,6 @@ import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
 
-import { task, timeout } from 'ember-concurrency';
-
 import { modifier } from 'ember-modifier';
 
 import { resource, use } from 'ember-resources';
@@ -20,7 +18,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { MenuItem, bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
-import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
+import { ArrowLeft } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
@@ -29,8 +27,7 @@ import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
-import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
-import monacoModifier from '@cardstack/host/modifiers/monaco';
+
 import { RoomResource } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -42,6 +39,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
+import CodeBlock from '../ai-assistant/code-block';
 import Preview from '../preview';
 
 import PreparingRoomMessageCommand from './preparing-room-message-command';
@@ -65,35 +63,10 @@ export default class RoomMessageCommand extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
 
-  editorDisplayOptions: MonacoEditorOptions = {
-    wordWrap: 'on',
-    wrappingIndent: 'indent',
-    fontWeight: 'bold',
-    scrollbar: {
-      alwaysConsumeMouseWheel: false,
-    },
-    lineNumbers: 'off',
-  };
-
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;
     return JSON.stringify({ name, payload }, null, 2);
   }
-
-  private copyToClipboard = (event: MouseEvent) => {
-    this.copyClipboardTask.perform(event.currentTarget as HTMLElement);
-  };
-
-  private copyClipboardTask = task(async (buttonElement: HTMLElement) => {
-    await navigator.clipboard.writeText(this.previewCommandCode);
-    let svg = buttonElement.children[0];
-    buttonElement.replaceChildren(svg, document.createTextNode('Copied'));
-    await timeout(2000);
-    buttonElement.replaceChildren(
-      svg,
-      document.createTextNode('Copy to clipboard'),
-    );
-  });
 
   @cached
   private get applyButtonState(): ApplyButtonState {
@@ -221,37 +194,18 @@ export default class RoomMessageCommand extends Component<Signature> {
           />
         </div>
         {{#if this.isDisplayingCode}}
-          <div class='preview-code'>
-            <Button
-              class='code-copy-button'
-              @kind='text-only'
-              @size='extra-small'
-              {{on 'click' this.copyToClipboard}}
-              data-test-copy-code
-            >
-              <CopyIcon
-                width='16'
-                height='16'
-                role='presentation'
-                aria-hidden='true'
-              />
-              <span class='copy-text'>Copy to clipboard</span>
-            </Button>
-            <div
-              class='monaco-container'
-              {{this.scrollBottomIntoView}}
-              {{monacoModifier
-                content=this.previewCommandCode
-                contentChanged=undefined
-                monacoSDK=@monacoSDK
-                language='json'
-                readOnly=true
-                editorDisplayOptions=this.editorDisplayOptions
-              }}
-              data-test-editor
-              data-test-percy-hide
-            />
-          </div>
+          <CodeBlock
+            {{this.scrollBottomIntoView}}
+            @monacoSDK={{@monacoSDK}}
+            @code={{this.previewCommandCode}}
+            @language='json'
+            as |codeBlock|
+          >
+            <codeBlock.actions as |actions|>
+              <actions.copyCode />
+            </codeBlock.actions>
+            <codeBlock.editor />
+          </CodeBlock>
         {{/if}}
         {{#if this.failedCommandState}}
           <div class='failed-command-result'>
@@ -380,12 +334,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       .header :deep(.content) {
         gap: 0;
       }
-      .icon-button {
-        --icon-color: var(--boxel-dark);
-      }
-      .icon-button:hover {
-        --icon-color: var(--boxel-highlight);
-      }
       .options-menu :deep(.boxel-menu__item__content) {
         padding-right: var(--boxel-sp-xxs);
         padding-left: var(--boxel-sp-xxs);
@@ -412,6 +360,9 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .failed-command-text {
         color: var(--boxel-light);
+      }
+      :deep(.code-block-actions) {
+        margin-top: var(--boxel-sp);
       }
     </style>
   </template>

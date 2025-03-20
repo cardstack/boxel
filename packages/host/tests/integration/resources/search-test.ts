@@ -11,7 +11,10 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
-import { SearchResource } from '@cardstack/host/resources/search';
+import {
+  SearchResource,
+  Args as SearchResourceArgs,
+} from '@cardstack/host/resources/search';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
 import RealmService from '@cardstack/host/services/realm';
@@ -32,6 +35,19 @@ class StubRealmService extends RealmService {
   realmOfURL(_url: URL) {
     return new URL(testRealmURL);
   }
+}
+
+function getSearchResourceForTest(
+  owner: object,
+  args: () => SearchResourceArgs,
+) {
+  return SearchResource.from(owner, args) as unknown as Omit<
+    SearchResource,
+    'loaded'
+  > & {
+    // we expose the private loaded promise just for our tests
+    loaded: Promise<void>;
+  };
 }
 
 module(`Integration | search resource`, function (hooks) {
@@ -296,7 +312,7 @@ module(`Integration | search resource`, function (hooks) {
         },
       },
     };
-    let search = SearchResource.from(loaderService, () => ({
+    let search = getSearchResourceForTest(loaderService, () => ({
       named: {
         query,
         realms: [testRealmURL],
@@ -304,7 +320,7 @@ module(`Integration | search resource`, function (hooks) {
         isAutoSaved: false,
         storeService,
       },
-    })) as SearchResource;
+    }));
     await search.loaded;
     assert.strictEqual(search.instances[0].id, `${testRealmURL}card-2`);
     assert.strictEqual(search.instances[0].constructor.name, 'Book');
@@ -322,7 +338,7 @@ module(`Integration | search resource`, function (hooks) {
         },
       },
     };
-    let search = SearchResource.from(loaderService, () => ({
+    let search = getSearchResourceForTest(loaderService, () => ({
       named: {
         query,
         realms: [testRealmURL],
@@ -330,7 +346,7 @@ module(`Integration | search resource`, function (hooks) {
         isAutoSaved: false,
         storeService,
       },
-    })) as SearchResource;
+    }));
     await search.loaded;
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual(search.instances[0].id, `${testRealmURL}books/1`);
@@ -379,7 +395,7 @@ module(`Integration | search resource`, function (hooks) {
         },
       },
     };
-    let search = SearchResource.from(loaderService, () => ({
+    let search = getSearchResourceForTest(loaderService, () => ({
       named: {
         query,
         realms: [testRealmURL],
@@ -387,7 +403,7 @@ module(`Integration | search resource`, function (hooks) {
         isAutoSaved: false,
         storeService,
       },
-    })) as SearchResource;
+    }));
     await search.loaded;
     assert.strictEqual(search.instances.length, 2);
     assert.strictEqual((search.instances[0] as any).author.firstName, `Mango`);

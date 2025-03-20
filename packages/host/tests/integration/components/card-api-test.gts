@@ -11,7 +11,7 @@ import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import { Loader, CardContextName, type Query } from '@cardstack/runtime-common';
+import { Loader, CardContextName } from '@cardstack/runtime-common';
 
 import { getSearch } from '@cardstack/host/resources/search';
 import LoaderService from '@cardstack/host/services/loader-service';
@@ -30,7 +30,6 @@ import {
   field,
   setupBaseRealm,
   Component,
-  // realmURL,
 } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
@@ -45,11 +44,7 @@ class CardContextProvider extends GlimmerComponent<CardContextProviderSignature>
   @provide(CardContextName)
   get context() {
     return {
-      actions: {
-        getCards: (getQuery: () => Query, getRealms: () => string[]) => {
-          return getSearch(this, getQuery, getRealms);
-        },
-      },
+      getCards: getSearch,
     };
   }
 }
@@ -181,8 +176,9 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
         get realms() {
           return [testRealmURL]; //TODO: Investigate where meta is returned. Offer a context where the symbol exists
         }
-        resource = this.args.context?.actions?.getCards
-          ? this.args.context.actions.getCards(
+        resource = this.args.context?.getCards
+          ? this.args.context.getCards(
+              this,
               () => this.query,
               () => this.realms,
             )

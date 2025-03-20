@@ -27,7 +27,7 @@ import type StoreService from '../services/store';
 
 const waiter = buildWaiter('search-resource:search-waiter');
 
-interface Args {
+export interface Args {
   named: {
     query: Query | undefined;
     realms: string[] | undefined;
@@ -42,11 +42,11 @@ export class SearchResource extends Resource<Args> {
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @tracked private realmsToSearch: string[] = [];
-  // This is deprecated. consumers of this resource need to be reactive such
-  // that they can deal with a resource that doesn't have a search results yet.
-  loaded: Promise<void> | undefined;
+  // Resist the urge to expose this property publicly as that may entice
+  // consumers of this resource  to use it in a non-reactive manner (pluck off
+  // the instances and throw away the resource).
+  private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
-  // declare private store: StoreService;
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
   #isAutoSaved = false;
@@ -92,6 +92,10 @@ export class SearchResource extends Resource<Args> {
         }
       });
     }
+  }
+
+  get isLoading() {
+    return this.search.isRunning;
   }
 
   get isLive() {
@@ -176,7 +180,7 @@ export class SearchResource extends Resource<Args> {
       // Please note 3 things there:
       // 1. we are mutating this._instances, not replacing it
       // 2. the items in this array come from an identity map, so we are never
-      //    recreating an instance that already exist.
+      //    recreating an instance that already exists.
       // 3. The ordering of the results is important, we need to retain that.
       //
       //  As such, removing all the items in-place in our tracked
@@ -193,12 +197,18 @@ export class SearchResource extends Resource<Args> {
       waiter.endAsync(token);
     }
   });
-
-  get isLoading() {
-    return this.search.isRunning;
-  }
 }
 
+// WARNING! please don't import this directly into your component's module.
+// Rather please instead use:
+// ```
+//   import { consume } from 'ember-provide-consume-context';
+//   import { type getCards, GetCardsContextName } from '@cardstack/runtime-common';
+//    ...
+//   @consume(GetCardsContextName) private declare getCards: getCards;
+// ```
+// If you need to use `getSearch()`/`getCards()` in something that is not a Component, then
+// let's talk.
 export function getSearch(
   parent: object,
   getQuery: () => Query | undefined,

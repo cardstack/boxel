@@ -16,7 +16,6 @@ import {
   EqFilter,
 } from '@cardstack/runtime-common/query';
 import { DndItem } from '@cardstack/boxel-ui/components';
-import { getCards } from '@cardstack/runtime-common';
 import { action } from '@ember/object';
 
 class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
@@ -74,7 +73,8 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
     return [this.currentRealm.href];
   }
 
-  assigneeQuery = getCards(
+  assigneeQuery = this.args.context?.getCards(
+    this,
     () => {
       return {
         filter: {

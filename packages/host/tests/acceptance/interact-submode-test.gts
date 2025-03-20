@@ -3,6 +3,7 @@ import {
   currentURL,
   click,
   fillIn,
+  find,
   triggerKeyEvent,
   settled,
 } from '@ember/test-helpers';
@@ -24,9 +25,15 @@ import {
 import { Realm } from '@cardstack/runtime-common/realm';
 
 import type CardService from '@cardstack/host/services/card-service';
+import type MessageService from '@cardstack/host/services/message-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
+
+import type {
+  IncrementalIndexEventContent,
+  RealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import {
   percySnapshot,
@@ -1869,6 +1876,59 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
         )
         .doesNotExist('card error state is NOT displayed');
+    });
+
+    test('stack item edit results in index event that is ignored', async function (assert) {
+      assert.expect(6);
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      const messageService = this.owner.lookup(
+        'service:message-service',
+      ) as MessageService;
+      const receivedEventDeferred = new Deferred<void>();
+      messageService.listenerCallbacks
+        .get(testRealmURL)!
+        .push((ev: RealmEventContent) => {
+          if (
+            ev.eventName === 'index' &&
+            ev.indexType === 'incremental-index-initiation'
+          ) {
+            return; // ignore the index initiation event
+          }
+          ev = ev as IncrementalIndexEventContent;
+          assert.ok(ev.clientRequestId);
+          assert.strictEqual(ev.eventName, 'index');
+          assert.strictEqual(ev.indexType, 'incremental');
+          assert.deepEqual(ev.invalidations, [`${testRealmURL}Person/fadhlan`]); // the card that was edited
+          receivedEventDeferred.fulfill();
+        });
+      await click('[data-test-edit-button]');
+      fillIn('[data-test-field="firstName"] input', 'FadhlanXXX');
+      let inputElement = find(
+        '[data-test-field="firstName"] input',
+      ) as HTMLInputElement;
+      inputElement.focus();
+      inputElement.select();
+      inputElement.setSelectionRange(0, 3);
+      await receivedEventDeferred.promise;
+      await settled();
+      inputElement = find(
+        '[data-test-field="firstName"] input',
+      ) as HTMLInputElement;
+      assert.strictEqual(
+        document.activeElement,
+        inputElement,
+        'focus is preserved on the input element',
+      );
+      assert.strictEqual(document.getSelection()?.anchorOffset, 3); // selection is preserved
     });
   });
 

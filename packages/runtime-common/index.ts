@@ -297,50 +297,11 @@ export type getCards = (
 {
   instances: CardDef[];
   instancesByRealm: { realm: string; cards: CardDef[] }[];
-  // TODO remove this
-  loaded: Promise<void>;
+  isLoading: boolean;
 };
-
-// TODO remove this
-export interface CardSearch {
-  getCards(
-    getQuery: () => Query | undefined,
-    getRealms: () => string[] | undefined,
-    opts?: {
-      isLive?: true;
-      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-    },
-  ): {
-    instances: CardDef[];
-    loaded: Promise<void>;
-    isLoading: boolean;
-  };
-  getCard<T extends CardDef>(
-    url: URL,
-    opts?: { loader?: Loader; isLive?: boolean },
-  ): {
-    card: T | undefined;
-    loaded: Promise<void> | undefined;
-    cardError?: undefined | { id: string; error: Error };
-  };
-}
 
 export interface CardCatalogQuery extends Query {
   filter?: CardTypeFilter | EveryFilter;
-}
-
-// TODO remove this
-export function getCards(
-  getQuery: () => Query | undefined,
-  getRealms: () => string[] | undefined,
-  opts?: {
-    isLive?: true;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-  },
-) {
-  let here = globalThis as any;
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCards(getQuery, getRealms, opts);
 }
 
 export interface CardCreator {
@@ -430,20 +391,6 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
-
-  // TODO remove this
-  getCards: (
-    // The reason (getQuery, getRealms) is a thunk is to ensure that the arguments are reactive wrt to ember resource
-    // This is the expectation of ember-resources ie`.from` method should be instantiated at the root of the component and expect a thunk
-    // The issue is when we wrap `getCards` as an api, we tend to model it as a function that takes arguments (values) thereby enclosing in a scoped context
-    // We acknowledge that this is not the "perfect" api but it is a pragmatic solution for now to resolve the tension between card api usage and ember-resources
-    getQuery: () => Query | undefined,
-    getRealms: () => string[] | undefined,
-    opts?: {
-      isLive?: true;
-      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-    },
-  ) => SearchQuery;
 }
 
 export function hasExecutableExtension(path: string): boolean {

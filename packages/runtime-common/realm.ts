@@ -292,10 +292,6 @@ export class Realm {
     this.backfillRetentionPolicies();
 
     this.#disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
-    console.log(
-      `disableMatrixRealmEvents for realm url ${url}`,
-      this.#disableMatrixRealmEvents,
-    );
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);

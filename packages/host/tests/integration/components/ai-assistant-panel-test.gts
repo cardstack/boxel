@@ -3205,6 +3205,8 @@ module('Integration | ai-assistant-panel', function (hooks) {
       'monaco content is correct',
     );
 
+    await waitFor('.monaco-editor'); // wait for the monaco editor to be rendered for percy
+
     await percySnapshot(assert);
   });
 });
