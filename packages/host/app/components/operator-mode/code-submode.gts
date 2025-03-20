@@ -115,8 +115,13 @@ type PanelHeights = {
 export type SelectedAccordionItem =
   | 'schema-editor'
   | 'spec-preview'
-  | 'playground'
-  | null;
+  | 'playground';
+
+const accordionItems: SelectedAccordionItem[] = [
+  'schema-editor',
+  'playground',
+  'spec-preview',
+];
 
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
@@ -488,7 +493,10 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get showSpecPreview() {
-    return this.selectedCardOrField?.exportName;
+    return (
+      this.selectedAccordionItem === 'spec-preview' &&
+      Boolean(this.selectedCardOrField?.exportName)
+    );
   }
 
   private get itemToDeleteAsCard() {
@@ -745,25 +753,20 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get selectedAccordionItem(): SelectedAccordionItem {
     let selection = this.panelSelections[this.readyFile.url];
-    if (selection === null) {
-      return null;
-    }
     return selection ?? 'schema-editor';
   }
 
   @action private openAccordionItem(item: SelectedAccordionItem) {
-    let selection = this.selectedAccordionItem === item ? null : item; // null means toggling the accordion item closed
-    //return if the item is already open
-    if (!selection) {
-      return;
+    if (this.selectedAccordionItem === item) {
+      let index = accordionItems.indexOf(item);
+      if (index !== -1 && index === accordionItems.length - 1) {
+        index--;
+      } else if (index !== -1) {
+        index++;
+      }
+      item = accordionItems[index];
     }
-    this.selectAccordionItem(selection);
-  }
-
-  @action private selectAccordionItem(item: SelectedAccordionItem) {
-    let selection = this.selectedAccordionItem === item ? null : item; // null means toggling the accordion item closed
-    this.panelSelections[this.readyFile.url] = selection;
-
+    this.panelSelections[this.readyFile.url] = item;
     // persist in local storage
     window.localStorage.setItem(
       CodeModePanelSelections,
@@ -944,11 +947,7 @@ export default class CodeSubmode extends Component<Signature> {
                       <A.Item
                         class='accordion-item'
                         @contentClass='accordion-item-content'
-                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
-                        @isOpen={{eq
-                          this.selectedAccordionItem
-                          'schema-editor'
-                        }}
+                        @isOpen={{true}}
                       >
                         <:title>
                           <SchemaEditorTitle @hasModuleError={{true}} />
@@ -984,10 +983,7 @@ export default class CodeSubmode extends Component<Signature> {
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
-                          @onClick={{fn
-                            this.selectAccordionItem
-                            'schema-editor'
-                          }}
+                          @onClick={{fn this.openAccordionItem 'schema-editor'}}
                           @isOpen={{eq
                             this.selectedAccordionItem
                             'schema-editor'
@@ -1005,7 +1001,7 @@ export default class CodeSubmode extends Component<Signature> {
                       <A.Item
                         class='accordion-item'
                         @contentClass='accordion-item-content'
-                        @onClick={{fn this.selectAccordionItem 'playground'}}
+                        @onClick={{fn this.openAccordionItem 'playground'}}
                         @isOpen={{eq this.selectedAccordionItem 'playground'}}
                         data-test-accordion-item='playground'
                       >
@@ -1043,46 +1039,47 @@ export default class CodeSubmode extends Component<Signature> {
                           {{/if}}
                         </:content>
                       </A.Item>
-                      {{#if this.showSpecPreview}}
-                        <SpecPreview
-                          @selectedDeclaration={{this.selectedDeclaration}}
-                          @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
-                          @openAccordionItem={{this.openAccordionItem}}
-                          as |SpecPreviewTitle SpecPreviewContent|
+                      <SpecPreview
+                        @selectedDeclaration={{this.selectedDeclaration}}
+                        @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
+                        @openAccordionItem={{this.openAccordionItem}}
+                        as |SpecPreviewTitle SpecPreviewContent|
+                      >
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn this.openAccordionItem 'spec-preview'}}
+                          @isOpen={{eq
+                            this.selectedAccordionItem
+                            'spec-preview'
+                          }}
+                          data-test-accordion-item='spec-preview'
                         >
-                          <A.Item
-                            class='accordion-item'
-                            @contentClass='accordion-item-content'
-                            @onClick={{fn
-                              this.selectAccordionItem
-                              'spec-preview'
-                            }}
-                            @isOpen={{eq
-                              this.selectedAccordionItem
-                              'spec-preview'
-                            }}
-                            data-test-accordion-item='spec-preview'
-                          >
-                            <:title>
-                              <SpecPreviewTitle />
-                            </:title>
-                            <:content>
+                          <:title>
+                            <SpecPreviewTitle />
+                          </:title>
+                          <:content>
+                            {{#if this.showSpecPreview}}
                               <SpecPreviewContent class='accordion-content' />
-                            </:content>
-                          </A.Item>
-                        </SpecPreview>
-                      {{/if}}
+                            {{else}}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-spec-nonexports
+                              >
+                                <span>Boxel Spec is not supported for card or
+                                  field definitions that are not exported.</span>
+                              </p>
+                            {{/if}}
+                          </:content>
+                        </A.Item>
+                      </SpecPreview>
                     </Accordion>
                   {{else if this.moduleContentsResource.moduleError}}
                     <Accordion as |A|>
                       <A.Item
                         class='accordion-item'
                         @contentClass='accordion-item-content'
-                        @onClick={{fn this.selectAccordionItem 'schema-editor'}}
-                        @isOpen={{eq
-                          this.selectedAccordionItem
-                          'schema-editor'
-                        }}
+                        @isOpen={{true}}
                       >
                         <:title>
                           <SchemaEditorTitle @hasModuleError={{true}} />

@@ -629,7 +629,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   get showCreateSpec() {
-    return !this.search.isLoading && this.cards.length === 0 && this.canWrite;
+    return (
+      Boolean(this.args.selectedDeclaration?.exportName) &&
+      !this.search.isLoading &&
+      this.cards.length === 0 &&
+      this.canWrite
+    );
   }
 
   get isLoading() {
