@@ -15,7 +15,7 @@ interface Signature {
   Args: {
     card: BaseDef;
     isDarkMode?: boolean;
-    isField?: boolean;
+    isFieldDef?: boolean;
   };
 }
 
@@ -156,7 +156,7 @@ export default class FittedFormatGallery extends Component<Signature> {
                   -
                   {{spec.width}}x{{spec.height}}
                 </div>
-                {{#if @isField}}
+                {{#if @isFieldDef}}
                   <CardContainer
                     class='item'
                     @displayBoundaries={{true}}

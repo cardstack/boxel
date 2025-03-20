@@ -472,9 +472,9 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 3 });
-    assert.dom('[data-option-index="0"]').hasText('1. marcelius@email.com');
-    assert.dom('[data-option-index="1"]').hasText('2. lilian@email.com');
-    assert.dom('[data-option-index="2"]').hasText('3. susie@email.com');
+    assert.dom('[data-option-index="0"]').hasText('marcelius@email.com');
+    assert.dom('[data-option-index="1"]').hasText('lilian@email.com');
+    assert.dom('[data-option-index="2"]').hasText('susie@email.com');
 
     await click('[data-option-index="2"]');
     assert.dom('[data-test-selected-item]').hasText('Contact Info - Example 3');
@@ -490,7 +490,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .hasText('marcelius@email.com');
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 3 });
-    assert.dom('[data-option-index="0"]').hasText('1. marcelius@email.com');
+    assert.dom('[data-option-index="0"]').hasText('marcelius@email.com');
 
     await selectDeclaration('Comment');
     assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
@@ -499,8 +499,8 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .hasText('Terrible product');
     await click('[data-test-instance-chooser]');
     assert.dom('[data-option-index]').exists({ count: 2 });
-    assert.dom('[data-option-index="0"]').hasText('1. Terrible product');
-    assert.dom('[data-option-index="1"]').hasText('2. Needs better packaging');
+    assert.dom('[data-option-index="0"]').hasText('Terrible product');
+    assert.dom('[data-option-index="1"]').hasText('Needs better packaging');
 
     await selectDeclaration('BlogPost'); // card def selected
     assert.dom('[data-test-selected-item]').doesNotExist();

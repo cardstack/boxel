@@ -216,12 +216,9 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       data-test-instance-chooser
       as |item|
     >
-      <div class='field-option'>
-        <span class='field-option-index'>{{item.displayIndex}}.</span>
-        <CardContainer class='field' @displayBoundaries={{true}}>
-          <Preview @card={{item.field}} @format='atom' />
-        </CardContainer>
-      </div>
+      <CardContainer class='field' @displayBoundaries={{true}}>
+        <Preview @card={{item.field}} @format='atom' />
+      </CardContainer>
     </BoxelSelect>
   {{/if}}
 
@@ -237,17 +234,6 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
     }
     .instance-chooser :deep(.boxel-trigger-content) {
       overflow: hidden;
-    }
-    .field-option {
-      display: flex;
-      align-items: center;
-      gap: var(--boxel-sp-xs);
-      width: 375px;
-      max-width: 100%;
-    }
-    .field-option-index {
-      width: var(--boxel-sp);
-      text-align: center;
     }
     .card,
     .field {

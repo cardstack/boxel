@@ -67,7 +67,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
     <FittedFormatGallery
       @card={{@card}}
       @isDarkMode={{true}}
-      @isField={{@isFieldDef}}
+      @isFieldDef={{@isFieldDef}}
     />
   {{/if}}
 
