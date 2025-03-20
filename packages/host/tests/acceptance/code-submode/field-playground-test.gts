@@ -1,6 +1,6 @@
 import { click, fillIn, waitUntil } from '@ember/test-helpers';
 
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
@@ -481,8 +481,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-embedded-contact-info]').hasText('susie@email.com');
   });
 
-  // TODO: this currently does not work because it requires the spec panel to update when selected declaration changes
-  skip('can update the instance chooser when selected declaration changes', async function (assert) {
+  test('can update the instance chooser when selected declaration changes', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'ContactInfo');
     assertFieldExists(assert, 'embedded');
     assert.dom('[data-test-selected-item]').hasText('Contact Info - Example 1');
@@ -502,6 +501,10 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-option-index]').exists({ count: 2 });
     assert.dom('[data-option-index="0"]').hasText('1. Terrible product');
     assert.dom('[data-option-index="1"]').hasText('2. Needs better packaging');
+
+    await selectDeclaration('BlogPost'); // card def selected
+    assert.dom('[data-test-selected-item]').doesNotExist();
+    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
   });
 
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
@@ -653,14 +656,13 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-field="quote"] input').hasNoValue();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
 
-    // TODO: spec panel updates when spec is created from playground
-    // await toggleAccordionPanel('spec-preview');
-    // assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Quote');
-    // assert
-    //   .dom(
-    //     '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="quote"] input',
-    //   )
-    //   .hasNoValue();
+    await toggleSpecPanel();
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Quote');
+    assert
+      .dom(
+        '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="quote"] input',
+      )
+      .hasNoValue();
   });
 
   test('can create new field instance (has preexisting Spec)', async function (assert) {
