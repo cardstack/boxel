@@ -1241,6 +1241,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       await waitFor('[data-test-room]');
       assert.dom('[data-test-room-error]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isEnabled();
+      await waitFor('[data-test-room-settled]');
       await percySnapshot(
         'Integration | ai-assistant-panel | it can handle an error during room creation | new room state',
       );
