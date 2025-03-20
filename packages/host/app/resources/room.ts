@@ -2,7 +2,7 @@ import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { TaskInstance, restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
 import { TrackedMap } from 'tracked-built-ins';
@@ -74,7 +74,7 @@ export class RoomResource extends Resource<Args> {
   private _isDisplayingViewCodeMap: TrackedMap<string, boolean> =
     new TrackedMap();
   @tracked matrixRoom: Room | undefined;
-  @tracked loading: Promise<void> | undefined;
+  @tracked processing: TaskInstance<void> | undefined;
   @tracked roomId: string | undefined;
 
   // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
@@ -89,10 +89,17 @@ export class RoomResource extends Resource<Args> {
       return;
     }
     this.roomId = named.roomId;
-    this.loading = this.load.perform(named.roomId);
+    this.processing = this.processRoomTask.perform(named.roomId);
   }
 
-  private load = restartableTask(async (roomId: string) => {
+  get isProcessing() {
+    return this.processRoomTask.isRunning;
+  }
+
+  processingLastStartedAt = 0;
+
+  private processRoomTask = restartableTask(async (roomId: string) => {
+    this.processingLastStartedAt = Date.now();
     try {
       this.matrixRoom = roomId
         ? await this.matrixService.getRoomData(roomId)
@@ -271,15 +278,12 @@ export class RoomResource extends Resource<Args> {
     return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
   }
 
-  activateLLM(model: string) {
-    this.activateLLMTask.perform(model);
-  }
-
   get isActivatingLLM() {
     return this.activateLLMTask.isRunning;
   }
 
-  private activateLLMTask = restartableTask(async (model: string) => {
+  activateLLMTask = restartableTask(async (model: string) => {
+    await this.processing;
     if (this.activeLLM === model) {
       return;
     }
