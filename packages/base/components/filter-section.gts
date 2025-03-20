@@ -1,4 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
+import CardListingContainer from '../components/card-listing-container';
 
 interface FilterSectionArgs {
   Blocks: {};
@@ -7,43 +8,61 @@ interface FilterSectionArgs {
 
 export default class FilterSection extends GlimmerComponent<FilterSectionArgs> {
   <template>
-    <div
+    <CardListingContainer
       role='complementary'
       aria-label='Filters'
       class='filter-section'
       ...attributes
     >
       <section class='filter-group'>
+        {{! Todo: Featured, we can choose to use button or others }}
         <h3 id='featured-heading' class='filter-heading'>Featured</h3>
       </section>
+
       <section class='filter-group'>
-        <h3 id='category-heading' class='filter-heading'>Categories</h3>
-        <div aria-labelledby='category-heading'>
-          {{! TODO: Add category filter component here }}
-        </div>
+        {{! Todo: Category Subtree }}
       </section>
-    </div>
+
+      <section class='filter-group'>
+        {{! Todo: Search }}
+      </section>
+
+      <section class='filter-group'>
+        {{! Todo: Tags }}
+      </section>
+
+      <section class='filter-group'>
+        {{! Todo: Access Tier  }}
+      </section>
+
+      <section class='filter-group'>
+        {{! Todo: Price Range }}
+      </section>
+    </CardListingContainer>
 
     <style scoped>
-      .filter-section {
-        position: sticky;
-        top: var(--catalog-app-layout-padding-top);
-        padding-right: var(--boxel-sp-sm);
-        height: 100%;
-        overflow-y: hidden;
-        width: 247px;
-        background: var(--boxel-light);
-        border-radius: var(--boxel-border-radius);
-        display: flex;
-        flex-direction: column;
-      }
-      .filter-section:hover {
-        overflow-y: auto;
-      }
-      .filter-heading {
-        margin: 0;
-        padding: var(--boxel-sp-sm);
-        font-weight: 600;
+      @layer {
+        .filter-section {
+          --card-listing-container-height: 100%;
+          --card-listing-container-width: 247px;
+          --card-listing-container-background-color: var(--boxel-light);
+          --card-listing-container-border-radius: var(--boxel-border-radius);
+
+          position: sticky;
+          top: 0;
+          display: flex;
+          flex-direction: column;
+          gap: var(--filter-section-gap, var(--boxel-sp-sm));
+          overflow-y: hidden;
+        }
+        .filter-section:hover {
+          overflow-y: auto;
+        }
+        .filter-heading {
+          margin: 0;
+          padding: var(--filter-section-heading-padding, var(--boxel-sp-sm));
+          font-weight: var(--filter-section-heading-font-weight, 600);
+        }
       }
     </style>
   </template>

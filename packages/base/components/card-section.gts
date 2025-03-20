@@ -12,6 +12,7 @@ export default class CardSection extends GlimmerComponent<CardSectionArgs> {
   <template>
     {{! TODO: Modify this section once we got the real data or query }}
     {{! TODO: Now we using grid layout for cards }}
+    {{! TODO: Remember all card display will be fitted format }}
     <section class='card-section' ...attributes>
       <h2>{{@title}}</h2>
       <ul class='cards'>
@@ -38,6 +39,7 @@ export default class CardSection extends GlimmerComponent<CardSectionArgs> {
           grid-auto-rows: var(--grid-card-height);
           gap: var(--boxel-sp);
           list-style-type: none;
+          padding: 0;
         }
         .card {
           height: auto;

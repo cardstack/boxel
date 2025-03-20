@@ -8,10 +8,12 @@ import {
 } from './card-api';
 import { isCardInstance } from '@cardstack/runtime-common';
 import StringField from './string';
-import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 
 import FilterSection from './components/filter-section';
 import CardSection from './components/card-section';
+import CardListingContainer from './components/card-listing-container';
+
+import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 
 class Isolated extends Component<typeof Catalog> {
   mockCards = [
@@ -19,6 +21,7 @@ class Isolated extends Component<typeof Catalog> {
     { name: 'Card 2' },
     { name: 'Card 3' },
     { name: 'Card 4' },
+    { name: 'Card 5' },
   ];
 
   <template>
@@ -27,22 +30,37 @@ class Isolated extends Component<typeof Catalog> {
         <div class='sidebar'>
           {{! TODO: Add FilterSection component here }}
           {{! TODO: Give Args to FilterSection if needed - query, realms, selectedView, context, etc. }}
-          {{! TODO: FilterSection should be a reflect the UI of the content area}}
           <FilterSection />
         </div>
+        {{! Note: Content will be display 2 columns: Content Listing Display and Related Listing Cards in the same time }}
         <div class='content'>
           <div class='top-bar'>
             {{! TODO: Add Spec Type Filter component here }}
             {{! TODO: Cards, Fields, Skill }}
-            Spec Selector will be exist at here. Eg: Cards, Fields, Skill
+            Spec Selector will be exist at here. Eg: Apps, Cards, Fields, Skill
           </div>
 
-          <div class='content-display'>
-            {{! TODO: We can choose either use Carousel or just a Grid layout here in futrue}}
-            <CardSection @title='Apps' @cards={{this.mockCards}} />
-            <CardSection @title='Cards' @cards={{this.mockCards}} />
-            <CardSection @title='Fields' @cards={{this.mockCards}} />
-            <CardSection @title='Skills' @cards={{this.mockCards}} />
+          <div class='content-display-container'>
+            {{! Column 1: Card Listing Section }}
+            {{! TODO: We need to have a single listing display at here after click one of card}}
+            <CardListingContainer class='card-listing-section'>
+              <CardSection @title='Apps' @cards={{this.mockCards}} />
+              <CardSection @title='Cards' @cards={{this.mockCards}} />
+              <CardSection @title='Fields' @cards={{this.mockCards}} />
+              <CardSection @title='Skills' @cards={{this.mockCards}} />
+            </CardListingContainer>
+
+            {{! Column 2: Related Listing Cards }}
+            {{! TODO: Parent & Related Listing Cards will be display at here - can make this to component }}
+            <div class='related-listing-cards'>
+              <CardListingContainer>
+                <h3 class='listing-title'>Parent Listing card</h3>
+              </CardListingContainer>
+
+              <CardListingContainer>
+                <h3 class='listing-title'>Related Listings from Publisher</h3>
+              </CardListingContainer>
+            </div>
           </div>
         </div>
       </section>
@@ -80,19 +98,38 @@ class Isolated extends Component<typeof Catalog> {
       }
 
       .content {
+        flex: 1;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
-        width: 100%;
-        position: relative; /* Do not change this */
         overflow-y: auto;
         padding-right: var(--boxel-sp-sm);
+        container-name: content;
+        container-type: inline-size;
       }
-      .content-display {
+      .content-display-container {
+        display: grid;
+        grid-template-columns: 1fr 247px;
+        gap: var(--boxel-sp-lg);
+      }
+      .card-listing-section {
+        --card-listing-container-background-color: transparent;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
       }
+
+      .related-listing-cards {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      .listing-title {
+        margin: 0;
+        padding: var(--boxel-sp-sm);
+        font-weight: 600;
+      }
+
       .operator-mode .buried .cards,
       .operator-mode .buried .add-button {
         display: none;
@@ -114,6 +151,12 @@ class Isolated extends Component<typeof Catalog> {
       }
       .instance-error:hover .boundaries {
         box-shadow: 0 0 0 1px var(--boxel-dark);
+      }
+
+      @container content (inline-size <= 768px) {
+        .content-display-container {
+          grid-template-columns: 1fr;
+        }
       }
     </style>
   </template>
