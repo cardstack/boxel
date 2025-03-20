@@ -25,7 +25,7 @@ jobs:
       group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
       - name: Build boxel-icons
         run: pnpm build
@@ -64,21 +64,21 @@ jobs:
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
       - name: Upload junit report to GitHub Actions Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
           name: host-test-report-${{ matrix.shardIndex }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
       - name: Upload realm server log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
           name: realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload icon server log
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
           name: icon-server-log-${{ matrix.shardIndex }}
@@ -92,7 +92,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
 
       - name: Finalise Percy
@@ -103,7 +103,7 @@ jobs:
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Download JUnit reports from GitHub Actions Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
         with:
           path: all-host-reports
           pattern: host-test-report-*
@@ -116,7 +116,7 @@ jobs:
         run: npx junit-report-merger host.xml "./all-host-reports/*.xml"
 
       - name: Upload merged report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
           name: host-test-report-merged
@@ -124,7 +124,7 @@ jobs:
           retention-days: 30
 
       - name: Publish test results
-        uses: EnricoMi/publish-unit-test-result-action@v2.9.0
+        uses: EnricoMi/publish-unit-test-result-action@170bf24d20d201b842d7a52403b73ed297e6645b # 2.18.0
         if: always()
         with:
           junit_files: host.xml

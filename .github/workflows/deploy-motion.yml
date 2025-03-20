@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: deploy-motion-${{ inputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
 
       - name: Init
         uses: ./.github/actions/init
@@ -40,7 +40,7 @@ jobs:
         working-directory: packages/boxel-motion/addon
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # 4.1.0
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1
