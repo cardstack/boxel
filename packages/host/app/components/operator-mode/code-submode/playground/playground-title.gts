@@ -1,8 +1,7 @@
-import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
+import { on } from '@ember/modifier';
 
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -12,16 +11,16 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import { consume } from 'ember-provide-consume-context';
 
-import { AddButton, BoxelSelect } from '@cardstack/boxel-ui/components';
-import { and, bool, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
-import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
+import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
 import {
   cardTypeDisplayName,
+  chooseCard,
   loadCard,
   specRef,
   GetCardContextName,
   type getCard,
+  type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -43,10 +42,10 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
-import FormatChooser from '../format-chooser';
+import { type PrerenderedCard } from '../../../prerendered-card-search';
 
 import FieldPickerModal from './field-chooser-modal';
-import PlaygroundPreview from './playground-preview';
+import InstanceSelectDropdown from './instance-chooser-dropdown';
 
 interface Signature {
   Args: {
@@ -56,51 +55,28 @@ interface Signature {
   };
 }
 
-export default class PlaygroundContent extends Component<Signature> {
+export default class PlaygroundTitle extends Component<Signature> {
   <template>
     <div
-      class='playground-panel-content'
+      class='playground-title'
       {{consumeContext consume=this.makeCardResource}}
     >
-      {{#let (if @isFieldDef this.field this.card) as |card|}}
-        {{#if card}}
-          <div
-            class='preview-area'
-            data-test-field-preview-card={{@isFieldDef}}
-          >
-            <PlaygroundPreview
-              @card={{card}}
-              @format={{this.format}}
-              @realmInfo={{this.realmInfo}}
-              @contextMenuItems={{this.contextMenuItems}}
-              @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
-              @onFinishEditing={{if
-                (eq this.format 'edit')
-                (fn this.setFormat this.defaultFormat)
-              }}
-              @isFieldDef={{@isFieldDef}}
-            />
-          </div>
-          <FormatChooser
-            class='format-chooser'
-            @formats={{if @isFieldDef this.fieldFormats}}
-            @format={{this.format}}
-            @setFormat={{this.setFormat}}
-            data-test-playground-format-chooser
-          />
-        {{else if (and (bool this.card) this.canWriteRealm)}}
-          <AddButton
-            class='add-field-button'
-            @variant='full-width'
-            @iconWidth='12px'
-            @iconHeight='12px'
-            {{on 'click' this.createNew}}
-            data-test-add-field-instance
-          >
-            Add Field
-          </AddButton>
-        {{/if}}
-      {{/let}}
+      <span>Playground</span>
+      <div
+        class='instance-chooser-container'
+        {{on 'click' this.handleClick}}
+        {{on 'mousedown' this.handleClick}}
+      >
+        <InstanceSelectDropdown
+          @query={{this.query}}
+          @realms={{this.recentRealms}}
+          @card={{this.card}}
+          @onSelect={{this.onSelect}}
+          @chooseCard={{this.chooseInstance}}
+          @createNew={{if this.canWriteRealm this.createNew}}
+          @createNewIsRunning={{this.createNewIsRunning}}
+        />
+      </div>
     </div>
 
     {{#if this.fieldChooserIsOpen}}
@@ -118,40 +94,20 @@ export default class PlaygroundContent extends Component<Signature> {
     {{/if}}
 
     <style scoped>
-      .playground-panel-content {
+      .playground-title {
         display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp);
-        min-height: 100%;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        gap: var(--boxel-sp-xxl);
       }
       .instance-chooser-container {
-        position: sticky;
-        z-index: 1;
-        top: 0;
         display: flex;
-        justify-content: center;
+        justify-content: end;
+        flex: 70;
       }
       .instance-chooser-container > :deep(.ember-basic-dropdown) {
         max-width: 100%;
-      }
-      .preview-area {
-        flex-grow: 1;
-        z-index: 0;
-        display: flex;
-        flex-direction: column;
-      }
-      .format-chooser {
-        position: sticky;
-        bottom: 0;
-        margin-top: auto;
-
-        --boxel-format-chooser-button-bg-color: var(--boxel-light);
-        --boxel-format-chooser-button-width: 85px;
-        --boxel-format-chooser-button-min-width: 85px;
-      }
-      .add-field-button {
-        max-width: 500px;
-        margin-inline: auto;
       }
     </style>
   </template>
@@ -169,8 +125,6 @@ export default class PlaygroundContent extends Component<Signature> {
   @tracked private fieldChooserIsOpen = false;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
-
   private makeCardResource = () => {
     this.cardResource = this.getCard(
       this,
@@ -181,6 +135,45 @@ export default class PlaygroundContent extends Component<Signature> {
 
   private get playgroundSelection() {
     return this.playgroundPanelService.getSelection(this.args.moduleId);
+  }
+
+  private get recentCardIds() {
+    return this.recentFilesService.recentFiles
+      .map((f) => `${f.realmURL}${f.filePath}`)
+      .filter((id) => id.endsWith('.json'))
+      .map((id) => id.slice(0, -1 * '.json'.length));
+  }
+
+  private get recentRealms() {
+    return [
+      ...new Set(
+        this.recentFilesService.recentFiles.map((f) => f.realmURL.href),
+      ),
+    ];
+  }
+
+  private get query(): Query {
+    if (this.args.isFieldDef) {
+      // TODO
+    }
+    return {
+      filter: {
+        every: [
+          {
+            type: this.args.codeRef,
+          },
+          {
+            any: this.recentCardIds.map((id) => ({ eq: { id } })).slice(0, 20),
+          },
+        ],
+      },
+      sort: [
+        {
+          by: 'createdAt',
+          direction: 'desc',
+        },
+      ],
+    };
   }
 
   private get card(): CardDef | undefined {
@@ -231,40 +224,6 @@ export default class PlaygroundContent extends Component<Signature> {
     return this.fieldInstances[index];
   }
 
-  private copyToClipboard = task(async (id: string) => {
-    await navigator.clipboard.writeText(id);
-  });
-
-  private openInInteractMode = task(async (id: string) => {
-    await this.operatorModeStateService.openCardInInteractMode(
-      new URL(id),
-      this.format === 'edit' ? 'edit' : 'isolated',
-    );
-  });
-
-  private get contextMenuItems() {
-    if (!this.card?.id) {
-      return undefined;
-    }
-    let cardId = this.card.id;
-    let menuItems: MenuItem[] = [
-      new MenuItem('Copy Card URL', 'action', {
-        action: () => this.copyToClipboard.perform(cardId),
-        icon: IconLink,
-      }),
-      new MenuItem('Open in Code Mode', 'action', {
-        action: () =>
-          this.operatorModeStateService.updateCodePath(new URL(cardId)),
-        icon: IconCode,
-      }),
-      new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode.perform(cardId),
-        icon: Eye,
-      }),
-    ];
-    return menuItems;
-  }
-
   private persistSelections = (
     selectedCardId: string,
     selectedFormat = this.format,
@@ -294,11 +253,8 @@ export default class PlaygroundContent extends Component<Signature> {
     );
   };
 
-  @action private setFormat(format: Format) {
-    if (!this.card?.id) {
-      return;
-    }
-    this.persistSelections(this.card.id, format);
+  @action private onSelect(card: PrerenderedCard) {
+    this.persistSelections(card.url.replace(/\.json$/, ''));
   }
 
   // only closes the dropdown if it's open
@@ -308,6 +264,13 @@ export default class PlaygroundContent extends Component<Signature> {
         '[data-playground-instance-chooser][aria-expanded="true"]',
       ) as BoxelSelect | null
     )?.click();
+
+  @action private chooseInstance() {
+    this.args.isFieldDef
+      ? (this.fieldChooserIsOpen = true)
+      : this.chooseCard.perform();
+    this.closeInstanceChooser();
+  }
 
   @action private chooseField(index: number) {
     if (!this.card?.id) {
@@ -321,10 +284,25 @@ export default class PlaygroundContent extends Component<Signature> {
     this.fieldChooserIsOpen = false;
   }
 
+  private chooseCard = task(async () => {
+    let chosenCard: CardDef | undefined = await chooseCard({
+      filter: { type: this.args.codeRef },
+    });
+
+    if (chosenCard) {
+      this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
+      this.persistSelections(chosenCard.id);
+    }
+  });
+
   @action private createNew() {
     this.args.isFieldDef && this.card
       ? this.createNewField.perform(this.card as Spec)
       : this.createNewCard.perform();
+  }
+
+  private get createNewIsRunning() {
+    return this.createNewCard.isRunning || this.createNewField.isRunning;
   }
 
   private createNewCard = task(async () => {
@@ -375,22 +353,14 @@ export default class PlaygroundContent extends Component<Signature> {
     this.closeInstanceChooser();
   });
 
-  private get realmInfo() {
-    if (!this.card?.id) {
-      return undefined;
-    }
-    return this.realm.info(this.card.id);
-  }
-
-  private get canEditCard() {
-    return Boolean(
-      this.format !== 'edit' &&
-        this.card?.id &&
-        this.realm.canWrite(this.card.id),
-    );
-  }
-
   private get canWriteRealm() {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
+  }
+
+  @action
+  handleClick(e: MouseEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    return false;
   }
 }

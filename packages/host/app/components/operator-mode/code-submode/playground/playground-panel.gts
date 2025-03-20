@@ -41,6 +41,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         height: 100%;
         width: 100%;
         padding: var(--boxel-sp);
+        padding-top: 0;
         background-color: var(--boxel-dark);
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);

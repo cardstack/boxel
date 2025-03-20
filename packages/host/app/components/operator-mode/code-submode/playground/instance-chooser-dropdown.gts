@@ -43,9 +43,9 @@ const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
         letter-spacing: var(--boxel-lsp-sm);
       }
       .title {
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
     </style>
   </template>;
@@ -189,19 +189,27 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       height: var(--boxel-form-control-height);
     }
     .instance-chooser {
-      width: 405px;
+      height: 26px;
+      min-width: 270px;
       max-width: 100%;
-      height: var(--boxel-form-control-height);
-      box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
+      border: 1px solid var(--boxel-dark);
+      outline: none;
+    }
+    .instance-chooser :deep(.boxel-trigger-content) {
+      overflow: hidden;
     }
     :deep(
       .boxel-select__dropdown .ember-power-select-option[aria-current='true']
     ),
     :deep(.instances-dropdown-content .ember-power-select-option) {
       background-color: var(--boxel-light);
+      flex-wrap: nowrap;
     }
     :deep(.ember-power-select-option:hover .card) {
       background-color: var(--boxel-100);
+    }
+    :deep(.boxel-trigger-content) {
+      font: var(--boxel-font-xs);
     }
     .card {
       height: 75px;
@@ -210,6 +218,11 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       container-name: fitted-card;
       container-type: size;
       background-color: var(--boxel-light);
+    }
+    .field {
+      padding: var(--boxel-sp-xs);
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
   </style>
 </template>;

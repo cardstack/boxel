@@ -24,7 +24,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -40,6 +40,7 @@ import {
   CodeRef,
   type ResolvedCodeRef,
   type getCard,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -91,6 +92,7 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import PlaygroundTitle from './code-submode/playground/playground-title';
 
 interface Signature {
   Args: {
@@ -777,6 +779,13 @@ export default class CodeSubmode extends Component<Signature> {
       : this.itemToDelete.id;
   }
 
+  private get moduleId() {
+    if (this.selectedCodeRef) {
+      return internalKeyFor(this.selectedCodeRef, undefined);
+    }
+    return undefined;
+  }
+
   <template>
     <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
@@ -997,7 +1006,18 @@ export default class CodeSubmode extends Component<Signature> {
                         @isOpen={{eq this.selectedAccordionItem 'playground'}}
                         data-test-accordion-item='playground'
                       >
-                        <:title>Playground</:title>
+                        <:title>
+                          {{#if (and this.selectedCodeRef this.moduleId)}}
+                            <PlaygroundTitle
+                              @codeRef={{this.selectedCodeRef}}
+                              @moduleId={{this.moduleId}}
+                              @isFieldDef={{isFieldDef
+                                this.selectedCardOrField.cardOrField
+                              }}
+                            />
+                          {{else}}
+                            Playground
+                          {{/if}}</:title>
                         <:content>
                           {{#if (eq this.selectedAccordionItem 'playground')}}
                             {{#if
