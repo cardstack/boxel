@@ -183,6 +183,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
     await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-field]');
     const testCard = `${testRealmURL}Person/hassan`;
 
     for (let i = 1; i <= 3; i++) {

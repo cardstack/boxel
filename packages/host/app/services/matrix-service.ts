@@ -2,7 +2,6 @@ import type Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
-import { buildWaiter } from '@ember/test-waiters';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
@@ -129,7 +128,6 @@ const SLIDING_SYNC_LIST_RANGE_END = 9;
 const SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 
 const realmEventsLogger = logger('realm:events');
-const waiter = buildWaiter('matrix-service:waiter');
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -201,8 +199,7 @@ export default class MatrixService extends Service {
   set currentRoomId(value: string | undefined) {
     this._currentRoomId = value;
     if (value) {
-      this.loadAllTimelineEvents(value);
-      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
+      this.loadAllTimelineEvents.perform(value);
     } else {
       window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
     }
@@ -1226,7 +1223,7 @@ export default class MatrixService extends Service {
     return await this.client.isUsernameAvailable(username);
   }
 
-  private async loadAllTimelineEvents(roomId: string) {
+  private loadAllTimelineEvents = restartableTask(async (roomId: string) => {
     let roomData = this.ensureRoomData(roomId);
     let room = this.client.getRoom(roomId);
 
@@ -1238,7 +1235,6 @@ export default class MatrixService extends Service {
       return;
     }
 
-    let token = waiter.beginAsync();
     this.timelineLoadingState.set(roomId, true);
     try {
       while (room.oldState.paginationToken != null) {
@@ -1287,9 +1283,8 @@ export default class MatrixService extends Service {
       });
     } finally {
       this.timelineLoadingState.set(roomId, false);
-      waiter.endAsync(token);
     }
-  }
+  });
 
   get isLoadingTimeline() {
     if (!this.currentRoomId) {

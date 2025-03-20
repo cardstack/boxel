@@ -9,6 +9,7 @@ import {
 
 export class MockSlidingSync extends SlidingSync {
   private _client: MatrixSDK.MatrixClient;
+  private _lists: Record<string, MSC3575List>;
   private lifecycleCallbacks: Function[] = [];
   private listCallbacks: Function[] = [];
 
@@ -21,6 +22,7 @@ export class MockSlidingSync extends SlidingSync {
   ) {
     super(proxyBaseUrl, lists, roomSubscriptionInfo, client, timeoutMS);
     this._client = client;
+    this._lists = Object.fromEntries(lists);
   }
 
   on(event: string, callback: Function) {
@@ -44,13 +46,12 @@ export class MockSlidingSync extends SlidingSync {
   }
 
   async start() {
-    let aiRoomList = this.getListParams('ai-room');
-    if (!aiRoomList) {
+    if (!this._lists) {
       return;
     }
     let slidingResponse = await this._client.slidingSync(
       {
-        lists: { ['ai-room']: aiRoomList },
+        lists: this._lists,
         room_subscriptions: undefined,
       },
       '',
@@ -64,8 +65,13 @@ export class MockSlidingSync extends SlidingSync {
     );
   }
 
+  async setListRanges(listKey: string, ranges: number[][]) {
+    this._lists[listKey].ranges = ranges;
+    return await this.resend();
+  }
+
   async resend() {
     await this.start();
-    return '';
+    return Promise.resolve('');
   }
 }

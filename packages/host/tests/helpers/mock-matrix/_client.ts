@@ -634,26 +634,45 @@ export class MockClient implements ExtendedClient {
     _proxyBaseUrl: string,
     _signal: AbortSignal,
   ): Promise<MSC3575SlidingSyncResponse> {
-    let listKey = Object.keys(req.lists || {})[0];
-    if (!listKey || !req.lists?.[listKey]?.ranges?.[0]) {
-      return Promise.resolve({
-        pos: '0',
-        lists: {},
-        rooms: {},
-        extensions: {},
-      });
-    }
+    let lists: MSC3575SlidingSyncResponse['lists'] = {};
+    let rooms: MSC3575SlidingSyncResponse['rooms'] = {};
+    Object.entries(req.lists || {}).forEach(([listKey, list]) => {
+      list.ranges.forEach((range) => {
+        let [start, end] = range;
+        //currently we only filter rooms using is_dm
+        let dmRooms =
+          this.getAccountData('m.direct')?.getContent()?.rooms ?? [];
+        let roomsInRange = this.serverState.rooms
+          .filter((r) => r.id.includes('mock'))
+          .filter((r) =>
+            list.filters?.is_dm
+              ? dmRooms.includes(r.id)
+              : !dmRooms.includes(r.id),
+          )
+          .slice(start, end + 1);
 
-    let [start, end] = req.lists[listKey].ranges[0];
-    let roomsInRange = this.serverState.rooms
-      .filter((r) => r.id.includes('mock'))
-      .slice(start, end + 1);
+        roomsInRange.forEach((room) => {
+          let timeline = this.serverState.getRoomEvents(room.id);
+          rooms[room.id] = {
+            name:
+              this.serverState.getRoomState(room.id, 'm.room.name', '')?.content
+                ?.name ?? 'room',
+            required_state: [],
+            timeline,
+            notification_count: 0,
+            highlight_count: 0,
+            joined_count: 1,
+            invited_count: 0,
+            initial: true,
+          };
 
-    let response: MSC3575SlidingSyncResponse = {
-      pos: String(Date.now()),
-      lists: {
-        [listKey]: {
-          count: this.serverState.rooms.length,
+          timeline.forEach((event: MatrixSDK.IRoomEvent) => {
+            this.emitEvent(new MatrixEvent(event));
+          });
+        });
+
+        lists[listKey] = {
+          count: roomsInRange.length,
           ops: [
             {
               op: 'SYNC',
@@ -661,31 +680,16 @@ export class MockClient implements ExtendedClient {
               room_ids: roomsInRange.map((r) => r.id),
             },
           ],
-        },
-      },
-      rooms: {},
-      extensions: {},
-    };
-
-    roomsInRange.forEach((room) => {
-      let timeline = this.serverState.getRoomEvents(room.id);
-      response.rooms[room.id] = {
-        name:
-          this.serverState.getRoomState(room.id, 'm.room.name', '')?.content
-            ?.name ?? 'room',
-        required_state: [],
-        timeline,
-        notification_count: 0,
-        highlight_count: 0,
-        joined_count: 1,
-        invited_count: 0,
-        initial: true,
-      };
-
-      timeline.forEach((event: MatrixSDK.IRoomEvent) => {
-        this.emitEvent(new MatrixEvent(event));
+        };
       });
     });
+
+    let response: MSC3575SlidingSyncResponse = {
+      pos: String(Date.now()),
+      lists,
+      rooms,
+      extensions: {},
+    };
 
     return Promise.resolve(response);
   }
