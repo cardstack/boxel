@@ -1633,6 +1633,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-stack-card-index="1"]`);
 
     await focus(`[data-test-search-field]`);
+
+    await waitFor(`[data-test-search-result-index="0"]`);
+    await waitFor(`[data-test-search-result-index="1"]`);
     assert.dom(`[data-test-search-result]`).exists({ count: 2 });
     assert
       .dom(

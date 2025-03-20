@@ -146,7 +146,7 @@ export default class OperatorModeStateService extends Service {
     }
     this.state.stacks[stackIndex].push(item);
     if (!item.cardError) {
-      this.recentCardsService.add(item.card);
+      this.recentCardsService.add(item.card.id);
     }
     this.schedulePersist();
   }
