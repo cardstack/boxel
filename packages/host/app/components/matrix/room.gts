@@ -29,7 +29,7 @@ import { TrackedObject, TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { and, eq, not, or } from '@cardstack/boxel-ui/helpers';
+import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCard,
@@ -172,16 +172,12 @@ export default class Room extends Component<Signature> {
                   'Current card is shared automatically'
                   'Topmost card is shared automatically'
                 }}
-                @disabled={{this.matrixService.isLoadingTimeline}}
               />
               <LLMSelect
                 @selected={{@roomResource.activeLLM}}
                 @onChange={{@roomResource.activateLLM}}
                 @options={{this.supportedLLMs}}
-                @disabled={{(or
-                  @roomResource.isActivatingLLM
-                  this.matrixService.isLoadingTimeline
-                )}}
+                @disabled={{@roomResource.isActivatingLLM}}
               />
             </div>
           </div>
