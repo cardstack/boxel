@@ -31,7 +31,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
     <CardContainer
       class={{if
         @isFieldDef
-        'field-preview-container isolated-and-edit-preview'
+        'field-preview-container'
         'full-height-preview isolated-and-edit-preview'
       }}
     >
