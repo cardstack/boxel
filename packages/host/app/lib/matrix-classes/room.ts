@@ -1,4 +1,4 @@
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { type IEvent } from 'matrix-js-sdk';
 
@@ -44,6 +44,15 @@ export default class Room {
       ?.name;
   }
 
+  @cached
+  get memberIds(): string[] {
+    let memberEvents = (this._roomState?.events
+      .get('m.room.member')
+      ?.values() ?? []) as MatrixSDK.MatrixEvent[];
+    let memberIds = [...memberEvents.map((ev) => ev.event.state_key)];
+    return memberIds.filter((id) => id !== undefined) as string[];
+  }
+
   notifyRoomStateUpdated(rs: MatrixSDK.RoomState) {
     this._roomState = rs; // this is usually the same object, but some internal state has changed. This assignment kicks off reactivity.
   }
@@ -63,8 +72,9 @@ export default class Room {
   }
 
   get activeLLM() {
-    let event = this._roomState?.events.get(APP_BOXEL_ACTIVE_LLM)?.get('')
-      ?.event;
+    let event = this._roomState?.events
+      .get(APP_BOXEL_ACTIVE_LLM)
+      ?.get('')?.event;
     return (event as ActiveLLMEvent)?.content.model ?? DEFAULT_LLM;
   }
 

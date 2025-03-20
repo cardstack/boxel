@@ -11,7 +11,6 @@ import { NodeAdapter } from './node-realm';
 import yargs from 'yargs';
 import { RealmServer } from './server';
 import { resolve } from 'path';
-import { createConnection, type Socket } from 'net';
 import { makeFastBootIndexRunner } from './fastboot';
 import { shimExternals } from './lib/externals';
 import * as Sentry from '@sentry/node';
@@ -20,6 +19,17 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import 'decorator-transforms/globals';
 
 let log = logger('main');
+if (process.env.NODE_ENV === 'test') {
+  (globalThis as any).__environment = 'test';
+}
+
+const REALM_SERVER_SECRET_SEED = process.env.REALM_SERVER_SECRET_SEED;
+if (!REALM_SERVER_SECRET_SEED) {
+  console.error(
+    `The REALM_SERVER_SECRET_SEED environment variable is not set. Please make sure this env var has a value`,
+  );
+  process.exit(-1);
+}
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -54,6 +64,9 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
   );
 }
 
+const DISABLE_MATRIX_REALM_EVENTS =
+  process.env.DISABLE_MATRIX_REALM_EVENTS === 'true';
+
 let {
   port,
   matrixURL,
@@ -66,6 +79,7 @@ let {
   username: usernames,
   useRegistrationSecretFunction,
   seedPath,
+  seedRealmURL,
   migrateDB,
   workerManagerPort,
 } = yargs(process.argv.slice(2))
@@ -108,6 +122,10 @@ let {
     seedPath: {
       description:
         'the path of the seed realm which is used to seed new realms',
+      type: 'string',
+    },
+    seedRealmURL: {
+      description: 'The URL of the seed realm',
       type: 'string',
     },
     matrixURL: {
@@ -213,6 +231,7 @@ let autoMigrate = migrateDB || undefined;
         virtualNetwork,
         dbAdapter,
         queue,
+        disableMatrixRealmEvents: DISABLE_MATRIX_REALM_EVENTS,
       },
       {
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
@@ -246,14 +265,17 @@ let autoMigrate = migrateDB || undefined;
     virtualNetwork,
     matrixClient,
     realmsRootPath,
-    secretSeed: REALM_SECRET_SEED,
+    realmServerSecretSeed: REALM_SERVER_SECRET_SEED,
+    realmSecretSeed: REALM_SECRET_SEED,
     dbAdapter,
     queue,
     assetsURL: dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
     seedPath,
+    seedRealmURL: seedRealmURL ? new URL(seedRealmURL) : undefined,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
+    disableMatrixRealmEvents: DISABLE_MATRIX_REALM_EVENTS,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
@@ -331,49 +353,20 @@ let autoMigrate = migrateDB || undefined;
   process.exit(-3);
 });
 
-let workerReadyDeferred: Deferred<boolean> | undefined;
 async function waitForWorkerManager(port: number) {
-  const workerManager = await new Promise<Socket>((r) => {
-    let socket = createConnection({ port }, () => {
-      log.info(`Connected to worker manager on port ${port}`);
-      r(socket);
-    });
-  });
-
-  workerManager.on('data', (data) => {
-    let res = data.toString();
-    if (!workerReadyDeferred) {
-      throw new Error(
-        `received unsolicited message from worker manager on port ${port}`,
-      );
+  let isReady = false;
+  let timeout = Date.now() + 30_000;
+  do {
+    let response = await fetch(`http://localhost:${port}/`);
+    if (response.ok) {
+      let json = await response.json();
+      isReady = json.ready;
     }
-    switch (res) {
-      case 'ready':
-      case 'not-ready':
-        workerReadyDeferred.fulfill(res === 'ready' ? true : false);
-        break;
-      default:
-        workerReadyDeferred.reject(
-          `unexpected response from worker manager: ${res}`,
-        );
-    }
-  });
-
-  try {
-    let isReady = false;
-    let timeout = Date.now() + 30_000;
-    do {
-      workerReadyDeferred = new Deferred();
-      workerManager.write('ready?');
-      isReady = await workerReadyDeferred.promise;
-    } while (!isReady && Date.now() < timeout);
-    if (!isReady) {
-      throw new Error(
-        `timed out trying to connect to worker manager on port ${port}`,
-      );
-    }
-  } finally {
-    workerManager.end();
+  } while (!isReady && Date.now() < timeout);
+  if (!isReady) {
+    throw new Error(
+      `timed out trying to waiting for worker manager to be ready on port ${port}`,
+    );
   }
   log.info('workers are ready');
 }

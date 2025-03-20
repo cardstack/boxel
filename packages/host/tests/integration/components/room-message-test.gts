@@ -6,40 +6,50 @@ import { module, test } from 'qunit';
 
 import RoomMessage from '@cardstack/host/components/matrix/room-message';
 
+import { type RoomResource } from '@cardstack/host/resources/room';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [],
     autostart: true,
   });
+
+  let { createAndJoinRoom } = mockMatrixUtils;
 
   async function setupTestScenario(
     isStreaming: boolean,
     timeAgoForCreated: number,
     timeAgoForUpdated: number,
+    messageContent: string,
   ) {
     let message = {
       author: { userId: '@aibot:localhost' },
-      message: 'Hello,',
-      formattedMessage: 'Hello, ',
+      message: messageContent,
+      formattedMessage: messageContent,
       created: new Date(new Date().getTime() - timeAgoForCreated * 60 * 1000),
       updated: new Date(new Date().getTime() - timeAgoForUpdated * 60 * 1000),
+      attachedResources() {
+        return undefined;
+      },
     };
 
     let testScenario = {
-      roomId: await createAndJoinRoom('@testuser:staging', 'Test Room'),
+      roomId: createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'Test Room',
+      }),
       message,
       messages: [message],
       isStreaming,
       monacoSDK: {},
-      currentEditor: {},
-      setCurrentMonacoContainer: null,
       maybeRetryAction: null,
-    };
+    } as unknown as RoomResource;
 
     return testScenario;
   }
@@ -51,13 +61,11 @@ module('Integration | Component | RoomMessage', function (hooks) {
       {{! @glint-ignore }}
       <RoomMessage
         @roomId={{testScenario.roomId}}
-        @message={{testScenario.message}}
+        @roomResource={{testScenario}}
         @monacoSDK={{testScenario.monacoSDK}}
         @isStreaming={{testScenario.isStreaming}}
-        @currentEditor={{testScenario.currentEditor}}
         @registerScroller={{noop}}
         @index={{0}}
-        @setCurrentEditor={{testScenario.setCurrentMonacoContainer}}
         @retryAction={{testScenario.maybeRetryAction}}
         data-test-message-idx='1'
       />
@@ -65,7 +73,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
   }
 
   test('it shows an error when AI bot message streaming timeouts', async function (assert) {
-    let testScenario = await setupTestScenario(true, 2, 1); // Streaming, created 2 mins ago, updated 1 min ago
+    let testScenario = await setupTestScenario(true, 2, 1, 'Hello,'); // Streaming, created 2 mins ago, updated 1 min ago
     await renderRoomMessageComponent(testScenario);
 
     await waitUntil(
@@ -83,13 +91,15 @@ module('Integration | Component | RoomMessage', function (hooks) {
   });
 
   test('it does not show an error when last streaming chunk is still within reasonable time limit', async function (assert) {
-    let testScenario = await setupTestScenario(true, 2, 0.5); // Streaming, created 2 mins ago, updated 30 seconds ago
+    let testScenario = await setupTestScenario(true, 2, 0.5, 'Hello,'); // Streaming, created 2 mins ago, updated 30 seconds ago
     await renderRoomMessageComponent(testScenario);
 
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-avatar]')
       .hasClass('ai-avatar-animated');
     assert.dom('[data-test-card-error]').doesNotExist();
-    assert.dom('[data-test-ai-message-content]').includesText('Hello,');
+    assert
+      .dom('[data-test-ai-message-content] span.streaming-text')
+      .includesText('Hello,');
   });
 });

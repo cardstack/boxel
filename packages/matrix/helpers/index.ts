@@ -73,26 +73,22 @@ export async function reloadAndOpenAiAssistant(page: Page) {
 
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
-  await page.waitForFunction(() =>
-    document.querySelector('[data-test-close-ai-assistant]'),
-  );
-
-  await page.waitForFunction(
-    () =>
-      document
-        .querySelector('[data-test-room]')
-        ?.getAttribute('data-test-room'),
-  ); // Opening the AI assistant either opens last room or creates one - wait for it to settle
+  await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
+  await expect(page.locator('[data-test-room]')).toHaveCount(1);
 }
 
 export async function createRealm(
   page: Page,
   endpoint: string,
   name = endpoint,
+  copyFromSeed = true,
 ) {
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
+  if (!copyFromSeed) {
+    await page.locator('[data-test-copy-from-seed-field]').click();
+  }
   await page.locator('[data-test-create-workspace-submit]').click();
   await expect(page.locator(`[data-test-workspace="${name}"]`)).toBeVisible();
   await expect(page.locator('[data-test-create-workspace-modal]')).toHaveCount(
@@ -264,9 +260,7 @@ export async function login(
 ) {
   await openRoot(page, opts?.url);
 
-  await page.waitForFunction(() =>
-    document.querySelector('[data-test-username-field]'),
-  );
+  await expect(page.locator('[data-test-username-field]')).toBeEditable();
   await page.locator('[data-test-username-field]').fill(username);
   await page.locator('[data-test-password-field]').fill(password);
   await page.locator('[data-test-login-btn]').click();
@@ -460,12 +454,13 @@ export async function assertMessages(
     from: string;
     message?: string;
     cards?: { id: string; title?: string; realmIconUrl?: string }[];
+    files?: { name: string; sourceUrl: string }[];
   }[],
 ) {
   await expect(page.locator('[data-test-message-idx]')).toHaveCount(
     messages.length,
   );
-  for (let [index, { from, message, cards }] of messages.entries()) {
+  for (let [index, { from, message, cards, files }] of messages.entries()) {
     await expect(
       page.locator(
         `[data-test-message-idx="${index}"][data-test-boxel-message-from="${from}"]`,
@@ -479,7 +474,7 @@ export async function assertMessages(
     if (cards?.length) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+          `[data-test-message-idx="${index}"] [data-test-message-items]`,
         ),
       ).toHaveCount(1);
       await expect(
@@ -487,14 +482,13 @@ export async function assertMessages(
           `[data-test-message-idx="${index}"] [data-test-attached-card]`,
         ),
       ).toHaveCount(cards.length);
-      cards.map(async (card) => {
+      for (let card of cards) {
         if (card.title) {
           if (message != null && card.title.includes(message)) {
             throw new Error(
               `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
             );
           }
-          // note: attached cards are in atom format (which display the title by default)
           await expect(
             page.locator(
               `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
@@ -509,11 +503,33 @@ export async function assertMessages(
             ),
           ).toHaveCount(1);
         }
-      });
-    } else {
+      }
+    }
+
+    if (files?.length) {
       await expect(
         page.locator(
-          `[data-test-message-idx="${index}"] [data-test-message-cards]`,
+          `[data-test-message-idx="${index}"] [data-test-message-items]`,
+        ),
+      ).toHaveCount(1);
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-attached-file]`,
+        ),
+      ).toHaveCount(files.length);
+      files.map(async (file) => {
+        await expect(
+          page.locator(
+            `[data-test-message-idx="${index}"] [data-test-attached-file="${file.sourceUrl}"]`,
+          ),
+        ).toContainText(file.name);
+      });
+    }
+
+    if (!files?.length && !cards?.length) {
+      await expect(
+        page.locator(
+          `[data-test-message-idx="${index}"] [data-test-message-items]`,
         ),
       ).toHaveCount(0);
     }
@@ -788,45 +804,4 @@ export function encodeWebSafeBase64(string: string) {
 export function decodeFromAlphanumeric(encodedString: string) {
   const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
   return Buffer.from(base64, 'base64').toString('utf8');
-}
-
-export function getSearchTool() {
-  return {
-    type: 'function',
-    function: {
-      name: 'searchCardsByTypeAndTitle',
-      description:
-        'Propose a query to search for card instances filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `cardType` attribute.',
-      parameters: {
-        type: 'object',
-        properties: {
-          description: {
-            type: 'string',
-          },
-          attributes: {
-            type: 'object',
-            properties: {
-              title: {
-                type: 'string',
-                description: 'title of the card',
-              },
-              cardType: {
-                type: 'string',
-                description: 'name of the card type',
-              },
-              type: {
-                type: 'object',
-                description: 'CodeRef of the card type',
-                properties: {
-                  module: { type: 'string' },
-                  name: { type: 'string' },
-                },
-              },
-            },
-          },
-        },
-        required: ['attributes', 'description'],
-      },
-    },
-  };
 }

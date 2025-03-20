@@ -1,6 +1,5 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -9,9 +8,12 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
+import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+
 import AiAssistantMessage, { AiAssistantConversation } from './index';
 export default class AiAssistantMessageUsage extends Component {
   @tracked formattedMessage = 'Hello, world';
+  @tracked reasoningContent = null;
   @tracked datetime = new Date(2024, 0, 3, 12, 30);
   @tracked isFromAssistant = false;
   @tracked isStreaming = false;
@@ -37,6 +39,7 @@ export default class AiAssistantMessageUsage extends Component {
   twoMinutesAgo = new Date(Date.now() - 2 * 60 * 1000);
 
   noop = () => {};
+  noopMonacoSDK = {} as MonacoSDK;
 
   <template>
     <FreestyleUsage @name='AiAssistant::Message'>
@@ -50,16 +53,19 @@ export default class AiAssistantMessageUsage extends Component {
             @registerConversationScroller={{this.noop}}
           >
             <AiAssistantMessage
-              @formattedMessage={{htmlSafe this.formattedMessage}}
+              @formattedMessage={{this.formattedMessage}}
+              @reasoningContent={{this.reasoningContent}}
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
               @index={{0}}
+              @eventId={{'123'}}
               @registerScroller={{this.noop}}
               @profileAvatar={{component
                 Avatar
                 userId=this.userId
                 isReady=true
               }}
+              @monacoSDK={{this.noopMonacoSDK}}
               @errorMessage={{this.errorMessage}}
               @retryAction={{this.retryAction}}
               @isStreaming={{this.isStreaming}}
@@ -94,6 +100,12 @@ export default class AiAssistantMessageUsage extends Component {
           @onInput={{fn (mut this.formattedMessage)}}
           @value={{this.formattedMessage}}
         />
+        <Args.String
+          @name='reasoningContent'
+          @description='The reasoning to display'
+          @onInput={{fn (mut this.reasoningContent)}}
+          @value={{this.reasoningContent}}
+        />
         <Args.Array
           @name='attachedCards'
           @description='Cards attached to the message in pill form.'
@@ -123,13 +135,13 @@ export default class AiAssistantMessageUsage extends Component {
             @registerConversationScroller={{this.noop}}
           >
             <AiAssistantMessage
-              @formattedMessage={{htmlSafe
-                'Please copy edit this message to make it more human.'
-              }}
+              @formattedMessage={{'Please copy edit this message to make it more human.'}}
               @datetime={{this.twoMinutesAgo}}
               @isFromAssistant={{false}}
               @index={{0}}
+              @eventId={{'124'}}
               @registerScroller={{this.noop}}
+              @monacoSDK={{this.noopMonacoSDK}}
               @profileAvatar={{component
                 Avatar
                 userId=this.userId
@@ -138,10 +150,10 @@ export default class AiAssistantMessageUsage extends Component {
               @isStreaming={{false}}
             />
             <AiAssistantMessage
-              @formattedMessage={{htmlSafe
-                'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
-              }}
+              @formattedMessage={{'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'}}
               @index={{1}}
+              @eventId={{'125'}}
+              @monacoSDK={{this.noopMonacoSDK}}
               @registerScroller={{this.noop}}
               @datetime={{this.oneMinutesAgo}}
               @isFromAssistant={{true}}

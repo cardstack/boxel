@@ -1,5 +1,7 @@
 import { action } from '@ember/object';
 
+import { service } from '@ember/service';
+
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
@@ -10,6 +12,8 @@ import { isIndexCard } from '@cardstack/host/lib/stack-item';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
+import { Submodes } from '../components/submode-switcher';
+import OperatorModeStateService from '../services/operator-mode-state-service';
 interface Args {
   named: {
     topMostStackItems: StackItem[];
@@ -25,9 +29,13 @@ export class AutoAttachment extends Resource<Args> {
   cards: TrackedSet<CardDef> = new TrackedSet(); // auto-attached cards
   private lastStackedItems: StackItem[] = [];
   private lastRemovedCards: Set<string> = new Set(); // internal state, changed from the outside. It tracks, everytime a card is removed in the ai-panel
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   modify(_positional: never[], named: Args['named']) {
     const { topMostStackItems, attachedCards } = named;
+    if (this.operatorModeStateService.state.submode === Submodes.Code) {
+      return; // Don't auto-attach cards in code mode
+    }
     this.updateAutoAttachedCardsTask.perform(topMostStackItems, attachedCards);
   }
 

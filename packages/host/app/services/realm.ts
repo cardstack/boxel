@@ -25,7 +25,6 @@ import {
   JWTPayload,
   SupportedMimeType,
   type RealmInfo,
-  type IndexEventData,
   RealmPermissions,
   RealmPaths,
 } from '@cardstack/runtime-common';
@@ -33,6 +32,11 @@ import {
 import ENV from '@cardstack/host/config/environment';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
+
+import type {
+  IndexRealmEventContent,
+  RealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 import { SessionLocalStorageKey } from '../utils/local-storage-keys';
 
@@ -54,9 +58,9 @@ type AuthStatus =
   | { type: 'anonymous' };
 
 class RealmResource {
-  @service private declare matrixService: MatrixService;
-  @service private declare network: NetworkService;
-  @service private declare messageService: MessageService;
+  @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
+  @service declare private messageService: MessageService;
 
   @tracked info: EnhancedRealmInfo | undefined;
   @tracked private realmPermissions: RealmPermissions | null | undefined;
@@ -151,24 +155,25 @@ class RealmResource {
     this.subscription = {
       unsubscribe: this.messageService.subscribe(
         this.realmURL,
-        ({ type, data: dataStr }: { type: string; data: string }) => {
+        (event: RealmEventContent) => {
           if (!this.info) {
             console.warn(
               `No realm info exists for ${this.realmURL} when trying to set indexing status`,
             );
             return;
           }
-          if (type !== 'index') {
+          if (event.eventName !== 'index') {
             return;
           }
-          let data = JSON.parse(dataStr) as IndexEventData;
-          if (data.type === 'full') {
+          let data = event as IndexRealmEventContent;
+          if (data.indexType === 'full') {
             return;
           }
-          switch (data.type) {
+          switch (data.indexType) {
             case 'incremental-index-initiation':
               this.info.isIndexing = true;
               break;
+            case 'copy':
             case 'incremental':
               this.info.isIndexing = false;
               break;
@@ -332,15 +337,23 @@ class RealmResource {
       return;
     }
 
-    // token expiration is unix time (seconds)
-    let expirationMs = this.claims.exp * 1000;
+    let refreshMs = 0;
 
-    let refreshMs = Math.max(
-      expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
-      0,
-    );
+    if (!this.claims.sessionRoom) {
+      // Force JWT renewal to ensure presence of sessionRoom property
+      console.log(`JWT for realm ${this.url} has no session room, renewing`);
+    } else {
+      // token expiration is unix time (seconds)
+      let expirationMs = this.claims.exp * 1000;
+
+      refreshMs = Math.max(
+        expirationMs - Date.now() - tokenRefreshPeriodSec * 1000,
+        0,
+      );
+    }
 
     await rawTimeout(refreshMs);
+
     if (!this.loggingIn) {
       this.loggingIn = this.loginTask.perform();
       await this.loggingIn;
@@ -349,10 +362,10 @@ class RealmResource {
 }
 
 export default class RealmService extends Service {
-  @service private declare realmServer: RealmServerService;
-  @service private declare matrixService: MatrixService;
-  @service private declare network: NetworkService;
-  @service private declare reset: ResetService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
+  @service declare private reset: ResetService;
 
   // This is not a TrackedMap, it's a regular Map. Conceptually, we want it to
   // be tracked, but we're using it as a read-through cache and glimmer/tracking
@@ -493,6 +506,12 @@ export default class RealmService extends Service {
       }
     }
     return undefined;
+  }
+
+  realmForSessionRoomId(sessionRoomId: string) {
+    return Array.from(this.realms.values()).find(
+      (r) => r.claims?.sessionRoom === sessionRoomId,
+    );
   }
 
   @cached

@@ -4,7 +4,7 @@
     "attributes": {
       "title": "Bigint Field",
       "description": "A field that captures big int values",
-      "isField": true,
+      "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/big-integer",
         "name": "default"
@@ -12,8 +12,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog-entry",
-        "name": "CatalogEntry"
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
       }
     }
   }

@@ -1,5 +1,7 @@
 import { CardResource } from './card-document';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 // a card resource but with optional "id" and "type" props
 export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
   type?: 'card';
@@ -59,7 +61,7 @@ export interface RealmPrerenderedCards {
 }
 
 import { RealmPaths, type LocalPath } from './paths';
-import { CardTypeFilter, EveryFilter, Query } from './query';
+import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './commands';
 export * from './constants';
@@ -99,7 +101,11 @@ export const isNode =
   '[object process]';
 
 export { SupportedMimeType } from './router';
-export { VirtualNetwork, type ResponseWithNodeStream } from './virtual-network';
+export {
+  isUrlLike,
+  VirtualNetwork,
+  type ResponseWithNodeStream,
+} from './virtual-network';
 export { RealmAuthDataSource } from './realm-auth-data-source';
 
 export type {
@@ -195,6 +201,10 @@ export interface CardChooser {
   ): Promise<undefined | T>;
 }
 
+export interface FileChooser {
+  chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
+}
+
 export async function chooseCard<T extends BaseDef>(
   query: CardCatalogQuery,
   opts?: {
@@ -220,57 +230,78 @@ export async function chooseCard<T extends BaseDef>(
   return await chooser.chooseCard<T>(query, opts);
 }
 
-export interface CardSearch {
-  getCards(
-    query: Query,
-    realms?: string[],
-    opts?: {
-      isLive?: true;
-      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-    },
-  ): {
-    instances: CardDef[];
-    loaded: Promise<void>;
-    isLoading: boolean;
-  };
-  getCard<T extends CardDef>(
-    url: URL,
-    opts?: { loader?: Loader; isLive?: boolean },
-  ): {
-    card: T | undefined;
-    loaded: Promise<void> | undefined;
-    cardError?: undefined | { id: string; error: Error };
-  };
+export async function chooseFile<T extends FieldDef>(): Promise<
+  undefined | any
+> {
+  let here = globalThis as any;
+  if (!here._CARDSTACK_FILE_CHOOSER) {
+    throw new Error(
+      `no cardstack file chooser is available in this environment`,
+    );
+  }
+  let chooser: FileChooser = here._CARDSTACK_FILE_CHOOSER;
+
+  return await chooser.chooseFile<T>();
 }
 
-export interface CardCatalogQuery extends Query {
-  filter?: CardTypeFilter | EveryFilter;
+export interface CardErrorsJSONAPI {
+  errors: {
+    id?: string; // 404 errors won't necessarily have an id
+    status: number;
+    title: string;
+    message: string;
+    realm: string | undefined;
+    meta: {
+      lastKnownGoodHtml: string | null;
+      cardTitle: string | null;
+      scopedCssUrls: string[];
+      stack: string | null;
+    };
+  }[];
 }
+export type CardErrorJSONAPI = CardErrorsJSONAPI['errors'][0];
+export type AutoSaveState = {
+  isSaving: boolean;
+  hasUnsavedChanges: boolean;
+  lastSaved: number | undefined;
+  lastSaveError: Error | undefined;
+  lastSavedErrorMsg: string | undefined;
+};
+export type getCard<T extends CardDef = CardDef> = (
+  parent: object,
+  url: () => string | LooseSingleCardDocument | undefined,
+  opts?: {
+    isLive?: boolean;
+    isAutoSaved?: boolean;
+  },
+) => // This is a duck type of the CardResource
+{
+  card: T | undefined;
+  isLoaded: boolean;
+  url: string | undefined;
+  autoSaveState: AutoSaveState | undefined;
+  cardError: CardErrorJSONAPI | undefined;
+  // TODO remove this
+  loaded: Promise<void>;
+};
 
-export function getCards(
-  query: Query,
-  realms?: string[],
+export type getCards = (
+  parent: object,
+  getQuery: () => Query | undefined,
+  getRealms?: () => string[] | undefined,
   opts?: {
     isLive?: true;
     doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
   },
-) {
-  let here = globalThis as any;
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCards(query, realms, opts);
-}
+) => // This is a duck type of the SearchResource
+{
+  instances: CardDef[];
+  instancesByRealm: { realm: string; cards: CardDef[] }[];
+  isLoading: boolean;
+};
 
-export function getCard<T extends CardDef>(
-  url: URL,
-  opts?: { loader?: Loader; isLive?: boolean },
-) {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CARD_SEARCH) {
-    // on the server we don't need this
-    return { card: undefined, loaded: undefined };
-  }
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCard<T>(url, opts);
+export interface CardCatalogQuery extends Query {
+  filter?: CardTypeFilter | EveryFilter;
 }
 
 export interface CardCreator {
@@ -304,12 +335,12 @@ export async function createNewCard<T extends CardDef>(
 }
 
 export interface RealmSubscribe {
-  subscribe(realmURL: string, cb: (ev: MessageEvent) => void): () => void;
+  subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void;
 }
 
 export function subscribeToRealm(
   realmURL: string,
-  cb: (ev: MessageEvent) => void,
+  cb: (ev: RealmEventContent) => void,
 ): () => void {
   let here = globalThis as any;
   if (!here._CARDSTACK_REALM_SUBSCRIBE) {
@@ -322,6 +353,11 @@ export function subscribeToRealm(
     let realmSubscribe: RealmSubscribe = here._CARDSTACK_REALM_SUBSCRIBE;
     return realmSubscribe.subscribe(realmURL, cb);
   }
+}
+
+export interface SearchQuery {
+  instances: CardDef[];
+  isLoading: boolean;
 }
 
 export interface Actions {

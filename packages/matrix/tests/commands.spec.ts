@@ -1,8 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { Credentials, putEvent, registerUser } from '../docker/synapse';
 import {
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
 } from '../helpers/matrix-constants';
 
@@ -12,7 +12,6 @@ import {
   sendMessage,
   registerRealmUsers,
   getRoomEvents,
-  getSearchTool,
   showAllCards,
   waitUntil,
   setupUserSubscribed,
@@ -44,7 +43,7 @@ test.describe('Commands', () => {
     await realmServer.stop();
   });
 
-  test(`it does include command tools (patch, search) in message event when top-most card is writable and context is shared`, async ({
+  test(`it includes the patch tool in message event when top-most card is writable and context is shared`, async ({
     page,
   }) => {
     await login(page, 'user1', 'pass', { url: appURL });
@@ -68,7 +67,7 @@ test.describe('Commands', () => {
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
 
-    expect(boxelMessageData.context.tools.length).toEqual(2);
+    expect(boxelMessageData.context.tools.length).toEqual(1);
     let patchCardTool = boxelMessageData.context.tools.find(
       (t: any) => t.function.name === 'patchCard',
     );
@@ -120,10 +119,6 @@ test.describe('Commands', () => {
         },
       },
     });
-    let searchCardTool = boxelMessageData.context.tools.find(
-      (t: any) => t.function.name === 'searchCardsByTypeAndTitle',
-    );
-    expect(searchCardTool).toMatchObject(getSearchTool());
   });
 
   test(`it does not include patch tool in message event for an open card that is not attached`, async ({
@@ -154,38 +149,8 @@ test.describe('Commands', () => {
       );
     }).toPass();
     let boxelMessageData = JSON.parse(message!.content.data);
-    expect(boxelMessageData.context.tools).toMatchObject([getSearchTool()]);
-  });
-
-  // TODO: currently we need isolated realm server to get payment setup to work
-  /*   test(`it does not include patch tool in message event when top-most card is read-only`, async ({
-    page,
-  }) => {
-    // the base realm is a read-only realm
-    await login(page, 'user1', 'pass', { url: `http://localhost:4201/base` });
-    let room1 = await getRoomId(page);
-    await showAllCards(page);
-    await expect(
-      page.locator(
-        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
-      ),
-    ).toHaveCount(1);
-    await page
-      .locator(
-        '[data-test-stack-card="https://cardstack.com/base/index"] [data-test-cards-grid-item="https://cardstack.com/base/fields/boolean-field"]',
-      )
-      .click();
-    await expect(
-      page.locator(
-        '[data-test-stack-card="https://cardstack.com/base/fields/boolean-field"]',
-      ),
-    ).toHaveCount(1);
-    await sendMessage(page, room1, 'please change this card');
-    let message = (await getRoomEvents()).pop()!;
-    expect(message.content.msgtype).toStrictEqual(APP_BOXEL_MESSAGE_MSGTYPE);
-    let boxelMessageData = JSON.parse(message.content.data);
     expect(boxelMessageData.context.tools).toMatchObject([]);
-  }); */
+  });
 
   test(`applying a command dispatches a CommandResultEvent if command is succesful`, async ({
     page,
@@ -194,12 +159,14 @@ test.describe('Commands', () => {
     let room1 = await getRoomId(page);
     let cardId = `${appURL}/hassan`;
     let content = {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1',
           name: 'patchCard',
           arguments: {
             description: 'Patching card',
@@ -213,7 +180,7 @@ test.describe('Commands', () => {
             },
           },
         },
-      }),
+      ],
     };
 
     await showAllCards(page);
@@ -242,16 +209,18 @@ test.describe('Commands', () => {
     let room1 = await getRoomId(page);
     let card_id = `${appURL}/hassan`;
     let content = {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
       formatted_body: 'some command',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'searchCardsByTypeAndTitle',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '1',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               type: {
                 module: `${appURL}person`,
                 name: 'Person',
@@ -259,8 +228,7 @@ test.describe('Commands', () => {
             },
           },
         },
-        eventId: 'search1',
-      }),
+      ],
     };
 
     await showAllCards(page);

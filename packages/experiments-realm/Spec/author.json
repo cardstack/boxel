@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Author",
+        "module": "../author"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Author",
+      "description": "Spec for Author",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../Author/ad28d989-68a8-4bad-a8dc-05f9f724489c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -6,6 +6,7 @@ pnpm setup:catalog-in-deployment
 NODE_NO_WARNINGS=1 \
   MATRIX_URL=https://matrix.boxel.ai \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
+  DISABLE_MATRIX_REALM_EVENTS=true \
   ts-node \
   --transpileOnly main \
   --port=3000 \
@@ -13,6 +14,7 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://app.boxel.ai' \
   --seedPath='/persistent/seed' \
+  --seedRealmURL='https://app.boxel.ai/seed/' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

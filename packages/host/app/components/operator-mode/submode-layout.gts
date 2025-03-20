@@ -17,9 +17,11 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { Avatar, IconButton } from '@cardstack/boxel-ui/components';
-import { and, cn, not } from '@cardstack/boxel-ui/helpers';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import { BoxelIcon } from '@cardstack/boxel-ui/icons';
+
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
@@ -47,10 +49,10 @@ import type OperatorModeStateService from '../../services/operator-mode-state-se
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    hideAiAssistant?: boolean;
     onSearchSheetOpened?: () => void;
     onSearchSheetClosed?: () => void;
     onCardSelectFromSearch: (cardId: string) => void;
+    selectedCardRef?: ResolvedCodeRef | undefined;
   };
   Blocks: {
     default: [
@@ -309,23 +311,17 @@ export default class SubmodeLayout extends Component<Signature> {
             @onCardSelect={{this.handleCardSelectFromSearch}}
             @onInputInsertion={{this.storeSearchElement}}
           />
-          {{#if (not @hideAiAssistant)}}
-            <AiAssistantToast
-              @hide={{this.operatorModeStateService.aiAssistantOpen}}
-              @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
-            />
-            <AiAssistantButton
-              class='chat-btn'
-              @isActive={{this.operatorModeStateService.aiAssistantOpen}}
-              {{on 'click' this.operatorModeStateService.toggleAiAssistant}}
-            />
-          {{/if}}
+          <AiAssistantToast
+            @hide={{this.operatorModeStateService.aiAssistantOpen}}
+            @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
+          />
+          <AiAssistantButton
+            class='chat-btn'
+            @isActive={{this.operatorModeStateService.aiAssistantOpen}}
+            {{on 'click' this.operatorModeStateService.toggleAiAssistant}}
+          />
         </ResizablePanel>
-        {{#if
-          (and
-            (not @hideAiAssistant) this.operatorModeStateService.aiAssistantOpen
-          )
-        }}
+        {{#if this.operatorModeStateService.aiAssistantOpen}}
           <ResizablePanel
             class='ai-assistant-resizable-panel'
             @defaultSize={{this.aiPanelWidths.defaultWidth}}
@@ -335,6 +331,7 @@ export default class SubmodeLayout extends Component<Signature> {
             <AiAssistantPanel
               @onClose={{this.operatorModeStateService.toggleAiAssistant}}
               @resizeHandle={{ResizeHandle}}
+              @selectedCardRef={{@selectedCardRef}}
               class='ai-assistant-panel
                 {{if this.workspaceChooserOpened "left-border"}}'
             />

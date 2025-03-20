@@ -5,16 +5,27 @@ import FreestyleGuide from 'ember-freestyle/components/freestyle-guide';
 import FreestyleSection from 'ember-freestyle/components/freestyle-section';
 
 import { pageTitle } from 'ember-page-title';
+
+import { provide } from 'ember-provide-consume-context';
+
 import RouteTemplate from 'ember-route-template';
 
+import {
+  GetCardContextName,
+  GetCardsContextName,
+} from '@cardstack/runtime-common';
+
 import AiAssistantApplyButtonUsage from '@cardstack/host/components/ai-assistant/apply-button/usage';
-import AiAssistantCardPicker from '@cardstack/host/components/ai-assistant/card-picker/usage';
+import AiAssistantAttachmentPickerUsage from '@cardstack/host/components/ai-assistant/attachment-picker/usage';
 import AiAssistantChatInputUsage from '@cardstack/host/components/ai-assistant/chat-input/usage';
 import AiAssistantMessageUsage from '@cardstack/host/components/ai-assistant/message/usage';
 import AiAssistantSkillMenuUsage from '@cardstack/host/components/ai-assistant/skill-menu/usage';
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
+
+import { getCard } from '@cardstack/host/resources/card-resource';
+import { getSearch } from '@cardstack/host/resources/search';
 
 import formatComponentName from '../helpers/format-component-name';
 
@@ -30,10 +41,22 @@ interface HostFreestyleSignature {
 class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   formatComponentName = formatComponentName;
 
+  @provide(GetCardContextName)
+  // @ts-ignore "getCard" is declared but not used
+  private get getCard() {
+    return getCard;
+  }
+
+  @provide(GetCardsContextName)
+  // @ts-ignore "getCard" is declared but not used
+  private get getCards() {
+    return getSearch;
+  }
+
   get usageComponents() {
     return [
       ['AiAssistant::ApplyButton', AiAssistantApplyButtonUsage],
-      ['AiAssistant::CardPicker', AiAssistantCardPicker],
+      ['AiAssistant::CardPicker', AiAssistantAttachmentPickerUsage],
       ['AiAssistant::ChatInput', AiAssistantChatInputUsage],
       ['AiAssistant::Message', AiAssistantMessageUsage],
       ['AiAssistant::PillMenu', PillMenuUsage],

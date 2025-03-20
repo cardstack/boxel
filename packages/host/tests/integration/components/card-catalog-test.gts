@@ -20,7 +20,6 @@ import {
   testRealmURL,
   setupLocalIndexing,
   setupIntegrationTestRealm,
-  setupServerSentEvents,
   lookupLoaderService,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -33,9 +32,9 @@ const baseRealmCardCount = 2;
 module('Integration | card-catalog', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
-  setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
     autostart: true,
   });
@@ -48,18 +47,18 @@ module('Integration | card-catalog', function (hooks) {
     let string: typeof import('https://cardstack.com/base/string');
     let textArea: typeof import('https://cardstack.com/base/text-area');
     let cardsGrid: typeof import('https://cardstack.com/base/cards-grid');
-    let catalogEntry: typeof import('https://cardstack.com/base/catalog-entry');
+    let spec: typeof import('https://cardstack.com/base/spec');
     cardApi = await loader.import(`${baseRealm.url}card-api`);
     string = await loader.import(`${baseRealm.url}string`);
     textArea = await loader.import(`${baseRealm.url}text-area`);
     cardsGrid = await loader.import(`${baseRealm.url}cards-grid`);
-    catalogEntry = await loader.import(`${baseRealm.url}catalog-entry`);
+    spec = await loader.import(`${baseRealm.url}spec`);
 
     let { field, contains, linksTo, CardDef, FieldDef } = cardApi;
     let { default: StringField } = string;
     let { default: TextAreaField } = textArea;
     let { CardsGrid } = cardsGrid;
-    let { CatalogEntry } = catalogEntry;
+    let { Spec } = spec;
 
     class Author extends CardDef {
       static displayName = 'Author';
@@ -105,6 +104,7 @@ module('Integration | card-catalog', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'blog-post.gts': { BlogPost },
         'address.gts': { Address },
@@ -115,64 +115,64 @@ module('Integration | card-catalog', function (hooks) {
         'publishing-packet.gts': { PublishingPacket },
         '.realm.json': `{ "name": "${realmName}", "iconURL": "https://example-icon.test" }`,
         'index.json': new CardsGrid(),
-        'CatalogEntry/publishing-packet.json': new CatalogEntry({
+        'Spec/publishing-packet.json': new Spec({
           title: 'Publishing Packet',
-          description: 'Catalog entry for PublishingPacket',
-          isField: false,
+          description: 'Spec for PublishingPacket',
+          specType: 'card',
           ref: {
-            module: `../publishing-packet`,
+            module: `${testRealmURL}publishing-packet`,
             name: 'PublishingPacket',
           },
         }),
-        'CatalogEntry/author.json': new CatalogEntry({
+        'Spec/author.json': new Spec({
           title: 'Author',
-          description: 'Catalog entry for Author',
-          isField: false,
+          description: 'Spec for Author',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}author`,
             name: 'Author',
           },
         }),
-        'CatalogEntry/person.json': new CatalogEntry({
+        'Spec/person.json': new Spec({
           title: 'Person',
-          description: 'Catalog entry for Person',
-          isField: false,
+          description: 'Spec for Person',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}person`,
             name: 'Person',
           },
         }),
-        'CatalogEntry/pet.json': new CatalogEntry({
+        'Spec/pet.json': new Spec({
           title: 'Pet',
-          description: 'Catalog entry for Pet',
-          isField: false,
+          description: 'Spec for Pet',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}pet`,
             name: 'Pet',
           },
         }),
-        'CatalogEntry/tree.json': new CatalogEntry({
+        'Spec/tree.json': new Spec({
           title: 'Tree',
-          description: 'Catalog entry for Tree',
-          isField: false,
+          description: 'Spec for Tree',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}tree`,
             name: 'Tree',
           },
         }),
-        'CatalogEntry/blog-post.json': new CatalogEntry({
+        'Spec/blog-post.json': new Spec({
           title: 'BlogPost',
-          description: 'Catalog entry for BlogPost',
-          isField: false,
+          description: 'Spec for BlogPost',
+          specType: 'card',
           ref: {
             module: `${testRealmURL}blog-post`,
             name: 'BlogPost',
           },
         }),
-        'CatalogEntry/address.json': new CatalogEntry({
+        'Spec/address.json': new Spec({
           title: 'Address',
-          description: 'Catalog entry for Address field',
-          isField: true,
+          description: 'Spec for Address field',
+          specType: 'field',
           ref: {
             module: `${testRealmURL}address`,
             name: 'Address',
@@ -234,11 +234,11 @@ module('Integration | card-catalog', function (hooks) {
 
       // note that Address field is not in the results
       assert.deepEqual(localResults, [
-        'http://test-realm/test/CatalogEntry/author',
-        'http://test-realm/test/CatalogEntry/blog-post',
-        'http://test-realm/test/CatalogEntry/person',
-        'http://test-realm/test/CatalogEntry/pet',
-        'http://test-realm/test/CatalogEntry/publishing-packet',
+        'http://test-realm/test/Spec/author',
+        'http://test-realm/test/Spec/blog-post',
+        'http://test-realm/test/Spec/person',
+        'http://test-realm/test/Spec/pet',
+        'http://test-realm/test/Spec/publishing-packet',
       ]);
     });
 
@@ -296,19 +296,19 @@ module('Integration | card-catalog', function (hooks) {
         ),
       ].map((n) => n.getAttribute('data-test-card-catalog-item'));
       assert.deepEqual(localResults, [
-        'http://test-realm/test/CatalogEntry/author',
-        'http://test-realm/test/CatalogEntry/blog-post',
-        'http://test-realm/test/CatalogEntry/person',
-        'http://test-realm/test/CatalogEntry/pet',
-        'http://test-realm/test/CatalogEntry/publishing-packet',
-        'http://test-realm/test/CatalogEntry/tree',
+        'http://test-realm/test/Spec/author',
+        'http://test-realm/test/Spec/blog-post',
+        'http://test-realm/test/Spec/person',
+        'http://test-realm/test/Spec/pet',
+        'http://test-realm/test/Spec/publishing-packet',
+        'http://test-realm/test/Spec/tree',
       ]);
     });
   });
 
   module('mouse and key events', function () {
     test(`pressing enter on a card selects it and submits the selection`, async function (assert) {
-      const card = `${testRealmURL}CatalogEntry/publishing-packet`;
+      const card = `${testRealmURL}Spec/publishing-packet`;
       assert
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
@@ -331,7 +331,7 @@ module('Integration | card-catalog', function (hooks) {
     });
 
     test(`can select card using mouse click and then submit selection using enter key`, async function (assert) {
-      const card = `${testRealmURL}CatalogEntry/blog-post`;
+      const card = `${testRealmURL}Spec/blog-post`;
       assert
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
@@ -359,8 +359,8 @@ module('Integration | card-catalog', function (hooks) {
     });
 
     test(`selecting a card, then focusing on another card and pressing enter submits the focused card`, async function (assert) {
-      const card1 = `${testRealmURL}CatalogEntry/blog-post`;
-      const card2 = `${testRealmURL}CatalogEntry/author`;
+      const card1 = `${testRealmURL}Spec/blog-post`;
+      const card2 = `${testRealmURL}Spec/author`;
       assert
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,
@@ -394,7 +394,7 @@ module('Integration | card-catalog', function (hooks) {
     });
 
     test(`double-clicking on a card selects the card and submits the selection`, async function (assert) {
-      const card = `${testRealmURL}CatalogEntry/blog-post`;
+      const card = `${testRealmURL}Spec/blog-post`;
       assert
         .dom(
           `[data-test-stack-card-index="0"] [data-test-boxel-card-header-title]`,

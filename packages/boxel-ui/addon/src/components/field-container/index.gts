@@ -98,7 +98,9 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
     }
 
     .horizontal {
-      grid-template-columns: var(--boxel-field-label-size, minmax(8rem, 25%)) 1fr;
+      grid-template-columns:
+        var(--boxel-field-label-size, minmax(8rem, 25%))
+        1fr;
     }
 
     .horizontal > .label-container {

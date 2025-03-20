@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
@@ -10,11 +9,16 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
+import { provide } from 'ember-provide-consume-context';
+
 import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { or, not, and } from '@cardstack/boxel-ui/helpers';
 
-import type { Loader, Query } from '@cardstack/runtime-common';
+import {
+  GetCardContextName,
+  GetCardsContextName,
+} from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
 import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
@@ -22,10 +26,7 @@ import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
-import {
-  getSearchResults,
-  type Search,
-} from '@cardstack/host/resources/search';
+import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
 
@@ -58,36 +59,23 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
-
     this.messageService.register();
 
     registerDestructor(this, () => {
-      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
   }
 
-  // public API
-  @action
-  getCards(
-    query: Query,
-    realms?: string[],
-    opts?: {
-      isLive?: true;
-      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-    },
-  ): Search {
-    return getSearchResults(this, query, realms, opts);
+  @provide(GetCardContextName)
+  // @ts-ignore "getCard" is declared but not used
+  private get getCard() {
+    return getCard;
   }
 
-  // public API
-  @action
-  getCard(url: URL, opts?: { loader?: Loader; isLive?: boolean }) {
-    return getCard(this, () => url.href, {
-      ...(opts?.isLive ? { isLive: () => opts.isLive! } : {}),
-      ...(opts?.loader ? { loader: () => opts.loader! } : {}),
-    });
+  @provide(GetCardsContextName)
+  // @ts-ignore "getCards" is declared but not used
+  private get getCards() {
+    return getSearch;
   }
 
   private saveSource = task(async (url: URL, content: string) => {

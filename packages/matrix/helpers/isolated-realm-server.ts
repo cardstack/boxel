@@ -18,7 +18,7 @@ export const appURL = 'http://localhost:4205/test';
 // judgement to decide if your test really merits an isolated realm for testing
 // or if a mock would be more suitable.
 
-export async function startServer() {
+export async function startServer(opts?: { includeSeedRealm: boolean }) {
   let dir = dirSync();
   let testRealmDir = join(dir.name, 'test');
   ensureDirSync(testRealmDir);
@@ -27,29 +27,36 @@ export async function startServer() {
   process.env.PGPORT = '5435';
   process.env.PGDATABASE = `test_db_${Math.floor(10000000 * Math.random())}`;
   process.env.NODE_NO_WARNINGS = '1';
+  process.env.REALM_SERVER_SECRET_SEED = "mum's the word";
   process.env.REALM_SECRET_SEED = "shhh! it's a secret";
   process.env.MATRIX_URL = 'http://localhost:8008';
   process.env.REALM_SERVER_MATRIX_USERNAME = 'realm_server';
+  process.env.NODE_ENV = 'test';
 
-  let workerManager = spawn(
-    'ts-node',
-    [
-      `--transpileOnly`,
-      'worker-manager',
-      `--port=4212`,
-      `--matrixURL='http://localhost:8008'`,
-      `--distURL="${process.env.HOST_URL ?? 'http://localhost:4200'}"`,
+  let workerArgs = [
+    `--transpileOnly`,
+    'worker-manager',
+    `--port=4212`,
+    `--matrixURL='http://localhost:8008'`,
+    `--distURL="${process.env.HOST_URL ?? 'http://localhost:4200'}"`,
 
-      `--fromUrl='http://localhost:4205/test/'`,
-      `--toUrl='http://localhost:4205/test/'`,
-      `--fromUrl='https://cardstack.com/base/'`,
-      `--toUrl='http://localhost:4201/base/'`,
-    ],
-    {
-      cwd: realmServerDir,
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-    },
-  );
+    `--fromUrl='http://localhost:4205/test/'`,
+    `--toUrl='http://localhost:4205/test/'`,
+  ];
+  if (opts?.includeSeedRealm) {
+    workerArgs = workerArgs.concat([
+      `--fromUrl='http://localhost:4205/seed/'`,
+      `--toUrl='http://localhost:4205/seed/'`,
+    ]);
+  }
+  workerArgs = workerArgs.concat([
+    `--fromUrl='https://cardstack.com/base/'`,
+    `--toUrl='http://localhost:4201/base/'`,
+  ]);
+  let workerManager = spawn('ts-node', workerArgs, {
+    cwd: realmServerDir,
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  });
   if (workerManager.stdout) {
     workerManager.stdout.on('data', (data: Buffer) =>
       console.log(`worker: ${data.toString()}`),
@@ -61,31 +68,41 @@ export async function startServer() {
     );
   }
 
-  let realmServer = spawn(
-    'ts-node',
-    [
-      `--transpileOnly`,
-      'main',
-      `--port=4205`,
-      `--matrixURL='http://localhost:8008'`,
-      `--realmsRootPath='${dir.name}'`,
-      `--seedPath='${seedPath}'`,
-      `--workerManagerPort=4212`,
-      `--migrateDB`,
-      `--useRegistrationSecretFunction`,
+  let serverArgs = [
+    `--transpileOnly`,
+    'main',
+    `--port=4205`,
+    `--matrixURL='http://localhost:8008'`,
+    `--realmsRootPath='${dir.name}'`,
+    `--seedPath='${seedPath}'`,
+    `--seedRealmURL='http://localhost:4205/seed/'`,
+    `--workerManagerPort=4212`,
+    `--migrateDB`,
+    `--useRegistrationSecretFunction`,
 
-      `--path='${testRealmDir}'`,
-      `--username='test_realm'`,
-      `--fromUrl='http://localhost:4205/test/'`,
-      `--toUrl='http://localhost:4205/test/'`,
-      `--fromUrl='https://cardstack.com/base/'`,
-      `--toUrl='http://localhost:4201/base/'`,
-    ],
-    {
-      cwd: realmServerDir,
-      stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-    },
-  );
+    `--path='${testRealmDir}'`,
+    `--username='test_realm'`,
+  ];
+  serverArgs = serverArgs.concat([
+    `--fromUrl='http://localhost:4205/test/'`,
+    `--toUrl='http://localhost:4205/test/'`,
+  ]);
+  if (opts?.includeSeedRealm) {
+    serverArgs = serverArgs.concat([
+      `--path='${seedPath}'`,
+      `--username='seed_realm'`,
+      `--fromUrl='http://localhost:4205/seed/'`,
+      `--toUrl='http://localhost:4205/seed/'`,
+    ]);
+  }
+  serverArgs = serverArgs.concat([
+    `--fromUrl='https://cardstack.com/base/'`,
+    `--toUrl='http://localhost:4201/base/'`,
+  ]);
+  let realmServer = spawn('ts-node', serverArgs, {
+    cwd: realmServerDir,
+    stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+  });
   realmServer.unref();
   if (realmServer.stdout) {
     realmServer.stdout.on('data', (data: Buffer) =>

@@ -15,6 +15,8 @@ import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
 import type LoaderService from '../services/loader-service';
 import type MessageService from '../services/message-service';
 import type NetworkService from '../services/network';
@@ -62,7 +64,7 @@ export interface Ready {
 export type FileResource = Loading | ServerError | NotFound | Ready;
 
 class _FileResource extends Resource<Args> {
-  private declare _url: string;
+  declare private _url: string;
   private onStateChange?: ((state: FileResource['state']) => void) | undefined;
   private onRedirect?: ((url: string) => void) | undefined;
   private subscription: { url: string; unsubscribe: () => void } | undefined;
@@ -72,12 +74,12 @@ class _FileResource extends Resource<Args> {
     state: 'loading',
   };
 
-  @service private declare loaderService: LoaderService;
-  @service private declare network: NetworkService;
-  @service private declare messageService: MessageService;
-  @service private declare cardService: CardService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
+  @service declare private messageService: MessageService;
+  @service declare private cardService: CardService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -91,7 +93,7 @@ class _FileResource extends Resource<Args> {
 
   private setSubscription(
     realmURL: string,
-    callback: (ev: { type: string; data: string }) => void,
+    callback: (ev: RealmEventContent) => void,
   ) {
     if (this.subscription && this.subscription.url !== realmURL) {
       this.subscription.unsubscribe();
@@ -197,19 +199,18 @@ class _FileResource extends Resource<Args> {
       },
     });
 
-    this.setSubscription(realmURL, (event: { type: string; data: string }) => {
-      let eventData = JSON.parse(event.data);
+    this.setSubscription(realmURL, (event: RealmEventContent) => {
       if (
-        event.type !== 'index' ||
+        event.eventName !== 'index' ||
         // we wait specifically for the index complete event ("incremental") so
         // that the subsequent index read retrieves the latest contents of the file
-        eventData.type !== 'incremental' ||
-        !Array.isArray(eventData.invalidations)
+        event.indexType !== 'incremental' ||
+        !Array.isArray(event.invalidations)
       ) {
         return;
       }
 
-      let { invalidations } = eventData as { invalidations: string[] };
+      let { invalidations } = event as { invalidations: string[] };
       let normalizedURL = this.url.endsWith('.json')
         ? this.url.replace(/\.json$/, '')
         : this.url;

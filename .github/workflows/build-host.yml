@@ -15,7 +15,7 @@ jobs:
       group: build-host-${{ inputs.environment }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
 
       - name: Init
         uses: ./.github/actions/init
@@ -25,13 +25,12 @@ jobs:
           INPUT_ENVIRONMENT: ${{ inputs.environment }}
         run: |
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
-            echo "OWN_REALM_URL=https://app.boxel.ai/experiments/" >> $GITHUB_ENV
             echo "RESOLVED_BASE_REALM_URL=https://app.boxel.ai/base/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix.boxel.ai" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=boxel.ai" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
+            echo "DISABLE_MATRIX_REALM_EVENTS=true" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
-            echo "OWN_REALM_URL=https://realms-staging.stack.cards/experiments/" >> $GITHUB_ENV
             echo "RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=stack.cards" >> $GITHUB_ENV
@@ -53,7 +52,7 @@ jobs:
         run: pnpm deploy:boxel-host build-only --verbose
 
       - name: Save dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         with:
           name: host-dist
           path: packages/host/tmp/deploy-dist

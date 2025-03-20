@@ -1,4 +1,4 @@
-import { click, fillIn } from '@ember/test-helpers';
+import { click, fillIn, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -9,16 +9,17 @@ import { baseRealm } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM,
+  DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   setupUserSubscription,
   testRealmURL,
   setupAcceptanceTestRealm,
   visitOperatorMode,
+  assertMessages,
 } from '../helpers';
 
 import {
@@ -42,78 +43,26 @@ async function selectCardFromCatalog(cardId: string) {
   await click('[data-test-card-catalog-go-button]');
 }
 
-async function assertMessages(
-  assert: Assert,
-  messages: {
-    from: string;
-    message?: string;
-    cards?: { id: string; title?: string; realmIconUrl?: string }[];
-  }[],
-) {
-  assert.dom('[data-test-message-idx]').exists({ count: messages.length });
-  for (let [index, { from, message, cards }] of messages.entries()) {
-    assert
-      .dom(
-        `[data-test-message-idx="${index}"][data-test-boxel-message-from="${from}"]`,
-      )
-      .exists({ count: 1 });
-    if (message != null) {
-      assert
-        .dom(`[data-test-message-idx="${index}"] .content`)
-        .containsText(message);
-    }
-    if (cards?.length) {
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
-        .exists({ count: 1 });
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-attached-card]`)
-        .exists({ count: cards.length });
-      cards.map(async (card) => {
-        if (card.title) {
-          if (message != null && card.title.includes(message)) {
-            throw new Error(
-              `This is not a good test since the message '${message}' overlaps with the asserted card text '${card.title}'`,
-            );
-          }
-          // note: attached cards are in atom format (which display the title by default)
-          assert
-            .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"]`,
-            )
-            .containsText(card.title);
-        }
-
-        if (card.realmIconUrl) {
-          assert
-            .dom(
-              `[data-test-message-idx="${index}"] [data-test-attached-card="${card.id}"] [data-test-realm-icon-url="${card.realmIconUrl}"]`,
-            )
-            .exists({ count: 1 });
-        }
-      });
-    } else {
-      assert
-        .dom(`[data-test-message-idx="${index}"] [data-test-message-cards]`)
-        .doesNotExist();
-    }
-  }
-}
-
 let matrixRoomId: string;
 module('Acceptance | AI Assistant tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
-  let { createAndJoinRoom, getRoomState } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
+
+  let { createAndJoinRoom, getRoomState } = mockMatrixUtils;
+
   setupBaseRealm(hooks);
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     class Pet extends CardDef {
@@ -193,6 +142,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     let mangoPet = new Pet({ name: 'Mango' });
 
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'person.gts': { Person },
         'pet.gts': { Pet },
@@ -316,7 +266,9 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       .hasText(DEFAULT_LLM.split('/')[1]);
     await click('[data-test-llm-select-selected]');
 
-    assert.dom('[data-test-llm-select-item]').exists({ count: 4 });
+    assert.dom('[data-test-llm-select-item]').exists({
+      count: DEFAULT_LLM_LIST.length,
+    });
     assert
       .dom('[data-test-llm-select-item="google/gemini-pro-1.5"]')
       .hasText('google/gemini-pro-1.5');
@@ -325,5 +277,158 @@ module('Acceptance | AI Assistant tests', function (hooks) {
 
     let roomState = getRoomState('mock_room_1', APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, 'google/gemini-pro-1.5');
+  });
+
+  test('defaults to anthropic/claude-3.5-sonnet in code mode', async function (assert) {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
+
+    createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test-2',
+    });
+
+    await click('[data-test-past-sessions-button]');
+    await waitFor("[data-test-enter-room='mock_room_2']");
+    await click('[data-test-enter-room="mock_room_2"]');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
+  });
+
+  test('auto-attached file is not displayed in interact mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+    );
+    await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists();
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom('[data-test-autoattached-card]').doesNotExist();
+  });
+
+  test('can open attach file modal', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
+
+    await click('[data-test-choose-file-btn]');
+    assert.dom('[data-test-attach-file-modal]').exists();
+    assert.dom('[data-test-file="pet.gts"]').exists();
+
+    // Change realm
+    await click('[data-test-attach-file-modal-realm-chooser]');
+    await click('[data-test-attach-file-modal-realm-option="Base Workspace"]');
+    assert.dom('[data-test-file="boolean.gts"]').exists();
+
+    await click('[data-test-attach-file-modal-realm-chooser]');
+    await click(
+      '[data-test-attach-file-modal-realm-option="Test Workspace B"]',
+    );
+
+    // Add attachment item
+    await click('[data-test-file="person.gts"]');
+    await click('[data-test-attach-file-modal-add-button]');
+    assert.dom('[data-test-attached-file]').exists({ count: 1 });
+    assert.dom('[data-test-attached-file]').hasText('person.gts');
+    // Add attachment item
+    await click('[data-test-choose-file-btn]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-attach-file-modal-add-button]');
+    assert.dom('[data-test-attached-file]').exists({ count: 2 });
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}person.gts"]`)
+      .hasText('person.gts');
+    assert
+      .dom(`[data-test-attached-file="${testRealmURL}pet.gts"]`)
+      .hasText('pet.gts');
+
+    // Add remove attachment item
+    await click(
+      `[data-test-attached-file="${testRealmURL}person.gts"] [data-test-remove-file-btn]`,
+    );
+    assert.dom('[data-test-attached-file]').hasText('pet.gts');
+
+    await fillIn('[data-test-message-field]', `Message With File`);
+    await click('[data-test-send-message-btn]');
+
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message With File',
+        files: [{ sourceUrl: `${testRealmURL}pet.gts`, name: 'pet.gts' }],
+      },
+    ]);
+  });
+
+  test('can display and remove auto attached file', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
+
+    await click('[data-test-file="person.gts"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
+
+    await click('[data-test-file-browser-toggle]');
+    await click(`[data-test-autoattached-file] [data-test-remove-file-btn]`);
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="pet.gts"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom(`[data-test-autoattached-file]`).hasText('pet.gts');
+
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="person.gts"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
   });
 });

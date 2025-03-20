@@ -14,4 +14,3 @@ declare module 'ember-elsewhere/components/to-elsewhere' {
 
   export default class ToElsewhere extends Component<Signature> {}
 }
-  

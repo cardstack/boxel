@@ -7,12 +7,15 @@ import {
 import { waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
+import { provide } from 'ember-provide-consume-context';
+
 import { module, test, skip } from 'qunit';
 
 import {
-  PermissionsContextName,
   type Permissions,
+  PermissionsContextName,
   baseRealm,
+  GetCardsContextName,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -22,6 +25,8 @@ import CardEditor from '@cardstack/host/components/card-editor';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
+
+import { getSearch } from '@cardstack/host/resources/search';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -43,6 +48,17 @@ let string: typeof import('https://cardstack.com/base/string');
 
 let loader: Loader;
 
+class GetCardsContextProvider extends GlimmerComponent<{
+  Args: {};
+  Blocks: { default: [] };
+}> {
+  @provide(GetCardsContextName)
+  // @ts-ignore "getCard" is declared but not used
+  private get getCards() {
+    return getSearch;
+  }
+}
+
 module('Integration | card-editor', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
@@ -62,8 +78,9 @@ module('Integration | card-editor', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
   });
@@ -137,6 +154,7 @@ module('Integration | card-editor', function (hooks) {
 
     ({ realm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },
         'fancy-pet.gts': { FancyPet },
@@ -372,8 +390,10 @@ module('Integration | card-editor', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
+          <GetCardsContextProvider>
+            <CardEditor @card={{card}} />
+            <CardCatalogModal />
+          </GetCardsContextProvider>
           <CardPrerender />
         </template>
       },
@@ -414,8 +434,10 @@ module('Integration | card-editor', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
+          <GetCardsContextProvider>
+            <CardEditor @card={{card}} />
+            <CardCatalogModal />
+          </GetCardsContextProvider>
           <CardPrerender />
         </template>
       },
@@ -448,8 +470,10 @@ module('Integration | card-editor', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
+          <GetCardsContextProvider>
+            <CardEditor @card={{card}} />
+            <CardCatalogModal />
+          </GetCardsContextProvider>
           <CardPrerender />
         </template>
       },
@@ -470,9 +494,11 @@ module('Integration | card-editor', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
+          <GetCardsContextProvider>
+            <CardEditor @card={{card}} />
+            <CardCatalogModal />
+            <CreateCardModal />
+          </GetCardsContextProvider>
           <CardPrerender />
         </template>
       },

@@ -4,6 +4,7 @@ import {
   type QueueRunner,
   type PgPrimitive,
   type Expression,
+  type JobInfo,
   param,
   separatedByCommas,
   addExplicitParens,
@@ -93,7 +94,7 @@ class WorkLoop {
       return;
     }
     let timerPromise = new Promise((resolve) => {
-      this.timeout = setTimeout(resolve, this.pollInterval);
+      this.timeout = setTimeout(resolve, this.pollInterval).unref();
     });
     log.debug(`[workloop %s] entering promise race`, this.label);
     await Promise.race([this.waker.promise, timerPromise]);
@@ -269,10 +270,19 @@ export class PgQueueRunner implements QueueRunner {
     }
   }
 
-  private async runJob(jobType: string, args: PgPrimitive) {
+  private async runJob(jobType: string, args: PgPrimitive, jobInfo: JobInfo) {
     let handler = this.#handlers.get(jobType);
     if (!handler) {
       throw new Error(`unknown job handler ${jobType}`);
+    }
+
+    if (
+      args &&
+      typeof args === 'object' &&
+      !Array.isArray(args) &&
+      !('jobInfo' in args)
+    ) {
+      args.jobInfo = jobInfo;
     }
     return await handler(args);
   }
@@ -348,13 +358,16 @@ export class PgQueueRunner implements QueueRunner {
           try {
             log.debug(`%s: running %s`, this.#workerId, jobToRun.id);
             result = await Promise.race([
-              this.runJob(jobToRun.job_type, jobToRun.args),
+              this.runJob(jobToRun.job_type, jobToRun.args, {
+                jobId: jobToRun.id,
+                reservationId: jobReservationId,
+              }),
               // we race the job so that it doesn't hold this worker hostage if
               // the job's promise never resolves
               new Promise<'timeout'>((r) =>
                 setTimeout(() => {
                   r('timeout');
-                }, this.#maxTimeoutSec * 1000),
+                }, this.#maxTimeoutSec * 1000).unref(),
               ),
             ]);
             if (result === 'timeout') {

@@ -1,11 +1,6 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import {
-  RoomMemberEvent,
-  RoomEvent,
-  createClient,
-  type MatrixEvent,
-} from 'matrix-js-sdk';
+import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername } from '@cardstack/runtime-common';
 import {
@@ -14,22 +9,20 @@ import {
   isCommandResultStatusApplied,
   getPromptParts,
   extractCardFragmentsFromEvents,
-  eventRequiresResponse,
 } from './helpers';
-import {
-  APP_BOXEL_ACTIVE_LLM,
-  DEFAULT_LLM,
-} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   shouldSetRoomTitle,
   setTitle,
   roomTitleAlreadySet,
 } from './lib/set-title';
-import { Responder } from './lib/send-response';
+import { Responder } from './lib/responder';
 import { handleDebugCommands } from './lib/debug';
-import { MatrixClient, updateStateEvent } from './lib/matrix';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { MatrixClient } from './lib/matrix';
+import type {
+  MatrixEvent as DiscreteMatrixEvent,
+  CommandResultEvent,
+} from 'https://cardstack.com/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
 import { getAvailableCredits, saveUsageCost } from './lib/ai-billing';
@@ -46,6 +39,7 @@ const MINIMUM_CREDITS = 10;
 class Assistant {
   private openai: OpenAI;
   private client: MatrixClient;
+  private toolCallCapableModels: Set<string>;
   pgAdapter: PgAdapter;
   id: string;
 
@@ -57,6 +51,21 @@ class Assistant {
     this.id = id;
     this.client = client;
     this.pgAdapter = new PgAdapter();
+    this.toolCallCapableModels = new Set();
+  }
+
+  async loadToolCallCapableModels() {
+    // api request is https://openrouter.ai/api/v1/models?supported_parameters=tools
+    let response = await fetch(
+      'https://openrouter.ai/api/v1/models?supported_parameters=tools',
+    );
+    let responseJson = (await response.json()) as {
+      data: { id: string }[];
+    };
+    let modelList = responseJson.data;
+    this.toolCallCapableModels = new Set(
+      modelList.map((model: any) => model.id),
+    );
   }
 
   async trackAiUsageCost(matrixUserId: string, generationId: string) {
@@ -72,7 +81,12 @@ class Assistant {
   }
 
   getResponse(prompt: PromptParts) {
-    if (prompt.tools.length === 0) {
+    // Sending tools to models that don't support them results in an error
+    // from openrouter.
+    if (
+      prompt.tools.length === 0 ||
+      !this.toolCallCapableModels.has(prompt.model)
+    ) {
       return this.openai.beta.chat.completions.stream({
         model: prompt.model,
         messages: prompt.messages as ChatCompletionMessageParam[],
@@ -100,15 +114,9 @@ class Assistant {
   async setTitle(
     roomId: string,
     history: DiscreteMatrixEvent[],
-    event?: MatrixEvent,
+    event?: CommandResultEvent,
   ) {
     return setTitle(this.openai, this.client, roomId, history, this.id, event);
-  }
-
-  async setDefaultLLM(roomId: string) {
-    await updateStateEvent(this.client, roomId, APP_BOXEL_ACTIVE_LLM, {
-      model: DEFAULT_LLM,
-    });
   }
 }
 
@@ -144,14 +152,14 @@ Common issues are:
     });
   let { user_id: aiBotUserId } = auth;
   let assistant = new Assistant(client, aiBotUserId);
+  await assistant.loadToolCallCapableModels();
 
   client.on(RoomMemberEvent.Membership, function (_event, member) {
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
         .joinRoom(member.roomId)
-        .then(async function () {
+        .then(function () {
           log.info('%s auto-joined %s', member.name, member.roomId);
-          await assistant.setDefaultLLM(member.roomId);
         })
         .catch(function (err) {
           log.info(
@@ -179,13 +187,15 @@ Common issues are:
         if (toStartOfTimeline) {
           return; // don't print paginated results
         }
-        if (!eventRequiresResponse(event)) {
-          return; // only print messages
-        }
 
         if (senderMatrixUserId === aiBotUserId) {
           return;
         }
+
+        if (!Responder.eventMayTriggerResponse(event)) {
+          return; // early exit for events that will not trigger a response
+        }
+
         log.info(
           '(%s) (Room: "%s" %s) (Message: %s %s)',
           event.getType(),
@@ -196,19 +206,29 @@ Common issues are:
         );
 
         const responder = new Responder(client, room.roomId);
-        await responder.initialize();
+
+        if (Responder.eventWillDefinitelyTriggerResponse(event)) {
+          await responder.ensureThinkingMessageSent();
+        }
 
         let promptParts: PromptParts;
         let initial = await client.roomInitialSync(room!.roomId, 1000);
         let eventList = (initial!.messages?.chunk ||
           []) as DiscreteMatrixEvent[];
         try {
-          promptParts = getPromptParts(eventList, aiBotUserId);
+          promptParts = await getPromptParts(eventList, aiBotUserId);
+          if (!promptParts.shouldRespond) {
+            return;
+          }
+          await responder.ensureThinkingMessageSent();
         } catch (e) {
           log.error(e);
-          responder.finalize(
-            'There was an error processing chat history. Please open another session.',
+          await responder.onError(
+            new Error(
+              'There was an error processing chat history. Please open another session.',
+            ),
           );
+          await responder.finalize();
           return;
         }
 
@@ -241,24 +261,17 @@ Common issues are:
         let generationId: string | undefined;
         const runner = assistant
           .getResponse(promptParts)
-          .on('chunk', async (chunk, _snapshot) => {
+          .on('chunk', async (chunk, snapshot) => {
             generationId = chunk.id;
-            await responder.onChunk(chunk);
-          })
-          .on('content', async (_delta, snapshot) => {
-            await responder.onContent(snapshot);
-          })
-          .on('message', async (msg) => {
-            await responder.onMessage(msg);
+            await responder.onChunk(chunk, snapshot);
           })
           .on('error', async (error) => {
             await responder.onError(error);
           });
 
-        let finalContent;
         try {
-          finalContent = await runner.finalContent();
-          await responder.finalize(finalContent);
+          await runner.finalChatCompletion();
+          await responder.finalize();
         } catch (error) {
           await responder.onError(error as OpenAIError);
         } finally {
@@ -271,7 +284,7 @@ Common issues are:
           return await assistant.setTitle(
             room.roomId,
             promptParts.history,
-            event,
+            event as CommandResultEvent,
           );
         }
         return;

@@ -1,5 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
-import type { CardDef } from '../card-api';
+import { type CardDef } from '../card-api';
+import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 export default class DefaultAtomViewTemplate extends GlimmerComponent<{
   Args: {
@@ -8,26 +9,17 @@ export default class DefaultAtomViewTemplate extends GlimmerComponent<{
   };
 }> {
   get text() {
-    let title =
-      typeof this.args.model.title === 'string'
-        ? this.args.model.title.trim()
-        : null;
-
-    return title
-      ? title
-      : `Untitled ${this.args.model.constructor.displayName}`;
+    if (!this.args.model) {
+      return;
+    }
+    if (typeof this.args.model.title === 'string') {
+      return this.args.model.title.trim();
+    }
+    return `Untitled ${this.args.model.constructor.displayName}`;
   }
   <template>
-    <span class='atom-default-template'>
+    <span class={{cn 'atom-default-template' empty-field=(not @model)}}>
       {{this.text}}
     </span>
-    <style scoped>
-      @layer {
-        .atom-default-template {
-          font: 600 var(--boxel-font-sm);
-          letter-spacing: var(--boxel-lsp-xs);
-        }
-      }
-    </style>
   </template>
 }

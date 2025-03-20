@@ -11,7 +11,7 @@ import type MatrixService from '../services/matrix-service';
 export default class AddSkillsToRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.AddSkillsToRoomInput
 > {
-  @service private declare matrixService: MatrixService;
+  @service declare private matrixService: MatrixService;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -27,7 +27,7 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
     let roomSkillEventIds = await matrixService.addSkillCardsToRoomHistory(
       skills,
       roomId,
-      { includeComputeds: true, maybeRelativeURL: null },
+      { includeComputeds: true, useAbsoluteURL: true },
     );
     await matrixService.updateStateEvent(
       roomId,

@@ -10,27 +10,36 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, timeout, all } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
 import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 
-import { provide } from 'ember-provide-consume-context';
+import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
+
+import { TrackedObject } from 'tracked-built-ins';
 
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
+  identifyCard,
+  isFieldDef,
   isCardDocumentString,
+  isPrimitive,
   hasExecutableExtension,
   RealmPaths,
-  type ResolvedCodeRef,
+  isResolvedCodeRef,
   PermissionsContextName,
+  GetCardContextName,
+  CodeRef,
+  type ResolvedCodeRef,
+  type getCard,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -38,7 +47,7 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import consumeContext from '@cardstack/host/modifiers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
@@ -54,13 +63,20 @@ import type { FileView } from '@cardstack/host/services/operator-mode-state-serv
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 
-import { type CardDef, type Format } from 'https://cardstack.com/base/card-api';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { type SpecType } from 'https://cardstack.com/base/spec';
 
 import { htmlComponent } from '../../lib/html-component';
-import { CodeModePanelWidths } from '../../utils/local-storage-keys';
+import {
+  CodeModePanelWidths,
+  CodeModePanelHeights,
+  CodeModePanelSelections,
+} from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
+import AttachFileModal from './attach-file-modal';
 import CardError from './card-error';
 import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
@@ -68,7 +84,9 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
+import PlaygroundPanel from './code-submode/playground/playground-panel';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
+import SpecPreview from './code-submode/spec-preview';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
@@ -94,7 +112,11 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-type SelectedAccordionItem = 'schema-editor' | null;
+export type SelectedAccordionItem =
+  | 'schema-editor'
+  | 'spec-preview'
+  | 'playground'
+  | null;
 
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
@@ -108,7 +130,6 @@ const defaultPanelWidths: PanelWidths = {
   emptyCodeModePanel: 100 - defaultLeftPanelWidth,
 };
 
-const CodeModePanelHeights = 'code-mode-panel-heights';
 const ApproximateRecentPanelDefaultPercentage =
   ((43 + 40 * 3.5) / (document.documentElement.clientHeight - 140)) * 100; // room for about 3.5 recent files
 const defaultPanelHeights: PanelHeights = {
@@ -126,12 +147,15 @@ function urlToFilename(url: URL) {
 }
 
 export default class CodeSubmode extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
   @service private declare loaderService: LoaderService;
+  @service private declare specPanelService: SpecPanelService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -139,29 +163,16 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private previewFormat: Format = 'isolated';
   @tracked private isCreateModalOpen = false;
   @tracked private itemToDelete: CardDef | URL | null | undefined;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  private hasUnsavedCardChanges = false;
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
-  private updateCursorByName: ((name: string) => void) | undefined;
-  #currentCard: CardDef | undefined;
+  private updateCursorByName:
+    | ((name: string, fieldName?: string) => void)
+    | undefined;
+  private panelSelections: Record<string, SelectedAccordionItem>;
 
   private createFileModal: CreateFileModal | undefined;
-  private cardResource = getCard(
-    this,
-    () => {
-      if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
-        return undefined;
-      }
-      // this includes all JSON files, but the card resource is smart enough
-      // to skip JSON that are not card instances
-      let url = this.codePath.href.replace(/\.json$/, '');
-      return url;
-    },
-    {
-      onCardInstanceChange: () => this.onCardLoaded,
-    },
-  );
   private moduleContentsResource = moduleContentsResource(
     this,
     () => {
@@ -173,6 +184,11 @@ export default class CodeSubmode extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
+
+    let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
+    this.panelSelections = new TrackedObject(
+      panelSelections ? JSON.parse(panelSelections) : {},
+    );
 
     let persistedDefaultPanelWidths = window.localStorage.getItem(
       CodeModePanelWidths,
@@ -212,30 +228,36 @@ export default class CodeSubmode extends Component<Signature> {
         : defaultPanelHeights;
 
     registerDestructor(this, () => {
-      // destructor functons are called synchronously. in order to save,
-      // which is async, we leverage an EC task that is running in a
-      // parent component (EC task lifetimes are bound to their context)
-      // that is not being destroyed.
-      if (this.hasUnsavedCardChanges && this.#currentCard) {
-        // we use this.#currentCard here instead of this.card because in
-        // the destructor we no longer have access to resources bound to
-        // this component since they are destroyed first, so this.#currentCard
-        // is something we copy from the card resource when it changes so that
-        // we have access to it in the destructor
-        this.args.saveCardOnClose(this.#currentCard);
-      }
       this.operatorModeStateService.unsubscribeFromOpenFileStateChanges(this);
     });
   }
 
+  // you cannot consume context in the constructor. the provider is wired up
+  //  as part of the DOM rendering
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(
+      this,
+      () => {
+        if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
+          return undefined;
+        }
+        // this includes all JSON files, but the card resource is smart enough
+        // to skip JSON that are not card instances
+        let url = this.codePath.href.replace(/\.json$/, '');
+        return url;
+      },
+      {
+        isAutoSaved: true,
+      },
+    );
+  };
+
   private get card() {
-    if (
-      this.cardResource.card &&
-      this.codePath?.href.replace(/\.json$/, '') === this.cardResource.url
-    ) {
-      return this.cardResource.card;
-    }
-    return undefined;
+    return this.cardResource?.card;
+  }
+
+  private get cardError() {
+    return this.cardResource?.cardError;
   }
 
   private backgroundURLStyle(backgroundURL: string | null) {
@@ -308,11 +330,6 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @cached
-  get cardError() {
-    return this.cardResource.cardError;
-  }
-
-  @cached
   get lastKnownGoodHtml() {
     if (this.cardError?.meta.lastKnownGoodHtml) {
       this.loadScopedCSS.perform();
@@ -367,7 +384,6 @@ export default class CodeSubmode extends Component<Signature> {
         return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
       }
     }
-
     // If rhs doesn't handle any case but we can't capture the error
     if (!this.card && !this.selectedCardOrField) {
       // this will prevent displaying message during a page refresh
@@ -434,26 +450,6 @@ export default class CodeSubmode extends Component<Signature> {
     }
   }
 
-  private onCardLoaded = (
-    oldCard: CardDef | undefined,
-    newCard: CardDef | undefined,
-  ) => {
-    if (oldCard) {
-      this.cardResource.api.unsubscribeFromChanges(oldCard, this.onCardChange);
-    }
-    if (newCard) {
-      this.cardResource.api.subscribeToChanges(newCard, this.onCardChange);
-    }
-    this.#currentCard = newCard;
-  };
-
-  private get loadedCard() {
-    if (!this.card) {
-      throw new Error(`bug: card ${this.codePath} is not loaded`);
-    }
-    return this.card;
-  }
-
   private get declarations() {
     return this.moduleContentsResource?.declarations;
   }
@@ -486,6 +482,15 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
+  private get selectedCodeRef(): ResolvedCodeRef | undefined {
+    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
+    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
+  }
+
+  get showSpecPreview() {
+    return this.selectedCardOrField?.exportName;
+  }
+
   private get itemToDeleteAsCard() {
     return this.itemToDelete as CardDef;
   }
@@ -500,35 +505,35 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   @action
-  goToDefinition(
-    codeRef: ResolvedCodeRef | undefined,
+  private goToDefinitionAndResetCursorPosition(
+    codeRef: CodeRef | undefined,
     localName: string | undefined,
+    fieldName?: string,
   ) {
-    this.operatorModeStateService.updateCodePathWithCodeSelection(
-      codeRef,
-      localName,
-      this.updateCursorByName,
-    );
+    this.goToDefinition(codeRef, localName, fieldName);
+    if (this.codePath) {
+      let urlString = this.codePath.toString();
+      this.recentFilesService.updateCursorPositionByURL(
+        urlString.endsWith('gts') ? urlString : `${urlString}.gts`,
+        undefined,
+      );
+    }
   }
 
-  private onCardChange = () => {
-    this.initiateAutoSaveTask.perform();
-  };
-
-  private initiateAutoSaveTask = restartableTask(async () => {
-    if (this.card) {
-      this.hasUnsavedCardChanges = true;
-      await timeout(this.environmentService.autoSaveDelayMs);
-      await this.saveCard.perform(this.card);
-      this.hasUnsavedCardChanges = false;
-    }
-  });
-
-  private saveCard = restartableTask(async (card: CardDef) => {
-    // these saves can happen so fast that we'll make sure to wait at
-    // least 500ms for human consumption
-    await all([this.cardService.saveModel(card), timeout(500)]);
-  });
+  @action
+  private goToDefinition(
+    codeRef: CodeRef | undefined,
+    localName: string | undefined,
+    fieldName?: string,
+  ) {
+    this.operatorModeStateService.updateCodePathWithSelection({
+      codeRef,
+      localName,
+      fieldName,
+      onLocalSelection: this.updateCursorByName,
+    });
+    this.specPanelService.setSelection(null);
+  }
 
   private loadScopedCSS = restartableTask(async () => {
     if (this.cardError?.meta.scopedCssUrls) {
@@ -541,7 +546,9 @@ export default class CodeSubmode extends Component<Signature> {
   });
 
   private get isSaving() {
-    return this.sourceFileIsSaving || this.saveCard.isRunning;
+    return (
+      this.sourceFileIsSaving || !!this.cardResource?.autoSaveState?.isSaving
+    );
   }
 
   @action
@@ -656,6 +663,7 @@ export default class CodeSubmode extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
+        specType?: SpecType;
       },
       sourceInstance?: CardDef,
     ) => {
@@ -718,7 +726,9 @@ export default class CodeSubmode extends Component<Signature> {
     this.createFileModal = createFileModal;
   };
 
-  private setupCodeEditor = (updateCursorByName: (name: string) => void) => {
+  private setupCodeEditor = (
+    updateCursorByName: (name: string, fieldName?: string) => void,
+  ) => {
     this.updateCursorByName = updateCursorByName;
   };
 
@@ -733,16 +743,32 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  @tracked private selectedAccordionItem: SelectedAccordionItem =
-    'schema-editor';
+  private get selectedAccordionItem(): SelectedAccordionItem {
+    let selection = this.panelSelections[this.readyFile.url];
+    if (selection === null) {
+      return null;
+    }
+    return selection ?? 'schema-editor';
+  }
 
-  @action private selectAccordionItem(item: SelectedAccordionItem) {
-    if (this.selectedAccordionItem === item) {
-      this.selectedAccordionItem = null;
+  @action private openAccordionItem(item: SelectedAccordionItem) {
+    let selection = this.selectedAccordionItem === item ? null : item; // null means toggling the accordion item closed
+    //return if the item is already open
+    if (!selection) {
       return;
     }
+    this.selectAccordionItem(selection);
+  }
 
-    this.selectedAccordionItem = item;
+  @action private selectAccordionItem(item: SelectedAccordionItem) {
+    let selection = this.selectedAccordionItem === item ? null : item; // null means toggling the accordion item closed
+    this.panelSelections[this.readyFile.url] = selection;
+
+    // persist in local storage
+    window.localStorage.setItem(
+      CodeModePanelSelections,
+      JSON.stringify(this.panelSelections),
+    );
   }
 
   get isReadOnly() {
@@ -764,24 +790,23 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   <template>
+    <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
       <div
+        {{consumeContext consume=this.makeCardResource}}
         class='code-mode-background'
         style={{this.backgroundURLStyle realmInfo.backgroundURL}}
       ></div>
     {{/let}}
     <SubmodeLayout
       @onCardSelectFromSearch={{this.openSearchResultInEditor}}
-      @hideAiAssistant={{true}}
+      @selectedCardRef={{this.selectedCodeRef}}
       as |search|
     >
       <div
         class='code-mode'
         data-test-code-mode
-        data-test-save-idle={{and
-          (not this.sourceFileIsSaving)
-          this.initiateAutoSaveTask.isIdle
-        }}
+        data-test-save-idle={{not this.isSaving}}
       >
         <div class='code-mode-top-bar'>
           <CardURLBar
@@ -828,14 +853,21 @@ export default class CodeSubmode extends Component<Signature> {
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @selectDeclaration={{this.selectDeclaration}}
                           @delete={{this.setItemToDelete}}
-                          @goToDefinition={{this.goToDefinition}}
+                          @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
                           @createFile={{perform this.createFile}}
                           @openSearch={{search.openSearchToResults}}
                         />
                       {{/if}}
                     </:inspector>
                     <:browser>
-                      <FileTree @realmURL={{this.realmURL}} />
+                      <FileTree
+                        @realmURL={{this.realmURL}}
+                        @selectedFile={{this.operatorModeStateService.codePathRelativeToRealm}}
+                        @openDirs={{this.operatorModeStateService.currentRealmOpenDirs}}
+                        @onFileSelected={{this.operatorModeStateService.onFileSelected}}
+                        @onDirectorySelected={{this.operatorModeStateService.toggleOpenDir}}
+                        @scrollPositionKey={{this.operatorModeStateService.codePathString}}
+                      />
                     </:browser>
                   </CodeSubmodeLeftPanelToggle>
                 </VerticallyResizablePanel>
@@ -935,13 +967,17 @@ export default class CodeSubmode extends Component<Signature> {
                       {{this.fileIncompatibilityMessage}}
                     </div>
                   {{else if this.selectedCardOrField.cardOrField}}
-                    <Accordion as |A|>
+                    <Accordion
+                      data-test-rhs-panel='card-or-field'
+                      data-test-selected-accordion-item={{this.selectedAccordionItem}}
+                      as |A|
+                    >
                       <SchemaEditor
                         @file={{this.readyFile}}
                         @moduleContentsResource={{this.moduleContentsResource}}
                         @card={{this.selectedCardOrField.cardOrField}}
                         @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @goToDefinition={{this.goToDefinition}}
+                        @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
                         @isReadOnly={{this.isReadOnly}}
                         as |SchemaEditorTitle SchemaEditorPanel|
                       >
@@ -956,6 +992,7 @@ export default class CodeSubmode extends Component<Signature> {
                             this.selectedAccordionItem
                             'schema-editor'
                           }}
+                          data-test-accordion-item='schema-editor'
                         >
                           <:title>
                             <SchemaEditorTitle />
@@ -965,6 +1002,76 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
+                      <A.Item
+                        class='accordion-item'
+                        @contentClass='accordion-item-content'
+                        @onClick={{fn this.selectAccordionItem 'playground'}}
+                        @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                        data-test-accordion-item='playground'
+                      >
+                        <:title>Playground</:title>
+                        <:content>
+                          {{#if (eq this.selectedAccordionItem 'playground')}}
+                            {{#if
+                              (isPrimitive this.selectedCardOrField.cardOrField)
+                            }}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-primitives
+                              >
+                                <span>Playground is not currently supported for
+                                  primitive fields.</span>
+                              </p>
+                            {{else if this.selectedCodeRef}}
+                              <PlaygroundPanel
+                                @codeRef={{this.selectedCodeRef}}
+                                @isUpdating={{this.moduleContentsResource.isLoading}}
+                                @isFieldDef={{isFieldDef
+                                  this.selectedCardOrField.cardOrField
+                                }}
+                              />
+                            {{else}}
+                              <p
+                                class='file-incompatible-message'
+                                data-test-incompatible-nonexports
+                              >
+                                <span>Playground is not currently supported for
+                                  card or field definitions that are not
+                                  exported.</span>
+                              </p>
+                            {{/if}}
+                          {{/if}}
+                        </:content>
+                      </A.Item>
+                      {{#if this.showSpecPreview}}
+                        <SpecPreview
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
+                          @openAccordionItem={{this.openAccordionItem}}
+                          as |SpecPreviewTitle SpecPreviewContent|
+                        >
+                          <A.Item
+                            class='accordion-item'
+                            @contentClass='accordion-item-content'
+                            @onClick={{fn
+                              this.selectAccordionItem
+                              'spec-preview'
+                            }}
+                            @isOpen={{eq
+                              this.selectedAccordionItem
+                              'spec-preview'
+                            }}
+                            data-test-accordion-item='spec-preview'
+                          >
+                            <:title>
+                              <SpecPreviewTitle />
+                            </:title>
+                            <:content>
+                              <SpecPreviewContent class='accordion-content' />
+                            </:content>
+                          </A.Item>
+                        </SpecPreview>
+                      {{/if}}
                     </Accordion>
                   {{else if this.moduleContentsResource.moduleError}}
                     <Accordion as |A|>
@@ -989,7 +1096,7 @@ export default class CodeSubmode extends Component<Signature> {
                     </Accordion>
                   {{else if this.card}}
                     <CardPreviewPanel
-                      @card={{this.loadedCard}}
+                      @card={{this.card}}
                       @realmURL={{this.realmURL}}
                       @format={{this.previewFormat}}
                       @setFormat={{this.setPreviewFormat}}
@@ -1033,6 +1140,7 @@ export default class CodeSubmode extends Component<Signature> {
       {{/if}}
       <CreateFileModal @onCreate={{this.setupCreateFileModal}} />
       <FromElseWhere @name='schema-editor-modal' />
+      <FromElseWhere @name='playground-field-picker' />
     </SubmodeLayout>
 
     <style scoped>
@@ -1128,11 +1236,22 @@ export default class CodeSubmode extends Component<Signature> {
         color: var(--boxel-450);
         font-weight: 500;
         padding: var(--boxel-sp-xl);
+        margin-block: 0;
+      }
+      .file-incompatible-message > span {
+        max-width: 400px;
       }
       .empty-container {
         background-color: var(--boxel-light-100);
         align-items: center;
         justify-content: center;
+      }
+      .accordion-item {
+        --accordion-item-title-font: 600 var(--boxel-font-sm);
+        box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
+      }
+      .accordion-item > :deep(.title) {
+        height: var(--accordion-item-closed-height);
       }
       .accordion-item :deep(.accordion-item-content) {
         overflow-y: auto;

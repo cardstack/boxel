@@ -1,10 +1,11 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { TrackedObject } from 'tracked-built-ins';
 
@@ -12,7 +13,7 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { baseRealm, getPlural } from '@cardstack/runtime-common';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -24,60 +25,54 @@ import type { PillMenuItem } from './index';
 
 const sampleCardURLs = [
   `${baseRealm.url}SkillCard/card-editing`,
-  `${baseRealm.url}SkillCard/generate-product-requirements`,
+  `${baseRealm.url}SkillCard/source-code-editing`,
 ];
 
 export default class PillMenuUsage extends Component {
-  headerIconURL = headerIcon;
-  resources = sampleCardURLs.map((url) =>
-    getCard(this, () => url, {
-      isLive: () => false,
-    }),
-  );
-  @tracked title = 'Pill Menu';
-  @tracked isExpandableHeader = false;
-  @tracked items: PillMenuItem[] = [];
-  @tracked itemDisplayName = 'Card';
-  @tracked canAttachCard = false;
+  @service private declare store: StoreService;
+
+  @tracked private title = 'Pill Menu';
+  @tracked private isExpandableHeader = false;
+  @tracked private items: PillMenuItem[] = [];
+  @tracked private itemDisplayName = 'Card';
+  @tracked private canAttachCard = false;
+  private headerIconURL = headerIcon;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
     this.attachSampleCards.perform();
   }
 
-  private attachSampleCards = restartableTask(async () => {
-    let cards: CardDef[] = [];
-    await Promise.all(
-      this.resources.map(async (resource) => {
-        await resource.loaded;
-        if (resource.card) {
-          cards.push(resource.card);
-        }
-      }),
-    );
-    let items = cards.map(
+  private attachSampleCards = task(async () => {
+    let cards = (
+      await Promise.all(
+        sampleCardURLs.map((url) =>
+          this.store.getInstanceDetachedFromStore(url),
+        ),
+      )
+    ).filter(Boolean) as CardDef[];
+    this.items = cards.map(
       (card) =>
         new TrackedObject({
           card,
           isActive: true,
         }),
     );
-    this.items = items;
   });
 
   private get activeItems() {
     return this.items.filter((item) => item.isActive);
   }
 
-  @action headerAction() {
+  @action private headerAction() {
     console.log('Header button clicked');
   }
 
-  @action onChooseCard(card: CardDef) {
+  @action private onChooseCard(card: CardDef) {
     this.items = [...this.items, new TrackedObject({ card, isActive: true })];
   }
 
-  @action onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {
+  @action private onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {
     item.isActive = isActive;
   }
 

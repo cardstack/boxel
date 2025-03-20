@@ -1,6 +1,6 @@
 import { on } from '@ember/modifier';
 
-import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
 import SwitchSubmodeCommand from '@cardstack/boxel-host/commands/switch-submode';
 
@@ -38,7 +38,7 @@ export class Person extends CardDef {
         console.error('No command context found');
         return;
       }
-      let createAIAssistantRoomCommand = new CreateAIAssistantRoomCommand(
+      let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
         commandContext,
       );
       let { roomId } = await createAIAssistantRoomCommand.execute({

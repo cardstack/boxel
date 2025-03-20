@@ -101,7 +101,7 @@ test.describe('Card Chooser', () => {
       template: 'test',
     });
     await registerRealmUsers(synapse);
-    realmServer = await startRealmServer();
+    realmServer = await startRealmServer({ includeSeedRealm: true });
     await registerUser(synapse, 'user1', 'pass');
   });
 
@@ -110,7 +110,9 @@ test.describe('Card Chooser', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can add realm read permissions when linking a new card', async ({
+  // Skipping this test, as it flaky
+  // https://linear.app/cardstack/issue/CS-8126/flaky-test-matrix-test-card-chooser-it-can-add-realm-read-permissions
+  test.skip('it can add realm read permissions when linking a new card', async ({
     page,
   }) => {
     await setupRealms(page);

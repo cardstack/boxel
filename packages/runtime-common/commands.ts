@@ -1,4 +1,8 @@
-import { isCardDef } from './code-ref';
+import {
+  type ResolvedCodeRef,
+  isCardDef,
+  codeRefWithAbsoluteURL,
+} from './code-ref';
 import { Deferred } from './deferred';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { CardDefConstructor } from 'https://cardstack.com/base/card-api';
@@ -7,6 +11,13 @@ import {
   CardSchema,
   generateJsonSchemaForCardType,
 } from './helpers/ai';
+import { simpleHash } from './utils';
+
+export interface CommandRequest {
+  id: string;
+  name: string;
+  arguments: { [key: string]: any };
+}
 
 export const CommandContextStamp = Symbol.for('CommandContext');
 export interface CommandContext {
@@ -142,4 +153,33 @@ export abstract class Command<
     }
     return generateJsonSchemaForCardType(InputType, cardApi, mappings);
   }
+}
+
+function friendlyModuleName(fullModuleUrl: string) {
+  return fullModuleUrl
+    .split('/')
+    .pop()!
+    .replace(/\.gts$/, '');
+}
+
+export function buildCommandFunctionName(
+  commandCodeRef: ResolvedCodeRef,
+  relativeTo?: URL,
+) {
+  if (!commandCodeRef?.module || !commandCodeRef?.name) {
+    return '';
+  }
+  let absoluteCodeRef = codeRefWithAbsoluteURL(
+    commandCodeRef,
+    relativeTo,
+  ) as ResolvedCodeRef;
+
+  const hashed = simpleHash(
+    `${absoluteCodeRef.module}#${absoluteCodeRef.name}`,
+  );
+  let name =
+    absoluteCodeRef.name === 'default'
+      ? friendlyModuleName(absoluteCodeRef.module)
+      : absoluteCodeRef.name;
+  return `${name}_${hashed.slice(0, 4)}`;
 }

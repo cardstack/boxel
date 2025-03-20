@@ -2,6 +2,11 @@ import { setOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
 import { inject as service } from '@ember/service';
 
+import { tracked } from '@glimmer/tracking';
+
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -13,27 +18,49 @@ import { Message } from './message';
 type CommandStatus = 'applied' | 'ready' | 'applying';
 
 export default class MessageCommand {
+  @tracked commandRequest: Partial<CommandRequest>;
+  @tracked commandStatus?: CommandStatus;
+  @tracked commandResultCardEventId?: string;
+
   constructor(
     public message: Message,
-    public toolCallId: string,
-    public name: string,
-    public payload: any, //arguments of toolCall. Its not called arguments due to lint
+    commandRequest: Partial<CommandRequest>,
+    public codeRef: ResolvedCodeRef | undefined,
     public eventId: string,
-    private commandStatus: CommandStatus,
-    public commandResultCardEventId: string | undefined,
+    public requiresApproval: boolean,
+    commandStatus: CommandStatus,
+    commandResultCardEventId: string | undefined,
     owner: Owner,
   ) {
     setOwner(this, owner);
+
+    this.commandRequest = commandRequest;
+    this.commandStatus = commandStatus;
+    this.commandResultCardEventId = commandResultCardEventId;
   }
 
   @service declare commandService: CommandService;
   @service declare matrixService: MatrixService;
   @service declare cardService: CardService;
 
+  get id() {
+    return this.commandRequest.id;
+  }
+
+  get name() {
+    return this.commandRequest.name;
+  }
+
+  get arguments() {
+    return this.commandRequest.arguments;
+  }
+
+  get description() {
+    return this.arguments?.description;
+  }
+
   get status() {
-    if (
-      this.commandService.currentlyExecutingCommandEventIds.has(this.eventId)
-    ) {
+    if (this.commandService.currentlyExecutingCommandRequestIds.has(this.id!)) {
       return 'applying';
     }
 

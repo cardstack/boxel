@@ -12,6 +12,7 @@ import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
+import { consume } from 'ember-provide-consume-context';
 
 import {
   FieldContainer,
@@ -24,25 +25,25 @@ import {
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
-  catalogEntryRef,
+  specRef,
   chooseCard,
   baseRealm,
   RealmPaths,
   Deferred,
   SupportedMimeType,
   maybeRelativeURL,
+  GetCardContextName,
+  type getCard,
   type LocalPath,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
-
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { CatalogEntry } from 'https://cardstack.com/base/catalog-entry';
+import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import { cleanseString } from '../../lib/utils';
 
@@ -59,12 +60,15 @@ export type NewFileType =
   | 'duplicate-instance'
   | 'card-instance'
   | 'card-definition'
-  | 'field-definition';
+  | 'field-definition'
+  | 'spec-instance';
+
 export const newFileTypes: NewFileType[] = [
   'duplicate-instance',
+  'card-instance',
   'card-definition',
   'field-definition',
-  'card-instance',
+  'spec-instance',
 ];
 const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
@@ -117,11 +121,7 @@ export default class CreateFileModal extends Component<Signature> {
                 </FieldContainer>
                 {{#unless (eq this.fileType.id 'duplicate-instance')}}
                   <FieldContainer
-                    @label={{if
-                      (eq this.maybeFileType.id 'card-instance')
-                      'Adopted From'
-                      'Inherits From'
-                    }}
+                    @label={{this.refLabel}}
                     class='field'
                     data-test-inherits-from-field
                   >
@@ -132,10 +132,10 @@ export default class CreateFileModal extends Component<Signature> {
                           @id={{this.definitionClass.ref.module}}
                         />
                       {{else}}
-                        {{#if this.selectedCatalogEntry}}
+                        {{#if this.selectedSpec}}
                           <SelectedTypePill
-                            @title={{this.selectedCatalogEntry.title}}
-                            @id={{this.selectedCatalogEntry.id}}
+                            @title={{this.selectedSpec.title}}
+                            @id={{this.selectedSpec.id}}
                           />
                         {{/if}}
                         <Button
@@ -145,7 +145,7 @@ export default class CreateFileModal extends Component<Signature> {
                           {{on 'click' (perform this.chooseType)}}
                           data-test-select-card-type
                         >
-                          {{if this.selectedCatalogEntry 'Change' 'Select'}}
+                          {{if this.selectedSpec 'Change' 'Select'}}
                         </Button>
                       {{/if}}
                     </div>
@@ -328,10 +328,12 @@ export default class CreateFileModal extends Component<Signature> {
     </style>
   </template>
 
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare cardService: CardService;
   @service private declare network: NetworkService;
 
-  @tracked private selectedCatalogEntry: CatalogEntry | undefined = undefined;
+  @tracked private selectedSpec: Spec | undefined = undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
   @tracked private hasUserEditedFileName = false;
@@ -345,6 +347,7 @@ export default class CreateFileModal extends Component<Signature> {
         definitionClass?: {
           displayName: string;
           ref: ResolvedCodeRef;
+          specType?: SpecType;
         };
         sourceInstance?: CardDef;
       }
@@ -355,6 +358,14 @@ export default class CreateFileModal extends Component<Signature> {
     this.args.onCreate(this);
   }
 
+  get refLabel() {
+    return this.maybeFileType?.id === 'card-instance'
+      ? 'Adopted From'
+      : this.maybeFileType?.id === 'spec-instance'
+      ? 'Code Ref'
+      : 'Inherits From';
+  }
+
   // public API for callers to use this component
   async createNewFile(
     fileType: FileType,
@@ -362,6 +373,7 @@ export default class CreateFileModal extends Component<Signature> {
     definitionClass?: {
       displayName: string;
       ref: ResolvedCodeRef;
+      specType?: SpecType;
     },
     sourceInstance?: CardDef,
   ) {
@@ -384,6 +396,7 @@ export default class CreateFileModal extends Component<Signature> {
       definitionClass?: {
         displayName: string;
         ref: ResolvedCodeRef;
+        specType?: SpecType;
       },
       sourceInstance?: CardDef,
     ) => {
@@ -402,7 +415,7 @@ export default class CreateFileModal extends Component<Signature> {
   );
 
   private clearState() {
-    this.selectedCatalogEntry = undefined;
+    this.selectedSpec = undefined;
     this.currentRequest = undefined;
     this.fileNameError = undefined;
     this.displayName = '';
@@ -495,7 +508,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateCardInstanceButtonDisabled() {
     return (
-      (!this.selectedCatalogEntry && !this.definitionClass) ||
+      (!this.selectedSpec && !this.definitionClass) ||
       !this.selectedRealmURL ||
       this.createCardInstance.isRunning
     );
@@ -507,7 +520,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateDefinitionButtonDisabled() {
     return (
-      (!this.selectedCatalogEntry && !this.definitionClass) ||
+      (!this.selectedSpec && !this.definitionClass) ||
       !this.selectedRealmURL ||
       !this.fileName ||
       !this.displayName ||
@@ -523,19 +536,19 @@ export default class CreateFileModal extends Component<Signature> {
     let token = waiter.beginAsync();
     try {
       if (!this.definitionClass) {
-        let catalogEntryPath =
+        let specEntryPath =
           this.fileType.id === 'field-definition'
             ? 'fields/field'
             : 'types/card';
-        let resource = getCard(
+        let resource = this.getCard(
           this,
-          () => `${baseRealm.url}${catalogEntryPath}`,
+          () => `${baseRealm.url}${specEntryPath}`,
           {
-            isLive: () => false,
+            isLive: false,
           },
         );
         await resource.loaded;
-        this.selectedCatalogEntry = resource.card as CatalogEntry;
+        this.selectedSpec = resource.card as Spec;
       }
     } finally {
       waiter.endAsync(token);
@@ -546,11 +559,11 @@ export default class CreateFileModal extends Component<Signature> {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
 
-    this.selectedCatalogEntry = await chooseCard({
+    this.selectedSpec = await chooseCard({
       filter: {
-        on: catalogEntryRef,
+        on: specRef,
         // REMEMBER ME
-        every: [{ eq: { isField } }],
+        every: [{ eq: { specType: isField ? 'field' : 'card' } }],
       },
     });
   });
@@ -567,9 +580,9 @@ export default class CreateFileModal extends Component<Signature> {
         `bug: cannot call createDefinition without a selected realm URL`,
       );
     }
-    if (!this.selectedCatalogEntry && !this.definitionClass) {
+    if (!this.selectedSpec && !this.definitionClass) {
       throw new Error(
-        `bug: cannot call createDefinition without a selected catalog entry or definitionClass `,
+        `bug: cannot call createDefinition without a selected spec or definitionClass `,
       );
     }
     if (!this.fileName) {
@@ -605,9 +618,9 @@ export default class CreateFileModal extends Component<Signature> {
 
     let {
       ref: { name: exportName, module },
-    } = (this.definitionClass ?? this.selectedCatalogEntry)!; // we just checked above to make sure one of these exists
+    } = (this.definitionClass ?? this.selectedSpec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    let absoluteModule = new URL(module, this.selectedCatalogEntry?.id);
+    let absoluteModule = new URL(module, this.selectedSpec?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
@@ -718,7 +731,7 @@ export class ${className} extends ${exportName} {
       );
     }
     if (
-      (!this.selectedCatalogEntry?.ref && !this.definitionClass) ||
+      (!this.selectedSpec?.ref && !this.definitionClass) ||
       !this.selectedRealmURL
     ) {
       throw new Error(
@@ -727,11 +740,11 @@ export class ${className} extends ${exportName} {
     }
 
     let { ref } = (
-      this.definitionClass ? this.definitionClass : this.selectedCatalogEntry
+      this.definitionClass ? this.definitionClass : this.selectedSpec
     )!; // we just checked above to make sure one of these exist
 
-    let relativeTo = this.selectedCatalogEntry
-      ? new URL(this.selectedCatalogEntry.id)
+    let relativeTo = this.selectedSpec
+      ? new URL(this.selectedSpec.id)
       : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card

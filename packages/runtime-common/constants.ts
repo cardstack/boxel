@@ -3,9 +3,9 @@ import type { ResolvedCodeRef } from './code-ref';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
-export const catalogEntryRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}catalog-entry`,
-  name: 'CatalogEntry',
+export const specRef: ResolvedCodeRef = {
+  module: `${baseRealm.url}spec`,
+  name: 'Spec',
 };
 export const baseCardRef: ResolvedCodeRef = {
   module: `${baseRealm.url}card-api`,
@@ -27,8 +27,12 @@ export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
 export const DefaultFormatsContextName = 'default-format-context';
+export const GetCardContextName = 'get-card-context';
+export const GetCardsContextName = 'get-cards-context';
 
 export const PermissionsContextName = 'permissions-context';
+
+export const CardURLContextName = 'card-url-context';
 
 export const RealmURLContextName = 'realm-url-context';
 

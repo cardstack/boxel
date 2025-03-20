@@ -9,7 +9,7 @@ import type OperatorModeStateService from '../services/operator-mode-state-servi
 export default class ShowCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.ShowCardInput
 > {
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
 
   description = 'Show a card in the UI';
 
@@ -31,7 +31,7 @@ export default class ShowCardCommand extends HostBaseCommand<
       1,
     );
     let newStackItem = await this.operatorModeStateService.createStackItem(
-      new URL(input.cardToShow.id),
+      new URL(input.cardIdToShow),
       newStackIndex,
     );
     this.operatorModeStateService.addItemToStack(newStackItem);

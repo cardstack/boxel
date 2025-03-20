@@ -1,14 +1,14 @@
 import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
-import { EmailField } from './email';
-import { PhoneField } from './phone-number';
-import { UrlField } from './url';
-import { WebsiteField } from './website';
-import { Address as AddressField } from './address';
-import { PercentageField } from './percentage';
+import { EmailField } from './fields/email';
+import { PhoneField } from './fields/phone-number';
+import { UrlField } from './fields/url';
+import { WebsiteField } from './fields/website';
+import { Address as AddressField } from './fields/address';
+import { PercentageField } from './fields/percentage';
 import { CurrencyField } from './fields/currency';
 import { AmountWithCurrency as AmountWithCurrencyField } from './fields/amount-with-currency';
-import { StatusTagField } from './crm/contact';
+import { StatusTagField } from './crm/contact-status-tag';
 import {
   CardDef,
   field,

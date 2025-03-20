@@ -21,6 +21,7 @@ import {
   isCardDef,
   IndexWriter,
   unixTime,
+  jobIdentity,
   type Batch,
   type LooseCardResource,
   type InstanceEntry,
@@ -33,6 +34,7 @@ import {
   type Relationship,
   type TextFileRef,
   type LastModifiedTimes,
+  type JobInfo,
 } from '@cardstack/runtime-common';
 import { Deferred } from '@cardstack/runtime-common/deferred';
 import {
@@ -88,6 +90,7 @@ export class CurrentRun {
   #render: Render;
   #realmURL: URL;
   #realmInfo?: RealmInfo;
+  #jobInfo?: JobInfo;
   readonly stats: Stats = {
     instancesIndexed: 0,
     modulesIndexed: 0,
@@ -95,8 +98,8 @@ export class CurrentRun {
     moduleErrors: 0,
     totalIndexEntries: 0,
   };
-  @service private declare loaderService: LoaderService;
-  @service private declare network: NetworkService;
+  @service declare private loaderService: LoaderService;
+  @service declare private network: NetworkService;
 
   constructor({
     realmURL,
@@ -105,6 +108,7 @@ export class CurrentRun {
     ignoreData = {},
     renderCard,
     render,
+    jobInfo,
   }: {
     realmURL: URL;
     reader: Reader;
@@ -112,6 +116,7 @@ export class CurrentRun {
     ignoreData?: Record<string, string>;
     renderCard: RenderCard;
     render: Render;
+    jobInfo?: JobInfo;
   }) {
     this.#indexWriter = indexWriter;
     this.#realmPaths = new RealmPaths(realmURL);
@@ -120,68 +125,54 @@ export class CurrentRun {
     this.#ignoreData = ignoreData;
     this.#renderCard = renderCard;
     this.#render = render;
+    this.#jobInfo = jobInfo;
   }
 
-  static async fromScratch(
-    current: CurrentRun,
-    invalidateEntireRealm?: boolean,
-  ): Promise<IndexResults> {
+  static async fromScratch(current: CurrentRun): Promise<IndexResults> {
     let start = Date.now();
-    log.debug(`starting from scratch indexing`);
-    perfLog.debug(
-      `starting from scratch indexing for realm ${current.realmURL.href}`,
+    log.debug(
+      `${jobIdentity(current.#jobInfo)} starting from scratch indexing`,
     );
-
-    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+    perfLog.debug(
+      `${jobIdentity(current.#jobInfo)} starting from scratch indexing for realm ${current.realmURL.href}`,
+    );
+    current.#batch = await current.#indexWriter.createBatch(
+      current.realmURL,
+      current.#jobInfo,
+    );
     let invalidations: URL[] = [];
-    if (invalidateEntireRealm) {
-      perfLog.debug(
-        `flag was set to invalidate entire realm ${current.realmURL.href}, skipping invalidation discovery`,
-      );
-      let mtimesStart = Date.now();
-      let filesystemMtimes = await current.#reader.mtimes();
-      perfLog.debug(
-        `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
-      );
-      invalidations = Object.keys(filesystemMtimes)
-        .filter(
-          (url) =>
-            // Only allow json and executable files to be invalidated so that we
-            // don't end up with invalidated files that weren't meant to be indexed
-            // (images, etc)
-            url.endsWith('.json') || hasExecutableExtension(url),
-        )
-        .map((url) => new URL(url));
-    } else {
-      let mtimesStart = Date.now();
-      let mtimes = await current.batch.getModifiedTimes();
-      perfLog.debug(
-        `completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
-      );
-      let invalidateStart = Date.now();
-      invalidations = (
-        await current.discoverInvalidations(current.realmURL, mtimes)
-      ).map((href) => new URL(href));
-      perfLog.debug(
-        `completed invalidations in ${Date.now() - invalidateStart} ms`,
-      );
-    }
+    let mtimesStart = Date.now();
+    let mtimes = await current.batch.getModifiedTimes();
+    perfLog.debug(
+      `${jobIdentity(current.#jobInfo)} completed getting index mtimes in ${Date.now() - mtimesStart} ms`,
+    );
+    let invalidateStart = Date.now();
+    invalidations = (
+      await current.discoverInvalidations(current.realmURL, mtimes)
+    ).map((href) => new URL(href));
+    perfLog.debug(
+      `${jobIdentity(current.#jobInfo)} completed invalidations in ${Date.now() - invalidateStart} ms`,
+    );
 
     await current.whileIndexing(async () => {
       let visitStart = Date.now();
       for (let invalidation of invalidations) {
         await current.tryToVisit(invalidation);
       }
-      perfLog.debug(`completed index visit in ${Date.now() - visitStart} ms`);
+      perfLog.debug(
+        `${jobIdentity(current.#jobInfo)} completed index visit in ${Date.now() - visitStart} ms`,
+      );
       let finalizeStart = Date.now();
       let { totalIndexEntries } = await current.batch.done();
       perfLog.debug(
-        `completed index finalization in ${Date.now() - finalizeStart} ms`,
+        `${jobIdentity(current.#jobInfo)} completed index finalization in ${Date.now() - finalizeStart} ms`,
       );
       current.stats.totalIndexEntries = totalIndexEntries;
-      log.debug(`completed from scratch indexing in ${Date.now() - start}ms`);
+      log.debug(
+        `${jobIdentity(current.#jobInfo)} completed from scratch indexing in ${Date.now() - start}ms`,
+      );
       perfLog.debug(
-        `completed from scratch indexing for realm ${
+        `${jobIdentity(current.#jobInfo)} completed from scratch indexing for realm ${
           current.realmURL.href
         } in ${Date.now() - start} ms`,
       );
@@ -204,9 +195,14 @@ export class CurrentRun {
     },
   ): Promise<IndexResults> {
     let start = Date.now();
-    log.debug(`starting from incremental indexing for ${url.href}`);
+    log.debug(
+      `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${url.href}`,
+    );
 
-    current.#batch = await current.#indexWriter.createBatch(current.realmURL);
+    current.#batch = await current.#indexWriter.createBatch(
+      current.realmURL,
+      current.#jobInfo,
+    );
     let invalidations = (await current.batch.invalidate(url)).map(
       (href) => new URL(href),
     );
@@ -224,7 +220,7 @@ export class CurrentRun {
       current.stats.totalIndexEntries = totalIndexEntries;
 
       log.debug(
-        `completed incremental indexing for ${url.href} in ${
+        `${jobIdentity(current.#jobInfo)} completed incremental indexing for ${url.href} in ${
           Date.now() - start
         }ms`,
       );
@@ -241,7 +237,9 @@ export class CurrentRun {
       await this.visitFile(url);
     } catch (err: any) {
       if (isCardError(err) && err.status === 404) {
-        log.info(`tried to visit file ${url.href}, but it no longer exists`);
+        log.info(
+          `${jobIdentity(this.#jobInfo)} tried to visit file ${url.href}, but it no longer exists`,
+        );
       } else {
         throw err;
       }
@@ -282,12 +280,16 @@ export class CurrentRun {
     url: URL,
     indexMtimes: LastModifiedTimes,
   ): Promise<string[]> {
-    log.debug(`discovering invalidations in dir ${url.href}`);
-    perfLog.debug(`discovering invalidations in dir ${url.href}`);
+    log.debug(
+      `${jobIdentity(this.#jobInfo)} discovering invalidations in dir ${url.href}`,
+    );
+    perfLog.debug(
+      `${jobIdentity(this.#jobInfo)} discovering invalidations in dir ${url.href}`,
+    );
     let mtimesStart = Date.now();
     let filesystemMtimes = await this.#reader.mtimes();
     perfLog.debug(
-      `time to get file system mtimes ${Date.now() - mtimesStart} ms`,
+      `${jobIdentity(this.#jobInfo)} time to get file system mtimes ${Date.now() - mtimesStart} ms`,
     );
 
     let ignoreFile = new URL('.gitignore', url).href;
@@ -302,7 +304,9 @@ export class CurrentRun {
         this.#ignoreData[url.href] = ignorePatterns.content;
       }
     } else {
-      perfLog.debug(`skip getting the ignore file--there is nothing to ignore`);
+      perfLog.debug(
+        `${jobIdentity(this.#jobInfo)} skip getting the ignore file--there is nothing to ignore`,
+      );
     }
 
     let invalidationList: string[] = [];
@@ -338,7 +342,7 @@ export class CurrentRun {
       await this.batch.invalidate(new URL(invalidationURL));
     }
     perfLog.debug(
-      `time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
+      `${jobIdentity(this.#jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
     );
     return this.batch.invalidations;
   }
@@ -351,7 +355,7 @@ export class CurrentRun {
       return;
     }
     let start = Date.now();
-    log.debug(`begin visiting file ${url.href}`);
+    log.debug(`${jobIdentity(this.#jobInfo)} begin visiting file ${url.href}`);
     let localPath: string;
     try {
       localPath = this.#realmPaths.local(url);
@@ -360,7 +364,7 @@ export class CurrentRun {
       // graph cross a realm just skip over the file. it will be out
       // of date, but such is life...
       log.debug(
-        `Visit of ${url.href} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
+        `${jobIdentity(this.#jobInfo)} Visit of ${url.href} cannot be performed as it is in a different realm than the realm whose contents are being invalidated (${this.realmURL.href})`,
       );
       return;
     }
@@ -389,13 +393,15 @@ export class CurrentRun {
           let { data } = JSON.parse(content);
           resource = data;
         } catch (e) {
-          log.warn(`unable to parse ${url.href} as card JSON`);
+          log.warn(
+            `${jobIdentity(this.#jobInfo)} unable to parse ${url.href} as card JSON`,
+          );
         }
 
         if (resource && isCardResource(resource)) {
           if (lastModified == null) {
             log.warn(
-              `No lastModified date available for ${url.href}, using current time`,
+              `${jobIdentity(this.#jobInfo)} No lastModified date available for ${url.href}, using current time`,
             );
             lastModified = unixTime(Date.now());
           }
@@ -410,7 +416,9 @@ export class CurrentRun {
         }
       }
     }
-    log.debug(`completed visiting file ${url.href} in ${Date.now() - start}ms`);
+    log.debug(
+      `${jobIdentity(this.#jobInfo)} completed visiting file ${url.href} in ${Date.now() - start}ms`,
+    );
   }
 
   private async indexModule(url: URL, ref: TextFileRef): Promise<void> {
@@ -419,7 +427,7 @@ export class CurrentRun {
     } catch (err: any) {
       this.stats.moduleErrors++;
       log.warn(
-        `encountered error loading module "${url.href}": ${err.message}`,
+        `${jobIdentity(this.#jobInfo)} encountered error loading module "${url.href}": ${err.message}`,
       );
       let deps = await (
         await this.loaderService.loader.getConsumedModules(url.href)
@@ -437,7 +445,9 @@ export class CurrentRun {
     }
 
     if (ref.isShimmed) {
-      log.debug(`skipping indexing of shimmed module ${url.href}`);
+      log.debug(
+        `${jobIdentity(this.#jobInfo)} skipping indexing of shimmed module ${url.href}`,
+      );
       return;
     }
     let consumes = (
@@ -512,7 +522,7 @@ export class CurrentRun {
         ...{ id: instanceURL.href, type: 'card' },
       };
       //Realm info may be used by a card to render field values.
-      //Example: catalog-entry-card
+      //Example: spec-card
       merge(adjustedResource, {
         meta: {
           lastModified,
@@ -529,6 +539,7 @@ export class CurrentRun {
           identityContext,
         },
       );
+      await api.flushLogs();
       isolatedHtml = unwrap(
         sanitizeHTML(
           await this.#renderCard({
@@ -662,7 +673,7 @@ export class CurrentRun {
         error.error.deps = [
           moduleURL,
           ...(uncaughtError instanceof CardError
-            ? uncaughtError.deps ?? []
+            ? (uncaughtError.deps ?? [])
             : []),
         ];
       } else if (typesMaybeError?.type === 'error') {
@@ -673,7 +684,7 @@ export class CurrentRun {
         throw err;
       }
       log.warn(
-        `encountered error indexing card instance ${path}: ${error.error.message}`,
+        `${jobIdentity(this.#jobInfo)} encountered error indexing card instance ${path}: ${error.error.message}`,
       );
       await this.updateEntry(instanceURL, error);
     }

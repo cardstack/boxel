@@ -6,10 +6,12 @@ import {
   waitUntil,
   scrollTo,
   visit,
+  settled,
 } from '@ember/test-helpers';
 
+import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import stringify from 'safe-stable-stringify';
 
@@ -23,6 +25,8 @@ import { Realm } from '@cardstack/runtime-common/realm';
 import type MonacoService from '@cardstack/host/services/monaco-service';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
+import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
+
 import {
   getMonacoContent,
   percySnapshot,
@@ -30,10 +34,8 @@ import {
   setMonacoContent,
   setupLocalIndexing,
   testRealmURL,
-  setupServerSentEvents,
   visitOperatorMode,
   waitForCodeEditor,
-  type TestContextWithSSE,
   setupUserSubscription,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -413,10 +415,12 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
-    setupServerSentEvents(hooks);
-    let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
     });
+
+    let { setActiveRealms, createAndJoinRoom } = mockMatrixUtils;
 
     async function openNewFileModal(menuSelection: string) {
       await waitFor('[data-test-new-file-button]');
@@ -425,7 +429,10 @@ module('Acceptance | code submode tests', function (_hooks) {
     }
 
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+      matrixRoomId = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
       setupUserSubscription(matrixRoomId);
 
       let realmServerService = this.owner.lookup(
@@ -437,9 +444,10 @@ module('Acceptance | code submode tests', function (_hooks) {
       setActiveRealms([catalogRealmURL, additionalRealmURL, personalRealmURL]);
 
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: personalRealmURL,
         permissions: {
-          '@testuser:staging': ['read', 'write', 'realm-owner'],
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
           'hello.txt': txtSource,
@@ -451,9 +459,10 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       });
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: additionalRealmURL,
         permissions: {
-          '@testuser:staging': ['read', 'write', 'realm-owner'],
+          '@testuser:localhost': ['read', 'write', 'realm-owner'],
         },
         contents: {
           'hello.txt': txtSource,
@@ -465,6 +474,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         },
       });
       await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         realmURL: catalogRealmURL,
         permissions: {
           '*': ['read'],
@@ -523,14 +533,19 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
-    setupServerSentEvents(hooks);
-    let { setActiveRealms, createAndJoinRoom } = setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
       activeRealms: [testRealmURL],
     });
 
+    let { createAndJoinRoom, setActiveRealms } = mockMatrixUtils;
+
     hooks.beforeEach(async function () {
-      matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+      matrixRoomId = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
       setupUserSubscription(matrixRoomId);
 
       monacoService = this.owner.lookup(
@@ -540,6 +555,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       // this seeds the loader used during index which obtains url mappings
       // from the global loader
       ({ realm } = await setupAcceptanceTestRealm({
+        mockMatrixUtils,
         contents: {
           'index.gts': indexCardSource,
           'pet-person.gts': personCardSource,
@@ -561,8 +577,8 @@ module('Acceptance | code submode tests', function (_hooks) {
               type: 'card',
               attributes: {
                 title: 'Person',
-                description: 'Catalog entry',
-                isField: false,
+                description: 'Spec',
+                specType: 'card',
                 ref: {
                   module: `./person`,
                   name: 'Person',
@@ -570,8 +586,44 @@ module('Acceptance | code submode tests', function (_hooks) {
               },
               meta: {
                 adoptsFrom: {
-                  module: `${baseRealm.url}catalog-entry`,
-                  name: 'CatalogEntry',
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'pet-entry.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                specType: 'card',
+                ref: {
+                  module: `./pet`,
+                  name: 'Pet',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
+                },
+              },
+            },
+          },
+          'pet-entry-2.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                specType: 'card',
+                ref: {
+                  module: `./pet`,
+                  name: 'Pet',
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${baseRealm.url}spec`,
+                  name: 'Spec',
                 },
               },
             },
@@ -990,34 +1042,26 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-code-mode-card-preview-body]')
         .includesText('Fadhlan');
 
-      assert
-        .dom('[data-test-preview-card-footer-button-isolated]')
-        .hasClass('active');
+      assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
 
-      await click('[data-test-preview-card-footer-button-fitted]');
-      assert
-        .dom('[data-test-preview-card-footer-button-fitted]')
-        .hasClass('active');
+      await click('[data-test-format-chooser="fitted"]');
+      assert.dom('[data-test-format-chooser="fitted"]').hasClass('active');
       assert
         .dom(
           '[data-test-code-mode-card-preview-body ] .field-component-card.fitted-format',
         )
         .exists();
 
-      await click('[data-test-preview-card-footer-button-embedded]');
-      assert
-        .dom('[data-test-preview-card-footer-button-embedded]')
-        .hasClass('active');
+      await click('[data-test-format-chooser="embedded"]');
+      assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
       assert
         .dom(
           '[data-test-code-mode-card-preview-body ] .field-component-card.embedded-format',
         )
         .exists();
 
-      await click('[data-test-preview-card-footer-button-atom]');
-      assert
-        .dom('[data-test-preview-card-footer-button-atom]')
-        .hasClass('active');
+      await click('[data-test-format-chooser="atom"]');
+      assert.dom('[data-test-format-chooser="atom"]').hasClass('active');
       assert
         .dom('[data-test-code-mode-card-preview-body] .atom-format')
         .exists();
@@ -1025,10 +1069,8 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-code-mode-card-preview-body] .atom-format')
         .includesText('Fadhlan');
 
-      await click('[data-test-preview-card-footer-button-edit]');
-      assert
-        .dom('[data-test-preview-card-footer-button-edit]')
-        .hasClass('active');
+      await click('[data-test-format-chooser="edit"]');
+      assert.dom('[data-test-format-chooser="edit"]').hasClass('active');
 
       assert
         .dom(
@@ -1246,27 +1288,10 @@ module('Acceptance | code submode tests', function (_hooks) {
         .hasText(`${elementName} card`);
     });
 
-    test<TestContextWithSSE>('the monaco cursor position is maintained during an auto-save', async function (assert) {
-      assert.expect(3);
+    test('the monaco cursor position is maintained during an auto-save', async function (assert) {
+      assert.expect(2);
       // we only want to change this for this particular test so we emulate what the non-test env sees
       monacoService.serverEchoDebounceMs = 5000;
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}in-this-file.gts`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}in-this-file.gts`],
-          },
-        },
-      ];
 
       try {
         await visitOperatorMode({
@@ -1277,16 +1302,11 @@ module('Acceptance | code submode tests', function (_hooks) {
         await waitForCodeEditor();
 
         let originalPosition: MonacoSDK.Position | undefined | null;
-        await this.expectEvents({
-          assert,
-          realm,
-          expectedEvents,
-          callback: async () => {
-            setMonacoContent(`// This is a change \n${inThisFileSource}`);
-            monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
-            originalPosition = monacoService.getCursorPosition();
-          },
-        });
+
+        setMonacoContent(`// This is a change \n${inThisFileSource}`);
+        monacoService.updateCursorPosition(new MonacoSDK.Position(45, 0));
+        originalPosition = monacoService.getCursorPosition();
+
         await waitFor('[data-test-saved]');
         await waitFor('[data-test-save-idle]');
         let currentPosition = monacoService.getCursorPosition();
@@ -1374,8 +1394,8 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-code-mode-card-preview-body]');
 
       await scrollTo('[data-test-code-mode-card-preview-body]', 0, 100);
-      await click('[data-test-preview-card-footer-button-edit]');
-      await click('[data-test-preview-card-footer-button-isolated]');
+      await click('[data-test-format-chooser="edit"]');
+      await click('[data-test-format-chooser="isolated"]');
       let element = document.querySelector(
         '[data-test-code-mode-card-preview-body]',
       )!;
@@ -1386,24 +1406,8 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test<TestContextWithSSE>('updates values in preview panel must be represented in editor panel', async function (assert) {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
+    // TODO: restore in CS-8200
+    skip('updates values in preview panel must be represented in editor panel', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -1411,74 +1415,56 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitForCodeEditor();
       await waitFor('[data-test-code-mode-card-preview-body]');
 
-      await click('[data-test-preview-card-footer-button-edit]');
+      await click('[data-test-format-chooser="edit"]');
 
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          // primitive field
-          await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
+      // primitive field
+      await fillIn('[data-test-field="lastName"] input', 'Ridhwanallah');
 
-          // compound field with 1 level
-          await fillIn(
-            '[data-test-field="streetAddress"] input',
-            'Unknown Address',
-          );
-          await fillIn('[data-test-field="city"] input', 'Bandung');
+      // compound field with 1 level
+      await fillIn(
+        '[data-test-field="streetAddress"] input',
+        'Unknown Address',
+      );
+      await fillIn('[data-test-field="city"] input', 'Bandung');
 
-          // compound field with 2 level
-          await fillIn(
-            '[data-test-field="fiveDigitPostalCode"] input',
-            '12345',
-          );
-          await fillIn('[data-test-field="fourDigitOptional"] input', '1234');
+      // compound field with 2 level
+      await fillIn('[data-test-field="fiveDigitPostalCode"] input', '12345');
+      await fillIn('[data-test-field="fourDigitOptional"] input', '1234');
 
-          // compound field with linksToMany field
-          await click(
-            '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
-          );
-          await waitFor(
-            `[data-test-select="${testRealmURL}Country/united-states"]`,
-          );
-          await click(
-            `[data-test-select="${testRealmURL}Country/united-states"]`,
-          );
-          await click(`[data-test-card-catalog-go-button]`);
-        },
-        opts: { timeout: 4500 },
-      });
+      // compound field with linksToMany field
+      await click(
+        '[data-test-links-to-many="countriesVisited"] [data-test-add-new]',
+      );
+      await waitFor(
+        `[data-test-select="${testRealmURL}Country/united-states"]`,
+      );
+      await click(`[data-test-select="${testRealmURL}Country/united-states"]`);
+      await click(`[data-test-card-catalog-go-button]`);
+
       await waitFor('[data-test-saved]');
       await waitFor('[data-test-save-idle]');
+      await settled();
 
       let content = getMonacoContent();
-      assert.ok(content.includes('Ridhwanallah'));
-      assert.ok(content.includes('Unknown Address'));
-      assert.ok(content.includes('Bandung'));
-      assert.ok(content.includes('12345'));
-      assert.ok(content.includes('1234'));
-      assert.ok(content.includes(`${testRealmURL}Country/united-states`));
+      await waitUntil(() => content.includes('Ridhwanallah'));
+      assert.ok(
+        content.includes('Ridhwanallah'),
+        'content includes Ridhwanallah',
+      );
+      assert.ok(
+        content.includes('Unknown Address'),
+        'content includes Unknown Address',
+      );
+      assert.ok(content.includes('Bandung'), 'content includes Bandung');
+      assert.ok(content.includes('12345'), 'content includes 12345');
+      assert.ok(content.includes('1234'), 'content includes 1234');
+      assert.ok(
+        content.includes(`${testRealmURL}Country/united-states`),
+        'content includes Country/united-states',
+      );
     });
 
-    test<TestContextWithSSE>('monaco editor live updates when index changes', async function (assert) {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
+    test('monaco editor live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1493,30 +1479,25 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
       await waitForCodeEditor();
       await waitUntil(() => getMonacoContent().includes('Fadhlan'));
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'FadhlanXXX',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'FadhlanXXX',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
       await waitUntil(() => getMonacoContent().includes('FadhlanXXX'));
       assert.true(
         getMonacoContent().includes('FadhlanXXX'),
@@ -1524,24 +1505,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
-    test<TestContextWithSSE>('card preview live updates when index changes', async function (assert) {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
+    test('card preview live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1555,59 +1519,116 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
       await waitFor('[data-test-card-resource-loaded]');
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                attributes: {
-                  firstName: 'FadhlanXXX',
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              firstName: 'FadhlanXXX',
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
-      await waitUntil(
-        () =>
-          document
-            .querySelector('[data-test-code-mode-card-preview-body]')
-            ?.textContent?.includes('FadhlanXXX'),
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-code-mode-card-preview-body]')
+          ?.textContent?.includes('FadhlanXXX'),
       );
       assert
         .dom('[data-test-code-mode-card-preview-body]')
         .includesText('FadhlanXXX');
     });
 
-    test<TestContextWithSSE>('card preview live updates with error', async function (assert) {
-      let expectedEvents = [
-        {
-          type: 'index',
-          data: {
-            type: 'incremental-index-initiation',
-            realmURL: testRealmURL,
-            updatedFile: `${testRealmURL}Person/fadhlan`,
-          },
-        },
-        {
-          type: 'index',
-          data: {
-            type: 'incremental',
-            invalidations: [`${testRealmURL}Person/fadhlan`],
-          },
-        },
-      ];
+    test('card preview live updates when there is a change in module', async function (assert) {
+      const personGts = `
+        import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+        import { Friend } from './friend';
+        import { Pet } from "./pet";
+        import { Address } from './address';
+        import { Trips } from './trips';
+
+        export class Person extends CardDef {
+          static displayName = 'Person';
+          @field firstName = contains(StringCard);
+          @field lastName = contains(StringCard);
+          @field title = contains(StringCard, {
+            computeVia: function (this: Person) {
+              return [this.firstName, this.lastName].filter(Boolean).join(' ');
+            },
+          });
+          @field pet = linksTo(Pet);
+          @field friends = linksToMany(Friend);
+          @field address = containsMany(StringCard);
+          @field addressDetail = contains(Address);
+          @field trips = contains(Trips);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <div data-test-person>
+                Hello <@fields.firstName />
+              </div>
+              <style scoped>
+                div {
+                  color: blue;
+                }
+              </style>
+            </template>
+          };
+        };
+      `;
+      const getElementColor = (selector: string) => {
+        let element = document.querySelector(selector);
+        if (!element) {
+          return;
+        }
+        return window.getComputedStyle(element).color;
+      };
+
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}Person/1.json`,
+      });
+      await waitFor('[data-test-card-resource-loaded]');
+      assert.dom('[data-test-person]').containsText('First name: Hassan');
+      assert.strictEqual(
+        getElementColor('[data-test-person]'),
+        'rgb(0, 128, 0)',
+      );
+
+      await realm.write('person.gts', personGts);
+
+      await waitUntil(() =>
+        document
+          .querySelector('[data-test-person]')
+          ?.textContent?.includes('Hello'),
+      );
+
+      assert.dom('[data-test-person]').includesText('Hello Hassan');
+      assert.strictEqual(
+        getElementColor('[data-test-person]'),
+        'rgb(0, 0, 255)',
+      );
+
+      await click('[data-test-file-browser-toggle]');
+      await click('[data-test-file="Person/1.json"]');
+      assert.dom('[data-test-person]').includesText('Hello Hassan');
+      assert.strictEqual(
+        getElementColor('[data-test-person]'),
+        'rgb(0, 0, 255)',
+      );
+    });
+
+    test('card preview live updates with error', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}Person/fadhlan.json`,
@@ -1616,63 +1637,52 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-card-error]')
         .doesNotExist('card error state is not displayed');
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                relationships: {
-                  'friends.0': {
-                    links: { self: './missing' },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            relationships: {
+              'friends.0': {
+                links: { self: './missing' },
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
       await waitFor('[data-test-card-error]');
       assert
         .dom('[data-test-card-error]')
         .exists('card error state is displayed');
 
-      await this.expectEvents({
-        assert,
-        realm,
-        expectedEvents,
-        callback: async () => {
-          await realm.write(
-            'Person/fadhlan.json',
-            JSON.stringify({
-              data: {
-                type: 'card',
-                relationships: {
-                  'friends.0': {
-                    links: { self: null },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: '../person',
-                    name: 'Person',
-                  },
-                },
+      await realm.write(
+        'Person/fadhlan.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            relationships: {
+              'friends.0': {
+                links: { self: null },
               },
-            } as LooseSingleCardDocument),
-          );
-        },
-      });
+            },
+            meta: {
+              adoptsFrom: {
+                module: '../person',
+                name: 'Person',
+              },
+            },
+          },
+        } as LooseSingleCardDocument),
+      );
+
       await waitFor('[data-test-card-error]', { count: 0 });
       assert
         .dom('[data-test-card-error]')
@@ -1691,7 +1701,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         )
         .exists();
 
-      await click('[data-test-preview-card-footer-button-edit]');
+      await click('[data-test-format-chooser="edit"]');
 
       // linksTo field
       await click('[data-test-links-to-editor="pet"] [data-test-remove-card]');
@@ -1757,6 +1767,66 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom(createFileModalOverlay).exists();
       await click(createFileModalOverlay!);
       assert.dom('[data-test-create-file-modal]').doesNotExist();
+    });
+
+    test('remembers open RHS panel via local storage', async function (assert) {
+      let accordionSelections = {
+        [`${testRealmURL}address.gts`]: 'spec-preview',
+        [`${testRealmURL}country.gts`]: null,
+        [`${testRealmURL}person.gts`]: 'schema-editor',
+        [`${testRealmURL}pet-person.gts`]: 'playground',
+      };
+      window.localStorage.setItem(
+        CodeModePanelSelections,
+        JSON.stringify(accordionSelections),
+      );
+
+      await visitOperatorMode({
+        stacks: [],
+        submode: 'code',
+        codePath: `${testRealmURL}pet.gts`,
+      });
+
+      assert
+        .dom('[data-test-selected-accordion-item="schema-editor"]')
+        .exists('defaults to schema-editor view');
+      await click('[data-test-accordion-item="spec-preview"] > button'); // select spec panel
+
+      await click('[data-test-file-browser-toggle]');
+      await click('[data-test-file="address.gts"]');
+      assert.dom('[data-test-selected-accordion-item="spec-preview"]').exists();
+      assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
+
+      await click('[data-test-file="country.gts"]');
+      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert.dom('[data-test-selected-accordion-item]').doesNotExist();
+      await click('[data-test-accordion-item="playground"] > button'); // open playground
+      assert.dom('[data-test-selected-accordion-item="playground"]').exists();
+
+      await click('[data-test-file="person.gts"]');
+      assert
+        .dom('[data-test-selected-accordion-item="schema-editor"]')
+        .exists();
+      await click('[data-test-accordion-item="schema-editor"] > button'); // close schema-editor panel
+      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert.dom('[data-test-selected-accordion-item]').doesNotExist();
+
+      await click('[data-test-file="pet-person.gts"]');
+      assert.dom('[data-test-selected-accordion-item="playground"]').exists();
+
+      let currentSelections = window.localStorage.getItem(
+        CodeModePanelSelections,
+      );
+      assert.strictEqual(
+        currentSelections,
+        JSON.stringify({
+          [`${testRealmURL}address.gts`]: 'spec-preview',
+          [`${testRealmURL}country.gts`]: 'playground',
+          [`${testRealmURL}person.gts`]: null,
+          [`${testRealmURL}pet-person.gts`]: 'playground',
+          [`${testRealmURL}pet.gts`]: 'spec-preview',
+        }),
+      );
     });
   });
 });

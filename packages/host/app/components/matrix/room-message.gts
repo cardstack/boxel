@@ -1,12 +1,11 @@
+import { fn } from '@ember/helper';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-
-import { trackedFunction } from 'ember-resources/util/function';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
@@ -14,13 +13,16 @@ import { bool } from '@cardstack/boxel-ui/helpers';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 
-import { Message } from '@cardstack/host/lib/matrix-classes/message';
+import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
@@ -31,16 +33,16 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     roomId: string;
-    message: Message;
+    // use a RoomResource as an arg instead of message to keep this component stable
+    // when new messages are received--otherwise a RoomMessage component is created for
+    // _every_ matrix event received regardless if the event had anything to do with this
+    // message.
+    roomResource: RoomResource;
     index: number;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
-    currentEditor: number | undefined;
-    setCurrentEditor: (editor: number | undefined) => void;
     retryAction?: () => void;
     isPending?: boolean;
-    isDisplayingCode: boolean;
-    onToggleViewCode: () => void;
     registerScroller: (args: {
       index: number;
       element: HTMLElement;
@@ -56,9 +58,14 @@ export default class RoomMessage extends Component<Signature> {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
+    this.loadMessageResources.perform();
   }
 
   @tracked private streamingTimeout = false;
+
+  private get message() {
+    return this.args.roomResource.messages[this.args.index];
+  }
 
   private checkStreamingTimeout = task(async () => {
     if (!this.isFromAssistant || !this.args.isStreaming) {
@@ -66,7 +73,7 @@ export default class RoomMessage extends Component<Signature> {
     }
 
     // If message is streaming and hasn't been updated in the last minute, show a timeout message
-    if (Date.now() - Number(this.args.message.updated) > STREAMING_TIMEOUT_MS) {
+    if (Date.now() - Number(this.message.updated) > STREAMING_TIMEOUT_MS) {
       this.streamingTimeout = true;
       return;
     }
@@ -78,16 +85,11 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   private get isFromAssistant() {
-    return this.args.message.author.userId === aiBotUserId;
+    return this.message.author.userId === aiBotUserId;
   }
 
-  run = task(async () => {
-    if (!this.args.message.command) {
-      throw new Error('No command to run');
-    }
-    return this.commandService.run
-      .unlinked()
-      .perform(this.args.message.command);
+  private run = task(async (command: MessageCommand) => {
+    return this.commandService.run.unlinked().perform(command);
   });
 
   <template>
@@ -97,46 +99,45 @@ export default class RoomMessage extends Component<Signature> {
       In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
       If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
     }}
-    {{#if this.resources}}
+    {{#if this.loadedResources}}
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
-        @formattedMessage={{htmlSafe
-          (markdownToHtml @message.formattedMessage)
-        }}
-        @datetime={{@message.created}}
+        @formattedMessage={{markdownToHtml this.message.formattedMessage false}}
+        @reasoningContent={{this.message.reasoningContent}}
+        @monacoSDK={{@monacoSDK}}
+        @datetime={{this.message.created}}
+        @eventId={{this.message.eventId}}
         @index={{@index}}
         @registerScroller={{@registerScroller}}
         @isFromAssistant={{this.isFromAssistant}}
         @profileAvatar={{component
           Avatar
           isReady=true
-          userId=@message.author.userId
-          displayName=@message.author.displayName
+          userId=this.message.author.userId
+          displayName=this.message.author.displayName
         }}
-        @resources={{this.resources}}
+        @resources={{this.loadedResources}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
-        @retryAction={{if @message.command (perform this.run) @retryAction}}
+        @retryAction={{@retryAction}}
         @isPending={{@isPending}}
-        data-test-boxel-message-from={{@message.author.name}}
+        data-test-boxel-message-from={{this.message.author.name}}
+        data-test-boxel-message-instance-id={{this.message.instanceId}}
         ...attributes
       >
-        {{#if @message.command}}
+        {{#each this.message.commands as |command|}}
           <RoomMessageCommand
-            @messageCommand={{@message.command}}
-            @messageIndex={{@message.index}}
-            @runCommand={{perform this.run}}
+            @messageCommand={{command}}
+            @roomResource={{@roomResource}}
+            @runCommand={{fn (perform this.run) command}}
             @roomId={{@roomId}}
             @isPending={{@isPending}}
-            @isDisplayingCode={{@isDisplayingCode}}
-            @onToggleViewCode={{@onToggleViewCode}}
             @monacoSDK={{@monacoSDK}}
-            @currentEditor={{@currentEditor}}
-            @failedCommandState={{this.failedCommandState}}
             @isError={{bool this.errorMessage}}
+            @isStreaming={{@isStreaming}}
           />
-        {{/if}}
+        {{/each}}
       </AiAssistantMessage>
     {{/if}}
 
@@ -150,70 +151,70 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service declare commandService: CommandService;
+  @tracked loadedResources:
+    | {
+        cards: CardDef[] | undefined;
+        files: FileDef[] | undefined;
+        errors: { id: string; error: Error }[] | undefined;
+      }
+    | undefined;
 
-  private loadMessageResources = trackedFunction(this, async () => {
+  loadMessageResources = task(async () => {
     let cards: CardDef[] = [];
     let errors: { id: string; error: Error }[] = [];
 
-    let promises = this.args.message.attachedResources?.map(
-      async (resource) => {
+    let promises = this.message
+      .attachedResources(this)
+      ?.map(async (resource) => {
         await resource.loaded;
         if (resource.card) {
           cards.push(resource.card);
         } else if (resource.cardError) {
-          let { id, error } = resource.cardError;
-          errors.push({
+          let {
             id,
-            error,
-          });
+            message,
+            title: name,
+            meta: { stack },
+          } = resource.cardError;
+          if (id) {
+            errors.push({
+              id,
+              error: { name, message, stack: stack ?? undefined },
+            });
+          }
         }
-      },
-    );
+      });
 
     if (promises) {
       await Promise.all(promises);
     }
 
-    return {
+    this.loadedResources = {
       cards: cards.length ? cards : undefined,
+      files: this.message.attachedFiles?.length
+        ? this.message.attachedFiles
+        : undefined,
       errors: errors.length ? errors : undefined,
     };
   });
 
-  private get resources() {
-    return this.loadMessageResources.value;
-  }
-
-  @cached
-  private get failedCommandState() {
-    if (!this.args.message.command?.eventId) {
-      return undefined;
-    }
-    return this.matrixService.failedCommandState.get(
-      this.args.message.command.eventId,
-    );
-  }
-
   private get errorMessage() {
-    if (this.failedCommandState) {
-      return `Failed to apply changes. ${this.failedCommandState.message}`;
-    }
-    if (this.args.message.errorMessage) {
-      return this.args.message.errorMessage;
+    if (this.message.errorMessage) {
+      return this.message.errorMessage;
     }
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';
     }
-    if (!this.resources?.errors) {
+    if (!this.loadedResources?.errors) {
       return undefined;
     }
 
-    let hasResourceErrors = this.resources.errors.length > 0;
+    let hasResourceErrors = this.loadedResources.errors.length > 0;
     if (hasResourceErrors) {
       return 'Error rendering attached cards.';
     }
 
-    return this.resources.errors
+    return this.loadedResources.errors
       .map((e: { id: string; error: Error }) => `${e.id}: ${e.error.message}`)
       .join(', ');
   }

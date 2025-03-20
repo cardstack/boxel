@@ -47,12 +47,10 @@ In order to run the ember-cli hosted app:
 
 1. `pnpm build` in the boxel-ui/addon workspace to build the boxel-ui addon.
 2. `pnpm build` in the boxel-motion/addon workspace to build the boxel-motion addon.
-3. `pnpm start` in the host/ workspace to serve the ember app. Note that this script includes the environment variable `OWN_REALM_URL=http://localhost:4201/experiments/` which configures the host to point to the experiments realm's cards realm by default.
+3. `pnpm start` in the host/ workspace to serve the ember app.
 4. `pnpm start:all` in the realm-server/ to serve the base and experiments realms -- this will also allow you to switch between the app and the tests without having to restart servers). This expects the Ember application to be running at `http://localhost:4200`, if you’re running it elsewhere you can specify it with `HOST_URL=http://localhost:5200 pnpm start:all`.
 
-The app is available at http://localhost:4200. It will serve the experiments realm (configurable with OWN_REALM_URL, as mentioned above). You can open the base and experiments cards workspace directly by entering http://localhost:4201/base or http://localhost:4201/experiments in the browser.
-
-If you want to use operator mode, you need to register an account on Matrix. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
+The app is available at http://localhost:4200. You will be prompted to register an account. To make it easier, you can execute `pnpm register-test-user` in `packages/matrix/`. Now you can sign in with the test user using the credentials `username: user`, `password: password`.
 
 When you are done running the app you can stop the synapse server by running the following from the `packages/matrix` workspace:
 
@@ -84,8 +82,8 @@ Instead of running `pnpm start:base`, you can alternatively use `pnpm start:all`
 | :4205 | `/test` realm for matrix client tests (playwright controlled) | 🚫                  | 🚫                   |
 | :4210 | Development Worker Manager (spins up 1 worker by default)     | ✅                  | 🚫                   |
 | :4211 | Test Worker Manager (spins up 1 worker by default)            | ✅                  | 🚫                   |
-| :4212 | Test Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅ | 🚫                   |
-| :4213 | Test Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅ | 🚫                   |
+| :4212 | Worker Manager for matrix client tests (playwright controlled - 1 worker) | ✅      | 🚫                   |
+| :4213 | Worker Manager for matrix client tests - base realm server (playwright controlled - 1 worker) | ✅ | 🚫    |
 | :5001 | Mail user interface for viewing emails sent to local SMTP     | ✅                  | 🚫                   |
 | :5435 | Postgres DB                                                   | ✅                  | 🚫                   |
 | :8008 | Matrix synapse server                                         | ✅                  | 🚫                   |
@@ -223,7 +221,7 @@ There is a ember-freestyle component explorer available to assist with developme
 
 1. `cd packages/boxel-ui/test-app`
 2. `pnpm start`
-3. Visit http://localhost:4210/ in your browser
+3. Visit http://localhost:4220/ in your browser
 
 ## Boxel Motion Demo App
 
@@ -285,12 +283,12 @@ First make sure to generate the host app's `dist/` output in order to support ca
 To run the `packages/realm-server/` workspace tests start:
 
 1. `pnpm start:all` in the `packages/realm-server/` to serve _both_ the base realm and the realm that serves the test cards for node.
-2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests
+2. Run `pnpm test` in the `packages/realm-server/` workspace to run the realm node tests. `TEST_MODULE=realm-endpoints-test.ts pnpm test-module` is an example of how to run a single test module.
 
 ### Boxel UI
 
 1. `cd packages/boxel-ui/test-app`
-2. `pnpm test` (or `pnpm start` and visit http://localhost:4210/tests to run tests in the browser)
+2. `pnpm test` (or `pnpm start` and visit http://localhost:4220/tests to run tests in the browser)
 
 ### Boxel Motion
 
@@ -311,10 +309,10 @@ The matrix client relies upon the host app and the realm servers. Start the host
 pnpm start
 ```
 
-Then start the realm server (minus the matrix server). From the `packages/realm-server` folder:
+Then start the realm server for matrix tests (does not start the matrix server). From the `packages/realm-server` folder:
 
 ```
-pnpm start:without-matrix
+MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests
 ```
 
 Then to run the tests from the CLI execute the following from `packages/matrix`:

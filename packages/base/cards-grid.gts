@@ -25,7 +25,7 @@ import { IconList, IconGrid } from '@cardstack/boxel-ui/icons';
 import { eq, cn } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
-  catalogEntryRef,
+  specRef,
   baseRealm,
   isCardInstance,
   SupportedMimeType,
@@ -36,7 +36,7 @@ import { tracked } from '@glimmer/tracking';
 import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 // @ts-ignore no types
 import cssUrl from 'ember-css-url';
-import { type CatalogEntry } from './catalog-entry';
+import { Spec } from './spec';
 import StringField from './string';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -44,6 +44,8 @@ import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import Captions from '@cardstack/boxel-icons/captions';
 import CardsIcon from '@cardstack/boxel-icons/cards';
 import { registerDestructor } from '@ember/destroyable';
+
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 type IconComponent = typeof Captions;
 interface SortOption {
@@ -213,9 +215,9 @@ class Isolated extends Component<typeof CardsGrid> {
         letter-spacing: 0.21px;
       }
       .cards-grid {
-        --grid-card-min-width: 11.125rem;
-        --grid-card-max-width: 1fr;
-        --grid-card-height: 15.125rem;
+        --grid-card-min-width: 10.625rem; /* 170px */
+        --grid-card-max-width: 10.625rem; /* 170px */
+        --grid-card-height: 15.625rem; /* 250px */
 
         padding: var(--cards-grid-padding-top) 0 0 var(--boxel-sp-sm);
 
@@ -381,16 +383,22 @@ class Isolated extends Component<typeof CardsGrid> {
     if (activeFilterRef) {
       preselectedCardTypeQuery = {
         filter: {
-          on: catalogEntryRef,
+          on: specRef,
           eq: { ref: activeFilterRef },
         },
+        sort: [
+          {
+            by: 'createdAt',
+            direction: 'desc',
+          },
+        ],
       };
     }
-    let card = await chooseCard<CatalogEntry>(
+    let card = await chooseCard<Spec>(
       {
         filter: {
-          on: catalogEntryRef,
-          every: [{ eq: { isField: false } }],
+          on: specRef,
+          every: [{ eq: { isCard: true } }],
         },
       },
       { preselectedCardTypeQuery },
@@ -463,9 +471,8 @@ class Isolated extends Component<typeof CardsGrid> {
       ) ?? this.filters[0];
   });
 
-  private refreshFilterList = (ev: MessageEvent) => {
-    let data = JSON.parse(ev.data);
-    if (ev.type === 'index' && data.type === 'incremental') {
+  private refreshFilterList = (ev: RealmEventContent) => {
+    if (ev.eventName === 'index' && ev.indexType === 'incremental') {
       this.loadFilterList.perform();
     }
   };

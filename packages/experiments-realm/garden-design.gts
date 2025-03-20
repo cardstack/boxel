@@ -16,7 +16,7 @@ import type Owner from '@ember/owner';
 import { htmlSafe } from '@ember/template';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
-import { baseRealm, getCards } from '@cardstack/runtime-common';
+import { baseRealm, type getCards } from '@cardstack/runtime-common';
 import LayoutBoardSplitIcon from '@cardstack/boxel-icons/layout-board-split';
 import PlantIcon from '@cardstack/boxel-icons/plant';
 
@@ -196,11 +196,7 @@ class Isolated extends Component<typeof GardenDesign> {
   `);
   @tracked gridMap: TrackedMap<string, GardenItem | null>;
 
-  @tracked
-  private declare liveQuery: {
-    instances: CardDef[];
-    isLoading: boolean;
-  };
+  @tracked private liveQuery: ReturnType<getCards> | undefined;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -213,25 +209,30 @@ class Isolated extends Component<typeof GardenDesign> {
       }),
     );
     this.updateGridModel();
-    // TODO refactor to use <PrerenderedCardSearch> component from the @context if you want live search
-    this.liveQuery = getCards(
-      {
-        filter: {
-          eq: {
-            _cardType: 'Garden Item',
-          },
-        },
-        sort: [
-          {
-            on: {
-              module: `${baseRealm.url}card-api`,
-              name: 'CardDef',
+    this.liveQuery = this.args.context?.getCards(
+      this,
+      () => {
+        return {
+          filter: {
+            eq: {
+              _cardType: 'Garden Item',
             },
-            by: 'title',
           },
-        ],
+          sort: [
+            {
+              on: {
+                module: `${baseRealm.url}card-api`,
+                name: 'CardDef',
+              },
+              by: 'title',
+            },
+          ],
+        };
       },
-      this.args.model[realmURL] ? [this.args.model[realmURL].href] : undefined,
+      () =>
+        this.args.model[realmURL]
+          ? [this.args.model[realmURL].href]
+          : undefined,
     );
   }
 

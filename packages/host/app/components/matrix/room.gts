@@ -1,11 +1,11 @@
-import { fn } from '@ember/helper';
+import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked, cached } from '@glimmer/tracking';
+import { cached } from '@glimmer/tracking';
 
 import {
   enqueueTask,
@@ -16,20 +16,27 @@ import {
 } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { consume } from 'ember-provide-consume-context';
+import { resource, use } from 'ember-resources';
 import max from 'lodash/max';
 
 import { MatrixEvent } from 'matrix-js-sdk';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject } from 'tracked-built-ins';
+import { TrackedObject, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
 import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { not } from '@cardstack/boxel-ui/helpers';
+import { eq, not } from '@cardstack/boxel-ui/helpers';
 
-import { unixTime } from '@cardstack/runtime-common';
+import {
+  type getCard,
+  GetCardContextName,
+  ResolvedCodeRef,
+  internalKeyFor,
+} from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
@@ -37,23 +44,29 @@ import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { getRoom } from '@cardstack/host/resources/room';
+import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
+import LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+
 import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import AiAssistantCardPicker from '../ai-assistant/card-picker';
+import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
 import LLMSelect from '../ai-assistant/llm-select';
 import { AiAssistantConversation } from '../ai-assistant/message';
 import NewSession from '../ai-assistant/new-session';
 import AiAssistantSkillMenu from '../ai-assistant/skill-menu';
+
+import { Submodes } from '../submode-switcher';
 
 import RoomMessage from './room-message';
 
@@ -63,7 +76,9 @@ import type { Skill } from '../ai-assistant/skill-menu';
 interface Signature {
   Args: {
     roomId: string;
+    roomResource: RoomResource;
     monacoSDK: MonacoSDK;
+    selectedCardRef?: ResolvedCodeRef;
   };
 }
 
@@ -74,26 +89,22 @@ export default class Room extends Component<Signature> {
         class='room'
         data-room-settled={{this.doWhenRoomChanges.isIdle}}
         data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
-        data-test-room-name={{this.roomResource.name}}
+        data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
       >
         <AiAssistantConversation
           @registerConversationScroller={{this.registerConversationScroller}}
           @setScrollPosition={{this.setScrollPosition}}
         >
-          {{#each this.messages as |message i|}}
+          {{#each this.messages key='eventId' as |message i|}}
             <RoomMessage
               @roomId={{@roomId}}
-              @message={{message}}
+              @roomResource={{@roomResource}}
               @index={{i}}
               @registerScroller={{this.registerMessageScroller}}
               @isPending={{this.isPendingMessage message}}
               @monacoSDK={{@monacoSDK}}
-              @isStreaming={{this.isMessageStreaming message i}}
-              @isDisplayingCode={{this.isDisplayingCode message}}
-              @onToggleViewCode={{fn this.toggleViewCode message}}
-              @currentEditor={{this.currentMonacoContainer}}
-              @setCurrentEditor={{this.setCurrentMonacoContainer}}
+              @isStreaming={{this.isMessageStreaming message}}
               @retryAction={{this.maybeRetryAction i message}}
               data-test-message-idx={{i}}
             />
@@ -133,17 +144,27 @@ export default class Room extends Component<Signature> {
               data-test-message-field={{@roomId}}
             />
             <div class='chat-input-area__bottom-section'>
-              <AiAssistantCardPicker
+              <AiAssistantAttachmentPicker
                 @autoAttachedCards={{this.autoAttachedCards}}
                 @cardsToAttach={{this.cardsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
+                @chooseFile={{this.chooseFile}}
+                @removeFile={{this.removeFile}}
+                @submode={{this.operatorModeStateService.state.submode}}
+                @autoAttachedFile={{this.autoAttachedFile}}
+                @filesToAttach={{this.filesToAttach}}
+                @autoAttachedCardTooltipMessage={{if
+                  (eq this.operatorModeStateService.state.submode Submodes.Code)
+                  'Current card is shared automatically'
+                  'Topmost card is shared automatically'
+                }}
               />
               <LLMSelect
-                @selected={{this.roomResource.activeLLM}}
-                @onChange={{this.roomResource.activateLLM}}
+                @selected={{@roomResource.activeLLM}}
+                @onChange={{perform @roomResource.activateLLMTask}}
                 @options={{this.supportedLLMs}}
-                @disabled={{this.roomResource.isActivatingLLM}}
+                @disabled={{@roomResource.isActivatingLLM}}
               />
             </div>
           </div>
@@ -184,8 +205,6 @@ export default class Room extends Component<Signature> {
       .chat-input-area__bottom-section {
         display: flex;
         justify-content: space-between;
-        gap: 10px;
-        align-items: center;
         padding-right: var(--boxel-sp-xxs);
         gap: var(--boxel-sp-xxl);
       }
@@ -202,24 +221,23 @@ export default class Room extends Component<Signature> {
     </style>
   </template>
 
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare loaderService: LoaderService;
+  @service private declare playgroundPanelService: PlaygroundPanelService;
 
-  private roomResource = getRoom(
-    this,
-    () => this.args.roomId,
-    () => this.matrixService.getRoomData(this.args.roomId)?.events,
-  );
   private autoAttachmentResource = getAutoAttachment(
     this,
     () => this.topMostStackItems,
     () => this.cardsToAttach,
   );
 
-  @tracked private currentMonacoContainer: number | undefined;
   private getConversationScrollability: (() => boolean) | undefined;
+  private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
     RoomData,
     {
@@ -235,6 +253,9 @@ export default class Room extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.doMatrixEventFlush.perform();
+    registerDestructor(this, () => {
+      this.scrollState().messageVisibilityObserver.disconnect();
+    });
   }
 
   private scrollState() {
@@ -268,6 +289,84 @@ export default class Room extends Component<Signature> {
     return state;
   }
 
+  // Using a resource for automatically attached files,
+  // so the file can be reattached after being removed
+  // when the user opens a different file and then returns to this one.
+  @use private autoAttachedFileResource = resource(() => {
+    let state = new TrackedObject<{
+      value: FileDef | undefined;
+      remove: () => void;
+    }>({
+      value: undefined,
+      remove: () => {
+        state.value = undefined;
+      },
+    });
+
+    if (!this.autoAttachedFileUrl) {
+      state.value = undefined;
+    } else {
+      state.value = this.matrixService.fileAPI.createFileDef({
+        sourceUrl: this.autoAttachedFileUrl,
+        name: this.autoAttachedFileUrl.split('/').pop(),
+      });
+    }
+
+    return state;
+  });
+
+  private get autoAttachedFileUrl() {
+    return this.operatorModeStateService.state.codePath?.href;
+  }
+
+  private get autoAttachedFile() {
+    return this.operatorModeStateService.state.submode === Submodes.Code
+      ? this.autoAttachedFileResource.value
+      : undefined;
+  }
+
+  private get removeAutoAttachedFile() {
+    return this.autoAttachedFileResource.remove;
+  }
+
+  private get filesToAttach() {
+    return this.matrixService.filesToSend.get(this.args.roomId) ?? [];
+  }
+
+  @use private playgroundPanelCardResource = resource(() => {
+    let state = new TrackedObject<{
+      value: CardDef | undefined;
+      remove: () => void;
+    }>({
+      value: undefined,
+      remove: () => {
+        state.value = undefined;
+      },
+    });
+
+    (async () => {
+      let cardResource = this.getCard(this, () => {
+        if (!this.args.selectedCardRef) {
+          return;
+        }
+        let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
+        return this.playgroundPanelService.getSelection(moduleId)?.cardId;
+      });
+      await cardResource.loaded;
+      state.value = cardResource.card;
+    })();
+
+    return state;
+  });
+
+  private get playgroundPanelCard() {
+    return this.playgroundPanelCardResource.value;
+  }
+
+  private get removePlaygroundPanelCard() {
+    return this.playgroundPanelCardResource.remove;
+  }
+
   private get isScrolledToBottom() {
     return this.scrollState().isScrolledToBottom;
   }
@@ -299,7 +398,7 @@ export default class Room extends Component<Signature> {
   }: {
     index: number;
     element: HTMLElement;
-    scrollTo: () => void;
+    scrollTo: (arg?: any) => void;
   }) => {
     this.messageElements.set(element, index);
     this.messageScrollers.set(index, scrollTo);
@@ -317,7 +416,8 @@ export default class Room extends Component<Signature> {
       // If we are permitted to auto-scroll and if there are no unread messages in the
       // room, then scroll to the last message in the room.
       !this.hasUnreadMessages &&
-      index === this.messages.length - 1
+      index === this.messages.length - 1 &&
+      !this.isScrolledToBottom
     ) {
       scrollTo();
     } else if (
@@ -327,13 +427,17 @@ export default class Room extends Component<Signature> {
       index === this.lastReadMessageIndex + 1
     ) {
       scrollTo();
+    } else if (this.isScrolledToBottom) {
+      this.scrollConversationToBottom?.();
     }
   };
 
   private registerConversationScroller = (
     isConversationScrollable: () => boolean,
+    scrollToBottom: () => void,
   ) => {
     this.getConversationScrollability = isConversationScrollable;
+    this.scrollConversationToBottom = scrollToBottom;
   };
 
   private setScrollPosition = ({ isBottom }: { isBottom: boolean }) => {
@@ -444,38 +548,22 @@ export default class Room extends Component<Signature> {
     return undefined;
   };
 
-  private isMessageStreaming = (message: Message, messageIndex: number) => {
-    return (
-      !message.isStreamingFinished &&
-      this.isLastMessage(messageIndex) &&
-      // Older events do not come with isStreamingFinished property so we have
-      // no other way to determine if the message is done streaming other than
-      // checking if they are old messages (older than 60 seconds as an arbitrary
-      // threshold)
-      unixTime(new Date().getTime() - message.created.getTime()) < 60
-    );
-  };
-
-  private isDisplayingCode = (message: Message) => {
-    return this.roomResource?.isDisplayingCode(message);
-  };
-
-  private toggleViewCode = (message: Message) => {
-    this.roomResource.toggleViewCode(message);
+  private isMessageStreaming = (message: Message) => {
+    return !message.isStreamingFinished;
   };
 
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
-    await this.roomResource.loading;
+    await this.args.roomResource.processing;
   });
 
   private get messages() {
-    return this.roomResource.messages;
+    return this.args.roomResource.messages;
   }
 
   private get skills(): Skill[] {
-    return this.roomResource.skills;
+    return this.args.roomResource.skills;
   }
 
   private get supportedLLMs(): string[] {
@@ -493,7 +581,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get room() {
-    let room = this.roomResource.matrixRoom;
+    let room = this.args.roomResource.matrixRoom;
     return room;
   }
 
@@ -526,13 +614,14 @@ export default class Room extends Component<Signature> {
     }
     let myLastMessage = myMessages[myMessages.length - 1];
 
-    let attachedCards = (myLastMessage!.attachedResources || [])
+    let attachedCards = (myLastMessage!.attachedResources(this) || [])
       .map((resource) => resource.card)
       .filter((card) => card !== undefined) as CardDef[];
 
     this.doSendMessage.perform(
       myLastMessage.message,
       attachedCards,
+      myLastMessage.attachedFiles,
       true,
       myLastMessage.clientGeneratedId,
     );
@@ -554,9 +643,17 @@ export default class Room extends Component<Signature> {
         cards.push(card);
       });
     }
+
+    let files = [];
+    if (this.autoAttachedFile) {
+      files.push(this.autoAttachedFile);
+    }
+    files.push(...this.filesToAttach);
+
     this.doSendMessage.perform(
       prompt ?? this.messageToSend,
       cards.length ? cards : undefined,
+      files.length ? files : undefined,
       Boolean(prompt),
     );
   }
@@ -576,7 +673,9 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeCard(card: CardDef) {
-    if (this.isAutoAttachedCard(card)) {
+    if (this.playgroundPanelCard?.id === card.id) {
+      this.removePlaygroundPanelCard();
+    } else if (this.isAutoAttachedCard(card)) {
       this.autoAttachmentResource.onCardRemoval(card);
     } else {
       const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
@@ -594,10 +693,47 @@ export default class Room extends Component<Signature> {
       this.cardsToAttach?.length ? this.cardsToAttach : undefined,
     );
   }
+
+  @action
+  private chooseFile(file: FileDef) {
+    let files = this.filesToAttach;
+    if (!files?.find((f) => f.sourceUrl === file.sourceUrl)) {
+      this.matrixService.filesToSend.set(this.args.roomId, [...files, file]);
+    }
+  }
+
+  @action
+  private isAutoAttachedFile(file: FileDef) {
+    return this.autoAttachedFile?.sourceUrl === file.sourceUrl;
+  }
+
+  @action
+  private removeFile(file: FileDef) {
+    if (this.isAutoAttachedFile(file)) {
+      this.removeAutoAttachedFile();
+      return;
+    }
+
+    const fileIndex = this.filesToAttach?.findIndex(
+      (f) => f.sourceUrl === file.sourceUrl,
+    );
+    if (fileIndex != undefined && fileIndex !== -1) {
+      if (this.filesToAttach !== undefined) {
+        this.filesToAttach.splice(fileIndex, 1);
+      }
+    }
+
+    this.matrixService.cardsToSend.set(
+      this.args.roomId,
+      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+    );
+  }
+
   private doSendMessage = enqueueTask(
     async (
       message: string | undefined,
       cards?: CardDef[],
+      files?: FileDef[],
       keepInputAndAttachments: boolean = false,
       clientGeneratedId: string = uuidv4(),
     ) => {
@@ -616,10 +752,15 @@ export default class Room extends Component<Signature> {
           .map((stackItem) => stackItem.card.id),
       };
       try {
+        if (files) {
+          files = await this.matrixService.uploadFiles(files);
+        }
+
         await this.matrixService.sendMessage(
           this.args.roomId,
           message,
           cards,
+          files,
           clientGeneratedId,
           context,
         );
@@ -634,6 +775,12 @@ export default class Room extends Component<Signature> {
   }
 
   private get autoAttachedCards() {
+    if (this.operatorModeStateService.state.submode === Submodes.Code) {
+      return this.playgroundPanelCard
+        ? new TrackedSet([this.playgroundPanelCard])
+        : new TrackedSet<CardDef>();
+    }
+
     return this.autoAttachmentResource.cards;
   }
 
@@ -665,10 +812,6 @@ export default class Room extends Component<Signature> {
   @action
   private isLastMessage(messageIndex: number) {
     return (this.room && messageIndex === this.messages.length - 1) ?? false;
-  }
-
-  @action private setCurrentMonacoContainer(index: number | undefined) {
-    this.currentMonacoContainer = index;
   }
 
   private isPendingMessage(message: Message) {

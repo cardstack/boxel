@@ -1,4 +1,5 @@
 import StringField from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
 import {
   CardDef,
   FieldDef,
@@ -22,6 +23,36 @@ class TravelGoal extends FieldDef {
       <CardContainer class='container'>
         <FieldContainer @label='Goal Title'>
           <@fields.goalTitle />
+        </FieldContainer>
+        <FieldContainer @label='Country'>
+          <@fields.country />
+        </FieldContainer>
+        <FieldContainer @label='Alternate Trips'>
+          <@fields.alternateTrips />
+        </FieldContainer>
+      </CardContainer>
+      <style scoped>
+        .container {
+          padding: 20px;
+          background-color: whitesmoke;
+        }
+        .container > * + * {
+          margin-top: 20px;
+        }
+      </style>
+    </template>
+  };
+}
+
+export class TravelGoalWithProgress extends TravelGoal {
+  static displayName = 'Travel Goal With Progress';
+  @field progress = contains(NumberField);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <CardContainer class='container'>
+        <FieldContainer @label='Goal Title (Progress)'>
+          <@fields.goalTitle />
+          (<@fields.progress />%)
         </FieldContainer>
         <FieldContainer @label='Country'>
           <@fields.country />
@@ -111,6 +142,10 @@ export class TripInfo extends CardDef {
   static edit = class Edit extends Component<typeof this> {
     <template></template>
   }
+
+
+
+
 
 
   */

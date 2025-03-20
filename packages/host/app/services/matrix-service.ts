@@ -20,34 +20,42 @@ import { TrackedMap } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  type LooseSingleCardDocument,
-  markdownToHtml,
-  splitStringIntoChunks,
+  aiBotUsername,
   baseRealm,
+  codeRefWithAbsoluteURL,
+  getClass,
   LooseCardResource,
+  logger,
+  markdownToHtml,
   ResolvedCodeRef,
+  splitStringIntoChunks,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+
 import {
   basicMappings,
   generateJsonSchemaForCardType,
-  getSearchTool,
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
+import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
   APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
-  LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
+  DEFAULT_LLM_LIST,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -61,20 +69,28 @@ import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import { BaseDef, type CardDef } from 'https://cardstack.com/base/card-api';
+import type {
+  relativeTo,
+  BaseDef,
+  CardDef,
+} from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as FileAPI from 'https://cardstack.com/base/file-api';
+import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardFragmentContent,
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
+  RealmEventContent,
+  CommandDefinitionsContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { CommandField, SkillCard } from 'https://cardstack.com/base/skill-card';
 
-import { getCard } from '../resources/card-resource';
+import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -88,6 +104,8 @@ import type CommandService from './command-service';
 import type LoaderService from './loader-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
+import type MessageService from './message-service';
+import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
@@ -97,7 +115,8 @@ import type * as MatrixSDK from 'matrix-js-sdk';
 const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
-const DefaultSkillCards = [`${baseRealm.url}SkillCard/card-editing`];
+
+const realmEventsLogger = logger('realm:events');
 
 export type OperatorModeContext = {
   submode: Submode;
@@ -105,14 +124,16 @@ export type OperatorModeContext = {
 };
 
 export default class MatrixService extends Service {
-  @service private declare loaderService: LoaderService;
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-  @service private declare realm: RealmService;
-  @service private declare matrixSdkLoader: MatrixSDKLoader;
-  @service private declare realmServer: RealmServerService;
-  @service private declare router: RouterService;
-  @service private declare reset: ResetService;
+  @service declare private loaderService: LoaderService;
+  @service declare private cardService: CardService;
+  @service declare private commandService: CommandService;
+  @service declare private realm: RealmService;
+  @service declare private matrixSdkLoader: MatrixSDKLoader;
+  @service declare private messageService: MessageService;
+  @service declare private realmServer: RealmServerService;
+  @service declare private router: RouterService;
+  @service declare private reset: ResetService;
+  @service declare private network: NetworkService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;
@@ -122,11 +143,14 @@ export default class MatrixService extends Service {
   profile = getMatrixProfile(this, () => this.userId);
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
+  private startedAtTs = -1;
 
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
   cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+  filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
+  reasoningExpandedState: TrackedMap<string, boolean> = new TrackedMap();
   flushTimeline: Promise<void> | undefined;
   flushMembership: Promise<void> | undefined;
   flushRoomState: Promise<void> | undefined;
@@ -141,7 +165,6 @@ export default class MatrixService extends Service {
     new TrackedMap();
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
   private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
-  private defaultSkills: SkillCard[] = [];
 
   constructor(owner: Owner) {
     super(owner);
@@ -174,12 +197,18 @@ export default class MatrixService extends Service {
     () => 'https://cardstack.com/base/card-api',
   );
 
+  private fileAPIModule = importResource(
+    this,
+    () => 'https://cardstack.com/base/file-api',
+  );
+
   private loadState = task(async () => {
     await this.loadSDK();
   });
 
   private async loadSDK() {
     await this.cardAPIModule.loaded;
+    await this.fileAPIModule.loaded;
     // The matrix SDK is VERY big so we only load it when we need it
     this.#matrixSDK = await this.matrixSdkLoader.load();
     this._client = this.matrixSDK.createClient({
@@ -225,6 +254,11 @@ export default class MatrixService extends Service {
     return this.client.getUserId();
   }
 
+  get aiBotUserId() {
+    let server = this.userId!.split(':')[1];
+    return `@${aiBotUsername}:${server}`;
+  }
+
   get userName() {
     return this.userId ? getMatrixUsername(this.userId) : null;
   }
@@ -241,6 +275,20 @@ export default class MatrixService extends Service {
       );
     }
     return this.cardAPIModule.module as typeof CardAPI;
+  }
+
+  get fileAPI() {
+    if (this.fileAPIModule.error) {
+      throw new Error(
+        `Error loading File API: ${JSON.stringify(this.fileAPIModule.error)}`,
+      );
+    }
+    if (!this.fileAPIModule.module) {
+      throw new Error(
+        `bug: File API has not loaded yet--make sure to await this.loaded before using the api`,
+      );
+    }
+    return this.fileAPIModule.module as typeof FileAPI;
   }
 
   private get matrixSDK() {
@@ -337,17 +385,20 @@ export default class MatrixService extends Service {
     name,
     iconURL,
     backgroundURL,
+    copyFromSeedRealm,
   }: {
     endpoint: string;
     name: string;
     iconURL?: string;
     backgroundURL?: string;
+    copyFromSeedRealm?: boolean;
   }) {
     let personalRealmURL = await this.realmServer.createRealm({
       endpoint,
       name,
       iconURL,
       backgroundURL,
+      copyFromSeedRealm,
     });
     let { realms = [] } =
       (await this.client.getAccountDataFromServer<{ realms: string[] }>(
@@ -425,38 +476,20 @@ export default class MatrixService extends Service {
       this.bindEventListeners();
 
       try {
+        let deviceId = this._client.getDeviceId();
+        if (deviceId) {
+          let { last_seen_ts } = await this._client.getDevice(deviceId);
+          if (last_seen_ts) {
+            this.startedAtTs = last_seen_ts;
+          }
+        }
+        if (this.startedAtTs === -1) {
+          this.startedAtTs = 0;
+        }
         await this._client.startClient();
         let accountDataContent = await this._client.getAccountDataFromServer<{
           realms: string[];
         }>(APP_BOXEL_REALMS_EVENT_TYPE);
-        // TODO: remove this once we've migrated all users
-        // TEMPORARY MIGRATION CODE
-        if (!accountDataContent?.realms?.length) {
-          console.log(
-            'You currently have no realms set, checking your old realms',
-          );
-          try {
-            accountDataContent = await this._client.getAccountDataFromServer<{
-              realms: string[];
-            }>(LEGACY_APP_BOXEL_REALMS_EVENT_TYPE);
-          } catch (e) {
-            // throws if nothing at this key
-          }
-          if (accountDataContent?.realms) {
-            console.log('Migrating your old realms to the new format');
-            await this._client.setAccountData(APP_BOXEL_REALMS_EVENT_TYPE, {
-              realms: accountDataContent.realms,
-            });
-            console.log('Removing your old realms data');
-            await this._client.setAccountData(
-              LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
-              {},
-            );
-          } else {
-            console.log('No old realms found');
-          }
-        }
-        // END OF TEMPORARY MIGRATION CODE
         await this.realmServer.setAvailableRealmURLs(
           accountDataContent?.realms ?? [],
         );
@@ -482,7 +515,7 @@ export default class MatrixService extends Service {
     let activeRealms = this.realmServer.availableRealmURLs;
 
     await Promise.all(
-      activeRealms.map(async (realmURL) => {
+      activeRealms.map(async (realmURL: string) => {
         try {
           // Our authorization-middleware can login automatically after seeing a
           // 401, but this preemptive login makes it possible to see
@@ -509,7 +542,8 @@ export default class MatrixService extends Service {
       | CardMessageContent
       | CardFragmentContent
       | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent,
+      | CommandResultWithOutputContent
+      | CommandDefinitionsContent,
   ) {
     let roomData = await this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -528,6 +562,7 @@ export default class MatrixService extends Service {
   async sendCommandResultEvent(
     roomId: string,
     invokedToolFromEventId: string,
+    toolCallId: string,
     resultCard?: CardDef,
   ) {
     let resultCardEventId: string | undefined;
@@ -540,10 +575,11 @@ export default class MatrixService extends Service {
     if (resultCardEventId === undefined) {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        commandRequestId: toolCallId,
         'm.relates_to': {
           event_id: invokedToolFromEventId,
           key: 'applied',
-          rel_type: 'm.annotation',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
       };
     } else {
@@ -552,8 +588,9 @@ export default class MatrixService extends Service {
         'm.relates_to': {
           event_id: invokedToolFromEventId,
           key: 'applied',
-          rel_type: 'm.annotation',
+          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
         },
+        commandRequestId: toolCallId,
         data: {
           cardEventId: resultCardEventId,
         },
@@ -574,11 +611,65 @@ export default class MatrixService extends Service {
     }
   }
 
+  async addCommandDefinitionsToRoomHistory(
+    commandDefinitions: CommandField[],
+    roomId: string,
+  ) {
+    // Create the command defs so getting the json schema
+    // and send it to the matrix room.
+    let commandDefinitionSchemas: {
+      codeRef: ResolvedCodeRef;
+      tool: Tool;
+    }[] = [];
+    const mappings = await basicMappings(this.loaderService.loader);
+    for (let commandDef of commandDefinitions) {
+      let absoluteCodeRef = codeRefWithAbsoluteURL(
+        commandDef.codeRef,
+        commandDef[Symbol.for('cardstack-relative-to') as typeof relativeTo],
+      ) as ResolvedCodeRef;
+      const Command = await getClass(
+        absoluteCodeRef,
+        this.loaderService.loader,
+      );
+      const command = new Command(this.commandService.commandContext);
+      const name = commandDef.functionName;
+      commandDefinitionSchemas.push({
+        codeRef: absoluteCodeRef,
+        tool: {
+          type: 'function',
+          function: {
+            name,
+            description: command.description,
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                },
+                ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
+              },
+              required: ['attributes', 'description'],
+            },
+          },
+        },
+      });
+    }
+    await this.sendEvent(roomId, 'm.room.message', {
+      msgtype: APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+      body: 'Command Definitions',
+      data: {
+        commandDefinitions: commandDefinitionSchemas,
+      },
+    });
+  }
+
   async addSkillCardsToRoomHistory(
     skills: SkillCard[],
     roomId: string,
     opts?: CardAPI.SerializeOpts,
   ): Promise<string[]> {
+    const commandDefinitions = skills.flatMap((skill) => skill.commands);
+    await this.addCommandDefinitionsToRoomHistory(commandDefinitions, roomId);
     return this.addCardsToRoom(skills, roomId, this.skillCardHashes, opts);
   }
 
@@ -586,7 +677,7 @@ export default class MatrixService extends Service {
     cards: CardDef[],
     roomId: string,
     cardHashes: Map<string, string> = this.cardHashes,
-    opts: CardAPI.SerializeOpts = { maybeRelativeURL: null },
+    opts: CardAPI.SerializeOpts = { useAbsoluteURL: true },
   ): Promise<string[]> {
     if (!cards.length) {
       return [];
@@ -610,23 +701,57 @@ export default class MatrixService extends Service {
         if (eventId === undefined) {
           let responses = await this.sendCardFragments(roomId, card);
           eventId = responses[0].event_id; // we only care about the first fragment
-          cardHashes.set(this.generateCardHashKey(roomId, card), eventId);
+          cardHashes.set(this.generateCardHashKey(roomId, card), eventId!);
         }
-        eventIds.push(eventId);
+        eventIds.push(eventId!);
       }
     }
     return eventIds;
+  }
+
+  async uploadFiles(files: FileDef[]) {
+    let uploadedFiles = await Promise.all(
+      files.map(async (file) => {
+        if (!file.sourceUrl) {
+          throw new Error('File needs a realm server source URL to upload');
+        }
+        let response = await this.network.authedFetch(file.sourceUrl, {
+          headers: {
+            Accept: 'application/vnd.card+source',
+          },
+        });
+
+        let blob = await response.blob();
+        let contentType = response.headers.get('content-type');
+
+        if (!contentType) {
+          throw new Error(`File has no content type: ${file.sourceUrl}`);
+        }
+        let uploadResponse = await this.client.uploadContent(blob, {
+          type: contentType,
+        });
+
+        file.url = this.client.mxcUrlToHttp(uploadResponse.content_uri);
+        file.contentType = contentType;
+
+        return file;
+      }),
+    );
+
+    return uploadedFiles;
   }
 
   async sendMessage(
     roomId: string,
     body: string | undefined,
     attachedCards: CardDef[] = [],
+    attachedFiles: FileDef[] = [],
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = markdownToHtml(body);
-    let tools: Tool[] = [getSearchTool()];
+    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
+
+    let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
     if (submode === 'interact') {
@@ -662,6 +787,7 @@ export default class MatrixService extends Service {
       formatted_body: html,
       clientGeneratedId,
       data: {
+        attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
         attachedCardsEventIds,
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
@@ -776,20 +902,29 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills() {
-    if (this.defaultSkills.length > 0) {
-      return this.defaultSkills;
+  async loadDefaultSkills(submode: Submode) {
+    let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
+
+    let codeModeDefaultSkills = [
+      `${baseRealm.url}SkillCard/boxel-coding`,
+      `${baseRealm.url}SkillCard/source-code-editing`,
+    ];
+
+    let defaultSkills;
+
+    if (submode === 'code') {
+      defaultSkills = codeModeDefaultSkills;
+    } else {
+      defaultSkills = interactModeDefaultSkills;
     }
 
-    await Promise.all(
-      DefaultSkillCards.map(async (skillCardURL) => {
-        let cardResource = getCard(this, () => skillCardURL);
-        await cardResource.loaded;
-        this.defaultSkills.push(cardResource.card as SkillCard);
+    return await Promise.all(
+      defaultSkills.map(async (skillCardURL) => {
+        // WARNING This card is not part of the identity map!
+        // TODO refactor this to use CardResource (please make ticket)
+        return await this.cardService.getCard<SkillCard>(skillCardURL);
       }),
     );
-
-    return this.defaultSkills;
   }
 
   @cached
@@ -816,6 +951,12 @@ export default class MatrixService extends Service {
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
     this.cardHashes = new Map();
+    this.skillCardHashes = new Map();
+    this._currentRoomId = undefined;
+    this.messagesToSend = new TrackedMap();
+    this.cardsToSend = new TrackedMap();
+    this.filesToSend = new TrackedMap();
+    this.currentUserEventReadReceipts = new TrackedMap();
   }
 
   private bindEventListeners() {
@@ -1300,7 +1441,7 @@ export default class MatrixService extends Service {
         Array.isArray(data.attachedCardsEventIds)
       ) {
         for (let attachedCardEventId of data.attachedCardsEventIds) {
-          this.ensureCardFragmentsLoaded(attachedCardEventId, roomData);
+          await this.ensureCardFragmentsLoaded(attachedCardEventId, roomData);
         }
       }
     } else if (
@@ -1313,26 +1454,97 @@ export default class MatrixService extends Service {
           ? JSON.parse(event.content.data)
           : event.content.data
       ) as CommandResultWithOutputContent['data'];
-      this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
+      await this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
     } else if (
       event.type === 'm.room.message' &&
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE
     ) {
       await this.realmServer.handleEvent(event);
+    } else if (
+      event.type === APP_BOXEL_REALM_EVENT_TYPE &&
+      event.sender &&
+      event.content
+    ) {
+      realmEventsLogger.debug('Received realm event', event);
+      if (
+        this.startedAtTs === -1 ||
+        (event.origin_server_ts || 0) < this.startedAtTs
+      ) {
+        realmEventsLogger.debug(
+          'Ignoring realm event because it occurred before the client started',
+          event,
+        );
+        return;
+      }
+
+      let realmResourceForEvent = this.realm.realmForSessionRoomId(
+        event.room_id!,
+      );
+      if (!realmResourceForEvent) {
+        realmEventsLogger.debug(
+          'Ignoring realm event because no realm found',
+          event,
+        );
+      } else if (realmResourceForEvent.info?.realmUserId !== event.sender) {
+        realmEventsLogger.debug(
+          `Ignoring realm event because sender ${event.sender} is not the realm user ${realmResourceForEvent.info?.realmUserId}`,
+          event,
+        );
+      } else {
+        (event.content as any).origin_server_ts = event.origin_server_ts;
+        this.messageService.relayMatrixSSE(
+          realmResourceForEvent.url,
+          event.content as RealmEventContent,
+        );
+      }
+      return;
     }
     await this.addRoomEvent(event, oldEventId);
 
     if (
       event.type === 'm.room.message' &&
-      event.content?.msgtype === APP_BOXEL_COMMAND_MSGTYPE
+      event.content?.[APP_BOXEL_COMMAND_REQUESTS_KEY]?.length &&
+      event.content?.isStreamingFinished
     ) {
-      this.commandService.executeCommandEventIfNeeded(event);
+      this.commandService.queueEventForCommandProcessing(event);
     }
 
     if (room.oldState.paginationToken != null) {
       // we need to scroll back to capture any room events fired before this one
       await this.client?.scrollback(room);
     }
+  }
+
+  async activateCodingSkill() {
+    if (!this.currentRoomId) {
+      return;
+    }
+
+    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      this.commandService.commandContext,
+    );
+    await addSkillsToRoomCommand.execute({
+      roomId: this.currentRoomId,
+      skills: await this.loadDefaultSkills('code'),
+    });
+  }
+
+  setLLMForCodeMode() {
+    this.setLLMModel('anthropic/claude-3.5-sonnet');
+  }
+
+  private setLLMModel(model: string) {
+    if (!DEFAULT_LLM_LIST.includes(model)) {
+      throw new Error(`Cannot find LLM model: ${model}`);
+    }
+    if (!this.currentRoomId) {
+      return;
+    }
+    let roomResource = this.roomResources.get(this.currentRoomId);
+    if (!roomResource) {
+      return;
+    }
+    roomResource.activateLLMTask.perform(model);
   }
 }
 

@@ -18,16 +18,18 @@ import { Loader } from '@cardstack/runtime-common/loader';
 
 import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import MatrixService from '@cardstack/host/services/matrix-service';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { CurrentRoomIdPersistenceKey } from '@cardstack/host/utils/local-storage-keys';
 
@@ -37,7 +39,6 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   type TestContextWithSave,
   getMonacoContent,
@@ -58,6 +59,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
+import { suspendGlobalErrorHook } from '../../helpers/uncaught-exceptions';
 
 module('Integration | ai-assistant-panel', function (hooks) {
   const realmName = 'Operator Mode Workspace';
@@ -77,14 +79,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
-  setupServerSentEvents(hooks);
-  let {
-    createAndJoinRoom,
-    simulateRemoteMessage,
-    getRoomEvents,
-    setReadReceipt,
-  } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
     autostart: true,
     now: (() => {
@@ -94,6 +91,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
       return () => (clock += 10);
     })(),
   });
+
+  let {
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    getRoomEvents,
+    setReadReceipt,
+  } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -234,6 +238,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },
         'shipping-info.gts': { ShippingInfo },
@@ -359,11 +364,12 @@ module('Integration | ai-assistant-panel', function (hooks) {
     messagesHaveBeenRead = true,
   ) {
     for (let i = 0; i < 20; i++) {
-      simulateRemoteMessage(roomId, '@testuser:staging', {
+      simulateRemoteMessage(roomId, '@testuser:localhost', {
         body: `question #${i + 1}`,
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         formatted_body: `question #${i + 1}`,
         format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
       });
       let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
         body: `answer #${i + 1}`,
@@ -373,7 +379,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         isStreamingFinished: true,
       });
       if (messagesHaveBeenRead) {
-        setReadReceipt(roomId, eventId, '@testuser:staging');
+        setReadReceipt(roomId, eventId, '@testuser:localhost');
       }
     }
   }
@@ -387,13 +393,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-boxel-card-header-title]').hasText('Person');
     assert.dom('[data-test-person]').hasText('Fadhlan');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -404,8 +411,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
+      ],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: 'patch1',
@@ -421,7 +427,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     });
     await click('[data-test-command-apply]');
     await waitFor('[data-test-command-card-idle]');
-
     assert.dom('[data-test-person]').hasText('Dave');
   });
 
@@ -436,36 +441,41 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
-    let room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+    let room1Id = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    let room2Id = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 2',
+    });
     simulateRemoteMessage(room2Id, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Incorrect command',
       formatted_body: 'Incorrect command',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'd60582a6-8792-4505-8d38-656c1167f00d',
           name: 'patchCard',
-          argument: {
+          arguments: {
             card_id: `${testRealmURL}Person/fadhlan`,
             relationships: { pet: null }, // this will error
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '444ac6ed-eea2-459b-93f7-56117bf54f50',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -476,21 +486,18 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Jackie',
       formatted_body: 'Changing first name to Jackie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'cddecff1-8f26-4170-91bf-5a2192fb2459',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -501,12 +508,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
 
     // let the room events all process before we open the assistant, so it will
@@ -581,16 +583,178 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
       eventId: 'event1',
     };
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'A patch',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({ toolCall: payload }),
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [payload],
       'm.relates_to': {
         rel_type: 'm.replace',
         event_id: 'event1',
       },
+    });
+
+    await waitFor('[data-test-view-code-button]');
+    await click('[data-test-view-code-button]');
+
+    await waitForCodeEditor();
+    assert.deepEqual(
+      JSON.parse(getMonacoContent()),
+
+      {
+        name: 'patchCard',
+        payload: {
+          attributes: {
+            cardId: 'http://test-realm/test/Person/fadhlan',
+            patch: {
+              attributes: {
+                address: {
+                  shippingInfo: {
+                    preferredCarrier: 'UPS',
+                  },
+                },
+                firstName: 'Joy',
+              },
+            },
+          },
+        },
+      },
+      'it can preview code when a change is proposed',
+    );
+    assert.dom('[data-test-copy-code]').isEnabled('copy button is available');
+    await percySnapshot(assert);
+
+    await click('[data-test-view-code-button]');
+    assert.dom('[data-test-code-editor]').doesNotExist();
+
+    await click('[data-test-command-apply="ready"]');
+    await waitFor('[data-test-command-card-idle]');
+    assert.dom('[data-test-apply-state="applied"]').exists();
+    assert.dom('[data-test-person]').hasText('Joy');
+    assert.dom(`[data-test-preferredcarrier]`).hasText('UPS');
+    assert.dom(`[data-test-city="Bandung"]`).exists();
+    assert.dom(`[data-test-country="Indonesia"]`).exists();
+  });
+
+  test('it can apply change to a linksTo field', async function (assert) {
+    let id = `${testRealmURL}Person/fadhlan`;
+    let roomId = await renderAiAssistantPanel(id);
+    await waitFor('[data-test-person="Fadhlan"]');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Removing pet and changing preferred carrier',
+      formatted_body: 'Removing pet and changing preferred carrier',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { preferredCarrier: 'Fedex' } },
+                },
+                relationships: {
+                  pet: { links: { self: null } },
+                },
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const stackCard = `[data-test-stack-card="${id}"]`;
+
+    await waitFor('[data-test-command-apply="ready"]');
+    assert.dom(`${stackCard} [data-test-preferredcarrier="DHL"]`).exists();
+    assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
+
+    await click('[data-test-command-apply]');
+    await waitFor('[data-test-command-card-idle]');
+    assert.dom('[data-test-apply-state="applied"]').exists();
+    assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
+    assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Link to pet and change preferred carrier',
+      formatted_body: 'Link to pet and change preferred carrier',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: id,
+              patch: {
+                attributes: {
+                  address: { shippingInfo: { preferredCarrier: 'UPS' } },
+                },
+                relationships: {
+                  pet: {
+                    links: { self: `${testRealmURL}Pet/mango` },
+                  },
+                },
+              },
+            },
+          },
+        },
+      ],
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: '__EVENT_ID__',
+      },
+    });
+    await waitFor('[data-test-command-apply="ready"]');
+    assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
+    assert.dom(`${stackCard} [data-test-pet]`).doesNotExist();
+
+    await click('[data-test-command-apply]');
+    await waitFor('[data-test-message-idx="1"] [data-test-command-card-idle]');
+    assert
+      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .exists();
+    assert.dom(`${stackCard} [data-test-preferredcarrier="UPS"]`).exists();
+    assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
+    assert.dom(`${stackCard} [data-test-city="Bandung"]`).exists();
+    assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
+  });
+
+  test('it can apply change when the command event is not a replacement event', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+
+    await waitFor('[data-test-person="Fadhlan"]');
+    assert.dom(`[data-test-preferredcarrier="DHL"]`).exists();
+
+    let payload = {
+      name: 'patchCard',
+      arguments: {
+        attributes: {
+          cardId: `${testRealmURL}Person/fadhlan`,
+          patch: {
+            attributes: {
+              firstName: 'Joy',
+              address: { shippingInfo: { preferredCarrier: 'UPS' } },
+            },
+          },
+        },
+      },
+      eventId: 'event1',
+    };
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'A patch',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: 'A patch',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [payload],
     });
 
     await waitFor('[data-test-view-code-button]');
@@ -634,99 +798,6 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom(`[data-test-country="Indonesia"]`).exists();
   });
 
-  test('it can apply change to a linksTo field', async function (assert) {
-    let id = `${testRealmURL}Person/fadhlan`;
-    let roomId = await renderAiAssistantPanel(id);
-    await waitFor('[data-test-person="Fadhlan"]');
-
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
-      body: 'Removing pet and changing preferred carrier',
-      formatted_body: 'Removing pet and changing preferred carrier',
-      format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'patchCard',
-          arguments: {
-            attributes: {
-              cardId: id,
-              patch: {
-                attributes: {
-                  address: { shippingInfo: { preferredCarrier: 'Fedex' } },
-                },
-                relationships: {
-                  pet: { links: { self: null } },
-                },
-              },
-            },
-          },
-        },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
-    });
-
-    const stackCard = `[data-test-stack-card="${id}"]`;
-
-    await waitFor('[data-test-command-apply="ready"]');
-    assert.dom(`${stackCard} [data-test-preferredcarrier="DHL"]`).exists();
-    assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
-
-    await click('[data-test-command-apply]');
-    await waitFor('[data-test-command-card-idle]');
-    assert.dom('[data-test-apply-state="applied"]').exists();
-    assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
-    assert.dom(`${stackCard} [data-test-pet="Mango"]`).doesNotExist();
-
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
-      body: 'Link to pet and change preferred carrier',
-      formatted_body: 'Link to pet and change preferred carrier',
-      format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'patchCard',
-          arguments: {
-            attributes: {
-              cardId: id,
-              patch: {
-                attributes: {
-                  address: { shippingInfo: { preferredCarrier: 'UPS' } },
-                },
-                relationships: {
-                  pet: {
-                    links: { self: `${testRealmURL}Pet/mango` },
-                  },
-                },
-              },
-            },
-          },
-        },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
-    });
-    await waitFor('[data-test-command-apply="ready"]');
-    assert.dom(`${stackCard} [data-test-preferredcarrier="Fedex"]`).exists();
-    assert.dom(`${stackCard} [data-test-pet]`).doesNotExist();
-
-    await click('[data-test-command-apply]');
-    await waitFor('[data-test-message-idx="1"] [data-test-command-card-idle]');
-    assert
-      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
-      .exists();
-    assert.dom(`${stackCard} [data-test-preferredcarrier="UPS"]`).exists();
-    assert.dom(`${stackCard} [data-test-pet="Mango"]`).exists();
-    assert.dom(`${stackCard} [data-test-city="Bandung"]`).exists();
-    assert.dom(`${stackCard} [data-test-country="Indonesia"]`).exists();
-  });
-
   test('it does not crash when applying change to a card with preexisting nested linked card', async function (assert) {
     let id = `${testRealmURL}Person/mickey`;
     let roomId = await renderAiAssistantPanel(id);
@@ -734,13 +805,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await waitFor('[data-test-person="Mickey"]');
     assert.dom('[data-test-tripTitle]').hasText('Summer Vacation');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change tripTitle to Trip to Japan',
       formatted_body: 'Change tripTitle to Trip to Japan',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -755,12 +827,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
 
     await waitFor('[data-test-command-apply="ready"]');
@@ -776,13 +843,15 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change first name to Dave',
       formatted_body: 'Change first name to Dave',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '8c848ebb-3e09-4ba3-b21d-348bdd7bd1ff',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -793,42 +862,34 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Incorrect patch command',
       formatted_body: 'Incorrect patch command',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '773c6c9b-a247-4099-8ec0-44f3ea197938',
           name: 'patchCard',
           arguments: {
-            arguments: {
-              card_id: id,
-              relationships: { pet: null },
-            },
+            card_id: id,
+            relationships: { pet: null },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
-      body: 'Change first name to Jackie',
-      formatted_body: 'Change first name to Jackie',
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Change first name to Jackie and switch to code mode',
+      formatted_body: 'Change first name to Jackie and switch to code mode',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '127538b2-b0d1-4902-bd09-1fdf55063f07',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -839,34 +900,46 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+        {
+          id: '6521d80d-a3e4-4687-b0b3-f5f7ddc85f0c',
+          name: 'switch-submode_dd88',
+          arguments: {
+            attributes: {
+              submode: 'code',
+            },
+          },
+        },
+      ],
     });
 
-    await waitFor('[data-test-command-apply="ready"]', { count: 3 });
+    await waitFor('[data-test-command-apply="ready"]', { count: 4 });
 
-    click('[data-test-message-idx="2"] [data-test-command-apply]');
+    click(
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-command-apply]',
+    );
     await waitFor(
-      '[data-test-message-idx="2"] [data-test-apply-state="applying"]',
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applying"]',
     );
     assert.dom('[data-test-apply-state="applying"]').exists({ count: 1 });
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="applying"]')
+      .dom(
+        '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applying"]',
+      )
       .exists();
 
-    await waitFor('[data-test-message-idx="2"] [data-test-command-card-idle]');
     await waitFor(
-      '[data-test-message-idx="2"] [data-test-apply-state="applied"]',
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-command-card-idle]',
+    );
+    await waitFor(
+      '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applied"]',
     );
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 1 });
     assert
-      .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
+      .dom(
+        '[data-test-message-idx="2"] [data-test-command-id="127538b2-b0d1-4902-bd09-1fdf55063f07"] [data-test-apply-state="applied"]',
+      )
       .exists();
-    assert.dom('[data-test-command-apply="ready"]').exists({ count: 2 });
+    assert.dom('[data-test-command-apply="ready"]').exists({ count: 3 });
     assert.dom('[data-test-person]').hasText('Jackie');
 
     await click('[data-test-message-idx="1"] [data-test-command-apply]');
@@ -875,7 +948,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="failed"]')
       .exists();
-    assert.dom('[data-test-command-apply="ready"]').exists({ count: 1 });
+    assert.dom('[data-test-command-apply="ready"]').exists({ count: 2 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
       .exists();
@@ -887,13 +960,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     await waitFor('[data-test-person="Fadhlan"]');
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Change first name to Dave',
       formatted_body: 'Change first name to Dave',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -904,12 +978,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
 
     await waitFor('[data-test-command-apply="ready"]', { count: 1 });
@@ -936,7 +1005,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    let event1Id = await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let event1Id = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       formatted_body: '',
       msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
@@ -960,13 +1029,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
         }),
       }),
     });
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'card with error',
       formatted_body: 'card with error',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       data: JSON.stringify({
         attachedCardsEventIds: [event1Id],
       }),
+      isStreamingFinished: true,
     });
 
     await waitFor('[data-test-card-error]');
@@ -976,19 +1046,146 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await percySnapshot(assert);
   });
 
-  module('suspending global error hook', (hooks) => {
-    let tmp: any;
-    let uncaughtException: any;
-    hooks.before(() => {
-      tmp = QUnit.onUncaughtException;
-      QUnit.onUncaughtException = (err) => {
-        uncaughtException = err;
-      };
-    });
+  test(`should handle events in order to prevent 'cardFragment not found' error`, async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let cardFragmentsEventId = '!card_fragments_event_id';
+    let now = Date.now();
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'Update mango card',
+        formatted_body: 'Update mango card',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        data: JSON.stringify({
+          attachedCardsEventIds: [cardFragmentsEventId],
+        }),
+        isStreamingFinished: true,
+      },
+      { origin_server_ts: now + 60000 },
+    );
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: '',
+        formatted_body: '',
+        msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+        data: JSON.stringify({
+          index: 0,
+          totalParts: 1,
+          cardFragment: JSON.stringify({
+            data: {
+              id: `${testRealmURL}Pet/mango`,
+              type: 'card',
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}Pet`,
+                  name: 'Mango',
+                },
+              },
+            },
+          }),
+        }),
+      },
+      { event_id: cardFragmentsEventId, origin_server_ts: now },
+    );
 
-    hooks.after(() => {
-      QUnit.onUncaughtException = tmp;
+    await waitFor('[data-test-message-idx="0"]');
+    assert.dom('[data-test-message-idx="0"]').exists({ count: 1 });
+    assert.dom('[data-test-message-idx="0"]').containsText('Update mango card');
+  });
+
+  test('it renders only new/updated messages', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
+      body: `question #0`,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: `question #1`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
     });
+    let messageEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Thinking...`,
+      msgtype: 'm.text',
+      formatted_body: `Thinking...`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    let commandEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Thinking...`,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      formatted_body: `Thinking...`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+    setReadReceipt(roomId, messageEventId, '@testuser:localhost');
+    setReadReceipt(roomId, commandEventId, '@testuser:localhost');
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor('[data-test-message-idx="1"]');
+
+    let instanceIds = Array.from(
+      document.querySelectorAll('[data-test-boxel-message-instance-id]'),
+    ).map((el) => el.getAttribute('data-test-boxel-message-instance-id'));
+    assert.strictEqual(instanceIds.length, 3);
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `answer #0`,
+      msgtype: 'm.text',
+      formatted_body: `answer #0`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      'm.relates_to': {
+        event_id: messageEventId,
+        rel_type: 'm.replace',
+      },
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      'm.relates_to': {
+        event_id: commandEventId,
+        rel_type: 'm.replace',
+      },
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+      ],
+    });
+    let newInstanceIds = Array.from(
+      document.querySelectorAll('[data-test-boxel-message-instance-id]'),
+    ).map((el) => el.getAttribute('data-test-boxel-message-instance-id'));
+
+    assert.deepEqual(newInstanceIds, instanceIds);
+  });
+
+  module('suspending global error hook', (hooks) => {
+    let { capturedExceptions } = suspendGlobalErrorHook(hooks);
+
     test('it can handle an error during room creation', async function (assert) {
       await setCardInOperatorModeState();
       await renderComponent(
@@ -1012,7 +1209,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       assert.dom('[data-test-room-error]').exists();
       assert.dom('[data-test-room]').doesNotExist();
       assert.dom('[data-test-past-sessions-button]').isDisabled();
-      assert.strictEqual(uncaughtException.message, 'Intentional error thrown');
+      assert.strictEqual(
+        capturedExceptions[0].message,
+        'Intentional error thrown',
+      );
       await percySnapshot(
         'Integration | ai-assistant-panel | it can handle an error during room creation | error state',
       );
@@ -1040,11 +1240,19 @@ module('Integration | ai-assistant-panel', function (hooks) {
         },
       );
 
-      createAndJoinRoom('@testuser:staging', 'test room 0');
-      let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
-      const room2Id = createAndJoinRoom('@testuser:staging', 'test room 2');
+      createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'test room 0',
+      });
+      let room1Id = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'test room 1',
+      });
+      const room2Id = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'test room 2',
+      });
       await settled();
-
       await openAiAssistant();
       await waitFor(`[data-room-settled]`);
 
@@ -1101,10 +1309,192 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-past-sessions]').doesNotExist();
   });
 
+  test('it can render reasoning from ai bot', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+  });
+
+  test('by default reasoning content expands when reasoning starts streaming, then collapses when body starts streaming', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+
+    await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
+    assert
+      .dom('[data-test-message-idx="0"] .reasoning-content')
+      .containsText('Thinking...');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotExist();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await waitUntil(() => {
+      const element = document.querySelector(
+        '[data-test-message-idx="0"] details[data-test-reasoning]',
+      );
+      return element?.textContent?.includes?.(
+        'they want to know what kind of dog to get',
+      );
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: 'You should get a',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a',
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await waitUntil(() => {
+      const element = document.querySelector('[data-test-message-idx="0"]');
+      return element?.textContent?.includes?.('You should get a');
+    });
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+  });
+
+  test('if user explicity collapses or expands reasoning content, that state is remembered', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+    });
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] .reasoning-content')
+      .containsText('Thinking...');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotExist();
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .containsText('they want to know what kind of dog to get');
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    await click(
+      '[data-test-message-idx="0"] details[data-test-reasoning] summary',
+    );
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: null,
+      msgtype: 'm.text',
+      formatted_body: null,
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: 'You should get a beagle.',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a beagle.',
+      isStreamingFinished: false,
+    });
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .doesNotHaveAttribute('open');
+    await click(
+      '[data-test-message-idx="0"] details[data-test-reasoning] summary',
+    );
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      [APP_BOXEL_REASONING_CONTENT_KEY]:
+        'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
+      body: 'You should get a beagle. They are great companions.',
+      msgtype: 'm.text',
+      formatted_body: 'You should get a beagle. They are great companions.',
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] details[data-test-reasoning]')
+      .hasAttribute('open');
+  });
+
   test('it can render a markdown message from ai bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
       msgtype: 'm.text',
       formatted_body:
@@ -1216,13 +1606,15 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it does not display the streaming indicator when ai bot sends an option', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'fb8fef81-2142-4861-a902-d5614b0aea52',
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -1233,12 +1625,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: 'patch1',
-      },
+      ],
     });
 
     await waitFor('[data-test-message-idx="0"]');
@@ -1277,7 +1664,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
     // Create a new room with some activity (this could happen when we will have a feature that interacts with AI outside of the AI pannel, i.e. "commands")
 
-    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
+    let anotherRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Another Room',
+    });
 
     simulateRemoteMessage(
       anotherRoomId,
@@ -1438,7 +1828,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     fillRoomWithReadMessages(roomId, false);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1460,7 +1853,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     fillRoomWithReadMessages(roomId);
     await settled();
     await click('[data-test-open-ai-assistant]');
@@ -1471,10 +1867,92 @@ module('Integration | ai-assistant-panel', function (hooks) {
     );
   });
 
+  test('scrolling stays at the bottom if a message is streaming in', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    fillRoomWithReadMessages(roomId);
+    await settled();
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-message-idx="39"]');
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `thinking...`,
+      msgtype: 'm.text',
+      formatted_body: `thinking...`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
+      msgtype: 'm.text',
+      formatted_body: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      ['m.relates_to']: {
+        rel_type: 'm.replace',
+        event_id: eventId,
+      },
+    });
+    assert.ok(
+      isAiAssistantScrolledToBottom(),
+      'AI assistant is scrolled to bottom',
+    );
+  });
+
+  test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
+    await setCardInOperatorModeState();
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await openAiAssistant();
+    let element = document.querySelector('#ai-chat-input');
+
+    let initialHeight = element
+      ? parseInt(window.getComputedStyle(element).height)
+      : 0;
+
+    assert.true(initialHeight < 50, 'input box is short');
+    await fillIn('[data-test-message-field]', 'Hello '.repeat(1000));
+
+    let newHeight = element
+      ? parseInt(window.getComputedStyle(element).height)
+      : 0;
+
+    assert.true(
+      newHeight >= 300,
+      'input box grows when entering/pasting lots of text',
+    );
+  });
+
   test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    simulateRemoteMessage(roomId, '@testuser:staging', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'Say one word.',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Say one word.',
@@ -1498,7 +1976,10 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom(`[data-test-enter-room='${roomId}'] [data-test-is-streaming]`)
       .doesNotExist();
 
-    let anotherRoomId = createAndJoinRoom('@testuser:staging', 'Another Room');
+    let anotherRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Another Room',
+    });
 
     let eventId3 = simulateRemoteMessage(
       anotherRoomId,
@@ -1532,14 +2013,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('it can retry a message when receiving an error from the AI bot', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
-    await simulateRemoteMessage(roomId, '@testuser:staging', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
       format: 'org.matrix.custom.html',
     });
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'There was an error processing your request, please try again later',
       msgtype: 'm.text',
       formatted_body:
@@ -1549,14 +2030,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
       errorMessage: 'AI bot error',
     });
 
-    await simulateRemoteMessage(roomId, '@testuser:staging', {
+    simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'I have a feeling something will go wrong',
       format: 'org.matrix.custom.html',
     });
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'There was an error processing your request, please try again later',
       msgtype: 'm.text',
       formatted_body:
@@ -1601,7 +2082,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
 
   test('replacement message should use `created` from the oldest message', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    let firstMessageId = await simulateRemoteMessage(
+    let firstMessageId = simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -1620,7 +2101,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
       },
     );
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -1633,7 +2114,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         origin_server_ts: new Date(2024, 0, 3, 12, 31).getTime(),
       },
     );
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
@@ -1697,9 +2178,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
       roomId,
       '@aibot:localhost',
       {
-        body: 'French bulldog is a',
+        body: 'Thinking...',
         msgtype: 'm.text',
-        formatted_body: 'French bulldog is a',
+        formatted_body: 'Thinking...',
         format: 'org.matrix.custom.html',
         isStreamingFinished: false,
       },
@@ -1707,6 +2188,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         origin_server_ts: Date.now(),
       },
     );
+    let originalEventId = partialEventId;
 
     await waitFor('[data-test-message-idx="3"]');
 
@@ -1716,6 +2198,45 @@ module('Integration | ai-assistant-panel', function (hooks) {
         'ai-avatar-animated',
         'Answer to my previous question is not in progress',
       );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
+      .hasClass(
+        'ai-avatar-animated',
+        'Answer to my current question is in progress',
+      );
+    assert
+      .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
+      .hasText('Thinking...');
+
+    partialEventId = simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'French bulldog is a',
+        msgtype: 'm.text',
+        formatted_body: 'French bulldog is a',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: false,
+        'm.relates_to': {
+          rel_type: 'm.replace',
+          event_id: originalEventId,
+        },
+      },
+      {
+        origin_server_ts: Date.now(),
+      },
+    );
+
+    await waitUntil(() => {
+      let el = document.querySelector(
+        '[data-test-message-idx="3"] [data-test-ai-message-content]',
+      );
+      if (el) {
+        return (el as HTMLElement).innerText === 'French bulldog is a';
+      } else {
+        return false;
+      }
+    });
     assert
       .dom('[data-test-message-idx="3"] [data-test-ai-avatar]')
       .hasClass(
@@ -1737,7 +2258,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         isStreamingFinished: false,
         'm.relates_to': {
           rel_type: 'm.replace',
-          event_id: partialEventId,
+          event_id: originalEventId,
         },
       },
       {
@@ -1783,7 +2304,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
         isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
         'm.relates_to': {
           rel_type: 'm.replace',
-          event_id: partialEventId,
+          event_id: originalEventId,
         },
       },
       {
@@ -1829,14 +2350,14 @@ module('Integration | ai-assistant-panel', function (hooks) {
     await click('[data-test-close-ai-assistant]');
 
     // Create a new room with some activity
-    let anotherRoomId = await createAndJoinRoom(
-      '@testuser:staging',
-      'Another Room',
-    );
+    let anotherRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'Another Room',
+    });
 
     // A message that hasn't been seen and was sent more than fifteen minutes ago must not be shown in the toast.
     let sixteenMinutesAgo = subMinutes(new Date(), 16);
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       anotherRoomId,
       '@aibot:localhost',
       {
@@ -1853,7 +2374,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert.dom('[data-test-ai-assistant-toast]').exists({ count: 0 });
 
     let fourteenMinutesAgo = subMinutes(new Date(), 14);
-    await simulateRemoteMessage(
+    simulateRemoteMessage(
       anotherRoomId,
       '@aibot:localhost',
       {
@@ -1916,6 +2437,197 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .hasValue('This is 1st sentence \n\nThis is 2nd sentence');
   });
 
+  test('when a command is being prepared, apply button is shown in preparing state', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    let initialEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing',
+      formatted_body: 'Changing',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first name to Evie',
+      formatted_body: 'Changing first name to Evie',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+        },
+      ],
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists();
+  });
+
+  test('when command is done streaming, apply button is shown in ready state', async function (assert) {
+    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person="Fadhlan"]');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
+    let initialEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing',
+      formatted_body: 'Changing',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: false,
+    });
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first names',
+      formatted_body: 'Changing first names',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+        },
+      ],
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+
+    await settled();
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-test-room-name="test room 1"]');
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 1 });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first names',
+      formatted_body: 'Changing first names',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+        {
+          id: 'f2da5504-b92f-480a-986a-56ec606d240e',
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/hassan`,
+              patch: { attributes: { firstName: 'Ivana' } },
+            },
+          },
+        },
+      ],
+      isStreamingFinished: false,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+    await settled();
+
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 2 });
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      body: 'Changing first names',
+      formatted_body: 'Changing first names',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
+              },
+            },
+          },
+        },
+        {
+          id: 'f2da5504-b92f-480a-986a-56ec606d240e',
+          name: 'patchCard',
+          arguments: {
+            attributes: {
+              cardId: `${testRealmURL}Person/hassan`,
+              patch: { attributes: { firstName: 'Ivana' } },
+            },
+          },
+        },
+      ],
+      isStreamingFinished: true,
+      'm.relates_to': {
+        rel_type: 'm.replace',
+        event_id: initialEventId,
+      },
+    });
+    await settled();
+
+    assert.dom('[data-test-message-idx]').exists({ count: 1 });
+    await waitFor('[data-test-message-idx="0"] [data-test-command-apply]');
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="preparing"]')
+      .exists({ count: 0 });
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-command-apply="ready"]')
+      .exists({ count: 2 });
+  });
+
   test('after command is issued, a reaction event will be dispatched', async function (assert) {
     await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
@@ -1927,14 +2639,18 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -1945,17 +2661,13 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
     let commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
@@ -1976,10 +2688,11 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists();
 
-    commandResultEvents = await getRoomEvents(roomId).filter(
+    commandResultEvents = getRoomEvents(roomId).filter(
       (event) =>
         event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        event.content['m.relates_to']?.rel_type === 'm.annotation' &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
@@ -2000,33 +2713,31 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let roomId = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'searchCardsByTypeAndTitle',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          name: 'patchCard',
           arguments: {
             attributes: {
-              description: 'Searching for card',
-              type: {
-                module: `${testRealmURL}pet`,
-                name: 'Pet',
+              cardId: `${testRealmURL}Person/fadhlan`,
+              patch: {
+                attributes: { firstName: 'Evie' },
               },
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
-    let commandResultEvents = await getRoomEvents(roomId).filter(
+    let commandResultEvents = getRoomEvents(roomId).filter(
       (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
     assert.equal(
@@ -2045,7 +2756,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
       .exists();
 
-    commandResultEvents = await getRoomEvents(roomId).filter(
+    commandResultEvents = getRoomEvents(roomId).filter(
       (event) => event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
     );
     assert.equal(
@@ -2059,14 +2770,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let id = `${testRealmURL}Pet/mango.json`;
     let roomId = await renderAiAssistantPanel(id);
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'searchCardsByTypeAndTitle',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'search1',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
             attributes: {
               description: 'Searching for card',
@@ -2077,20 +2790,15 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-boxel-command-result]');
-    await waitFor('.result-list li:nth-child(2)');
+    await settled();
     assert
-      .dom('[data-test-command-message]')
+      .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-view-code-button]')
+      .exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
@@ -2106,37 +2814,32 @@ module('Integration | ai-assistant-panel', function (hooks) {
     let id = `${testRealmURL}Pet/mango.json`;
     let roomId = await renderAiAssistantPanel(id);
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'searchCardsByTypeAndTitle',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'search1',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
+            description: 'Searching for card',
             attributes: {
-              description: 'Searching for card',
               title: 'Mango',
             },
           },
         },
-        eventId: 'search1',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: 'search1',
-      },
+      ],
     });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-boxel-card-header-title]',
-    );
-    await waitFor('.result-list li:nth-child(1)');
+    await settled();
     assert
-      .dom('[data-test-command-message]')
+      .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
+    assert
+      .dom('[data-test-ai-message-content] [data-test-view-code-button]')
+      .exists({ count: 1 });
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
@@ -2148,14 +2851,16 @@ module('Integration | ai-assistant-panel', function (hooks) {
   test('toggle more search results', async function (assert) {
     let id = `${testRealmURL}Person/fadhlan.json`;
     let roomId = await renderAiAssistantPanel(id);
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'searchCardsByTypeAndTitle',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: {
             attributes: {
               description: 'Searching for card',
@@ -2166,17 +2871,9 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
-    await waitFor('[data-test-boxel-command-result]');
-    await waitFor('.result-list li:nth-child(5)');
+    await settled();
     assert.dom('.result-list li:nth-child(6)').doesNotExist();
     assert
       .dom('[data-test-toggle-show-button]')
@@ -2215,28 +2912,22 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     };
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'searchCardsByTypeAndTitle',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'fd4515fb-ed4d-4005-9782-4e844d7d4d9c',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: toolArgs,
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
-
+    await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
-
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
@@ -2289,30 +2980,25 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     };
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
       formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
-          name: 'searchCardsByTypeAndTitle',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'ffd1a3d0-0bd4-491a-a907-b96ec9d8902c',
+          name: 'SearchCardsByTypeAndTitleCommand_a959',
           arguments: toolArgs,
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
+    await settled();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     await click('[data-test-close-button]'); // close the last open card
     assert.dom(`[data-test-stack-card="${id}"]`).doesNotExist();
     assert.dom('[data-test-workspace-chooser]').exists();
-
-    await waitFor('[data-test-command-apply]');
-    await click('[data-test-message-idx="0"] [data-test-command-apply]');
     assert
       .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
       .containsText('Search Results');
@@ -2368,15 +3054,19 @@ module('Integration | ai-assistant-panel', function (hooks) {
       },
     );
     await waitFor('[data-test-person="Fadhlan"]');
-    let room1Id = createAndJoinRoom('@testuser:staging', 'test room 1');
+    let room1Id = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'test room 1',
+    });
 
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
-      msgtype: APP_BOXEL_COMMAND_MSGTYPE,
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
       formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
-      data: JSON.stringify({
-        toolCall: {
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
           name: 'patchCard',
           arguments: {
             attributes: {
@@ -2387,12 +3077,7 @@ module('Integration | ai-assistant-panel', function (hooks) {
             },
           },
         },
-        eventId: '__EVENT_ID__',
-      }),
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
+      ],
     });
 
     await settled();
@@ -2417,5 +3102,111 @@ module('Integration | ai-assistant-panel', function (hooks) {
     assert
       .dom('[data-test-ai-message-content] [data-test-editor]')
       .exists('View Code panel should remain open');
+  });
+
+  test('it shows the copy code to clipboard button', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        formatted_body:
+          'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+    assert
+      .dom('button.code-copy-button')
+      .exists('the copy code to clipboard button exists');
+
+    // assert that new messages don't destabilize the RoomMessage component
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'this is another message',
+        formatted_body: 'this is another message',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 13, 30).getTime(),
+      },
+    );
+    await settled();
+
+    assert
+      .dom('button.code-copy-button')
+      .exists('the copy code to clipboard button exists');
+
+    assert.dom('[data-test-apply-code-button]').doesNotExist(); // no apply for code that is not a search/replace block
+
+    // the chrome security model prevents the clipboard API
+    // from working when tests are run in a headless mode, so we are unable to
+    // assert the button actually copies contents to the clipboard
+  });
+
+  test('it renders codeblock in monaco', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        formatted_body:
+          'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+    let monacoContent = getMonacoContent();
+    assert.strictEqual(
+      monacoContent,
+      `console.log("hello world");`,
+      'monaco content is correct',
+    );
+
+    // assert that new messages don't destabilize the RoomMessage component
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: 'this is another message',
+        formatted_body: 'this is another message',
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 13, 30).getTime(),
+      },
+    );
+    await settled();
+
+    monacoContent = getMonacoContent();
+    assert.strictEqual(
+      monacoContent,
+      `console.log("hello world");`,
+      'monaco content is correct',
+    );
+
+    await waitFor('.monaco-editor'); // wait for the monaco editor to be rendered for percy
+
+    await percySnapshot(assert);
   });
 });

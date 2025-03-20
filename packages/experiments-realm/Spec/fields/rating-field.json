@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Rating Summary Field",
+      "specType": "field",
+      "ref": {
+        "module": "../../ratings-summary",
+        "name": "RatingsSummary"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,11 +1,16 @@
 import Component from '@glimmer/component';
 
-import { provide } from 'ember-provide-consume-context';
+import { provide, consume } from 'ember-provide-consume-context';
 
 import {
   CardContextName,
   DefaultFormatsContextName,
+  CardURLContextName,
+  GetCardContextName,
+  GetCardsContextName,
   ResolvedCodeRef,
+  type getCard,
+  type getCards,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -29,6 +34,9 @@ interface Signature {
 }
 
 export default class Preview extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
   get defaultFormat() {
@@ -42,8 +50,18 @@ export default class Preview extends Component<Signature> {
   private get context() {
     return {
       prerenderedCardSearchComponent: PrerenderedCardSearch,
+      getCard: this.getCard,
+      getCards: this.getCards,
       ...this.args.cardContext,
     };
+  }
+
+  @provide(CardURLContextName)
+  // @ts-ignore "cardURL is declared but not used"
+  private get cardURL() {
+    return 'id' in this.args.card
+      ? (this.args.card?.id as string | undefined)
+      : undefined;
   }
 
   <template>

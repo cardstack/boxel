@@ -1,7 +1,7 @@
 import GlimmerComponent from '@glimmer/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { htmlSafe } from '@ember/template';
-import { type CardorFieldTypeIcon } from 'https://cardstack.com/base/card-api';
+import { type CardOrFieldTypeIcon } from 'https://cardstack.com/base/card-api';
 import ImageIcon from '@cardstack/boxel-icons/image';
 import { FilterList } from '@cardstack/boxel-ui/components';
 import { element } from '@cardstack/boxel-ui/helpers';
@@ -10,7 +10,7 @@ import type { SortOption } from './sort';
 
 export interface LayoutFilter {
   displayName: string;
-  icon: CardorFieldTypeIcon;
+  icon: CardOrFieldTypeIcon;
   cardTypeName?: string;
   createNewButtonText?: string;
   isCreateNewDisabled?: boolean;
@@ -50,7 +50,7 @@ interface TitleGroupSignature {
     title?: string;
     tagline?: string;
     thumbnailURL?: string;
-    icon?: CardorFieldTypeIcon;
+    icon?: CardOrFieldTypeIcon;
     element?: keyof HTMLElementTagNameMap;
   };
   Element: HTMLElement;
@@ -136,7 +136,7 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
           {{yield to='contentHeader'}}
         </header>
         {{#if (has-block 'grid')}}
-          <div class='content-grid content-scroll-container'>
+          <div class='content-grid'>
             {{yield to='grid'}}
           </div>
         {{/if}}
@@ -168,6 +168,7 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
         flex-grow: 1;
         display: grid;
         grid-template-rows: max-content 1fr;
+        overflow-y: scroll;
       }
 
       /* these help hide overlay button visibility through gaps during scroll */
@@ -208,12 +209,8 @@ export class Layout extends GlimmerComponent<LayoutSignature> {
       }
       .content-grid {
         max-width: 100%;
-        padding-left: var(--layout-padding);
-        padding-bottom: var(--layout-padding);
-      }
-      .content-scroll-container {
-        padding-right: var(--layout-padding);
-        overflow: auto;
+        padding: var(--layout-padding);
+        padding-top: 0;
       }
     </style>
   </template>

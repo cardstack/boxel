@@ -1,7 +1,9 @@
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 
-import { type ResolvedCodeRef } from '@cardstack/runtime-common/code-ref';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+
+import { type CodeRef } from '@cardstack/runtime-common/code-ref';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import CardSchemaEditor from '@cardstack/host/components/operator-mode/card-schema-editor';
@@ -22,34 +24,53 @@ interface Signature {
     moduleSyntax: ModuleSyntax;
     isReadOnly: boolean;
     goToDefinition: (
-      codeRef: ResolvedCodeRef | undefined,
+      codeRef: CodeRef | undefined,
       localName: string | undefined,
+      fieldName?: string,
     ) => void;
+    isLoading: boolean;
   };
 }
 
 export default class CardAdoptionChain extends Component<Signature> {
   <template>
     <div ...attributes>
-      {{#each @cardInheritanceChain as |data index|}}
-        <CardSchemaEditor
-          @card={{data.card}}
-          @cardType={{data.cardType}}
-          @file={{@file}}
-          @moduleSyntax={{@moduleSyntax}}
-          @childFields={{this.getFields index 'successors'}}
-          @parentFields={{this.getFields index 'ancestors'}}
-          @allowFieldManipulation={{this.allowFieldManipulation
-            @file
-            data.cardType
-          }}
-          @goToDefinition={{@goToDefinition}}
-        />
-        {{#unless (this.isLastItem index @cardInheritanceChain)}}
-          <Divider @label='Inherits From' />
-        {{/unless}}
-      {{/each}}
+      {{#if @isLoading}}
+        <div class='loading'>
+          <LoadingIndicator class='loading-icon' />
+          Loading...
+        </div>
+      {{else}}
+        {{#each @cardInheritanceChain as |data index|}}
+          <CardSchemaEditor
+            @card={{data.card}}
+            @cardType={{data.cardType}}
+            @file={{@file}}
+            @moduleSyntax={{@moduleSyntax}}
+            @childFields={{this.getFields index 'successors'}}
+            @parentFields={{this.getFields index 'ancestors'}}
+            @allowFieldManipulation={{this.allowFieldManipulation
+              @file
+              data.cardType
+            }}
+            @goToDefinition={{@goToDefinition}}
+          />
+          {{#unless (this.isLastItem index @cardInheritanceChain)}}
+            <Divider @label='Inherits From' />
+          {{/unless}}
+        {{/each}}
+      {{/if}}
     </div>
+    <style scoped>
+      .loading {
+        display: inline-flex;
+      }
+      .loading-icon {
+        display: inline-block;
+        margin-right: var(--boxel-sp-xxxs);
+        vertical-align: middle;
+      }
+    </style>
   </template>
 
   isLastItem = (index: number, items: any[] = []) => index + 1 === items.length;

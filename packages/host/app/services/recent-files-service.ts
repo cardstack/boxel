@@ -13,18 +13,23 @@ import { LocalPath } from '@cardstack/runtime-common/paths';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 
-type SerialRecentFile = [URL, string];
+type SerialRecentFile = [URL, string, CursorPosition];
 
+export type CursorPosition = {
+  line: number;
+  column: number;
+};
 export interface RecentFile {
   realmURL: URL;
   filePath: LocalPath;
+  cursorPosition?: CursorPosition;
 }
 
 export default class RecentFilesService extends Service {
   // we shouldn't be making assumptions about what realm the files are coming
   // from, the caller should just tell us
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare reset: ResetService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private reset: ResetService;
 
   @tracked declare recentFiles: TrackedArray<RecentFile>;
 
@@ -83,13 +88,18 @@ export default class RecentFilesService extends Service {
 
     const existingIndex = this.findRecentFileIndex(file);
 
+    let cursorPosition;
     if (existingIndex > -1) {
+      if (!cursorPosition) {
+        cursorPosition = this.recentFiles[existingIndex].cursorPosition;
+      }
       this.recentFiles.splice(existingIndex, 1);
     }
 
     this.recentFiles.unshift({
       realmURL: new URL(currentRealmUrl),
       filePath: file,
+      cursorPosition,
     });
 
     if (this.recentFiles.length > 100) {
@@ -99,6 +109,22 @@ export default class RecentFilesService extends Service {
     this.persistRecentFiles();
   }
 
+  findRecentFileByURL(urlString: string) {
+    const existingIndex = this.findRecentFileIndexByURL(urlString);
+    return existingIndex > -1 ? this.recentFiles[existingIndex] : undefined;
+  }
+
+  updateCursorPositionByURL(
+    urlString: string,
+    cursorPosition?: CursorPosition,
+  ) {
+    const existingIndex = this.findRecentFileIndexByURL(urlString);
+    if (existingIndex > -1) {
+      this.recentFiles[existingIndex].cursorPosition = cursorPosition;
+      this.persistRecentFiles();
+    }
+  }
+
   private persistRecentFiles() {
     window.localStorage.setItem(
       'recent-files',
@@ -106,6 +132,7 @@ export default class RecentFilesService extends Service {
         this.recentFiles.map((recentFile) => [
           recentFile.realmURL.toString(),
           recentFile.filePath,
+          recentFile.cursorPosition,
         ]),
       ),
     );
@@ -122,6 +149,12 @@ export default class RecentFilesService extends Service {
     );
   }
 
+  private findRecentFileIndexByURL(urlString: string) {
+    return this.recentFiles.findIndex(
+      ({ realmURL, filePath }) => `${realmURL}${filePath}` === urlString,
+    );
+  }
+
   private extractRecentFilesFromStorage() {
     let recentFilesString = window.localStorage.getItem('recent-files');
 
@@ -130,11 +163,11 @@ export default class RecentFilesService extends Service {
         this.recentFiles = new TrackedArray(
           JSON.parse(recentFilesString).reduce(function (
             recentFiles: RecentFile[],
-            [realmUrl, filePath]: SerialRecentFile,
+            [realmUrl, filePath, cursorPosition]: SerialRecentFile,
           ) {
             try {
               let url = new URL(realmUrl);
-              recentFiles.push({ realmURL: url, filePath });
+              recentFiles.push({ realmURL: url, filePath, cursorPosition });
             } catch (e) {
               console.log(
                 `Ignoring non-URL recent file from storage: ${realmUrl}`,

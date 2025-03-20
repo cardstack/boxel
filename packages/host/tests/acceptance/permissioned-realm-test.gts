@@ -4,7 +4,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import {
   setupLocalIndexing,
-  setupServerSentEvents,
   setupAcceptanceTestRealm,
   testRealmURL,
   lookupLoaderService,
@@ -17,14 +16,19 @@ let matrixRoomId: string;
 module('Acceptance | permissioned realm tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
 
+  let { createAndJoinRoom } = mockMatrixUtils;
+
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     let loader = lookupLoaderService().loader;
@@ -34,9 +38,9 @@ module('Acceptance | permissioned realm tests', function (hooks) {
     let { default: StringField } = await loader.import<
       typeof import('https://cardstack.com/base/string')
     >(`${baseRealm.url}string`);
-    let { CatalogEntry } = await loader.import<
-      typeof import('https://cardstack.com/base/catalog-entry')
-    >(`${baseRealm.url}catalog-entry`);
+    let { Spec } = await loader.import<
+      typeof import('https://cardstack.com/base/spec')
+    >(`${baseRealm.url}spec`);
 
     class Index extends CardDef {
       static isolated = class Isolated extends Component<typeof this> {
@@ -74,13 +78,14 @@ module('Acceptance | permissioned realm tests', function (hooks) {
     }
 
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'index.gts': { Index },
         'person.gts': { Person },
-        'person-entry.json': new CatalogEntry({
+        'person-entry.json': new Spec({
           title: 'Person',
-          description: 'Catalog entry',
-          isField: false,
+          description: 'Spec',
+          specType: 'card',
           ref: {
             module: `./person`,
             name: 'Person',

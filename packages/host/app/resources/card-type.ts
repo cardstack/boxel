@@ -74,8 +74,8 @@ const moduleInfoCache: Map<string, ModuleInfo> = new Map();
 
 export class CardType extends Resource<Args> {
   @tracked type: Type | undefined;
-  @service private declare cardService: CardService;
-  @service private declare network: NetworkService;
+  @service declare private cardService: CardService;
+  @service declare private network: NetworkService;
   declare loader: Loader;
   typeCache: Map<string, Type> = new Map();
   ready: Promise<void> | undefined;
@@ -168,6 +168,29 @@ export class CardType extends Resource<Args> {
     };
     this.typeCache.set(id, type);
     return type;
+  }
+
+  async isClassInChain(
+    card: typeof BaseDef,
+    codeRef: ResolvedCodeRef | undefined,
+  ): Promise<boolean> {
+    if (!codeRef) {
+      return false;
+    }
+
+    const type = (await this.toType(card)) as Type;
+
+    // check root level is already matching the codeRef
+    if (type.localName === codeRef.name && type.module === codeRef.module) {
+      return true;
+    }
+
+    // else, check if the recursive super class is matching the codeRef
+    let superCard = getAncestor(card);
+    if (superCard && card !== superCard) {
+      return this.isClassInChain(superCard, codeRef);
+    }
+    return false;
   }
 
   private fetchModuleInfo = async (url: URL) => {

@@ -10,6 +10,7 @@ import CardHeader from './components/card-header/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
 import ColorPalette from './components/color-palette/index.gts';
 import ColorPicker from './components/color-picker/index.gts';
+import CopyButton from './components/copy-button/index.gts';
 import DateRangePicker from './components/date-range-picker/index.gts';
 import DndKanbanBoard, {
   type DndItem,
@@ -51,6 +52,7 @@ import ResizablePanelGroup, {
   ResizeHandle,
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
+import SkeletonPlaceholder from './components/skeleton-placeholder/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
@@ -82,6 +84,7 @@ export {
   CircleSpinner,
   ColorPalette,
   ColorPicker,
+  CopyButton,
   DateRangePicker,
   DndColumn,
   DndItem,
@@ -106,6 +109,7 @@ export {
   ResizablePanel,
   ResizablePanelGroup,
   ResizeHandle,
+  SkeletonPlaceholder,
   Switch,
   TabbedHeader,
   Tooltip,

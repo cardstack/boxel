@@ -9,6 +9,7 @@ import Component from '@glimmer/component';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
+import { consume } from 'ember-provide-consume-context';
 
 import flatMap from 'lodash/flatMap';
 
@@ -18,15 +19,17 @@ import { Button, BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
-  createNewCard,
-  baseRealm,
   type CodeRef,
   type CreateNewCard,
+  type getCards,
+  createNewCard,
+  baseRealm,
   Deferred,
   Loader,
   RealmInfo,
   CardCatalogQuery,
   isCardInstance,
+  GetCardsContextName,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -42,8 +45,6 @@ import {
 } from '@cardstack/runtime-common/query';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
-
-import { getSearchResults, Search } from '../../resources/search';
 
 import {
   suggestCardChooserTitle,
@@ -71,7 +72,7 @@ interface Signature {
 }
 
 type Request = {
-  search: Search;
+  search: ReturnType<getCards>;
   deferred: Deferred<CardDef | undefined>;
   opts?: {
     offerToCreate?: {
@@ -231,8 +232,10 @@ export default class CardCatalogModal extends Component<Signature> {
     </style>
   </template>
 
-  stateStack: State[] = new TrackedArray<State>();
-  stateId = 0;
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
+  private stateStack: State[] = new TrackedArray<State>();
+  private stateId = 0;
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -358,7 +361,7 @@ export default class CardCatalogModal extends Component<Signature> {
         opts?.multiSelect,
       );
       let request = new TrackedObject<Request>({
-        search: getSearchResults(this, query),
+        search: this.getCards(this, () => query),
         deferred: new Deferred(),
         opts,
       });
@@ -542,6 +545,8 @@ export default class CardCatalogModal extends Component<Signature> {
           realmOfSelectedCard = (await this.cardService.getRealmURL(card))
             ?.href;
         } else if (typeof selectedItem === 'string') {
+          // WARNING This card is not part of the identity map!
+          // TODO refactor this to use CardResource (please make ticket)
           card = await this.cardService.getCard(selectedItem);
           realmOfSelectedCard = (
             card ? await this.cardService.getRealmURL(card) : undefined
@@ -644,7 +649,7 @@ export default class CardCatalogModal extends Component<Signature> {
   private createNewTask = task(
     async (
       ref: CodeRef,
-      relativeTo: URL | undefined /* this should be the catalog entry ID */,
+      relativeTo: URL | undefined /* this should be the spec ID */,
       realmURL: URL | undefined,
     ) => {
       if (!this.state) {

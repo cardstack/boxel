@@ -3,7 +3,7 @@ declare module 'ember-elsewhere/components/from-elsewhere' {
 
   type Signature = {
     Args: {
-      name: string
+      name: string;
     };
     Element: HTMLDivElement;
   };

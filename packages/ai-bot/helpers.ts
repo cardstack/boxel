@@ -4,30 +4,32 @@ import {
   type CardResource,
 } from '@cardstack/runtime-common';
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
+import { CommandRequest } from '@cardstack/runtime-common/commands';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
-  CommandEvent,
   Tool,
   SkillsConfigEvent,
   ActiveLLMEvent,
+  CardMessageEvent,
   CommandResultEvent,
+  CommandDefinitionsEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-} from '../runtime-common/matrix-constants';
-import {
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_COMMAND_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot');
@@ -42,7 +44,8 @@ You may make multiple function calls, all calls are gated by the user so multipl
 If a user asks you about things in the world, use your existing knowledge to help them. Only if necessary, add a *small* caveat at the end of your message to explain that you do not have live external data. \
 \
 If you need access to the cards the user can see, you can ask them to attach the cards. \
-If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown.';
+If you encounter JSON structures, please enclose them within backticks to ensure they are displayed stylishly in Markdown. \
+If you encounter code, please indent code using 2 spaces per tab stop and enclose the code within triple backticks and indicate the language after the opening backticks so that the code is displayed stylishly in Markdown.';
 
 export const SKILL_INSTRUCTIONS_MESSAGE =
   '\nThe user has given you the following instructions. You must obey these instructions when responding to the user:\n';
@@ -58,13 +61,23 @@ type TextMessage = {
   complete: boolean;
 };
 
-export interface PromptParts {
-  tools: Tool[];
-  messages: OpenAIPromptMessage[];
-  model: string;
-  history: DiscreteMatrixEvent[];
-  toolChoice: ToolChoice;
-}
+export type PromptParts =
+  | {
+      shouldRespond: true;
+      tools: Tool[];
+      messages: OpenAIPromptMessage[];
+      model: string;
+      history: DiscreteMatrixEvent[];
+      toolChoice: ToolChoice;
+    }
+  | {
+      shouldRespond: false;
+      tools: undefined;
+      messages: undefined;
+      model: undefined;
+      history: undefined;
+      toolChoice: undefined;
+    };
 
 export type Message = CommandMessage | TextMessage;
 
@@ -75,22 +88,34 @@ export class HistoryConstructionError extends Error {
   }
 }
 
-export function getPromptParts(
+export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): PromptParts {
+): Promise<PromptParts> {
   let cardFragments: Map<string, CardFragmentContent> =
     extractCardFragmentsFromEvents(eventList);
   let history: DiscreteMatrixEvent[] = constructHistory(
     eventList,
     cardFragments,
   );
+  let shouldRespond = getShouldRespond(history);
+  if (!shouldRespond) {
+    return {
+      shouldRespond: false,
+      tools: undefined,
+      messages: undefined,
+      model: undefined,
+      history: undefined,
+      toolChoice: undefined,
+    };
+  }
   let skills = getEnabledSkills(eventList, cardFragments);
-  let tools = getTools(history, aiBotUserId);
+  let tools = getTools(history, skills, aiBotUserId);
   let toolChoice = getToolChoice(history, aiBotUserId);
-  let messages = getModifyPrompt(history, aiBotUserId, tools, skills);
+  let messages = await getModifyPrompt(history, aiBotUserId, tools, skills);
   let model = getModel(eventList);
   return {
+    shouldRespond,
     tools,
     messages,
     model,
@@ -167,10 +192,10 @@ export function constructHistory(
       continue;
     }
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let { attachedCardsEventIds } = event.content.data;
+      let { attachedCardsEventIds } = event.content.data ?? {};
       if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
-        event.content.data.attachedCards = attachedCardsEventIds.map((id) =>
-          serializedCardFromFragments(id, cardFragments),
+        event.content.data.attachedCards = attachedCardsEventIds.map(
+          (id: string) => serializedCardFromFragments(id, cardFragments),
         );
       }
     }
@@ -194,6 +219,30 @@ export function constructHistory(
   let latestEvents = Array.from(latestEventsMap.values());
   latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   return latestEvents;
+}
+
+function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
+  // If the aibot is awaiting command results, it should not respond yet.
+  let lastEventExcludingCommandResults = history.findLast(
+    (event) => event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  );
+  let commandRequests =
+    lastEventExcludingCommandResults.content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+  if (!commandRequests || commandRequests.length === 0) {
+    return true;
+  }
+  let lastEventIndex = history.indexOf(lastEventExcludingCommandResults);
+  let allCommandsHaveResults = commandRequests.every(
+    (commandRequest: CommandRequest) => {
+      return history.slice(lastEventIndex).some((event) => {
+        return (
+          event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === commandRequest.id
+        );
+      });
+    },
+  );
+  return allCommandsHaveResults;
 }
 
 function getEnabledSkills(
@@ -320,12 +369,164 @@ export function getRelevantCards(
   };
 }
 
+export async function loadCurrentlyAttachedFiles(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): Promise<
+  {
+    url: string;
+    sourceUrl: string;
+    name: string;
+    contentType?: string;
+    content: string | undefined;
+    error: string | undefined;
+  }[]
+> {
+  let lastMessageEventByUser = history.findLast(
+    (event) => event.sender !== aiBotUserId,
+  );
+
+  let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
+    msgtype?: string;
+    data?: {
+      attachedFiles?: {
+        url: string;
+        sourceUrl: string;
+        name: string;
+        contentType?: string;
+      }[];
+    };
+  };
+
+  if (
+    !mostRecentUserMessageContent ||
+    mostRecentUserMessageContent.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
+    return [];
+  }
+
+  // We are only interested in downloading the most recently attached files -
+  // downloading older ones is not needed since the prompt that is being constructed
+  // should operate on fresh data
+  if (!mostRecentUserMessageContent.data?.attachedFiles?.length) {
+    return [];
+  }
+
+  let attachedFiles = mostRecentUserMessageContent.data.attachedFiles;
+
+  return Promise.all(
+    attachedFiles.map(
+      async (attachedFile: {
+        url: string;
+        sourceUrl: string;
+        name: string;
+        contentType?: string;
+      }) => {
+        try {
+          let content: string | undefined;
+          let error: string | undefined;
+          if (attachedFile.contentType?.startsWith('text/')) {
+            let response = await (globalThis as any).fetch(attachedFile.url);
+            if (!response.ok) {
+              throw new Error(`HTTP error. Status: ${response.status}`);
+            }
+            content = await response.text();
+          } else {
+            error = `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`;
+          }
+
+          return {
+            url: attachedFile.url,
+            sourceUrl: attachedFile.sourceUrl,
+            name: attachedFile.name,
+            contentType: attachedFile.contentType,
+            content,
+            error,
+          };
+        } catch (error) {
+          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
+          Sentry.captureException(error, {
+            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
+          });
+          return {
+            url: attachedFile.url,
+            name: attachedFile.name,
+            contentType: attachedFile.contentType,
+            content: undefined,
+            error: `Error loading attached file: ${(error as Error).message}`,
+          };
+        }
+      },
+    ),
+  );
+}
+
+export function attachedFilesToPrompt(
+  attachedFiles: {
+    url: string;
+    sourceUrl: string;
+    name: string;
+    contentType?: string;
+    content: string | undefined;
+    error: string | undefined;
+  }[],
+): string {
+  if (!attachedFiles.length) {
+    return 'No attached files';
+  }
+  return attachedFiles
+    .map((f) => {
+      let hyperlink = f.sourceUrl ? `[${f.name}](${f.sourceUrl})` : f.name;
+      if (f.error) {
+        return `${hyperlink}: ${f.error}`;
+      }
+
+      return `${hyperlink}: ${f.content}`;
+    })
+    .join('\n');
+}
+
 export function getTools(
   history: DiscreteMatrixEvent[],
+  enabledSkills: LooseCardResource[],
   aiBotUserId: string,
 ): Tool[] {
   // Build map directly from messages
+  let enabledCommandNames = new Set<string>();
   let toolMap = new Map<string, Tool>();
+
+  // Get the list of all names from enabled skills
+  for (let skill of enabledSkills) {
+    if (skill.attributes?.commands) {
+      let { commands } = skill.attributes;
+      for (let command of commands) {
+        enabledCommandNames.add(command.functionName);
+      }
+    }
+  }
+
+  // Iterate over the command definitions, and add any tools that are in
+  // enabled skills to the tool map
+  let commandDefinitionEvents: CommandDefinitionsEvent[] = history.filter(
+    (event) =>
+      event.type === 'm.room.message' &&
+      event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+  ) as CommandDefinitionsEvent[];
+
+  for (let event of commandDefinitionEvents) {
+    let { content } = event;
+    let { commandDefinitions } = content.data;
+    for (let commandDefinition of commandDefinitions) {
+      if (enabledCommandNames.has(commandDefinition.tool.function.name)) {
+        toolMap.set(
+          commandDefinition.tool.function.name,
+          commandDefinition.tool,
+        );
+      }
+    }
+  }
+
+  // Add in tools from the user's messages
   for (let event of history) {
     if (event.type !== 'm.room.message' || event.sender == aiBotUserId) {
       continue;
@@ -377,60 +578,72 @@ export function getToolChoice(
   return 'auto';
 }
 
-function getCommandResult(
-  commandEvent: CommandEvent,
+function getCommandResults(
+  cardMessageEvent: CardMessageEvent,
   history: DiscreteMatrixEvent[],
 ) {
-  let commandResultEvent = history.find((e) => {
+  let commandResultEvents = history.filter((e) => {
     if (
       isCommandResultEvent(e) &&
-      e.content['m.relates_to']?.event_id === commandEvent.event_id
+      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
     ) {
       return true;
     }
     return false;
-  }) as CommandResultEvent | undefined;
-  return commandResultEvent;
+  }) as CommandResultEvent[];
+  return commandResultEvents;
 }
 
-function toToolCall(event: CommandEvent): ChatCompletionMessageToolCall {
-  return {
-    id: event.content.data.toolCall.id,
-    function: {
-      name: event.content.data.toolCall.name,
-      arguments: JSON.stringify(event.content.data.toolCall.arguments),
+function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
+  return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (commandRequest: CommandRequest) => {
+      return {
+        id: commandRequest.id,
+        function: {
+          name: commandRequest.name,
+          arguments: JSON.stringify(commandRequest.arguments),
+        },
+        type: 'function',
+      };
     },
-    type: 'function',
-  };
+  );
 }
 
-function toPromptMessageWithToolResult(
-  event: CommandEvent,
+function toPromptMessageWithToolResults(
+  event: CardMessageEvent,
   history: DiscreteMatrixEvent[],
-): OpenAIPromptMessage {
-  let commandResult = getCommandResult(event, history);
-  let content = 'pending';
-  if (commandResult) {
-    let status = commandResult.content['m.relates_to']?.key;
-    if (
-      commandResult.content.msgtype ===
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-    ) {
-      content = `Command ${status}, with result card: ${JSON.stringify(
-        commandResult.content.data.card,
-      )}.\n`;
-    } else {
-      content = `Command ${status}.\n`;
-    }
-  }
-  return {
-    role: 'tool',
-    content,
-    tool_call_id: event.content.data.toolCall.id,
-  };
+): OpenAIPromptMessage[] {
+  let commandResults = getCommandResults(event, history);
+  return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (commandRequest: CommandRequest) => {
+      let content = 'pending';
+      let commandResult = commandResults.find(
+        (commandResult) =>
+          commandResult.content.commandRequestId === commandRequest.id,
+      );
+      if (commandResult) {
+        let status = commandResult.content['m.relates_to']?.key;
+        if (
+          commandResult.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+        ) {
+          content = `Command ${status}, with result card: ${JSON.stringify(
+            commandResult.content.data.card,
+          )}.\n`;
+        } else {
+          content = `Command ${status}.\n`;
+        }
+      }
+      return {
+        role: 'tool',
+        tool_call_id: commandRequest.id,
+        content,
+      };
+    },
+  );
 }
 
-export function getModifyPrompt(
+export async function getModifyPrompt(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
   tools: Tool[] = [],
@@ -449,44 +662,48 @@ export function getModifyPrompt(
       continue;
     }
     if (isCommandResultEvent(event)) {
+      continue; // we'll include these with the tool calls
+    }
+    if (
+      'isStreamingFinished' in event.content &&
+      event.content.isStreamingFinished === false
+    ) {
       continue;
     }
     let body = event.content.body;
-    if (body) {
-      if (event.sender === aiBotUserId) {
-        if (isCommandEvent(event)) {
-          historicalMessages.push({
-            role: 'assistant',
-            content: body,
-            tool_calls: [toToolCall(event)],
-          });
-          historicalMessages.push(
-            toPromptMessageWithToolResult(event, history),
-          );
-        } else {
-          historicalMessages.push({
-            role: 'assistant',
-            content: body,
-          });
-        }
-      } else {
-        if (
-          event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-          event.content.data?.context?.openCardIds
-        ) {
-          body = `User message: ${body}
+    if (event.sender === aiBotUserId) {
+      let toolCalls = toToolCalls(event);
+      let historicalMessage: OpenAIPromptMessage = {
+        role: 'assistant',
+        content: body,
+      };
+      if (toolCalls.length) {
+        historicalMessage.tool_calls = toolCalls;
+      }
+      historicalMessages.push(historicalMessage);
+      if (toolCalls.length) {
+        toPromptMessageWithToolResults(event, history).forEach((message) =>
+          historicalMessages.push(message),
+        );
+      }
+    }
+    if (body && event.sender !== aiBotUserId) {
+      if (
+        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
+        event.content.data?.context?.openCardIds
+      ) {
+        body = `User message: ${body}
           Context: the user has the following cards open: ${JSON.stringify(
             event.content.data.context.openCardIds,
           )}`;
-        } else {
-          body = `User message: ${body}
+      } else {
+        body = `User message: ${body}
           Context: the user has no open cards.`;
-        }
-        historicalMessages.push({
-          role: 'user',
-          content: body,
-        });
       }
+      historicalMessages.push({
+        role: 'user',
+        content: body,
+      });
     }
   }
 
@@ -494,15 +711,18 @@ export function getModifyPrompt(
     history,
     aiBotUserId,
   );
-  let systemMessage =
-    MODIFY_SYSTEM_MESSAGE +
-    `
-  The user currently has given you the following data to work with:
-  Cards:\n`;
-  systemMessage += attachedCardsToMessage(
-    mostRecentlyAttachedCard,
-    attachedCards,
-  );
+
+  let attachedFiles = await loadCurrentlyAttachedFiles(history, aiBotUserId);
+
+  let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
+The user currently has given you the following data to work with:
+
+Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
+
+Attached files:
+${attachedFilesToPrompt(attachedFiles)}
+`;
+
   if (skillCards.length) {
     systemMessage += SKILL_INSTRUCTIONS_MESSAGE;
     systemMessage += skillCardsToMessage(skillCards);
@@ -564,19 +784,6 @@ export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
   );
 };
 
-export function isCommandEvent(
-  event: DiscreteMatrixEvent,
-): event is CommandEvent {
-  return (
-    event.type === 'm.room.message' &&
-    typeof event.content === 'object' &&
-    event.content.msgtype === APP_BOXEL_COMMAND_MSGTYPE &&
-    event.content.format === 'org.matrix.custom.html' &&
-    typeof event.content.data === 'object' &&
-    typeof event.content.data.toolCall === 'object'
-  );
-}
-
 function getModel(eventlist: DiscreteMatrixEvent[]): string {
   let activeLLMEvent = eventlist.findLast(
     (event) => event.type === APP_BOXEL_ACTIVE_LLM,
@@ -595,27 +802,7 @@ export function isCommandResultEvent(
   }
   return (
     event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-    event.content['m.relates_to']?.rel_type === 'm.annotation'
+    event.content['m.relates_to']?.rel_type ===
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE
   );
-}
-
-export function eventRequiresResponse(event: MatrixEvent) {
-  // If it's a message, we should respond unless it's a card fragment
-  if (event.getType() === 'm.room.message') {
-    if (event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE) {
-      return false;
-    }
-    return true;
-  }
-
-  // If it's a command result with output, we should respond
-  if (
-    event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-    event.getContent().msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-  ) {
-    return true;
-  }
-
-  // If it's a different type, or a command result without output, we should not respond
-  return false;
 }

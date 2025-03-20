@@ -6,9 +6,9 @@ import {
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import { Loader } from './loader';
-import { isField } from './constants';
+import { isField, primitive } from './constants';
 import { CardError } from './error';
-import { trimExecutableExtension } from './index';
+import { isUrlLike, trimExecutableExtension } from './index';
 
 export type ResolvedCodeRef = {
   module: string;
@@ -34,7 +34,7 @@ let localIdentities = new WeakMap<
   | { type: 'fieldOf'; card: typeof BaseDef; field: string }
 >();
 
-export function isResolvedCodeRef(ref?: CodeRef): ref is ResolvedCodeRef {
+export function isResolvedCodeRef(ref?: CodeRef | {}): ref is ResolvedCodeRef {
   if (ref && 'module' in ref && 'name' in ref) {
     return true;
   } else {
@@ -72,8 +72,23 @@ export function isBaseDef(cardOrField: any): cardOrField is typeof BaseDef {
   return typeof cardOrField === 'function' && 'baseDef' in cardOrField;
 }
 
-export function isCardDef(card: any): card is typeof CardDef {
-  return isBaseDef(card) && 'isCardDef' in card;
+export function isCardDef(card: any): card is typeof CardDef;
+export function isCardDef(codeRef: CodeRef, loader: Loader): Promise<boolean>;
+export function isCardDef(
+  cardOrCodeRef: any,
+  loader?: Loader,
+): boolean | Promise<boolean> {
+  if (isCodeRef(cardOrCodeRef)) {
+    if (!loader) {
+      throw new Error(
+        'Loader is required to check if a code ref is a card def',
+      );
+    }
+    return loadCard(cardOrCodeRef, { loader })
+      .then((card) => isCardDef(card))
+      .catch(() => false);
+  }
+  return isBaseDef(cardOrCodeRef) && 'isCardDef' in cardOrCodeRef;
 }
 
 export function isCardInstance(card: any): card is CardDef {
@@ -84,19 +99,32 @@ export function isFieldDef(field: any): field is typeof FieldDef {
   return isBaseDef(field) && 'isFieldDef' in field;
 }
 
+export function isPrimitive(def: any) {
+  return isBaseDef(def) && primitive in def;
+}
+
 export function codeRefWithAbsoluteURL(
   ref: CodeRef,
   relativeTo?: URL | undefined,
   opts?: { trimExecutableExtension?: true },
 ): CodeRef {
   if (!('type' in ref)) {
-    let moduleURL = new URL(ref.module, relativeTo);
-    if (opts?.trimExecutableExtension) {
-      moduleURL = trimExecutableExtension(moduleURL);
+    if (isUrlLike(ref.module)) {
+      let moduleURL = new URL(ref.module, relativeTo);
+      if (opts?.trimExecutableExtension) {
+        moduleURL = trimExecutableExtension(moduleURL);
+      }
+      return { ...ref, module: moduleURL.href };
+    } else {
+      return { ...ref };
     }
-    return { ...ref, module: moduleURL.href };
   }
   return { ...ref, card: codeRefWithAbsoluteURL(ref.card, relativeTo) };
+}
+
+export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
+  let module = await loader.import<Record<string, any>>(ref.module);
+  return module[ref.name];
 }
 
 export async function loadCard(
@@ -226,4 +254,21 @@ export function humanReadable(ref: CodeRef): string {
 
 function assertNever(value: never) {
   return new Error(`should never happen ${value}`);
+}
+
+// utility to return `typeConstraint` when it exists and is part of the ancestor chain of `type`
+export async function getNarrowestType(
+  typeConstraint: CodeRef,
+  type: CodeRef,
+  loader: Loader,
+) {
+  let narrowTypeExists = false;
+  // Since the only place this function is used is inside of the spec preview,
+  // We use isCardDef (a shortcut) because it's a faster check to determine if `typeConstraint` is in the same inheritance chain as `type`
+  // As `type` is always a card, checking that the typeConstraint isCardDef is a sufficient condition
+  // TODO: This will have to be made more generic in consideration of other scenarios. This commit shows a solution that was more generic https://github.com/cardstack/boxel/pull/2105/commits/02e8408b776f4dea179978271b6f1febc0246f9b
+  narrowTypeExists = (await isCardDef(typeConstraint, loader)) ?? false;
+  let narrowestType =
+    narrowTypeExists && typeConstraint ? typeConstraint : type;
+  return narrowestType;
 }

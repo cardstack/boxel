@@ -26,7 +26,7 @@ export default class CreateBoxelApp extends Command<
       await createPRDCommand.execute(input);
 
     let showCardCommand = new ShowCardCommand(this.commandContext);
-    await showCardCommand.execute({ cardToShow: prdCard });
+    await showCardCommand.execute({ cardIdToShow: prdCard.id });
 
     let generateCodeCommand = new GenerateCodeCommand(this.commandContext);
     let { code, appName } = await generateCodeCommand.execute({
@@ -72,7 +72,7 @@ export default class CreateBoxelApp extends Command<
     });
 
     // show the app card
-    await showCardCommand.execute({ cardToShow: myAppCard });
+    await showCardCommand.execute({ cardIdToShow: myAppCard.id });
 
     return myAppCard;
   }

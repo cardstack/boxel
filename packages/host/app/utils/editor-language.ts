@@ -11,12 +11,12 @@ export type MonacoLanguageConfig = {
 };
 
 const gjsConfig: LanguageInfo = {
-  id: 'glimmerJS',
+  id: 'gjs',
   extensions: ['.gjs'],
 };
 
 const gtsConfig: LanguageInfo = {
-  id: 'glimmerTS',
+  id: 'gts',
   extensions: ['.gts'],
 };
 

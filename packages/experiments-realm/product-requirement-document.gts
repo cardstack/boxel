@@ -17,7 +17,7 @@ import { tracked } from '@glimmer/tracking';
 import { AppCard } from './app-card';
 import ClipboardListIcon from '@cardstack/boxel-icons/clipboard-list';
 
-import CreateAIAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import ShowCardCommand from '@cardstack/boxel-host/commands/show-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import WriteTextFileCommand from '@cardstack/boxel-host/commands/write-text-file';
@@ -252,7 +252,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
     }
     this.errorMessage = '';
     try {
-      let createRoomCommand = new CreateAIAssistantRoomCommand(commandContext);
+      let createRoomCommand = new CreateAiAssistantRoomCommand(commandContext);
       let { roomId } = await createRoomCommand.execute({
         name: 'AI Assistant Room',
       });
@@ -327,7 +327,7 @@ class Isolated extends Component<typeof ProductRequirementDocument> {
 
       let showCardCommand = new ShowCardCommand(commandContext);
       await showCardCommand.execute({
-        cardToShow: myAppCard,
+        cardIdToShow: myAppCard.id,
       });
 
       if (!myAppCard) {

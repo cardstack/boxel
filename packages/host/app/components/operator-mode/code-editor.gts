@@ -32,6 +32,8 @@ import type { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import RecentFilesService from '@cardstack/host/services/recent-files-service';
+
 import BinaryFileInfo from './binary-file-info';
 
 interface Signature {
@@ -43,7 +45,9 @@ interface Signature {
     saveSourceOnClose: (url: URL, content: string) => void;
     selectDeclaration: (declaration: ModuleDeclaration) => void;
     onFileSave: (status: 'started' | 'finished') => void;
-    onSetup: (updateCursorByName: (name: string) => void) => void;
+    onSetup: (
+      updateCursorByName: (name: string, fieldName?: string) => void,
+    ) => void;
   };
 }
 
@@ -54,6 +58,7 @@ export default class CodeEditor extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
+  @service private declare recentFilesService: RecentFilesService;
 
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
@@ -122,12 +127,48 @@ export default class CodeEditor extends Component<Signature> {
 
   @cached
   private get initialMonacoCursorPosition() {
+    if (this.codePath) {
+      let recentFile = this.recentFilesService.findRecentFileByURL(
+        this.codePath.toString(),
+      );
+      if (recentFile?.cursorPosition) {
+        return new Position(
+          recentFile.cursorPosition.line,
+          recentFile.cursorPosition.column,
+        );
+      }
+    }
+
+    let selectedFieldName = this.operatorModeStateService.state.fieldSelection;
+    let { selectedDeclaration } = this.args;
+    if (
+      selectedFieldName &&
+      selectedDeclaration &&
+      'possibleFields' in selectedDeclaration &&
+      selectedDeclaration.possibleFields
+    ) {
+      let possibleFields = selectedDeclaration.possibleFields;
+      let field = possibleFields.get(selectedFieldName);
+      let loc =
+        field?.path?.node && 'loc' in field.path.node && field.path.node.loc
+          ? field.path.node.loc
+          : undefined;
+      if (loc) {
+        let { start } = loc;
+        let { line, column } = start;
+        // Adjusts column to make cursor position right after the field name
+        let fieldDecoratorTextLength = 8;
+        column = column + fieldDecoratorTextLength + selectedFieldName.length;
+        return new Position(line, column);
+      }
+    }
+
     let loc =
-      this.args.selectedDeclaration?.path?.node &&
-      'body' in this.args.selectedDeclaration.path.node &&
-      'loc' in this.args.selectedDeclaration.path.node.body &&
-      this.args.selectedDeclaration.path.node.body.loc
-        ? this.args.selectedDeclaration?.path?.node.body.loc
+      selectedDeclaration?.path?.node &&
+      'body' in selectedDeclaration.path.node &&
+      'loc' in selectedDeclaration.path.node.body &&
+      selectedDeclaration.path.node.body.loc
+        ? selectedDeclaration?.path?.node.body.loc
         : undefined;
     if (loc) {
       let { start } = loc;
@@ -137,17 +178,37 @@ export default class CodeEditor extends Component<Signature> {
   }
 
   @action
-  private updateMonacoCursorPositionByName(name: string) {
+  private updateMonacoCursorPositionByName(name: string, fieldName?: string) {
     let declaration = findDeclarationByName(name, this.declarations);
     if (declaration === undefined) return;
-    return this.updateMonacoCursorPositionByDeclaration(declaration);
+    return this.updateMonacoCursorPositionByDeclaration(declaration, fieldName);
   }
 
   @action
   private updateMonacoCursorPositionByDeclaration(
     declaration: ModuleDeclaration,
+    fieldName?: string,
   ) {
     if (
+      fieldName &&
+      'possibleFields' in declaration &&
+      declaration.possibleFields
+    ) {
+      let possibleFields = declaration.possibleFields;
+      let field = possibleFields.get(fieldName);
+      let loc =
+        field?.path?.node && 'loc' in field.path.node && field.path.node.loc
+          ? field.path.node.loc
+          : undefined;
+      if (loc) {
+        // Adjusts column to make cursor position right after the field name
+        let fieldDecoratorTextLength = 8;
+        let columnAdjustment = fieldDecoratorTextLength + fieldName.length;
+        this.monacoService.updateCursorPosition(
+          new Position(loc.start.line, loc.start.column + columnAdjustment),
+        );
+      }
+    } else if (
       declaration.path?.node &&
       'body' in declaration.path.node &&
       'loc' in declaration.path.node.body &&
@@ -193,6 +254,22 @@ export default class CodeEditor extends Component<Signature> {
         );
       }
     }
+  }
+
+  @action
+  private onCursorPositionChange(position: Position) {
+    this.selectDeclarationByMonacoCursorPosition(position);
+
+    if (!this.codePath) {
+      return;
+    }
+    this.recentFilesService.updateCursorPositionByURL(
+      this.codePath.toString(),
+      {
+        line: position.lineNumber,
+        column: position.column,
+      },
+    );
   }
 
   @action
@@ -303,7 +380,7 @@ export default class CodeEditor extends Component<Signature> {
             monacoSDK=this.monacoSDK
             language=this.language
             initialCursorPosition=this.initialMonacoCursorPosition
-            onCursorPositionChange=this.selectDeclarationByMonacoCursorPosition
+            onCursorPositionChange=this.onCursorPositionChange
             readOnly=@isReadOnly
             editorDisplayOptions=(hash lineNumbersMinChars=3 fontSize=13)
           }}
@@ -324,7 +401,15 @@ export default class CodeEditor extends Component<Signature> {
         padding: var(--boxel-sp) 0;
       }
 
-      .monaco-container.readonly {
+      :global(.monaco-container.readonly) {
+        background-color: #ebeaed;
+      }
+
+      :global(.monaco-container.readonly .margin) {
+        background-color: #ebeaed;
+      }
+
+      :global(.monaco-container.readonly .monaco-editor-background) {
         background-color: #ebeaed;
       }
 

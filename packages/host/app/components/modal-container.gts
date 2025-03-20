@@ -66,6 +66,7 @@ export default class ModalContainer extends Component<Signature> {
             {{on 'click' @onClose}}
             class='dialog-box__close'
             aria-label='close modal'
+            data-test-close-modal
           />
           {{yield to='header'}}
         </Header>

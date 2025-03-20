@@ -19,6 +19,7 @@ import {
   ecsMetadata,
   setContextResponse,
   fetchRequestFromContext,
+  methodOverrideSupport,
 } from './middleware';
 import { registerUser } from './synapse';
 import convertAcceptHeaderQueryParam from './middleware/convert-accept-header-qp';
@@ -59,7 +60,8 @@ export class RealmServer {
   private realms: Realm[];
   private virtualNetwork: VirtualNetwork;
   private matrixClient: MatrixClient;
-  private secretSeed: string;
+  private realmServerSecretSeed: string;
+  private realmSecretSeed: string;
   private realmsRootPath: string;
   private dbAdapter: DBAdapter;
   private queue: QueuePublisher;
@@ -67,18 +69,20 @@ export class RealmServer {
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private seedPath: string | undefined;
+  private seedRealmURL: URL | undefined;
   private matrixRegistrationSecret: string | undefined;
   private promiseForIndexHTML: Promise<string> | undefined;
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
-
+  private disableMatrixRealmEvents: boolean;
   constructor({
     serverURL,
     realms,
     virtualNetwork,
     matrixClient,
-    secretSeed,
+    realmServerSecretSeed,
+    realmSecretSeed,
     realmsRootPath,
     dbAdapter,
     queue,
@@ -87,20 +91,25 @@ export class RealmServer {
     matrixRegistrationSecret,
     getRegistrationSecret,
     seedPath,
+    seedRealmURL,
+    disableMatrixRealmEvents,
   }: {
     serverURL: URL;
     realms: Realm[];
     virtualNetwork: VirtualNetwork;
     matrixClient: MatrixClient;
-    secretSeed: string;
+    realmServerSecretSeed: string;
+    realmSecretSeed: string;
     realmsRootPath: string;
     dbAdapter: DBAdapter;
     queue: QueuePublisher;
     assetsURL: URL;
     getIndexHTML: () => Promise<string>;
     seedPath?: string;
+    seedRealmURL?: URL;
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
+    disableMatrixRealmEvents?: boolean;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -113,15 +122,18 @@ export class RealmServer {
     this.serverURL = serverURL;
     this.virtualNetwork = virtualNetwork;
     this.matrixClient = matrixClient;
-    this.secretSeed = secretSeed;
+    this.realmSecretSeed = realmSecretSeed;
+    this.realmServerSecretSeed = realmServerSecretSeed;
     this.realmsRootPath = realmsRootPath;
     this.seedPath = seedPath;
+    this.seedRealmURL = seedRealmURL;
     this.dbAdapter = dbAdapter;
     this.queue = queue;
     this.assetsURL = assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
+    this.disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
     this.realms = [...realms, ...this.loadRealms()];
   }
 
@@ -134,7 +146,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index',
+            'Authorization, Content-Type, If-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-HTTP-Method-Override',
         }),
       )
       .use(async (ctx, next) => {
@@ -156,11 +168,13 @@ export class RealmServer {
       })
       .use(convertAcceptHeaderQueryParam)
       .use(convertAuthHeaderQueryParam)
+      .use(methodOverrideSupport)
       .use(
         createRoutes({
           dbAdapter: this.dbAdapter,
           matrixClient: this.matrixClient,
-          secretSeed: this.secretSeed,
+          realmServerSecretSeed: this.realmServerSecretSeed,
+          realmSecretSeed: this.realmSecretSeed,
           virtualNetwork: this.virtualNetwork,
           createRealm: this.createRealm,
           serveIndex: this.serveIndex,
@@ -270,12 +284,14 @@ export class RealmServer {
     name,
     backgroundURL,
     iconURL,
+    copyFromSeedRealm = true,
   }: {
     ownerUserId: string; // note matrix userIDs look like "@mango:boxel.ai"
     endpoint: string;
     name: string;
     backgroundURL?: string;
     iconURL?: string;
+    copyFromSeedRealm?: boolean;
   }): Promise<Realm> => {
     if (
       this.realms.find(
@@ -320,7 +336,7 @@ export class RealmServer {
       matrixURL: this.matrixClient.matrixURL,
       displayname: username,
       username,
-      password: await passwordFromSeed(username, this.secretSeed),
+      password: await passwordFromSeed(username, this.realmSecretSeed),
       registrationSecret: await this.getMatrixRegistrationSecret(),
     });
     this.log.debug(`created realm bot user '${userId}' for new realm ${url}`);
@@ -335,23 +351,36 @@ export class RealmServer {
       ...(iconURL ? { iconURL } : {}),
       ...(backgroundURL ? { backgroundURL } : {}),
     });
-    if (this.seedPath) {
+    if (this.seedPath && copyFromSeedRealm) {
       let ignoreList = IGNORE_SEED_FILES.map((file) =>
         join(this.seedPath!.replace(/\/$/, ''), file),
       );
+
       copySync(this.seedPath, realmPath, {
         filter: (src, _dest) => {
           return !ignoreList.includes(src);
         },
       });
       this.log.debug(`seed files for new realm ${url} copied to ${realmPath}`);
+    } else {
+      writeJSONSync(join(realmPath, 'index.json'), {
+        data: {
+          type: 'card',
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/cards-grid',
+              name: 'CardsGrid',
+            },
+          },
+        },
+      });
     }
 
     let realm = new Realm(
       {
         url,
         adapter,
-        secretSeed: this.secretSeed,
+        secretSeed: this.realmSecretSeed,
         virtualNetwork: this.virtualNetwork,
         dbAdapter: this.dbAdapter,
         queue: this.queue,
@@ -359,8 +388,15 @@ export class RealmServer {
           url: this.matrixClient.matrixURL,
           username,
         },
+        disableMatrixRealmEvents: this.disableMatrixRealmEvents,
       },
-      { invalidateEntireRealm: true, userInitiatedRealmCreation: true },
+      {
+        ...(this.seedRealmURL && copyFromSeedRealm
+          ? {
+              copiedFromRealm: this.seedRealmURL,
+            }
+          : {}),
+      },
     );
     this.realms.push(realm);
     this.virtualNetwork.mount(realm.handle);
@@ -405,7 +441,7 @@ export class RealmServer {
           let realm = new Realm({
             url,
             adapter,
-            secretSeed: this.secretSeed,
+            secretSeed: this.realmSecretSeed,
             virtualNetwork: this.virtualNetwork,
             dbAdapter: this.dbAdapter,
             queue: this.queue,
@@ -413,6 +449,7 @@ export class RealmServer {
               url: this.matrixClient.matrixURL,
               username,
             },
+            disableMatrixRealmEvents: this.disableMatrixRealmEvents,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);

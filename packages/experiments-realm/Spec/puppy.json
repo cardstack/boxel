@@ -1,0 +1,20 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Puppy",
+      "description": "Spec for Puppy card",
+      "specType": "card",
+      "ref": {
+        "module": "../puppy-card",
+        "name": "PuppyCard"
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

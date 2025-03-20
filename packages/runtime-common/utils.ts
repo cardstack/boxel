@@ -1,3 +1,5 @@
+import type { JobInfo } from './worker';
+
 export async function retry<T>(
   fn: () => Promise<T | null>,
   { retries, delayMs }: { retries: number; delayMs: number },
@@ -18,6 +20,10 @@ export async function retry<T>(
   }
 
   return null;
+}
+
+export async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
@@ -60,4 +66,22 @@ export function decodeWebSafeBase64(encoded: string): string {
   }
 
   return Buffer.from(base64, 'base64').toString('utf-8');
+}
+
+// This is the djb2_xor hash function from http://www.cse.yorku.ca/~oz/hash.html
+export function simpleHash(str: string) {
+  let len = str.length;
+  let h = 5381;
+
+  for (let i = 0; i < len; i++) {
+    h = (h * 33) ^ str.charCodeAt(i);
+  }
+  return (h >>> 0).toString(16);
+}
+
+export function jobIdentity(jobInfo?: JobInfo): string {
+  if (!jobInfo) {
+    return `[no job identity]`;
+  }
+  return `[job: ${jobInfo.jobId}.${jobInfo.reservationId}]`;
 }

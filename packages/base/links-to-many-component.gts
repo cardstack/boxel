@@ -29,6 +29,9 @@ import {
   getPlural,
   CardContextName,
   RealmURLContextName,
+  type ResolvedCodeRef,
+  getNarrowestType,
+  Loader,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -40,6 +43,7 @@ import {
 } from '@cardstack/boxel-ui/modifiers';
 
 import { action } from '@ember/object';
+import { initSharedState } from './shared-state';
 
 interface Signature {
   Element: HTMLElement;
@@ -52,6 +56,7 @@ interface Signature {
       boxedElement: Box<BaseDef>,
     ): typeof BaseDef;
     childFormat: 'atom' | 'fitted';
+    typeConstraint?: ResolvedCodeRef;
   };
 }
 
@@ -95,7 +100,12 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       selectedCards?.map((card: any) => ({ not: { eq: { id: card.id } } })) ??
       [];
     let type = identifyCard(this.args.field.card) ?? baseCardRef;
-    let filter = { every: [{ type }, ...selectedCardsQuery] };
+    if (this.args.typeConstraint) {
+      type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
+    }
+    let filter = {
+      every: [{ type }, ...selectedCardsQuery],
+    };
     let chosenCard: CardDef | undefined = await chooseCard(
       { filter },
       {
@@ -142,7 +152,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
 
   @action
   setItems(items: any) {
-    (this.args.model.value as any)[this.args.field.name] = items;
+    this.args.arrayField.set(items);
   }
 
   <template>
@@ -371,6 +381,10 @@ function shouldRenderEditor(
 ) {
   return (format ?? defaultFormat) === 'edit' && !isComputed;
 }
+const componentCache = initSharedState(
+  'linksToManyComponentCache',
+  () => new WeakMap<Box<BaseDef[]>, { component: BoxComponent }>(),
+);
 
 export function getLinksToManyComponent({
   model,
@@ -386,6 +400,10 @@ export function getLinksToManyComponent({
     boxedElement: Box<BaseDef>,
   ): typeof BaseDef;
 }): BoxComponent {
+  let stable = componentCache.get(arrayField);
+  if (stable) {
+    return stable.component;
+  }
   let getComponents = () =>
     arrayField.children.map((child) =>
       getBoxComponent(cardTypeFor(field, child), child, field),
@@ -405,6 +423,7 @@ export function getLinksToManyComponent({
               defaultFormats.cardDef
               model
             }}
+            @typeConstraint={{@typeConstraint}}
             ...attributes
           />
         {{else}}
@@ -455,7 +474,7 @@ export function getLinksToManyComponent({
       </style>
     </template>
   };
-  return new Proxy(linksToManyComponent, {
+  let proxy = new Proxy(linksToManyComponent, {
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
@@ -480,4 +499,21 @@ export function getLinksToManyComponent({
       return linksToManyComponent;
     },
   });
+  stable = {
+    component: proxy as unknown as BoxComponent,
+  };
+
+  componentCache.set(arrayField, stable);
+  return stable.component;
+}
+
+function myLoader(): Loader {
+  // we know this code is always loaded by an instance of our Loader, which sets
+  // import.meta.loader.
+
+  // When type-checking realm-server, tsc sees this file and thinks
+  // it will be transpiled to CommonJS and so it complains about this line. But
+  // this file is always loaded through our loader and always has access to import.meta.
+  // @ts-ignore
+  return (import.meta as any).loader;
 }

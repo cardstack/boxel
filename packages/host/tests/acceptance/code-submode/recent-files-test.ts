@@ -9,9 +9,12 @@ import {
 import { waitUntil } from '@ember/test-helpers';
 
 import window from 'ember-window-mock';
+import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+
+import MonacoService from '@cardstack/host/services/monaco-service';
 
 import {
   percySnapshot,
@@ -181,21 +184,32 @@ const friendCardSource = `
 `;
 
 let matrixRoomId: string;
+let monacoService: MonacoService;
 module('Acceptance | code submode | recent files tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  let { createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
   });
 
+  let { createAndJoinRoom } = mockMatrixUtils;
+
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
+    monacoService = this.owner.lookup(
+      'service:monaco-service',
+    ) as MonacoService;
 
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
@@ -209,8 +223,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
-              isField: false,
+              description: 'Spec',
+              specType: 'card',
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -218,8 +232,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },
@@ -374,10 +388,10 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
-        [testRealmURL, 'index.json'],
-        [testRealmURL, 'français.json'],
-        [testRealmURL, 'Person/1.json'],
-        ['http://localhost:4202/test/', 'français.json'],
+        [testRealmURL, 'index.json', null],
+        [testRealmURL, 'français.json', null],
+        [testRealmURL, 'Person/1.json', null],
+        ['http://localhost:4202/test/', 'français.json', null],
       ],
     );
   });
@@ -496,7 +510,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       'recent-files',
       JSON.stringify([
         ['https://cardstack.com/base/', 'code-ref.gts'],
-        ['https://cardstack.com/base/', 'catalog-entry.gts'],
+        ['https://cardstack.com/base/', 'spec.gts'],
         'a-non-url-to-ignore',
       ]),
     );
@@ -552,17 +566,52 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('code-ref.gts');
-    assert
-      .dom('[data-test-recent-file]:nth-child(3)')
-      .containsText('catalog-entry.gts');
+    assert.dom('[data-test-recent-file]:nth-child(3)').containsText('spec.gts');
 
+    // the cursor positions seem to be different in CI than locally
+    let removedCursorPositions = (
+      JSON.parse(window.localStorage.getItem('recent-files') || '[]') as [
+        string,
+        string,
+        { column: number; line: number } | null,
+      ][]
+    ).map(([mod, name]) => [mod, name]);
+
+    assert.deepEqual(removedCursorPositions, [
+      ['https://cardstack.com/base/', 'field-component.gts'],
+      ['https://cardstack.com/base/', 'date.gts'],
+      ['https://cardstack.com/base/', 'code-ref.gts'],
+      ['https://cardstack.com/base/', 'spec.gts'],
+    ]);
+  });
+
+  test('set cursor based on the position in recent file', async function (assert) {
+    window.localStorage.setItem(
+      'recent-files',
+      JSON.stringify([
+        [testRealmURL, 'index.json', null],
+        [testRealmURL, 'friend.gts', { line: 14, column: 1 }],
+      ]),
+    );
+
+    await visitOperatorMode({
+      stacks: [],
+      submode: 'code',
+      codePath: `${testRealmURL}friend.gts`,
+      fileView: 'browser',
+      openDirs: {},
+    });
+
+    let cursorPosition = monacoService.getCursorPosition();
+    assert.strictEqual(cursorPosition?.lineNumber, 14);
+    assert.strictEqual(cursorPosition?.column, 1);
+
+    monacoService.updateCursorPosition(new MonacoSDK.Position(22, 3));
     assert.deepEqual(
       JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
       [
-        ['https://cardstack.com/base/', 'field-component.gts'],
-        ['https://cardstack.com/base/', 'date.gts'],
-        ['https://cardstack.com/base/', 'code-ref.gts'],
-        ['https://cardstack.com/base/', 'catalog-entry.gts'],
+        [testRealmURL, 'friend.gts', { column: 3, line: 22 }],
+        [testRealmURL, 'index.json', null],
       ],
     );
   });

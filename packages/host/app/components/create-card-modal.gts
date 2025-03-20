@@ -27,6 +27,8 @@ import ModalContainer from './modal-container';
 
 import type CardService from '../services/card-service';
 
+// Is this actually still being used in our app?? or can we remove it?
+
 export default class CreateCardModal extends Component {
   <template>
     {{#let this.currentRequest.card as |card|}}
@@ -74,7 +76,7 @@ export default class CreateCardModal extends Component {
   private _create = enqueueTask(
     async <T extends CardDef>(
       ref: CodeRef,
-      relativeTo: URL | undefined, // this relativeTo should be the catalog entry ID that the CodeRef comes from
+      relativeTo: URL | undefined, // this relativeTo should be the spec ID that the CodeRef comes from
       opts?: {
         doc?: LooseSingleCardDocument;
         realmURL?: URL;

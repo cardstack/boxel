@@ -26,11 +26,9 @@ import LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   CardDocFiles,
-  TestContextWithSSE,
   lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  setupServerSentEvents,
   testRealmURL,
 } from '../../helpers';
 import {
@@ -42,6 +40,7 @@ import {
   linksTo,
   setupBaseRealm,
 } from '../../helpers/base-realm';
+import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module(`Integration | prerendered-card-search`, function (hooks) {
@@ -56,7 +55,13 @@ module(`Integration | prerendered-card-search`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
+
   setupBaseRealm(hooks);
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class PersonField extends FieldDef {
@@ -253,13 +258,13 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
         },
       },
-      'catalog-entry-1.json': {
+      'spec-1.json': {
         data: {
           type: 'card',
           attributes: {
             title: 'Post',
             description: 'A card that represents a blog post',
-            isField: false,
+            specType: 'card',
             ref: {
               module: `${testRealmURL}post`,
               name: 'Post',
@@ -267,19 +272,19 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
+              module: `${baseRealm.url}spec`,
+              name: 'Spec',
             },
           },
         },
       },
-      'catalog-entry-2.json': {
+      'spec-2.json': {
         data: {
           type: 'card',
           attributes: {
             title: 'Article',
             description: 'A card that represents an online article ',
-            isField: false,
+            specType: 'card',
             ref: {
               module: `${testRealmURL}article`,
               name: 'Article',
@@ -287,8 +292,8 @@ module(`Integration | prerendered-card-search`, function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: `${baseRealm.url}catalog-entry`,
-              name: 'CatalogEntry',
+              module: `${baseRealm.url}spec`,
+              name: 'Spec',
             },
           },
         },
@@ -297,6 +302,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
 
     ({ realm: testRealm } = await setupIntegrationTestRealm({
       loader,
+      mockMatrixUtils,
       contents: {
         'article.gts': { Article },
         'blog-post.gts': { BlogPost },
@@ -450,7 +456,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
   });
 
-  test<TestContextWithSSE>(`refreshes when a queried realm changes`, async function (assert) {
+  test(`refreshes when a queried realm changes`, async function (assert) {
     let query: Query = {
       filter: {
         on: {
@@ -493,16 +499,10 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     await waitFor('.card-container');
     assert.dom('.card-container').exists({ count: 2 });
 
-    await this.expectEvents({
-      assert,
-      realm: testRealm,
-      expectedNumberOfEvents: 2,
-      callback: async () => {
-        let owner = (getContext() as TestContext).owner;
-        let cardService = owner.lookup('service:card-service') as CardService;
-        await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
-      },
-    });
+    let owner = (getContext() as TestContext).owner;
+    let cardService = owner.lookup('service:card-service') as CardService;
+    await cardService.deleteSource(new URL(`${testRealmURL}card-2.json`));
+
     await waitUntil(() => {
       return document.querySelectorAll('.card-container').length === 1;
     });

@@ -1,4 +1,5 @@
 import { getOwner, setOwner } from '@ember/owner';
+import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
@@ -10,12 +11,13 @@ import { TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
-  Command,
   type PatchData,
+  Command,
   CommandContext,
   CommandContextStamp,
-  ResolvedCodeRef,
-  isResolvedCodeRef,
+  getClass,
+  identifyCard,
+  delay,
 } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -24,7 +26,6 @@ import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { SearchCardsByTypeAndTitleCommand } from '../commands/search-cards';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
@@ -41,13 +42,15 @@ type GenericCommand = Command<
 >;
 
 export default class CommandService extends Service {
-  @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare matrixService: MatrixService;
-  @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
-  @service private declare realm: Realm;
-  @service private declare realmServer: RealmServerService;
-  currentlyExecutingCommandEventIds = new TrackedSet<string>();
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private cardService: CardService;
+  @service declare private loaderService: LoaderService;
+  @service declare private realm: Realm;
+  @service declare private realmServer: RealmServerService;
+  currentlyExecutingCommandRequestIds = new TrackedSet<string>();
+  private commandProcessingEventQueue: string[] = [];
+  private flushCommandProcessingQueue: Promise<void> | undefined;
 
   private commands: Map<
     string,
@@ -63,52 +66,99 @@ export default class CommandService extends Service {
     return name;
   }
 
-  public async executeCommandEventIfNeeded(event: Partial<IEvent>) {
+  public queueEventForCommandProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
     if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content?.['m.relates_to']!.event_id;
     }
     if (!eventId) {
       throw new Error(
-        'No event id found for command event, this should not happen',
+        'No event id found for event with commands, this should not happen',
       );
     }
-    // examine the tool_call and see if it's a command that we know how to run
-    let toolCall = event?.content?.data?.toolCall;
-    if (!toolCall) {
+    let roomId = event.room_id;
+    if (!roomId) {
+      throw new Error(
+        'No room id found for event with commands, this should not happen',
+      );
+    }
+    let compoundKey = `${roomId}|${eventId}`;
+    if (this.commandProcessingEventQueue.includes(compoundKey)) {
       return;
     }
-    // TODO: check whether this toolCall was already executed and exit if so
-    let { name } = toolCall;
-    let { command, autoExecute } = this.commands.get(name) ?? {};
-    if (!command || !autoExecute) {
-      return;
-    }
-    this.currentlyExecutingCommandEventIds.add(eventId);
-    try {
-      // Get the input type and validate/construct the payload
-      let InputType = await command.getInputType();
 
-      // Construct a new instance of the input type with the
-      // The input is undefined if the command has no input type
-      let typedInput;
-      if (InputType) {
-        typedInput = new InputType({
-          ...toolCall.arguments.attributes,
-          ...toolCall.arguments.relationships,
-        });
-      } else {
-        typedInput = undefined;
+    this.commandProcessingEventQueue.push(compoundKey);
+
+    debounce(this, this.drainCommandProcessingQueue, 100);
+  }
+
+  private async drainCommandProcessingQueue() {
+    await this.flushCommandProcessingQueue;
+
+    let finishedProcessingCommands: () => void;
+    this.flushCommandProcessingQueue = new Promise(
+      (res) => (finishedProcessingCommands = res),
+    );
+
+    let commandSpecs = [...this.commandProcessingEventQueue];
+    this.commandProcessingEventQueue = [];
+
+    while (commandSpecs.length > 0) {
+      let [roomId, eventId] = commandSpecs.shift()!.split('|');
+
+      let roomResource = this.matrixService.roomResources.get(roomId!);
+      if (!roomResource) {
+        throw new Error(
+          `Room resource not found for room id ${roomId}, this should not happen`,
+        );
       }
-      let resultCard = await command.execute(typedInput as any);
-      await this.matrixService.sendCommandResultEvent(
-        event.room_id!,
-        eventId,
-        resultCard,
-      );
-    } finally {
-      this.currentlyExecutingCommandEventIds.delete(eventId);
+      let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
+      let currentRoomProcessingTimestamp = roomResource.processingLastStartedAt;
+      while (
+        roomResource.isProcessing &&
+        currentRoomProcessingTimestamp ===
+          roomResource.processingLastStartedAt &&
+        Date.now() < timeout
+      ) {
+        // wait for the room resource to finish processing
+        await delay(100);
+      }
+      if (
+        roomResource.isProcessing &&
+        currentRoomProcessingTimestamp === roomResource.processingLastStartedAt
+      ) {
+        // room seems to be stuck processing, so we will log and skip this event
+        console.error(
+          `Room resource for room ${roomId} seems to be stuck processing, skipping event ${eventId}`,
+        );
+        continue;
+      }
+
+      let message = roomResource.messages.find((m) => m.eventId === eventId);
+      if (!message) {
+        continue;
+      }
+      for (let messageCommand of message.commands) {
+        if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
+          continue;
+        }
+        if (messageCommand.commandResultCardEventId) {
+          continue;
+        }
+        if (!messageCommand.name) {
+          continue;
+        }
+        let { command, autoExecute } =
+          this.commands.get(messageCommand.name) ?? {};
+        if (
+          messageCommand.requiresApproval === false ||
+          (command && autoExecute)
+        ) {
+          this.run.perform(messageCommand);
+        }
+      }
     }
+    finishedProcessingCommands!();
   }
 
   get commandContext(): CommandContext {
@@ -122,29 +172,35 @@ export default class CommandService extends Service {
 
   //TODO: Convert to non-EC async method after fixing CS-6987
   run = task(async (command: MessageCommand) => {
-    let { payload, eventId } = command;
+    let { arguments: payload, eventId, id: commandRequestId } = command;
     let resultCard: CardDef | undefined;
     try {
-      this.matrixService.failedCommandState.delete(eventId);
-      this.currentlyExecutingCommandEventIds.add(eventId);
+      this.matrixService.failedCommandState.delete(commandRequestId!);
+      this.currentlyExecutingCommandRequestIds.add(commandRequestId!);
 
       // lookup command
-      let { command: commandToRun } = this.commands.get(command.name) ?? {};
+      let { command: commandToRun } =
+        this.commands.get(command.commandRequest.name ?? '') ?? {};
+
+      // If we don't find it in the one-offs, start searching for
+      // one in the skills we can construct
+      if (!commandToRun) {
+        let commandCodeRef = command.codeRef;
+        if (commandCodeRef) {
+          let CommandConstructor = (await getClass(
+            commandCodeRef,
+            this.loaderService.loader,
+          )) as { new (context: CommandContext): Command<any, any> };
+          commandToRun = new CommandConstructor(this.commandContext);
+        }
+      }
 
       if (commandToRun) {
-        // Get the input type and validate/construct the payload
-        let InputType = await commandToRun.getInputType();
-        // Construct a new instance of the input type with the payload
-        // The input is undefined if the command has no input type
-        let typedInput;
-        if (InputType) {
-          typedInput = new InputType({
-            ...payload.attributes,
-            ...payload.relationships,
-          });
-        } else {
-          typedInput = undefined;
-        }
+        let typedInput = await this.instantiateCommandInput(
+          commandToRun,
+          payload?.attributes,
+          payload?.relationships,
+        );
         [resultCard] = await all([
           await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
@@ -162,18 +218,6 @@ export default class CommandService extends Service {
             relationships: payload?.attributes?.patch?.relationships,
           },
         );
-      } else if (command.name === 'searchCardsByTypeAndTitle') {
-        if (!hasSearchData(payload)) {
-          throw new Error(
-            "Search command can't run because it doesn't have all the arguments returned by open ai",
-          );
-        }
-        let command = new SearchCardsByTypeAndTitleCommand(this.commandContext);
-        resultCard = await command.execute({
-          title: payload.attributes.title,
-          cardType: payload.attributes.cardType,
-          type: payload.attributes.type,
-        });
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
@@ -183,6 +227,7 @@ export default class CommandService extends Service {
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
+        commandRequestId!,
         resultCard,
       );
     } catch (e) {
@@ -190,34 +235,61 @@ export default class CommandService extends Service {
         typeof e === 'string'
           ? new Error(e)
           : e instanceof Error
-          ? e
-          : new Error('Command failed.');
+            ? e
+            : new Error('Command failed.');
       console.warn(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
-      this.matrixService.failedCommandState.set(eventId, error);
+      this.matrixService.failedCommandState.set(commandRequestId!, error);
     } finally {
-      this.currentlyExecutingCommandEventIds.delete(eventId);
+      this.currentlyExecutingCommandRequestIds.delete(commandRequestId!);
     }
   });
+
+  // Construct a new instance of the input type with the
+  // The input is undefined if the command has no input type
+  private async instantiateCommandInput(
+    command: GenericCommand,
+    attributes: Record<string, any> | undefined,
+    relationships: Record<string, any> | undefined,
+  ) {
+    // Get the input type and validate/construct the payload
+    let typedInput;
+    let InputType = await command.getInputType();
+    if (InputType) {
+      let adoptsFrom = identifyCard(InputType);
+      if (adoptsFrom) {
+        let inputDoc = {
+          type: 'card',
+          data: {
+            meta: {
+              adoptsFrom,
+            },
+            attributes: attributes ?? {},
+            relationships: relationships ?? {},
+          },
+        };
+        typedInput = await this.cardService.createFromSerialized(
+          inputDoc.data,
+          inputDoc,
+        );
+      } else {
+        // identifyCard can fail in some circumstances where the input type is not exported
+        // in that case, we'll fall back to this less reliable method of constructing the input type
+        typedInput = new InputType({ ...attributes, ...relationships });
+      }
+    } else {
+      typedInput = undefined;
+    }
+    return typedInput;
+  }
 }
 
 type PatchPayload = { attributes: { cardId: string; patch: PatchData } };
-type SearchPayload = {
-  attributes: { cardType?: string; title?: string; type?: ResolvedCodeRef };
-};
 
 function hasPatchData(payload: any): payload is PatchPayload {
   return (
     payload.attributes?.cardId &&
     (payload.attributes?.patch?.attributes ||
       payload.attributes?.patch?.relationships)
-  );
-}
-
-function hasSearchData(payload: any): payload is SearchPayload {
-  return (
-    isResolvedCodeRef(payload.attributes?.type) ||
-    payload.attributes?.title ||
-    payload.attributes?.cardType
   );
 }

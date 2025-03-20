@@ -13,7 +13,7 @@ import NetworkService from './network';
   actually implemented via direct HTTP.
 */
 export default class MatrixSDKLoader extends Service {
-  @service private declare network: NetworkService;
+  @service declare private network: NetworkService;
   #extended: ExtendedMatrixSDK | undefined;
 
   async load(): Promise<ExtendedMatrixSDK> {
@@ -100,6 +100,8 @@ export type ExtendedClient = Pick<
   | 'startClient'
   | 'getAccountDataFromServer'
   | 'setAccountData'
+  | 'getDeviceId'
+  | 'getDevice'
 > & {
   requestEmailToken(
     type: 'registration' | 'threepid',
@@ -113,6 +115,11 @@ export type ExtendedClient = Pick<
   ): Promise<MatrixSDK.LoginResponse>;
   createRealmSession(realmURL: URL): Promise<string>;
   hashMessageWithSecret(message: string): Promise<string>;
+  uploadContent(
+    file: MatrixSDK.FileType,
+    opts: MatrixSDK.UploadOpts,
+  ): Promise<MatrixSDK.UploadResponse>;
+  mxcUrlToHttp(mxcUrl: string): string;
 };
 
 async function hashMessageWithSecret(

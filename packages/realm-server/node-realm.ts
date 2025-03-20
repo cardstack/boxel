@@ -3,10 +3,12 @@ import {
   Kind,
   FileRef,
   createResponse,
+  logger,
   unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
 } from '@cardstack/runtime-common';
+import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 import { ServerResponse } from 'http';
 import sane, { type Watcher } from 'sane';
@@ -24,11 +26,15 @@ import {
 } from 'fs-extra';
 import { join } from 'path';
 import { Duplex } from 'node:stream';
-import type {
-  RequestContext,
-  UpdateEventData,
-} from '@cardstack/runtime-common/realm';
+import type { RequestContext } from '@cardstack/runtime-common/realm';
 import jwt from 'jsonwebtoken';
+import type {
+  RealmEventContent,
+  UpdateRealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+
+const realmEventsLog = logger('realm:events');
 
 export class NodeAdapter implements RealmAdapter {
   constructor(private realmDir: string) {}
@@ -59,22 +65,40 @@ export class NodeAdapter implements RealmAdapter {
 
   private watcher: Watcher | undefined = undefined;
 
-  async subscribe(cb: (message: UpdateEventData) => void): Promise<void> {
+  async subscribe(
+    cb: (message: UpdateRealmEventContent) => void,
+    options: { watcher?: string },
+  ): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
-    this.watcher = sane(join(this.realmDir, '/'));
+
+    // TODO remove with CS-8014
+    let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
+
+    this.watcher = sane(join(this.realmDir, '/'), watcherOptions);
     this.watcher.on('change', (path, _root, stat) => {
       if (stat.isFile()) {
-        cb({ updated: path });
+        cb({
+          eventName: 'update',
+          updated: path,
+        });
       }
     });
     this.watcher.on('add', (path, _root, stat) => {
       if (stat.isFile()) {
-        cb({ added: path });
+        cb({
+          eventName: 'update',
+          added: path,
+        });
       }
     });
-    this.watcher.on('delete', (path) => cb({ removed: path }));
+    this.watcher.on('delete', (path) =>
+      cb({
+        eventName: 'update',
+        removed: path,
+      }),
+    );
     this.watcher.on('error', (err) => {
       throw new Error(`watcher error: ${err}`);
     });
@@ -181,6 +205,47 @@ export class NodeAdapter implements RealmAdapter {
       iat: number;
       exp: number;
     };
+  }
+
+  async broadcastRealmEvent(
+    event: RealmEventContent,
+    matrixClient: MatrixClient,
+  ): Promise<void> {
+    realmEventsLog.debug('Broadcasting realm event', event);
+
+    if (!matrixClient.isLoggedIn()) {
+      realmEventsLog.debug(
+        `Not logged in (${matrixClient.username}, skipping server event`,
+      );
+      return;
+    }
+
+    let dmRooms;
+
+    try {
+      dmRooms =
+        (await matrixClient.getAccountData<Record<string, string>>(
+          'boxel.session-rooms',
+        )) ?? {};
+    } catch (e) {
+      realmEventsLog.error('Error getting account data', e);
+      return;
+    }
+
+    realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
+
+    for (let userId of Object.keys(dmRooms)) {
+      let roomId = dmRooms[userId];
+      try {
+        await matrixClient.sendEvent(roomId, APP_BOXEL_REALM_EVENT_TYPE, event);
+      } catch (e) {
+        realmEventsLog.error(
+          `Unable to send event in room ${roomId} for user ${userId}`,
+          event,
+          e,
+        );
+      }
+    }
   }
 }
 

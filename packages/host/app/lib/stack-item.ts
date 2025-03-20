@@ -21,6 +21,10 @@ interface Args {
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
 }
 
+// TODO consider refactoring this class-it seems to really be just a wrapper
+// around a CardResource. not using @consume for access of getCard() is
+// problematic. Refactor this as part of getting rid of the CardResource.loaded
+// usage
 export class StackItem {
   format: Format;
   request?: Deferred<CardDef | undefined>;
@@ -48,10 +52,15 @@ export class StackItem {
     if (cardResource) {
       this.cardResource = cardResource;
     } else if (url) {
-      this.cardResource = getCard(owner, () => url!.href);
+      // Warning this doesn't use @consume for getCard!
+      this.cardResource = getCard(owner, () => url!.href, {
+        isAutoSaved: true,
+      });
     } else if (newCard) {
+      // Warning this doesn't use @consume for getCard!
       this.cardResource = getCard(owner, () => newCard!.doc, {
         relativeTo: newCard.relativeTo,
+        isAutoSaved: true,
       });
     }
 
@@ -75,6 +84,10 @@ export class StackItem {
     }
 
     throw new Error(`This StackItem has no card set`);
+  }
+
+  get autoSaveState() {
+    return this.cardResource?.autoSaveState;
   }
 
   get title() {

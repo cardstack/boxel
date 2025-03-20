@@ -32,16 +32,19 @@ export default class Index extends Route<void> {
     clientSecret: { refreshModel: true },
   };
 
-  @service private declare matrixService: MatrixService;
-  @service private declare billingService: BillingService;
-  @service private declare cardService: CardService;
-  @service private declare router: RouterService;
-  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service declare private matrixService: MatrixService;
+  @service declare private billingService: BillingService;
+  @service declare private cardService: CardService;
+  @service declare private router: RouterService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare realm: RealmService;
 
   didMatrixServiceStart = false;
 
   async fetchCard(url: string) {
+    // TODO this seems dubious. I don't think we want a CardResource at this
+    // layer. Refactor this out as part of refactoring out the
+    // CardResource.loaded promise.
     let resource = getCard(this, () => url);
     await resource.loaded;
     if (resource.cardError) {

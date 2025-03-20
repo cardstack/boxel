@@ -15,7 +15,9 @@ import {
   mergeRelationships,
   type PatchData,
   RealmPaths,
-  type ResolvedCodeRef,
+  type LocalPath,
+  CodeRef,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -30,10 +32,13 @@ import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
+import { Format } from 'https://cardstack.com/base/card-api';
+
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
 
+import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 import type CardService from './card-service';
@@ -52,6 +57,7 @@ export interface OperatorModeState {
   fileView?: FileView;
   openDirs: Map<string, string[]>;
   codeSelection?: string;
+  fieldSelection?: string;
 }
 
 interface CardItem {
@@ -71,6 +77,7 @@ export type SerializedState = {
   fileView?: FileView;
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
+  fieldSelection?: string;
 };
 
 interface OpenFileSubscriber {
@@ -88,15 +95,16 @@ export default class OperatorModeStateService extends Service {
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
 
-  @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
-  @service private declare messageService: MessageService;
-  @service private declare realm: Realm;
-  @service private declare recentCardsService: RecentCardsService;
-  @service private declare recentFilesService: RecentFilesService;
-  @service private declare router: RouterService;
-  @service private declare reset: ResetService;
-  @service private declare network: NetworkService;
+  @service declare private cardService: CardService;
+  @service declare private loaderService: LoaderService;
+  @service declare private messageService: MessageService;
+  @service declare private realm: Realm;
+  @service declare private recentCardsService: RecentCardsService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private router: RouterService;
+  @service declare private reset: ResetService;
+  @service declare private network: NetworkService;
+  @service declare private matrixService: MatrixService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -138,12 +146,15 @@ export default class OperatorModeStateService extends Service {
     }
     this.state.stacks[stackIndex].push(item);
     if (!item.cardError) {
-      this.recentCardsService.add(item.card);
+      this.recentCardsService.add(item.card.id);
     }
     this.schedulePersist();
   }
 
   patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
+    // WARNING This card is not part of the identity map! Unsure if that is
+    // necessary for the way this card is used. TODO consider refactor this to
+    // use CardResource (please make ticket for this investigation)
     let card = await this.cardService.getCard(id);
     let document = await this.cardService.serializeCard(card);
     if (patch.attributes) {
@@ -310,23 +321,45 @@ export default class OperatorModeStateService extends Service {
   updateSubmode(submode: Submode) {
     this.state.submode = submode;
     this.schedulePersist();
+
+    if (submode === Submodes.Code) {
+      this.matrixService.setLLMForCodeMode();
+      this.matrixService.activateCodingSkill();
+    }
   }
 
-  updateCodePathWithCodeSelection(
-    codeRef: ResolvedCodeRef | undefined,
-    localName: string | undefined,
-    onLocalSelection?: (name: string) => void,
-  ) {
+  updateCodePathWithSelection({
+    codeRef,
+    localName,
+    fieldName,
+    onLocalSelection,
+  }: {
+    codeRef: CodeRef | undefined;
+    localName: string | undefined;
+    fieldName: string | undefined;
+    onLocalSelection?: (name: string, fieldName?: string) => void;
+  }) {
     //moving from one definition to another
-    if (codeRef) {
+    if (codeRef && isResolvedCodeRef(codeRef)) {
       //(possibly) in a different module
       this.state.codeSelection = codeRef.name;
       this.updateCodePath(new URL(codeRef.module));
+    } else if (
+      codeRef &&
+      'type' in codeRef &&
+      codeRef.type === 'fieldOf' &&
+      'card' in codeRef &&
+      isResolvedCodeRef(codeRef.card)
+    ) {
+      this.state.fieldSelection = codeRef.field;
+      this.state.codeSelection = codeRef.card.name;
+      this.updateCodePath(new URL(codeRef.card.module));
     } else if (localName && onLocalSelection) {
       //in the same module
       this.state.codeSelection = localName;
+      this.state.fieldSelection = fieldName;
       this.schedulePersist();
-      onLocalSelection(localName);
+      onLocalSelection(localName, fieldName);
     }
   }
 
@@ -348,6 +381,15 @@ export default class OperatorModeStateService extends Service {
 
     return undefined;
   }
+
+  get codePathString() {
+    return this.state.codePath?.toString();
+  }
+
+  onFileSelected = (entryPath: LocalPath) => {
+    let fileUrl = new RealmPaths(this.realmURL).fileURL(entryPath);
+    this.updateCodePath(fileUrl);
+  };
 
   updateCodePath(codePath: URL | null) {
     this.state.codePath = codePath;
@@ -446,6 +488,7 @@ export default class OperatorModeStateService extends Service {
       fileView: this.state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
       codeSelection: this.state.codeSelection,
+      fieldSelection: this.state.fieldSelection,
     };
 
     for (let stack of this.state.stacks) {
@@ -504,6 +547,7 @@ export default class OperatorModeStateService extends Service {
       fileView: rawState.fileView ?? 'inspector',
       openDirs,
       codeSelection: rawState.codeSelection,
+      fieldSelection: rawState.fieldSelection,
     });
 
     let stackIndex = 0;
@@ -511,7 +555,16 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        let cardResource = getCard(this, () => item.id);
+        // TODO this seems dubious. We are unable to use @consume getCard at
+        // this layer. moreover we are throwing away the resource anyways (via
+        // stackItem.ready), Aaaaand the lifetime of these resources is wrong
+        // since this is a service. Let's figure out why we are deserializing
+        // cards at this layer and see if we can get rid of resource usage here
+        // altogether. Please refactor as part of eliminating the
+        // CardService.loaded promise.
+        let cardResource = getCard(this, () => item.id, {
+          isAutoSaved: true,
+        });
         let stackItem = new StackItem({
           owner: this, // ugh, not a great owner...
           cardResource,
@@ -532,7 +585,7 @@ export default class OperatorModeStateService extends Service {
     return this.state.openDirs ?? new TrackedMap();
   }
 
-  toggleOpenDir(entryPath: string): void {
+  toggleOpenDir = (entryPath: string): void => {
     if (!this.realmURL) {
       return;
     }
@@ -560,7 +613,7 @@ export default class OperatorModeStateService extends Service {
       new TrackedArray([...dirs, entryPath]),
     );
     this.schedulePersist();
-  }
+  };
 
   private get readyFile() {
     if (isReady(this.openFile.current)) {
@@ -630,13 +683,13 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  async openCardInInteractMode(url: URL) {
+  async openCardInInteractMode(url: URL, format: Format = 'isolated') {
     this.clearStacks();
     let newItem = new StackItem({
       url,
       stackIndex: 0,
       owner: this, // We need to think for better owner
-      format: 'isolated',
+      format,
     });
     await newItem.ready();
     this.addItemToStack(newItem);

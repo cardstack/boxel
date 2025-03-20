@@ -191,15 +191,21 @@ let matrixRoomId: string;
 module('Acceptance | code submode | file-tree tests', function (hooks) {
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  let { setRealmPermissions, createAndJoinRoom } = setupMockMatrix(hooks, {
-    loggedInAs: '@testuser:staging',
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL],
   });
+
+  let { setRealmPermissions, createAndJoinRoom } = mockMatrixUtils;
 
   hooks.beforeEach(async function () {
     setRealmPermissions({ [testRealmURL]: ['read', 'write'] });
 
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     const numStubFiles = 100;
@@ -211,6 +217,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     // this seeds the loader used during index which obtains url mappings
     // from the global loader
     await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'index.gts': indexCardSource,
         'pet-person.gts': personCardSource,
@@ -223,8 +230,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Catalog entry',
-              isField: false,
+              description: 'Spec',
+              specType: 'card',
               ref: {
                 module: `./person`,
                 name: 'Person',
@@ -232,8 +239,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: `${baseRealm.url}catalog-entry`,
-                name: 'CatalogEntry',
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
               },
             },
           },

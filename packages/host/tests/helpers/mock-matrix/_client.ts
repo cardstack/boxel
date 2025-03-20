@@ -9,7 +9,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  LEGACY_APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
@@ -90,6 +90,7 @@ export class MockClient implements ExtendedClient {
       exp: expires,
       user: this.loggedInAs,
       realm: realmURL.href,
+      sessionRoom: `test-session-room-realm-${realmURL.href}-user-${this.loggedInAs}`,
       // adding a nonce to the test token so that we can tell the difference
       // between different tokens created in the same second
       nonce: nonce++,
@@ -120,8 +121,6 @@ export class MockClient implements ExtendedClient {
   setAccountData<T>(type: string, data: T): Promise<{}> {
     if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
       this.sdkOpts.activeRealms = (data as any).realms;
-    } else if (type === LEGACY_APP_BOXEL_REALMS_EVENT_TYPE) {
-      // nothing to do
     } else {
       throw new Error(
         'Support for updating this event type in account data is not yet implemented in this mock.',
@@ -427,6 +426,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
       case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
+      case APP_BOXEL_REALM_EVENT_TYPE:
       case 'm.room.create':
       case 'm.room.message':
       case 'm.room.name':
@@ -587,5 +587,24 @@ export class MockClient implements ExtendedClient {
 
   getUserId(): string | null {
     return this.loggedInAs ?? null;
+  }
+
+  async uploadContent(
+    _content: ArrayBuffer,
+    _opts?: { type?: string; name?: string },
+  ): Promise<{ content_uri: string }> {
+    return { content_uri: `mxc://mock-server/${Math.random()}` };
+  }
+
+  mxcUrlToHttp(mxcUrl: string): string {
+    return mxcUrl.replace('mxc://', 'http://mock-server/');
+  }
+
+  getDeviceId(): string | null {
+    return null;
+  }
+
+  getDevice(deviceId: string): Promise<MatrixSDK.IMyDevice> {
+    throw new Error(`Method not implemented: getDevice ${deviceId}`);
   }
 }

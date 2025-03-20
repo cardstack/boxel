@@ -208,7 +208,7 @@ export class VirtualNetwork {
   }
 }
 
-function isUrlLike(moduleIdentifier: string): boolean {
+export function isUrlLike(moduleIdentifier: string): boolean {
   return (
     moduleIdentifier.startsWith('.') ||
     moduleIdentifier.startsWith('/') ||
@@ -267,8 +267,7 @@ async function buildRequest(url: string, originalRequest: Request) {
   // the new url and the body as a Uint8Array.
 
   let body = null;
-
-  if (['POST', 'PUT', 'PATCH'].includes(originalRequest.method)) {
+  if (['POST', 'PUT', 'PATCH', 'QUERY'].includes(originalRequest.method)) {
     body = await originalRequest.clone().text();
   }
 

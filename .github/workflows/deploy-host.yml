@@ -17,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
     concurrency: deploy-host-${{ inputs.environment }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
 
       - name: Init
         uses: ./.github/actions/init
@@ -31,6 +31,7 @@ jobs:
             echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/boxel-host" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-boxel-host-production" >> $GITHUB_ENV
             echo "AWS_CLOUDFRONT_DISTRIBUTION=EIY7A542TLTVQ" >> $GITHUB_ENV
+            echo "DISABLE_MATRIX_REALM_EVENTS=true" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-host" >> $GITHUB_ENV
             echo "AWS_S3_BUCKET=cardstack-boxel-host-staging" >> $GITHUB_ENV
@@ -41,13 +42,13 @@ jobs:
           fi
 
       - name: Download dist
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@b14cf4c92620c250e1c074ab0a5800e37df86765 # 4.2.0
         with:
           name: host-dist
           path: packages/host/tmp/deploy-dist
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@ececac1a45f3b08a01d2dd070d28d111c5fe6722 # 4.1.0
         with:
           role-to-assume: ${{ env.AWS_ROLE_ARN }}
           aws-region: us-east-1

@@ -32,7 +32,6 @@ import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys
 import {
   percySnapshot,
   setupLocalIndexing,
-  setupServerSentEvents,
   setupOnSave,
   testRealmURL,
   setupAcceptanceTestRealm,
@@ -43,7 +42,6 @@ import {
   testRealmSecretSeed,
   setupUserSubscription,
   setupRealmServerEndpoints,
-  TestContextWithSSE,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -53,16 +51,21 @@ module('Acceptance | operator mode tests', function (hooks) {
   let testRealm: Realm;
   setupApplicationTest(hooks);
   setupLocalIndexing(hooks);
-  setupServerSentEvents(hooks);
   setupOnSave(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+  });
+
   let { setExpiresInSec, createAndJoinRoom, simulateRemoteMessage } =
-    setupMockMatrix(hooks, {
-      loggedInAs: '@testuser:staging',
-      activeRealms: [testRealmURL],
-    });
+    mockMatrixUtils;
 
   hooks.beforeEach(async function () {
-    matrixRoomId = createAndJoinRoom('@testuser:staging', 'room-test');
+    matrixRoomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
     setupUserSubscription(matrixRoomId);
 
     setExpiresInSec(60 * 60);
@@ -285,6 +288,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     }
 
     ({ realm: testRealm } = await setupAcceptanceTestRealm({
+      mockMatrixUtils,
       contents: {
         'address.gts': { Address },
         'boom-field.gts': { BoomField },
@@ -300,8 +304,8 @@ module('Acceptance | operator mode tests', function (hooks) {
             type: 'card',
             attributes: {
               title: 'Person Card',
-              description: 'Catalog entry for Person Card',
-              isField: false,
+              description: 'Spec for Person Card',
+              specType: 'card',
               ref: {
                 module: `${testRealmURL}person`,
                 name: 'Person',
@@ -309,8 +313,8 @@ module('Acceptance | operator mode tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/catalog-entry',
-                name: 'CatalogEntry',
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
               },
             },
           },
@@ -553,7 +557,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         assert.dom(`[data-test-error-title]`).includesText('Link Not Found');
       });
 
-      test<TestContextWithSSE>('can delete a card', async function (assert) {
+      test('can delete a card', async function (assert) {
         await visit('/');
         await click('[data-test-workspace="Test Workspace B"]');
         await click('[data-test-boxel-filter-list-button="All Cards"]');
@@ -573,14 +577,7 @@ module('Acceptance | operator mode tests', function (hooks) {
           .dom(`[data-test-delete-modal-container]`)
           .containsText('Delete the card Fadhlan?');
 
-        await this.expectEvents({
-          assert,
-          realm: testRealm,
-          expectedNumberOfEvents: 1,
-          callback: async () => {
-            await click('[data-test-confirm-delete-button]');
-          },
-        });
+        await click('[data-test-confirm-delete-button]');
 
         assert
           .dom(`[data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`)
@@ -877,7 +874,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         type: 'user',
         id: 1,
         attributes: {
-          matrixUserId: '@testuser:staging',
+          matrixUserId: '@testuser:localhost',
           stripeCustomerId: 'stripe-id-1',
           creditsAvailableInPlanAllowance: 1000,
           creditsIncludedInPlanAllowance: 1000,
@@ -949,7 +946,7 @@ module('Acceptance | operator mode tests', function (hooks) {
               headers: {
                 Authorization: createJWT(
                   {
-                    user: '@testuser:staging',
+                    user: '@testuser:localhost',
                     sessionRoom: matrixRoomId,
                   },
                   '1d',
@@ -980,14 +977,14 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-profile-popover]').doesNotExist();
       assert.dom('[data-test-settings-modal]').exists();
 
-      assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:staging
+      assert.dom('[data-test-profile-icon]').hasText('T'); // "T", from first letter of: @testuser:localhost
       assert.dom('[data-test-profile-display-name]').hasText(''); // No display name set yet
       assert
         .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(34, 221, 152)' });
+        .hasStyle({ backgroundColor: 'rgb(88, 226, 29)' });
       assert
         .dom('[data-test-profile-icon-handle]')
-        .hasText('@testuser:staging');
+        .hasText('@testuser:localhost');
 
       await fillIn('[data-test-display-name-field]', '');
       assert
@@ -1030,7 +1027,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       assert.dom('[data-test-profile-icon]').hasText('T');
       assert
         .dom('[data-test-profile-icon]')
-        .hasStyle({ backgroundColor: 'rgb(34, 221, 152)' });
+        .hasStyle({ backgroundColor: 'rgb(88, 226, 29)' });
 
       assert.dom('[data-test-profile-popover]').doesNotExist();
 
@@ -1091,7 +1088,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .hasAttribute(
           'href',
           `https://extra-credits-payment-link-1250?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:staging',
+            '@testuser:localhost',
           )}`,
         );
       assert.dom('[data-test-pay-button="0"]').hasAttribute('target', '_blank');
@@ -1100,7 +1097,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .hasAttribute(
           'href',
           `https://extra-credits-payment-link-15000?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:staging',
+            '@testuser:localhost',
           )}`,
         );
       assert.dom('[data-test-pay-button="1"]').hasAttribute('target', '_blank');
@@ -1109,7 +1106,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         .hasAttribute(
           'href',
           `https://extra-credits-payment-link-80000?client_reference_id=${encodeWebSafeBase64(
-            '@testuser:staging',
+            '@testuser:localhost',
           )}`,
         );
       assert.dom('[data-test-pay-button="2"]').hasAttribute('target', '_blank');
@@ -1185,6 +1182,27 @@ module('Acceptance | operator mode tests', function (hooks) {
         .dom('[data-test-subscription-data="additional-credit"]')
         .hasNoClass('out-of-credit');
       assert.dom('[data-test-buy-more-credits]').hasNoClass('out-of-credit');
+    });
+
+    test(`ai panel continues being open when switching to code submode`, async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      await click('[data-test-open-ai-assistant]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      await click('[data-test-open-ai-assistant]');
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
     });
   });
 });

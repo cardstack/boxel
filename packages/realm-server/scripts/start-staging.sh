@@ -13,6 +13,7 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
   --seedPath='/persistent/seed' \
+  --seedRealmURL='https://realms-staging.stack.cards/seed/' \
   \
   --path='/persistent/base' \
   --username='base_realm' \

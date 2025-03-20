@@ -211,9 +211,9 @@ export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
       }
 
       :global(
-          .boxel-input-group__select-accessory__dropdown
-            .ember-power-select-option
-        ) {
+        .boxel-input-group__select-accessory__dropdown
+          .ember-power-select-option
+      ) {
         font: var(--boxel-button-font, var(--boxel-font-sm));
         padding: var(--boxel-sp-xs) var(--boxel-sp-xs) var(--boxel-sp-xs)
           var(--boxel-sp-xs);
