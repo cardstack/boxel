@@ -183,7 +183,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
     await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-test-message-field]');
+    await waitFor(`[data-room-settled]`);
     const testCard = `${testRealmURL}Person/hassan`;
 
     for (let i = 1; i <= 3; i++) {
@@ -261,7 +261,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
     await click('[data-test-open-ai-assistant]');
-
+    await waitFor(`[data-room-settled]`);
     assert
       .dom('[data-test-llm-select-selected]')
       .hasText(DEFAULT_LLM.split('/')[1]);
@@ -293,6 +293,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
@@ -326,6 +327,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
     );
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-autoattached-file]').doesNotExist();
     assert.dom('[data-test-autoattached-card]').exists();
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
@@ -348,6 +350,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
 
     await click('[data-test-choose-file-btn]');
@@ -412,6 +415,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
 
     await click('[data-test-file="person.gts"]');
@@ -453,6 +457,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     await click('[data-test-past-sessions-button]');
 
     assert.dom('[data-test-past-sessions]').exists();

@@ -200,6 +200,7 @@ export default class MatrixService extends Service {
     this._currentRoomId = value;
     if (value) {
       this.loadAllTimelineEvents.perform(value);
+      window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
     } else {
       window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
     }
@@ -1226,8 +1227,9 @@ export default class MatrixService extends Service {
   private loadAllTimelineEvents = restartableTask(async (roomId: string) => {
     let roomData = this.ensureRoomData(roomId);
     let room = this.client.getRoom(roomId);
+    let roomResource = this.roomResources.get(roomId);
 
-    if (!room) {
+    if (!room || !roomResource) {
       throw new Error(`Cannot find room with id ${roomId}`);
     }
 
@@ -1245,34 +1247,15 @@ export default class MatrixService extends Service {
         }
       }
 
-      let startTime = Date.now();
-      let checkCount = 0;
-
+      // Wait for all events to be loaded in roomResource
       let timeline = room.getLiveTimeline();
       let events = timeline.getEvents();
       await new Promise<void>((resolve) => {
         let checkEvents = () => {
-          checkCount++;
-          let elapsedTime = Date.now() - startTime;
           let allEventsConsumed = events.every((event) =>
             roomData.events.some((e) => e.event_id === event.getId()),
           );
-
-          console.log(
-            `[Matrix Service] Waiting for events... (${elapsedTime}ms, attempt ${checkCount})`,
-            `\n  - Events to consume: ${events.length}`,
-            `\n  - Events consumed: ${
-              events.filter((event) =>
-                roomData.events.some((e) => e.event_id === event.getId()),
-              ).length
-            }`,
-            `\n  - All consumed: ${allEventsConsumed}`,
-          );
-
           if (allEventsConsumed) {
-            console.log(
-              `[Matrix Service] All events consumed after ${elapsedTime}ms and ${checkCount} checks`,
-            );
             resolve();
           } else {
             setTimeout(checkEvents, 100);
@@ -1281,6 +1264,7 @@ export default class MatrixService extends Service {
 
         checkEvents();
       });
+      await this.roomResources.get(roomId)?.loading;
     } finally {
       this.timelineLoadingState.set(roomId, false);
     }

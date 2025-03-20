@@ -29,7 +29,7 @@ import { TrackedObject, TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { eq, not, or } from '@cardstack/boxel-ui/helpers';
+import { and, eq, not, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCard,
@@ -87,8 +87,14 @@ export default class Room extends Component<Signature> {
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
         class='room'
-        data-room-settled={{this.doWhenRoomChanges.isIdle}}
-        data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
+        data-room-settled={{(and
+          this.doWhenRoomChanges.isIdle
+          (not this.matrixService.isLoadingTimeline)
+        )}}
+        data-test-room-settled={{(and
+          this.doWhenRoomChanges.isIdle
+          (not this.matrixService.isLoadingTimeline)
+        )}}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
       >
