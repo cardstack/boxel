@@ -1,3 +1,6 @@
+import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
+
 import {
   contains,
   field,
@@ -14,6 +17,7 @@ import CardSection from './components/card-section';
 import CardListingContainer from './components/card-listing-container';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
+import TopBarFilter, { type FilterOption } from './components/top-bar-filter';
 
 class Isolated extends Component<typeof Catalog> {
   mockCards = [
@@ -21,8 +25,31 @@ class Isolated extends Component<typeof Catalog> {
     { name: 'Card 2' },
     { name: 'Card 3' },
     { name: 'Card 4' },
-    { name: 'Card 5' },
   ];
+
+  specFilterOptions: FilterOption[] = [
+    { id: 'all', displayName: 'All' },
+    { id: 'apps', displayName: 'Apps' },
+    { id: 'cards', displayName: 'Cards' },
+    { id: 'fields', displayName: 'Fields' },
+    { id: 'skills', displayName: 'Skills' },
+  ];
+
+  @tracked activeSpecFilterId: string = this.specFilterOptions[0].id;
+
+  @action
+  handleSpecFilterChanged(filterId: string) {
+    this.activeSpecFilterId = filterId;
+  }
+
+  get shouldShowSection() {
+    return (sectionId: string) => {
+      if (this.activeSpecFilterId === 'all') {
+        return true;
+      }
+      return this.activeSpecFilterId === sectionId.toLowerCase();
+    };
+  }
 
   <template>
     <div class='catalog-layout'>
@@ -34,20 +61,32 @@ class Isolated extends Component<typeof Catalog> {
         </div>
         {{! Note: Content will be display 2 columns: Content Listing Display and Related Listing Cards in the same time }}
         <div class='content'>
-          <div class='top-bar'>
-            {{! TODO: Add Spec Type Filter component here }}
-            {{! TODO: Cards, Fields, Skill }}
-            Spec Selector will be exist at here. Eg: Apps, Cards, Fields, Skill
-          </div>
+          <TopBarFilter
+            @filters={{this.specFilterOptions}}
+            @activeFilterId={{this.activeSpecFilterId}}
+            @onChange={{this.handleSpecFilterChanged}}
+            class='spec-filter-bar'
+          />
 
           <div class='content-display-container'>
             {{! Column 1: Card Listing Section }}
             {{! TODO: We need to have a single listing display at here after click one of card}}
             <CardListingContainer class='card-listing-section'>
-              <CardSection @title='Apps' @cards={{this.mockCards}} />
-              <CardSection @title='Cards' @cards={{this.mockCards}} />
-              <CardSection @title='Fields' @cards={{this.mockCards}} />
-              <CardSection @title='Skills' @cards={{this.mockCards}} />
+              {{#if (this.shouldShowSection 'apps')}}
+                <CardSection @title='Apps' @cards={{this.mockCards}} />
+              {{/if}}
+
+              {{#if (this.shouldShowSection 'cards')}}
+                <CardSection @title='Cards' @cards={{this.mockCards}} />
+              {{/if}}
+
+              {{#if (this.shouldShowSection 'fields')}}
+                <CardSection @title='Fields' @cards={{this.mockCards}} />
+              {{/if}}
+
+              {{#if (this.shouldShowSection 'skills')}}
+                <CardSection @title='Skills' @cards={{this.mockCards}} />
+              {{/if}}
             </CardListingContainer>
 
             {{! Column 2: Related Listing Cards }}
@@ -74,12 +113,6 @@ class Isolated extends Component<typeof Catalog> {
         height: 100%;
         background-color: var(--boxel-100);
       }
-      .top-bar {
-        display: grid;
-        grid-template-columns: 1fr auto auto;
-        padding-right: var(--boxel-sp);
-        gap: var(--boxel-sp-xxxl);
-      }
       .title {
         font: bold var(--boxel-font-lg);
         line-height: 1.58;
@@ -95,6 +128,16 @@ class Isolated extends Component<typeof Catalog> {
       }
       .sidebar {
         position: relative;
+      }
+
+      .spec-filter-bar {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: var(--boxel-100);
+        padding-bottom: var(--boxel-sp-sm);
+        border-bottom: 1px solid var(--boxel-200);
+        box-shadow: 0 0 15px var(--boxel-200);
       }
 
       .content {
@@ -163,7 +206,7 @@ class Isolated extends Component<typeof Catalog> {
 }
 
 export class Catalog extends CardDef {
-  static displayName = 'Catalog Layout';
+  static displayName = 'Catalog';
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
