@@ -45,6 +45,7 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
           @size='small'
           class='apply-button'
           tabindex='-1'
+          disabled
           {{setCssVar boxel-button-text-color='var(--boxel-200)'}}
           data-test-apply-state='preparing'
           ...attributes
@@ -93,6 +94,9 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
     .state-indicator.preparing .apply-button {
       border: 0;
       min-width: 74px;
+    }
+    .state-indicator.preparing .apply-button:disabled {
+      opacity: 1;
     }
     .state-indicator.preparing .apply-button:focus {
       --boxel-button-color: inherit;
