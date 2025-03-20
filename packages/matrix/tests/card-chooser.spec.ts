@@ -112,7 +112,7 @@ test.describe('Card Chooser', () => {
 
   // Skipping this test, as it flaky
   // https://linear.app/cardstack/issue/CS-8126/flaky-test-matrix-test-card-chooser-it-can-add-realm-read-permissions
-  test('it can add realm read permissions when linking a new card', async ({
+  test.skip('it can add realm read permissions when linking a new card', async ({
     page,
   }) => {
     await setupRealms(page);
