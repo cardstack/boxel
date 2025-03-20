@@ -33,6 +33,7 @@ export default class AiAssistantApplyButtonUsage extends Component {
     }
   }
   <template>
+    {{! template-lint-disable no-inline-styles no-invalid-interactive }}
     <FreestyleUsage @name='AiAssistant::ApplyButton'>
       <:description>
         Displays button for applying change proposed by AI Assistant. Includes

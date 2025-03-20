@@ -113,11 +113,11 @@ export default class CommandService extends Service {
         );
       }
       let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
-      let currentRoomProcessingTimestamp = roomResource.processingLastStarteAt;
+      let currentRoomProcessingTimestamp = roomResource.processingLastStartedAt;
       while (
         roomResource.isProcessing &&
         currentRoomProcessingTimestamp ===
-          roomResource.processingLastStarteAt &&
+          roomResource.processingLastStartedAt &&
         Date.now() < timeout
       ) {
         // wait for the room resource to finish processing
@@ -125,7 +125,7 @@ export default class CommandService extends Service {
       }
       if (
         roomResource.isProcessing &&
-        currentRoomProcessingTimestamp === roomResource.processingLastStarteAt
+        currentRoomProcessingTimestamp === roomResource.processingLastStartedAt
       ) {
         // room seems to be stuck processing, so we will log and skip this event
         console.error(
