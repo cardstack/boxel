@@ -12,12 +12,20 @@ import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
+import {
+  ParsedCodeContent,
+  parseCodeContent,
+} from '@cardstack/host/lib/search-replace-blocks-parsing';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import CodeBlock from './code-block';
+
+export interface CodeData extends ParsedCodeContent {
+  language: string;
+}
 
 interface FormattedMessageSignature {
   html: string;
@@ -102,14 +110,8 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     return index === this.htmlGroups.length - 1;
   };
 
-  private isCodePatch = (code: string) => {
-    let searchReplaceRegex =
-      /<<<<<<< SEARCH\n(.*)\n=======\n(.*)\n>>>>>>> REPLACE/s;
-    return searchReplaceRegex.test(code);
-  };
-
-  private fileUrlIsPresent = (fileUrl?: string | null): fileUrl is string => {
-    return typeof fileUrl === 'string' && fileUrl.trim() !== '';
+  private isCodePatch = (codeData: ParsedCodeContent): boolean => {
+    return !!codeData.fileUrl && !!codeData.searchStartLine;
   };
 
   <template>
@@ -138,24 +140,13 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
             {{#let (extractCodeData htmlGroup.content) as |codeData|}}
               <CodeBlock
                 @monacoSDK={{@monacoSDK}}
-                @code={{codeData.content}}
-                @language={{codeData.language}}
+                @codeData={{codeData}}
                 as |codeBlock|
               >
                 <codeBlock.actions as |actions|>
                   <actions.copyCode />
-                  {{#if
-                    (and
-                      (this.isCodePatch codeData.content)
-                      (this.fileUrlIsPresent codeData.fileUrl)
-                      (not @isStreaming)
-                    )
-                  }}
-                    <actions.applyCodePatch
-                      @codePatch={{codeData.content}}
-                      {{! @glint-ignore -- we know fileUrl is string here due to fileUrlIsPresent type guard }}
-                      @fileUrl={{codeData.fileUrl}}
-                    />
+                  {{#if (and (this.isCodePatch codeData) (not @isStreaming))}}
+                    <actions.applyCodePatch />
                   {{/if}}
                 </codeBlock.actions>
                 <codeBlock.editor />
@@ -284,11 +275,17 @@ function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   return result;
 }
 
-function extractCodeData(preElementString: string) {
+function extractCodeData(preElementString: string): CodeData {
   if (!preElementString) {
     return {
       language: '',
-      content: '',
+      fileUrl: null,
+      code: '',
+      searchStartLine: null,
+      searchEndLine: null,
+      replaceStartLine: null,
+      replaceEndLine: null,
+      contentWithoutFileUrl: null,
     };
   }
   // Extract language using regex - finds the value of data-codeblock attribute
@@ -299,29 +296,13 @@ function extractCodeData(preElementString: string) {
   const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
   let content = contentMatch ? contentMatch[1] : null;
 
-  // When the model responds with a code patch block, the source-code-editing.json skill
-  // will dictate that the first comment in the search/replace file block
-  // is a file url comment, like this: // File url: http://localhost:4201/user/realm/card.gts
-  // We need this url so that we know which file the code patch applies to.
-  // We extract this url and remove it from the content.
-  let fileUrl = null;
+  let parsedContent = parseCodeContent(content ?? '');
 
-  let trimmedContent = content?.trim();
-  if (trimmedContent?.trim().startsWith('// File url: ')) {
-    let firstLine = trimmedContent.split('\n')[0];
-    let fileUrlRegex = /File url: (.*)/;
-    let fileUrlMatch = firstLine.match(fileUrlRegex);
-    if (fileUrlMatch) {
-      fileUrl = fileUrlMatch[1];
-    }
-    // Remove the first line from the content
-    content = trimmedContent.split('\n').slice(1).join('\n');
-  }
+  content = parsedContent.code;
 
   return {
     language: language ?? '',
-    content: content ?? '',
-    fileUrl: fileUrl ?? null,
+    ...parsedContent,
   };
 }
 

@@ -41,6 +41,7 @@ import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
 import Preview from '../preview';
+import { hash } from '@ember/helper';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -192,8 +193,7 @@ export default class RoomMessageCommand extends Component<Signature> {
         <CodeBlock
           {{this.scrollBottomIntoView}}
           @monacoSDK={{@monacoSDK}}
-          @code={{this.previewCommandCode}}
-          @language='json'
+          @codeData={{hash code=this.previewCommandCode language='json'}}
           as |codeBlock|
         >
           <codeBlock.actions as |actions|>

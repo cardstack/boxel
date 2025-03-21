@@ -22,7 +22,10 @@ import { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
 
+import { CodeData } from './formatted-message';
+
 import type { ComponentLike } from '@glint/template';
+import type * as _MonacoSDK from 'monaco-editor';
 interface CopyCodeButtonSignature {
   Args: {
     code?: string;
@@ -31,14 +34,14 @@ interface CopyCodeButtonSignature {
 
 interface ApplyCodePatchButtonSignature {
   Args: {
-    codePatch: string;
-    fileUrl: string;
+    codePatch?: string | null;
+    fileUrl?: string | null;
   };
 }
 
 interface CodeBlockActionsSignature {
   Args: {
-    code?: string;
+    codeData?: Partial<CodeData>;
   };
   Blocks: {
     default: [
@@ -58,8 +61,7 @@ interface CodeBlockEditorSignature {
 interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
-    code: string;
-    language: string;
+    codeData: Partial<CodeData>;
   };
   Blocks: {
     default: [
@@ -72,39 +74,65 @@ interface Signature {
   Element: HTMLElement;
 }
 
-import type * as _MonacoSDK from 'monaco-editor';
+let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
+  {{yield
+    (hash
+      editor=(component CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData)
+      actions=(component CodeBlockActionsComponent codeData=@codeData)
+    )
+  }}
+</template>;
 
-export default class CodeBlock extends Component<Signature> {
-  @tracked copyCodeButtonText: 'Copy' | 'Copied!' = 'Copy';
-
-  copyCode = restartableTask(async (code: string) => {
-    this.copyCodeButtonText = 'Copied!';
-    await navigator.clipboard.writeText(code);
-    await timeout(1000);
-    this.copyCodeButtonText = 'Copy';
-  });
-
-  <template>
-    {{yield
-      (hash
-        editor=(component
-          CodeBlockEditor monacoSDK=@monacoSDK code=@code language=@language
-        )
-        actions=(component CodeBlockActionsComponent code=@code)
-      )
-    }}
-  </template>
-}
+export default CodeBlockComponent;
 
 interface MonacoEditorSignature {
   Args: {
     Named: {
-      code: string;
-      language: string;
+      codeData: Partial<CodeData>;
       monacoSDK: MonacoSDK;
       editorDisplayOptions: MonacoEditorOptions;
     };
   };
+}
+
+function applyCodeDiffDecorations(
+  editor: _MonacoSDK.editor.IStandaloneCodeEditor,
+  monacoSDK: MonacoSDK,
+  codeData: Partial<CodeData>,
+) {
+  if (codeData.searchStartLine && codeData.searchEndLine) {
+    editor.deltaDecorations(
+      [],
+      [
+        {
+          range: new monacoSDK.Range(
+            codeData.searchStartLine,
+            0,
+            codeData.searchEndLine,
+            1000, // Arbitrary large number to ensure the decoration spans the entire line
+          ),
+          options: { inlineClassName: 'line-to-be-replaced' },
+        },
+      ],
+    );
+  }
+
+  if (codeData.replaceStartLine && codeData.replaceEndLine) {
+    editor.deltaDecorations(
+      [],
+      [
+        {
+          range: new monacoSDK.Range(
+            codeData.replaceStartLine,
+            0,
+            codeData.replaceEndLine,
+            1000, // Arbitrary large number to ensure the decoration spans the entire line
+          ),
+          options: { inlineClassName: 'line-to-be-replaced-with' },
+        },
+      ],
+    );
+  }
 }
 
 class MonacoEditor extends Modifier<MonacoEditorSignature> {
@@ -115,12 +143,15 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
     element: HTMLElement,
     _positional: [],
     {
-      code,
-      language,
+      codeData,
       monacoSDK,
       editorDisplayOptions,
     }: MonacoEditorSignature['Args']['Named'],
   ) {
+    let { code, language } = codeData;
+    if (!code || !language) {
+      return;
+    }
     if (this.monacoState) {
       let { editor } = this.monacoState;
       let model = editor.getModel()!;
@@ -131,37 +162,58 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
       // then apply that delta to the model. Compared to calling setValue()
       // for every new value, this removes the need for re-tokenizing the code
       // which is expensive and produces visual annoyances such as flickering.
+
       let currentCode = model.getValue();
-      let newCode = code;
-      let codeDelta = newCode.slice(currentCode.length);
+      let newCode = code ?? '';
 
-      let lineCount = model.getLineCount();
-      let lastLineLength = model.getLineLength(lineCount);
+      if (!newCode.startsWith(currentCode)) {
+        // This is a safety net for rare cases where the new code streamed in
+        // does not begin with the current code. This can happen when streaming
+        // in code with search/replace diff markers and the diff marker in chunk
+        // is incomplete, for example "<<<<<<< SEAR" instead of
+        // "<<<<<<< SEARCH". In this case the code diff parsing logic
+        // in parseCodeContent will not recognize the diff marker and it will
+        // display "<<<<<<< SEAR" for a brief moment in the editor, before getting
+        // a chunk with a complete diff marker. In this case we need to reset
+        // the data otherwise the appending delta will be incorrect and we'll
+        // see mangled code in the editor (syntax errors with incomplete diff markers).
+        model.setValue(newCode);
+      } else {
+        let codeDelta = newCode.slice(currentCode.length);
 
-      let range = {
-        startLineNumber: lineCount,
-        startColumn: lastLineLength + 1,
-        endLineNumber: lineCount,
-        endColumn: lastLineLength + 1,
-      };
+        let lineCount = model.getLineCount();
+        let lastLineLength = model.getLineLength(lineCount);
 
-      let editOperation = {
-        range: range,
-        text: codeDelta,
-        forceMoveMarkers: true,
-      };
+        let range = {
+          startLineNumber: lineCount,
+          startColumn: lastLineLength + 1,
+          endLineNumber: lineCount,
+          endColumn: lastLineLength + 1,
+        };
 
-      let withDisabledReadOnly = (readOnlySetting: boolean, fn: () => void) => {
-        editor.updateOptions({ readOnly: false });
-        fn();
-        editor.updateOptions({ readOnly: readOnlySetting });
-      };
+        let editOperation = {
+          range: range,
+          text: codeDelta,
+          forceMoveMarkers: true,
+        };
 
-      withDisabledReadOnly(!!editorDisplayOptions.readOnly, () => {
-        editor.executeEdits('append-source', [editOperation]);
-      });
+        let withDisabledReadOnly = (
+          readOnlySetting: boolean,
+          fn: () => void,
+        ) => {
+          editor.updateOptions({ readOnly: false });
+          fn();
+          editor.updateOptions({ readOnly: readOnlySetting });
+        };
 
-      editor.revealLine(lineCount + 1); // Scroll to the end as the code streams
+        withDisabledReadOnly(!!editorDisplayOptions.readOnly, () => {
+          editor.executeEdits('append-source', [editOperation]);
+        });
+
+        editor.revealLine(lineCount + 1); // Scroll to the end as the code streams
+
+        applyCodeDiffDecorations(editor, monacoSDK, codeData);
+      }
     } else {
       let monacoContainer = element;
 
@@ -174,6 +226,7 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
       monacoSDK.editor.setModelLanguage(model, language);
 
       model.setValue(code);
+      applyCodeDiffDecorations(editor, monacoSDK, codeData);
 
       this.monacoState = {
         editor,
@@ -206,6 +259,12 @@ class CodeBlockEditor extends Component<Signature> {
 
   <template>
     <style scoped>
+      :global(.line-to-be-replaced) {
+        background-color: rgb(255 0 0 / 37%);
+      }
+      :global(.line-to-be-replaced-with) {
+        background-color: rgb(6 144 29 / 56%);
+      }
       .code-block {
         margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
@@ -216,9 +275,8 @@ class CodeBlockEditor extends Component<Signature> {
     <div
       {{MonacoEditor
         monacoSDK=@monacoSDK
+        codeData=@codeData
         editorDisplayOptions=this.editorDisplayOptions
-        code=@code
-        language=@language
       }}
       class='code-block'
       data-test-editor
@@ -246,8 +304,12 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
     <div class='code-block-actions'>
       {{yield
         (hash
-          copyCode=(component CopyCodeButton code=@code)
-          applyCodePatch=(component ApplyCodePatchButton)
+          copyCode=(component CopyCodeButton code=@codeData.code)
+          applyCodePatch=(component
+            ApplyCodePatchButton
+            codePatch=@codeData.contentWithoutFileUrl
+            fileUrl=@codeData.fileUrl
+          )
         )
       }}
     </div>
