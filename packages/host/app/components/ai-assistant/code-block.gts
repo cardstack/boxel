@@ -280,7 +280,6 @@ class CodeBlockEditor extends Component<Signature> {
       }}
       class='code-block'
       data-test-editor
-      data-test-percy-hide
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
     </div>
