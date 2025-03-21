@@ -255,6 +255,7 @@ class CodeBlockEditor extends Component<Signature> {
       enabled: false,
     },
     readOnly: true,
+    automaticLayout: true,
   };
 
   <template>
