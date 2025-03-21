@@ -1,5 +1,12 @@
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
+import { StringField } from 'https://cardstack.com/base/card-api';
 
 export class Publisher extends CardDef {
   static displayName = 'Publisher';
+  @field name = contains(StringField);
+  @field title = contains(StringField, {
+    computeVia(this: Publisher) {
+      return this.name;
+    },
+  });
 }

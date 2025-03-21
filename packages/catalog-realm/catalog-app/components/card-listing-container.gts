@@ -19,6 +19,8 @@ export default class CardListingContainer extends GlimmerComponent<CardListingCo
         width: var(--card-listing-container-width, 100%);
         height: var(--card-listing-container-height, auto);
         padding: var(--card-listing-container-padding, 0);
+        border: var(--card-listing-container-border, 1px);
+        border-color: var(--card-listing-container-border-color, transparent);
         border-radius: var(
           --card-listing-container-border-radius,
           var(--boxel-border-radius)

@@ -10,4 +10,9 @@ export class License extends CardDef {
   static displayName = 'License';
   @field name = contains(StringField);
   @field content = contains(TextAreaField);
+  @field title = contains(StringField, {
+    computeVia: function (this: License) {
+      return this.name;
+    },
+  });
 }
