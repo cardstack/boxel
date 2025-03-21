@@ -571,9 +571,10 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').exists();
+    assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
+    await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
   });
@@ -610,12 +611,9 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}person-1.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-accordion-item="spec-preview"] button');
     await click('[data-test-create-spec-button]');
     //spec is opened
-    await assert
-      .dom('[data-test-accordion-item="spec-preview"]')
-      .hasClass('open');
+    assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('Person1');

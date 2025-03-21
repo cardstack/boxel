@@ -756,7 +756,7 @@ export default class CodeSubmode extends Component<Signature> {
     return selection ?? 'schema-editor';
   }
 
-  @action private openAccordionItem(item: SelectedAccordionItem) {
+  @action private toggleAccordionItem(item: SelectedAccordionItem) {
     if (this.selectedAccordionItem === item) {
       let index = accordionItems.indexOf(item);
       if (index !== -1 && index === accordionItems.length - 1) {
@@ -983,7 +983,10 @@ export default class CodeSubmode extends Component<Signature> {
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
-                          @onClick={{fn this.openAccordionItem 'schema-editor'}}
+                          @onClick={{fn
+                            this.toggleAccordionItem
+                            'schema-editor'
+                          }}
                           @isOpen={{eq
                             this.selectedAccordionItem
                             'schema-editor'
@@ -1001,7 +1004,7 @@ export default class CodeSubmode extends Component<Signature> {
                       <A.Item
                         class='accordion-item'
                         @contentClass='accordion-item-content'
-                        @onClick={{fn this.openAccordionItem 'playground'}}
+                        @onClick={{fn this.toggleAccordionItem 'playground'}}
                         @isOpen={{eq this.selectedAccordionItem 'playground'}}
                         data-test-accordion-item='playground'
                       >
@@ -1042,13 +1045,20 @@ export default class CodeSubmode extends Component<Signature> {
                       <SpecPreview
                         @selectedDeclaration={{this.selectedDeclaration}}
                         @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
-                        @openAccordionItem={{this.openAccordionItem}}
+                        @toggleAccordionItem={{this.toggleAccordionItem}}
+                        @isPanelOpen={{eq
+                          this.selectedAccordionItem
+                          'spec-preview'
+                        }}
                         as |SpecPreviewTitle SpecPreviewContent|
                       >
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
-                          @onClick={{fn this.openAccordionItem 'spec-preview'}}
+                          @onClick={{fn
+                            this.toggleAccordionItem
+                            'spec-preview'
+                          }}
                           @isOpen={{eq
                             this.selectedAccordionItem
                             'spec-preview'
