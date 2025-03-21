@@ -198,7 +198,6 @@ class Isolated extends Component<typeof Spec> {
         -webkit-line-clamp: 2;
         overflow: hidden;
         text-wrap: pretty;
-        word-break: break-word;
       }
       .box {
         border: 1px solid var(--boxel-border-color);
