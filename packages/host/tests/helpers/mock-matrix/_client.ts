@@ -148,22 +148,8 @@ export class MockClient implements ExtendedClient {
     return Promise.resolve({});
   }
 
-  getAccountData(eventType: string): MatrixEvent | undefined {
-    if (eventType === 'm.direct') {
-      return new MatrixEvent({
-        type: 'm.direct',
-        content: this.sdkOpts.directRooms || {},
-      });
-    }
-    if (eventType === APP_BOXEL_REALMS_EVENT_TYPE) {
-      return new MatrixEvent({
-        type: APP_BOXEL_REALMS_EVENT_TYPE,
-        content: {
-          realms: this.sdkOpts.activeRealms || [],
-        },
-      });
-    }
-    return undefined;
+  getAccountData<T>(_type: string): Promise<T> {
+    throw new Error('Method not implemented.');
   }
 
   addThreePidOnly(_data: MatrixSDK.IAddThreePidOnlyBody): Promise<{}> {
