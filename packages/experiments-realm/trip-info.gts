@@ -74,7 +74,7 @@ export class TravelGoalWithProgress extends TravelGoal {
   };
 }
 
-class Traveler extends FieldDef {
+export class Traveler extends FieldDef {
   static displayName = 'Traveler';
   @field name = contains(StringField);
   @field countryOfOrigin = linksTo(Country);
