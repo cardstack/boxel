@@ -18,8 +18,6 @@ import { Publisher } from './publisher';
 import { Category, Tag } from './category';
 import { License } from './license';
 
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
-
 class EmbeddedTemplate extends Component<typeof Listing> {
   @action addToWorkspace() {
     console.log('addToWorkspace');
