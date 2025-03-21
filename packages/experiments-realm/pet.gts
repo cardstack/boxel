@@ -27,6 +27,15 @@ export class FullName extends FieldDef {
   };
 }
 
+export class Treat extends FieldDef {
+  @field title = contains(StringField);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <@fields.title />
+    </template>
+  };
+}
+
 export class Toy extends FieldDef {
   @field title = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
