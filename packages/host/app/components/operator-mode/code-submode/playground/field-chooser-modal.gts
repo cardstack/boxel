@@ -10,11 +10,11 @@ import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import Preview from '@cardstack/host/components/preview';
 
-import type { FieldDef } from 'https://cardstack.com/base/card-api';
+import type { FieldOption } from './playground-content';
 
 interface Signature {
   Args: {
-    instances: FieldDef[] | undefined;
+    instances: FieldOption[] | undefined;
     selectedIndex: number;
     onSelect: (index: number) => void;
     onClose: () => void;
@@ -34,22 +34,27 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
     data-test-field-chooser
   >
     <:content>
-      <div class='instances'>
-        {{#each @instances as |instance i|}}
-          <CardContainer
-            class={{cn 'instance-container' selected=(eq i @selectedIndex)}}
-            @tag='button'
-            @displayBoundaries={{true}}
-            {{on 'click' (fn @onSelect i)}}
-            aria-label='Select instance {{add i 1}}'
-            data-test-field-instance={{i}}
-          >
-            <Preview @card={{instance}} @format='embedded' />
-          </CardContainer>
-        {{else}}
-          <p>No field instances available</p>
-        {{/each}}
-      </div>
+      {{#if @instances.length}}
+        <ol class='instances'>
+          {{#each @instances as |instance i|}}
+            <li class='field-option'>
+              <span class='field-option-index'>{{instance.displayIndex}}.</span>
+              <CardContainer
+                class={{cn 'instance-container' selected=(eq i @selectedIndex)}}
+                @tag='button'
+                @displayBoundaries={{true}}
+                {{on 'click' (fn @onSelect i)}}
+                aria-label='Select instance {{add i 1}}'
+                data-test-field-instance={{i}}
+              >
+                <Preview @card={{instance.field}} @format='embedded' />
+              </CardContainer>
+            </li>
+          {{/each}}
+        </ol>
+      {{else}}
+        <p>No field instances available</p>
+      {{/if}}
     </:content>
   </ModalContainer>
 
@@ -63,6 +68,8 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
     .instances {
       display: grid;
       gap: var(--boxel-sp);
+      margin-block: 0;
+      padding-inline-start: 0;
     }
     .instance-container {
       appearance: none;
@@ -75,6 +82,14 @@ const FieldChooser: TemplateOnlyComponent<Signature> = <template>
     .instance-container:hover,
     .instance-container:focus {
       box-shadow: 0 0 0 2px var(--boxel-highlight-hover);
+    }
+    .field-option {
+      display: flex;
+      gap: var(--boxel-sp-xs);
+    }
+    .field-option-index {
+      width: var(--boxel-sp);
+      text-align: center;
     }
   </style>
 </template>;
