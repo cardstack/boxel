@@ -26,6 +26,7 @@ import {
   getPlaygroundSelections,
   getRecentFiles,
   assertCardExists,
+  selectDeclaration,
 } from '../../helpers/playground';
 
 import { setupApplicationTest } from '../../helpers/setup';
@@ -65,6 +66,9 @@ const personCardSource = `
   }
   export class PersonField extends FieldDef {
     static displayName = 'PersonField';
+  }
+  export class DifferentField extends FieldDef {
+    static displayName = 'DifferentField';
   }
 `;
 
@@ -451,6 +455,26 @@ module('Acceptance | Spec preview', function (hooks) {
               ref: {
                 module: `./pet`,
                 name: 'PetField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'different-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'DifferentField',
+              description: 'Spec for DifferentField',
+              specType: 'field',
+              ref: {
+                module: `./person`,
+                name: 'DifferentField',
               },
             },
             meta: {
@@ -1021,5 +1045,51 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('Pet');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
+  });
+
+  test('it does not set the wrong spec for field playground', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    assert.dom('[data-test-playground-panel]').exists();
+    let selection =
+      getPlaygroundSelections()?.[`${testRealmURL}person/PersonField`];
+    assert.strictEqual(selection, undefined);
+
+    await selectDeclaration('PersonField');
+    selection =
+      getPlaygroundSelections()?.[`${testRealmURL}person/PersonField`];
+    assert.strictEqual(
+      selection,
+      undefined,
+      'Person Spec is not set as the spec for PersonField',
+    );
+    assert.dom('[data-test-create-spec-button]').exists();
+
+    await selectDeclaration('DifferentField');
+    let newSelection =
+      getPlaygroundSelections()?.[`${testRealmURL}person/DifferentField`];
+    assert.strictEqual(
+      newSelection?.cardId,
+      `${testRealmURL}different-field-entry`,
+    );
+    assert.dom('[data-test-create-spec-button]').doesNotExist();
+
+    await selectDeclaration('PersonField');
+    selection =
+      getPlaygroundSelections()?.[`${testRealmURL}person/PersonField`];
+    assert.strictEqual(
+      selection,
+      undefined,
+      'DifferentField Spec is not set as the spec for PersonField',
+    );
+    assert.strictEqual(
+      selection,
+      undefined,
+      'DifferentField Spec is not set as the spec for PersonField',
+    );
+    assert.dom('[data-test-create-spec-button]').exists();
   });
 });
