@@ -1,5 +1,4 @@
 import { fn, hash } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
@@ -7,13 +6,14 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
+import { modifier } from 'ember-modifier';
 
 import { consume } from 'ember-provide-consume-context';
 
-import { AddButton, BoxelSelect } from '@cardstack/boxel-ui/components';
-import { and, bool, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -29,6 +29,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import { consumeContext } from '@cardstack/host/helpers/consume-context';
+
+import { getSearch } from '@cardstack/host/resources/search';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -71,6 +73,13 @@ interface Signature {
     isFieldDef?: boolean;
   };
 }
+
+const createSpec = modifier((_element: HTMLElement, [fn]: [() => void]) => {
+  if (!fn) {
+    throw new Error('No function was provided to createSpec modifier');
+  }
+  fn();
+});
 
 export default class PlaygroundContent extends Component<Signature> {
   <template>
@@ -116,17 +125,14 @@ export default class PlaygroundContent extends Component<Signature> {
             @setFormat={{this.setFormat}}
             data-test-playground-format-chooser
           />
-        {{else if (and (bool this.card) this.canWriteRealm)}}
-          <AddButton
-            class='add-field-button'
-            @variant='full-width'
-            @iconWidth='12px'
-            @iconHeight='12px'
-            {{on 'click' this.createNew}}
-            data-test-add-field-instance
-          >
-            Add Field
-          </AddButton>
+        {{else if @isFieldDef}}
+          {{#if
+            (or this.searchFieldSpec.isLoading this.createNewCard.isRunning)
+          }}
+            <LoadingIndicator @color='var(--boxel-light)' />
+          {{else if this.fieldHasNoSpec}}
+            <div {{createSpec this.createNew}} />
+          {{/if}}
         {{/if}}
       {{/let}}
     </div>
@@ -177,10 +183,6 @@ export default class PlaygroundContent extends Component<Signature> {
         --boxel-format-chooser-button-width: 85px;
         --boxel-format-chooser-button-min-width: 85px;
       }
-      .add-field-button {
-        max-width: 500px;
-        margin-inline: auto;
-      }
     </style>
   </template>
 
@@ -196,6 +198,32 @@ export default class PlaygroundContent extends Component<Signature> {
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
   @tracked private fieldChooserIsOpen = false;
   @tracked private cardResource: ReturnType<getCard> | undefined;
+
+  private get specQuery(): Query {
+    return {
+      filter: {
+        on: specRef,
+        eq: { ref: this.args.codeRef },
+      },
+    };
+  }
+
+  private searchFieldSpec = getSearch(
+    this,
+    () => this.specQuery,
+    () => this.realmServer.availableRealmURLs,
+    { isLive: true, isAutoSaved: true },
+  );
+
+  private get fieldHasNoSpec() {
+    if (!this.args.isFieldDef || this.createNewCard.isRunning) {
+      return false;
+    }
+    return (
+      !this.searchFieldSpec.isLoading &&
+      this.searchFieldSpec.instances?.length === 0
+    );
+  }
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
 
@@ -276,11 +304,13 @@ export default class PlaygroundContent extends Component<Signature> {
   }
 
   private get fieldInstances(): FieldOption[] | undefined {
-    if (!this.args.isFieldDef) {
+    if (!this.args.isFieldDef || !this.card) {
       return undefined;
     }
-    let instances = (this.card as Spec | undefined)?.containedExamples;
+    let spec = this.card as Spec;
+    let instances = spec.containedExamples;
     if (!instances?.length) {
+      this.createNewField.perform(spec);
       return undefined;
     }
     return instances.map((field, i) => {
@@ -453,8 +483,11 @@ export default class PlaygroundContent extends Component<Signature> {
     return this.createNewCard.isRunning || this.createNewField.isRunning;
   }
 
-  private createNewCard = task(async () => {
+  private createNewCard = restartableTask(async () => {
     if (this.args.isFieldDef) {
+      let fieldCard = await loadCard(this.args.codeRef, {
+        loader: this.loaderService.loader,
+      });
       // for field def, create a new spec card instance
       this.newCardJSON = {
         data: {
@@ -462,8 +495,16 @@ export default class PlaygroundContent extends Component<Signature> {
             specType: 'field',
             ref: this.args.codeRef,
             title: this.args.codeRef.name,
+            containedExamples: [new fieldCard()],
           },
           meta: {
+            fields: {
+              containedExamples: [
+                {
+                  adoptsFrom: this.args.codeRef,
+                },
+              ],
+            },
             adoptsFrom: specRef,
             realmURL: this.operatorModeStateService.realmURL.href,
           },
@@ -482,15 +523,17 @@ export default class PlaygroundContent extends Component<Signature> {
     await this.cardResource?.loaded; // TODO: remove await when card-resource is refactored
     if (this.card) {
       this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
-      if (this.args.isFieldDef) {
-        this.createNewField.perform(this.card as Spec);
-      } else {
-        this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
-      }
+      this.persistSelections(
+        this.card.id,
+        'edit',
+        this.args.isFieldDef ? 0 : undefined,
+      ); // open new instance in playground in edit format
     }
+    this.closeInstanceChooser();
   });
 
-  private createNewField = task(async (specCard: Spec) => {
+  private createNewField = restartableTask(async (specCard: Spec) => {
+    console.log('start task');
     let fieldCard = await loadCard(this.args.codeRef, {
       loader: this.loaderService.loader,
     });
@@ -499,6 +542,7 @@ export default class PlaygroundContent extends Component<Signature> {
     let index = examples?.length ? examples.length - 1 : 0;
     this.persistSelections(specCard.id, 'edit', index);
     this.closeInstanceChooser();
+    console.log('added field');
   });
 
   private get realmInfo() {
