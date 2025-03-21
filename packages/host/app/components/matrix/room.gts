@@ -162,7 +162,7 @@ export default class Room extends Component<Signature> {
               />
               <LLMSelect
                 @selected={{@roomResource.activeLLM}}
-                @onChange={{@roomResource.activateLLM}}
+                @onChange={{perform @roomResource.activateLLMTask}}
                 @options={{this.supportedLLMs}}
                 @disabled={{@roomResource.isActivatingLLM}}
               />
@@ -555,7 +555,7 @@ export default class Room extends Component<Signature> {
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
-    await this.args.roomResource.loading;
+    await this.args.roomResource.processing;
   });
 
   private get messages() {

@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { type CardDef, isCompoundField } from '../card-api';
+import { type CardDef } from '../card-api';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 export default class DefaultAtomViewTemplate extends GlimmerComponent<{
@@ -14,9 +14,6 @@ export default class DefaultAtomViewTemplate extends GlimmerComponent<{
     }
     if (typeof this.args.model.title === 'string') {
       return this.args.model.title.trim();
-    }
-    if (isCompoundField(this.args.model)) {
-      return;
     }
     return `Untitled ${this.args.model.constructor.displayName}`;
   }

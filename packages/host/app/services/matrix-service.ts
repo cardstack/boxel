@@ -1529,11 +1529,11 @@ export default class MatrixService extends Service {
     });
   }
 
-  async setLLMForCodeMode() {
+  setLLMForCodeMode() {
     this.setLLMModel('anthropic/claude-3.5-sonnet');
   }
 
-  private async setLLMModel(model: string) {
+  private setLLMModel(model: string) {
     if (!DEFAULT_LLM_LIST.includes(model)) {
       throw new Error(`Cannot find LLM model: ${model}`);
     }
@@ -1544,8 +1544,7 @@ export default class MatrixService extends Service {
     if (!roomResource) {
       return;
     }
-    await roomResource.loading;
-    roomResource.activateLLM(model);
+    roomResource.activateLLMTask.perform(model);
   }
 }
 
