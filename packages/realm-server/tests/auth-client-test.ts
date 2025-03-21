@@ -37,7 +37,7 @@ module(basename(__filename), function () {
         async hashMessageWithSecret(_message: string): Promise<string> {
           throw new Error('Method not implemented.');
         },
-        async getAccountData() {
+        async getAccountDataFromServer() {
           return {};
         },
         async setAccountData() {

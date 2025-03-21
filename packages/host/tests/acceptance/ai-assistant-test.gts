@@ -35,6 +35,7 @@ import {
 } from '../helpers/base-realm';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
 
 async function selectCardFromCatalog(cardId: string) {
@@ -52,6 +53,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
+    directRooms: [
+      getRoomIdForRealmAndUser(testRealmURL, '@testuser:localhost'),
+      getRoomIdForRealmAndUser(baseRealm.url, '@testuser:localhost'),
+    ],
   });
 
   let { createAndJoinRoom, getRoomState } = mockMatrixUtils;

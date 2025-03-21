@@ -4,7 +4,7 @@ import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task, dropTask } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash';
 import {
@@ -119,7 +119,7 @@ import type ResetService from './reset';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
-const { matrixURL, environment } = ENV;
+const { matrixURL } = ENV;
 const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 const SLIDING_SYNC_AI_ROOM_LIST_NAME = 'ai-room';
@@ -181,7 +181,7 @@ export default class MatrixService extends Service {
 
   private slidingSync: SlidingSync | undefined;
   private aiRoomIds: Set<string> = new Set();
-  @tracked private isLoadingMoreAIRooms = false;
+  @tracked private _isLoadingMoreAIRooms = false;
 
   constructor(owner: Owner) {
     super(owner);
@@ -555,7 +555,7 @@ export default class MatrixService extends Service {
       filters: {
         is_dm: true,
       },
-      timeline_limit: 1,
+      timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       required_state: [['*', '*']],
     });
     this.slidingSync = new this.matrixSdkLoader.SlidingSync(
@@ -565,7 +565,7 @@ export default class MatrixService extends Service {
         timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       },
       this.client as any,
-      environment === 'test' ? 200 : 2000,
+      500,
     );
     this.slidingSync.on(
       SlidingSyncEvent.Lifecycle,
@@ -1224,7 +1224,7 @@ export default class MatrixService extends Service {
     return await this.client.isUsernameAvailable(username);
   }
 
-  private loadAllTimelineEvents = restartableTask(async (roomId: string) => {
+  private loadAllTimelineEvents = dropTask(async (roomId: string) => {
     let roomData = this.ensureRoomData(roomId);
     let room = this.client.getRoom(roomId);
     let roomResource = this.roomResources.get(roomId);
@@ -1669,8 +1669,12 @@ export default class MatrixService extends Service {
     this.loadMoreAIRoomsTask.perform();
   }
 
-  private loadMoreAIRoomsTask = restartableTask(async () => {
-    if (!this.slidingSync) return;
+  private loadMoreAIRoomsTask = dropTask(async () => {
+    if (!this.slidingSync) {
+      throw new Error(
+        'To load more AI rooms, sliding sync must be initialized',
+      );
+    }
 
     let currentList = this.slidingSync.getListParams(
       SLIDING_SYNC_AI_ROOM_LIST_NAME,
@@ -1686,22 +1690,26 @@ export default class MatrixService extends Service {
 
     let newEndRange = currentRange[1] + 10;
 
-    this.isLoadingMoreAIRooms = true;
+    this._isLoadingMoreAIRooms = true;
     try {
       await this.slidingSync.setListRanges(SLIDING_SYNC_AI_ROOM_LIST_NAME, [
         [0, newEndRange],
       ]);
     } finally {
-      this.isLoadingMoreAIRooms = false;
+      this._isLoadingMoreAIRooms = false;
     }
   });
 
-  get loadingMoreAIRooms() {
-    return this.isLoadingMoreAIRooms;
+  get isLoadingMoreAIRooms() {
+    return this._isLoadingMoreAIRooms;
   }
 
   async loadMoreAuthRooms(realms: string[]) {
-    if (!this.slidingSync) return;
+    if (!this.slidingSync) {
+      throw new Error(
+        'To load more auth rooms, sliding sync must be initialized',
+      );
+    }
 
     let currentList = this.slidingSync.getListParams(
       SLIDING_SYNC_AUTH_ROOM_LIST_NAME,

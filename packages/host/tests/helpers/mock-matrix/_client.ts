@@ -52,9 +52,16 @@ export class MockClient implements ExtendedClient {
   async getAccountDataFromServer<T extends { [k: string]: any }>(
     _eventType: string,
   ): Promise<T | null> {
-    return {
-      realms: this.sdkOpts.activeRealms ?? [],
-    } as unknown as T;
+    if (_eventType === 'm.direct') {
+      return {
+        [this.loggedInAs!]: this.sdkOpts.directRooms ?? [],
+      } as unknown as T;
+    } else if (_eventType === APP_BOXEL_REALMS_EVENT_TYPE) {
+      return {
+        realms: this.sdkOpts.activeRealms ?? [],
+      } as unknown as T;
+    }
+    return null;
   }
 
   get loggedInAs() {
@@ -105,6 +112,7 @@ export class MockClient implements ExtendedClient {
       nonce: nonce++,
       permissions,
     };
+
     let stringifiedHeader = JSON.stringify(header);
     let stringifiedPayload = JSON.stringify(payload);
     let headerAndPayload = `${btoa(stringifiedHeader)}.${btoa(
@@ -131,7 +139,7 @@ export class MockClient implements ExtendedClient {
     if (type === APP_BOXEL_REALMS_EVENT_TYPE) {
       this.sdkOpts.activeRealms = (data as any).realms;
     } else if (type === 'm.direct') {
-      this.sdkOpts.directRooms = data as any;
+      this.sdkOpts.directRooms = (data as any)[this.loggedInAs!];
     } else {
       throw new Error(
         'Support for updating this event type in account data is not yet implemented in this mock.',
@@ -636,22 +644,21 @@ export class MockClient implements ExtendedClient {
   ): Promise<MSC3575SlidingSyncResponse> {
     let lists: MSC3575SlidingSyncResponse['lists'] = {};
     let rooms: MSC3575SlidingSyncResponse['rooms'] = {};
-    Object.entries(req.lists || {}).forEach(([listKey, list]) => {
-      list.ranges.forEach((range) => {
-        let [start, end] = range;
+    for (const [listKey, list] of Object.entries(req.lists || {})) {
+      for (let i = 0; i < list.ranges.length; i++) {
+        let [start, end] = list.ranges[i];
         //currently we only filter rooms using is_dm
-        let dmRooms =
-          this.getAccountData('m.direct')?.getContent()?.rooms ?? [];
+        let dmRooms = (await this.getAccountDataFromServer('m.direct')) ?? {};
         let roomsInRange = this.serverState.rooms
-          .filter((r) => r.id.includes('mock'))
           .filter((r) =>
             list.filters?.is_dm
-              ? dmRooms.includes(r.id)
-              : !dmRooms.includes(r.id),
+              ? dmRooms[this.loggedInAs!]?.includes(r.id)
+              : !dmRooms[this.loggedInAs!]?.includes(r.id),
           )
           .slice(start, end + 1);
 
-        roomsInRange.forEach((room) => {
+        for (let j = 0; j < roomsInRange.length; j++) {
+          let room = roomsInRange[j];
           let timeline = this.serverState.getRoomEvents(room.id);
           rooms[room.id] = {
             name:
@@ -665,11 +672,11 @@ export class MockClient implements ExtendedClient {
             invited_count: 0,
             initial: true,
           };
-
-          timeline.forEach((event: MatrixSDK.IRoomEvent) => {
+          for (let k = 0; k < timeline.length; k++) {
+            let event = timeline[k];
             this.emitEvent(new MatrixEvent(event));
-          });
-        });
+          }
+        }
 
         lists[listKey] = {
           count: roomsInRange.length,
@@ -681,8 +688,8 @@ export class MockClient implements ExtendedClient {
             },
           ],
         };
-      });
-    });
+      }
+    }
 
     let response: MSC3575SlidingSyncResponse = {
       pos: String(Date.now()),

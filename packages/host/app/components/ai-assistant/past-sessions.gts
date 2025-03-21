@@ -68,7 +68,7 @@ export default class AiAssistantPastSessionsList extends Component<Signature> {
             {{#each @sessions key='roomId' as |session|}}
               <PastSessionItem @session={{session}} @actions={{@roomActions}} />
             {{/each}}
-            {{#if this.matrixService.loadingMoreAIRooms}}
+            {{#if this.matrixService.isLoadingMoreAIRooms}}
               <li
                 class='loading-indicator-container'
                 data-test-loading-more-rooms
