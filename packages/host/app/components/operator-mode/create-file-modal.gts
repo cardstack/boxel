@@ -390,8 +390,8 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isReady() {
     return this.definitionClass
-      ? Boolean(this.defaultSpecResource?.isLoaded)
-      : true;
+      ? true
+      : Boolean(this.defaultSpecResource?.isLoaded);
   }
 
   private get selectedSpec() {
