@@ -203,7 +203,7 @@ interface ContentSignature {
     spec: Spec | undefined;
     isLoading: boolean;
     viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
-    onSpecView: (specId: string) => void;
+    onSpecView: (spec: Spec) => void;
   };
 }
 
@@ -351,7 +351,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 @card={{@spec}}
                 @format='edit'
                 @cardContext={{this.cardContext}}
-                {{SpecPreviewModifier id=@spec.id onSpecView=@onSpecView}}
+                {{SpecPreviewModifier spec=@spec onSpecView=@onSpecView}}
               />
             {{/if}}
           </div>
@@ -675,8 +675,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  private onSpecView = (id: string) => {
-    this.updatePlaygroundSelections(id, true);
+  private onSpecView = (spec: Spec) => {
+    if (!spec.isField) {
+      return; // not a field spec
+    }
+    if (
+      this.getSelectedDeclarationAsCodeRef.name !== spec.ref.name ||
+      this.getSelectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
+    ) {
+      return; // not the right field spec
+    }
+    this.updatePlaygroundSelections(spec.id, true);
   };
 
   private viewCardInPlayground = (card: CardDefOrId) => {
@@ -786,8 +795,8 @@ function getRelativePath(baseUrl: string, targetUrl: string) {
 interface ModifierSignature {
   Args: {
     Named: {
-      id?: string;
-      onSpecView?: (id: string) => void;
+      spec?: Spec;
+      onSpecView?: (spec: Spec) => void;
     };
   };
 }
@@ -798,13 +807,13 @@ export class SpecPreviewModifier extends Modifier<ModifierSignature> {
   modify(
     _element: HTMLElement,
     _positional: [],
-    { id, onSpecView }: ModifierSignature['Args']['Named'],
+    { spec, onSpecView }: ModifierSignature['Args']['Named'],
   ) {
-    if (!id || !onSpecView) {
-      throw new Error('bug: no id or onSpecView hook');
+    if (!spec || !onSpecView) {
+      throw new Error('bug: no spec or onSpecView hook');
     }
     next(() => {
-      onSpecView(id);
+      onSpecView(spec);
     });
   }
 }
