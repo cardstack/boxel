@@ -68,7 +68,11 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
       commodo consequat.</div>
   {{else if (eq @format 'fitted')}}
-    <FittedFormatGallery @card={{@card}} @isDarkMode={{true}} />
+    <FittedFormatGallery
+      @card={{@card}}
+      @isDarkMode={{true}}
+      @isFieldDef={{@isFieldDef}}
+    />
   {{/if}}
 
   <style scoped>
