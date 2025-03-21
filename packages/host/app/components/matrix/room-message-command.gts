@@ -1,3 +1,4 @@
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
@@ -17,7 +18,7 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 
-import { MenuItem, bool, cn } from '@cardstack/boxel-ui/helpers';
+import { MenuItem, bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
 import { ArrowLeft } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
@@ -41,7 +42,8 @@ import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
 import Preview from '../preview';
-import { hash } from '@ember/helper';
+
+import PreparingRoomMessageCommand from './preparing-room-message-command';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -52,6 +54,7 @@ interface Signature {
     runCommand: () => void;
     isError?: boolean;
     isPending?: boolean;
+    isStreaming: boolean;
     monacoSDK: MonacoSDK;
   };
 }
@@ -167,77 +170,80 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{#if @messageCommand.description}}
         <div class='command-description'>{{@messageCommand.description}}</div>
       {{/if}}
-      <div
-        class='command-button-bar'
-        {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
-              Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
-        {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
-        data-test-command-card-idle={{this.commandService.run.isIdle}}
-      >
-        <Button
-          class='view-code-button'
-          {{on 'click' this.toggleViewCode}}
-          @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-          @size='extra-small'
-          data-test-view-code-button
+      {{#if @isStreaming}}
+        <PreparingRoomMessageCommand />
+      {{else}}
+        <div
+          class='command-button-bar'
+          data-test-command-card-idle={{not
+            (eq @messageCommand.status 'applying')
+          }}
         >
-          {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-        </Button>
-        <ApplyButton
-          @state={{this.applyButtonState}}
-          {{on 'click' @runCommand}}
-          data-test-command-apply={{this.applyButtonState}}
-        />
-      </div>
-      {{#if this.isDisplayingCode}}
-        <CodeBlock
-          {{this.scrollBottomIntoView}}
-          @monacoSDK={{@monacoSDK}}
-          @codeData={{hash code=this.previewCommandCode language='json'}}
-          as |codeBlock|
-        >
-          <codeBlock.actions as |actions|>
-            <actions.copyCode />
-          </codeBlock.actions>
-          <codeBlock.editor />
-        </CodeBlock>
-      {{/if}}
-      {{#if this.failedCommandState}}
-        <div class='failed-command-result'>
-          <span class='failed-command-text'>
-            {{this.failedCommandState.message}}
-          </span>
           <Button
-            {{on 'click' @runCommand}}
-            class='retry-button'
-            @size='small'
-            @kind='secondary-dark'
-            data-test-retry-command-button
+            class='view-code-button'
+            {{on 'click' this.toggleViewCode}}
+            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
+            @size='extra-small'
+            data-test-view-code-button
           >
-            Retry
+            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
           </Button>
+          <ApplyButton
+            @state={{this.applyButtonState}}
+            {{on 'click' @runCommand}}
+            data-test-command-apply={{this.applyButtonState}}
+          />
         </div>
-      {{/if}}
-      {{#if this.commandResultCard.card}}
-        <CardContainer
-          @displayBoundaries={{false}}
-          class='command-result-card-preview'
-          data-test-command-result-container
-        >
-          <CardHeader
-            @cardTypeDisplayName={{this.headerTitle}}
-            @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
-            @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
-            class='header'
-            data-test-command-result-header
-          />
-          <Preview
-            @card={{this.commandResultCard.card}}
-            @format='embedded'
-            @displayContainer={{false}}
-            data-test-boxel-command-result
-          />
-        </CardContainer>
+        {{#if this.isDisplayingCode}}
+          <CodeBlock
+            {{this.scrollBottomIntoView}}
+            @monacoSDK={{@monacoSDK}}
+            @codeData={{hash code=this.previewCommandCode language='json'}}
+            as |codeBlock|
+          >
+            <codeBlock.actions as |actions|>
+              <actions.copyCode />
+            </codeBlock.actions>
+            <codeBlock.editor />
+          </CodeBlock>
+        {{/if}}
+        {{#if this.failedCommandState}}
+          <div class='failed-command-result'>
+            <span class='failed-command-text'>
+              {{this.failedCommandState.message}}
+            </span>
+            <Button
+              {{on 'click' @runCommand}}
+              class='retry-button'
+              @size='small'
+              @kind='secondary-dark'
+              data-test-retry-command-button
+            >
+              Retry
+            </Button>
+          </div>
+        {{/if}}
+        {{#if this.commandResultCard.card}}
+          <CardContainer
+            @displayBoundaries={{false}}
+            class='command-result-card-preview'
+            data-test-command-result-container
+          >
+            <CardHeader
+              @cardTypeDisplayName={{this.headerTitle}}
+              @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
+              @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+              class='header'
+              data-test-command-result-header
+            />
+            <Preview
+              @card={{this.commandResultCard.card}}
+              @format='embedded'
+              @displayContainer={{false}}
+              data-test-boxel-command-result
+            />
+          </CardContainer>
+        {{/if}}
       {{/if}}
     </div>
 

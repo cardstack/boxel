@@ -1,24 +1,19 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import { consume } from 'ember-provide-consume-context';
 import { TrackedObject } from 'tracked-built-ins';
 
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import {
-  type getCard,
-  GetCardContextName,
-  baseRealm,
-  getPlural,
-} from '@cardstack/runtime-common';
+import { baseRealm, getPlural } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/modifiers/consume-context';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -30,18 +25,17 @@ import type { PillMenuItem } from './index';
 
 const sampleCardURLs = [
   `${baseRealm.url}SkillCard/card-editing`,
-  `${baseRealm.url}SkillCard/generate-product-requirements`,
+  `${baseRealm.url}SkillCard/source-code-editing`,
 ];
 
 export default class PillMenuUsage extends Component {
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @service private declare store: StoreService;
 
   @tracked private title = 'Pill Menu';
   @tracked private isExpandableHeader = false;
   @tracked private items: PillMenuItem[] = [];
   @tracked private itemDisplayName = 'Card';
   @tracked private canAttachCard = false;
-  @tracked private resources: ReturnType<getCard>[] = [];
   private headerIconURL = headerIcon;
 
   constructor(owner: Owner, args: {}) {
@@ -49,32 +43,21 @@ export default class PillMenuUsage extends Component {
     this.attachSampleCards.perform();
   }
 
-  private makeCardResources = () => {
-    this.resources = sampleCardURLs.map((url) =>
-      this.getCard(this, () => url, {
-        isLive: false,
-      }),
-    );
-  };
-
-  private attachSampleCards = restartableTask(async () => {
-    let cards: CardDef[] = [];
-    await Promise.all(
-      this.resources.map(async (resource) => {
-        await resource.loaded;
-        if (resource.card) {
-          cards.push(resource.card);
-        }
-      }),
-    );
-    let items = cards.map(
+  private attachSampleCards = task(async () => {
+    let cards = (
+      await Promise.all(
+        sampleCardURLs.map((url) =>
+          this.store.getInstanceDetachedFromStore(url),
+        ),
+      )
+    ).filter(Boolean) as CardDef[];
+    this.items = cards.map(
       (card) =>
         new TrackedObject({
           card,
           isActive: true,
         }),
     );
-    this.items = items;
   });
 
   private get activeItems() {
@@ -94,10 +77,7 @@ export default class PillMenuUsage extends Component {
   }
 
   <template>
-    <FreestyleUsage
-      @name='PillMenu'
-      {{consumeContext consume=this.makeCardResources}}
-    >
+    <FreestyleUsage @name='PillMenu'>
       <:description>
         Component with a header and a list of card pills.
       </:description>

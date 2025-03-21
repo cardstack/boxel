@@ -5,3 +5,4 @@ export const CodeModePanelHeights = 'code-mode-panel-heights';
 export const CodeModePanelSelections = 'code-mode-panel-selections';
 export const SessionLocalStorageKey = 'boxel-session';
 export const PlaygroundSelections = 'playground-selections';
+export const SpecSelection = 'spec-selection';

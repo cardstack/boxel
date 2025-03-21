@@ -1,4 +1,4 @@
-import { fn } from '@ember/helper';
+import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
@@ -53,6 +53,17 @@ import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 
+export type FieldOption = {
+  index: number;
+  displayIndex: number;
+  field: FieldDef;
+};
+
+export type SelectedInstance = {
+  card: CardDef;
+  fieldIndex: number | undefined;
+};
+
 interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
@@ -69,9 +80,12 @@ export default class PlaygroundContent extends Component<Signature> {
     >
       <div class='instance-chooser-container'>
         <InstanceSelectDropdown
-          @query={{this.query}}
-          @realms={{this.recentRealms}}
-          @card={{this.card}}
+          @prerenderedCardQuery={{hash
+            query=this.query
+            realms=this.recentRealms
+          }}
+          @fieldOptions={{this.fieldInstances}}
+          @selection={{this.dropdownSelection}}
           @onSelect={{this.onSelect}}
           @chooseCard={{this.chooseInstance}}
           @createNew={{if this.canWriteRealm this.createNew}}
@@ -210,9 +224,9 @@ export default class PlaygroundContent extends Component<Signature> {
     ];
   }
 
-  private get query(): Query {
+  private get query(): Query | undefined {
     if (this.args.isFieldDef) {
-      // TODO
+      return undefined;
     }
     return {
       filter: {
@@ -263,15 +277,22 @@ export default class PlaygroundContent extends Component<Signature> {
     return this.args.isFieldDef ? 0 : undefined;
   }
 
-  private get fieldInstances(): FieldDef[] | undefined {
+  private get fieldInstances(): FieldOption[] | undefined {
     if (!this.args.isFieldDef) {
       return undefined;
     }
-    let instances = (this.card as Spec)?.containedExamples;
+    let instances = (this.card as Spec | undefined)?.containedExamples;
     if (!instances?.length) {
       return undefined;
     }
-    return instances;
+    return instances.map((field, i) => {
+      let option: FieldOption = {
+        index: i,
+        displayIndex: i + 1,
+        field,
+      };
+      return option;
+    });
   }
 
   private get field(): FieldDef | undefined {
@@ -283,7 +304,7 @@ export default class PlaygroundContent extends Component<Signature> {
       // display the next available instance if item was deleted
       index = this.fieldInstances.length - 1;
     }
-    return this.fieldInstances[index];
+    return this.fieldInstances[index].field;
   }
 
   private copyToClipboard = task(async (id: string) => {
@@ -349,8 +370,34 @@ export default class PlaygroundContent extends Component<Signature> {
     );
   };
 
-  @action private onSelect(card: PrerenderedCard) {
-    this.persistSelections(card.url.replace(/\.json$/, ''));
+  @action private onSelect(item: PrerenderedCard | FieldOption) {
+    if (this.args.isFieldDef) {
+      this.persistSelections(
+        this.card!.id,
+        this.format,
+        (item as FieldOption).index,
+      );
+    } else {
+      this.persistSelections(
+        (item as PrerenderedCard).url.replace(/\.json$/, ''),
+      );
+    }
+  }
+
+  private get dropdownSelection(): SelectedInstance | undefined {
+    if (!this.card) {
+      return undefined;
+    }
+    if (this.args.isFieldDef) {
+      return {
+        card: this.card,
+        fieldIndex: this.fieldIndex,
+      };
+    }
+    return {
+      card: this.card,
+      fieldIndex: undefined,
+    };
   }
 
   @action private setFormat(format: Format) {
