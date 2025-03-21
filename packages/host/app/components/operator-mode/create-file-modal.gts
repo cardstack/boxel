@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -70,7 +69,6 @@ export const newFileTypes: NewFileType[] = [
   'field-definition',
   'spec-instance',
 ];
-const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
 export interface FileType {
   id: NewFileType;
@@ -411,34 +409,29 @@ export default class CreateFileModal extends Component<Signature> {
       },
       sourceInstance?: CardDef,
     ) => {
-      let token = waiter.beginAsync();
-      try {
-        this.currentRequest = {
-          fileType,
-          newFileDeferred: new Deferred(),
-          realmURL,
-          definitionClass,
-          sourceInstance,
-        };
-        if (!this.definitionClass) {
-          let specEntryPath =
-            this.fileType.id === 'field-definition'
-              ? 'fields/field'
-              : 'types/card';
-          this.defaultSpecResource = this.getCard(
-            this,
-            () => `${baseRealm.url}${specEntryPath}`,
-            {
-              isLive: false,
-            },
-          );
-        }
-        let url = await this.currentRequest.newFileDeferred.promise;
-        this.clearState();
-        return url;
-      } finally {
-        waiter.endAsync(token);
+      this.currentRequest = {
+        fileType,
+        newFileDeferred: new Deferred(),
+        realmURL,
+        definitionClass,
+        sourceInstance,
+      };
+      if (!this.definitionClass) {
+        let specEntryPath =
+          this.fileType.id === 'field-definition'
+            ? 'fields/field'
+            : 'types/card';
+        this.defaultSpecResource = this.getCard(
+          this,
+          () => `${baseRealm.url}${specEntryPath}`,
+          {
+            isLive: false,
+          },
+        );
       }
+      let url = await this.currentRequest.newFileDeferred.promise;
+      this.clearState();
+      return url;
     },
   );
 
