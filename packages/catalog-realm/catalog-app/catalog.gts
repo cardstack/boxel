@@ -60,46 +60,48 @@ class Isolated extends Component<typeof Catalog> {
           <FilterSection />
         </div>
         {{! Note: Content will be display 2 columns: Content Listing Display and Related Listing Cards in the same time }}
-        <div class='content-area'>
-          {{! Column 1: Card Listing Section }}
-          {{! TODO: We need to have a single listing display at here after click one of card}}
-          <div class='catalog-content'>
-            <TopBarFilter
-              @filters={{this.specFilterOptions}}
-              @activeFilterId={{this.activeSpecFilterId}}
-              @onChange={{this.handleSpecFilterChanged}}
-              class='catalog-filter-bar'
-            />
+        <div class='content-area-container'>
+          <div class='content-area'>
+            {{! Column 1: Card Listing Section }}
+            {{! TODO: We need to have a single listing display at here after click one of card}}
+            <div class='catalog-content'>
+              <TopBarFilter
+                @filters={{this.specFilterOptions}}
+                @activeFilterId={{this.activeSpecFilterId}}
+                @onChange={{this.handleSpecFilterChanged}}
+                class='catalog-filter-bar'
+              />
 
-            <CardListingContainer class='catalog-listing'>
-              {{#if (this.shouldShowSection 'apps')}}
-                <CardSection @title='Apps' @cards={{this.mockCards}} />
-              {{/if}}
+              <CardListingContainer class='catalog-listing'>
+                {{#if (this.shouldShowSection 'apps')}}
+                  <CardSection @title='Apps' @cards={{this.mockCards}} />
+                {{/if}}
 
-              {{#if (this.shouldShowSection 'cards')}}
-                <CardSection @title='Cards' @cards={{this.mockCards}} />
-              {{/if}}
+                {{#if (this.shouldShowSection 'cards')}}
+                  <CardSection @title='Cards' @cards={{this.mockCards}} />
+                {{/if}}
 
-              {{#if (this.shouldShowSection 'fields')}}
-                <CardSection @title='Fields' @cards={{this.mockCards}} />
-              {{/if}}
+                {{#if (this.shouldShowSection 'fields')}}
+                  <CardSection @title='Fields' @cards={{this.mockCards}} />
+                {{/if}}
 
-              {{#if (this.shouldShowSection 'skills')}}
-                <CardSection @title='Skills' @cards={{this.mockCards}} />
-              {{/if}}
-            </CardListingContainer>
-          </div>
+                {{#if (this.shouldShowSection 'skills')}}
+                  <CardSection @title='Skills' @cards={{this.mockCards}} />
+                {{/if}}
+              </CardListingContainer>
+            </div>
 
-          {{! Column 2: Related Card Listing  }}
-          {{! TODO: Parent & Related Listing Cards will be display at here - can make this to component }}
-          <div class='related-card-listing'>
-            <CardListingContainer>
-              <h3 class='listing-title'>Parent Listing card</h3>
-            </CardListingContainer>
+            {{! Column 2: Related Card Listing  }}
+            {{! TODO: Parent & Related Listing Cards will be display at here - can make this to component }}
+            <div class='related-card-listing'>
+              <CardListingContainer>
+                <h3 class='listing-title'>Parent Listing card</h3>
+              </CardListingContainer>
 
-            <CardListingContainer>
-              <h3 class='listing-title'>Related Listings from Publisher</h3>
-            </CardListingContainer>
+              <CardListingContainer>
+                <h3 class='listing-title'>Related Listings from Publisher</h3>
+              </CardListingContainer>
+            </div>
           </div>
         </div>
       </section>
@@ -131,13 +133,18 @@ class Isolated extends Component<typeof Catalog> {
         position: relative;
       }
 
-      .content-area {
+      /* container */
+      .content-area-container {
         flex: 1;
+        height: auto;
+        container-name: content-area-container;
+        container-type: inline-size;
+      }
+      .content-area {
+        height: 100%;
         display: grid;
         grid-template-columns: 1fr 247px;
         gap: var(--boxel-sp-lg);
-        container-name: content-area;
-        container-type: inline-size;
       }
       .catalog-content {
         display: block;
@@ -192,7 +199,14 @@ class Isolated extends Component<typeof Catalog> {
         box-shadow: 0 0 0 1px var(--boxel-dark);
       }
 
-      @container content-area (inline-size <= 768px) {
+      @container content-area-container (inline-size <= 768px) {
+        .content-area {
+          grid-template-columns: 1fr;
+          overflow-y: auto;
+        }
+        .catalog-content {
+          overflow-y: unset;
+        }
       }
     </style>
   </template>
