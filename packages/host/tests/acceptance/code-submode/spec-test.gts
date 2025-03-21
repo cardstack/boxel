@@ -1,10 +1,4 @@
-import {
-  click,
-  waitFor,
-  fillIn,
-  triggerEvent,
-  find,
-} from '@ember/test-helpers';
+import { click, fillIn, triggerEvent, find } from '@ember/test-helpers';
 
 import { module, test, skip } from 'qunit';
 
@@ -532,11 +526,9 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-has-spec]').containsText('card');
     await click('[data-test-accordion-item="spec-preview"] button');
-    await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-spec-selector-item-path]').hasText('person-entry');
     await percySnapshot(assert);
@@ -547,7 +539,6 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
-    await waitFor('[data-test-view-spec-instance]');
     assert.dom('[data-test-view-spec-instance]').exists();
   });
   test('view when there are multiple spec instances', async function (assert) {
@@ -555,15 +546,12 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-has-spec]').containsText('2 instances');
     await click('[data-test-accordion-item="spec-preview"] button');
-    await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
     assert.dom('[data-test-spec-selector-item-path]').hasText('pet-entry-2');
-    await waitFor('[data-test-view-spec-instance]');
     assert.dom('[data-test-view-spec-instance]').exists();
   });
   test('view when there are no spec instances', async function (assert) {
@@ -571,7 +559,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').exists();
     assert.dom('[data-test-create-spec-intent-message]').exists();
@@ -582,7 +569,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealm2URL}new-skill.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
@@ -596,7 +582,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealm2URL}person.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
@@ -610,12 +595,9 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}person-1.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-accordion-item="spec-preview"] button');
     await click('[data-test-create-spec-button]');
     //spec is opened
-    await assert
-      .dom('[data-test-accordion-item="spec-preview"]')
-      .hasClass('open');
+    assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('Person1');
@@ -688,7 +670,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
@@ -701,7 +682,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
     let readMeInput = 'This is a spec for a person';
     this.onSave((_, json) => {
@@ -725,17 +705,12 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-
-    await waitFor('[data-test-view-spec-instance]');
+    await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-view-spec-instance]').exists();
     await click('[data-test-view-spec-instance]');
-
-    await waitFor('[data-test-card-url-bar-input]');
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person-entry.json`);
-
-    await waitFor('[data-test-editor]');
     assert.dom('[data-test-editor]').hasAnyText();
     assert.dom('[data-test-editor]').containsText('Person');
     assert.dom('[data-test-editor]').containsText('Spec');
@@ -753,20 +728,15 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+
     await click('[data-test-accordion-item="spec-preview"] button');
-
-    await waitFor('[data-test-spec-selector]');
-    assert.dom('[data-test-spec-selector]').exists();
-
     await click('[data-test-spec-selector] > div');
-
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
       .hasText('pet-entry-2');
-    await click('[data-option-index="0"]');
 
+    await click('[data-option-index="0"]');
     assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();
     assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
 
@@ -774,14 +744,12 @@ module('Acceptance | Spec preview', function (hooks) {
       `[data-test-card="${testRealmURL}Pet/mango"]`,
       'mouseenter',
     );
-
     assert.dom('[data-test-card-overlay]').exists();
 
     await triggerEvent(
       `[data-test-card="${testRealmURL}Pet/mango"]`,
       'mouseleave',
     );
-
     assert.dom('[data-test-card-overlay]').doesNotExist();
   });
 
@@ -790,13 +758,11 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}polymorphic-field.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     const elementName = 'SubTestField';
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-has-spec]').containsText('field');
     await click('[data-test-accordion-item="spec-preview"] button');
-    await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     assert
       .dom('[data-test-module-href]')
@@ -840,13 +806,8 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-
-    // Open the spec preview panel
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
-
     // Select the pet-entry-2 spec which has linked examples
-    await waitFor('[data-test-spec-selector]');
     await click('[data-test-spec-selector] > div');
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
@@ -855,12 +816,10 @@ module('Acceptance | Spec preview', function (hooks) {
 
     // Wait for linked examples to appear
     const petId = `${testRealmURL}Pet/mango`;
-    await waitFor(`[data-test-links-to-many="linkedExamples"]`);
     assert.dom(`[data-test-card="${petId}"]`).exists();
 
     // Click on the first linked example
     await triggerEvent(`[data-test-card="${petId}"]`, 'mouseenter');
-    await waitFor('[data-test-card-overlay]');
     await click(`[data-test-card="${petId}"]`);
 
     // Verify the card was persisted in playground selections
@@ -875,7 +834,6 @@ module('Acceptance | Spec preview', function (hooks) {
     );
 
     // Verify the playground panel shows the selected card
-    await waitFor('[data-test-selected-item]');
     assert.dom('[data-test-selected-item]').hasText('Mango');
     assertCardExists(
       assert,
@@ -886,31 +844,22 @@ module('Acceptance | Spec preview', function (hooks) {
   });
 
   test('updatePlaygroundSelections adds card to recent files storage when clicking an example card', async function (assert) {
+    const petId = `${testRealmURL}Pet/mango`;
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-
-    // Open the spec preview panel
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
-
     // Select the pet-entry-2 spec which has linked examples
-    await waitFor('[data-test-spec-selector]');
     await click('[data-test-spec-selector] > div');
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
       .hasText('pet-entry-2');
+
     await click('[data-option-index="0"]');
-
-    // Wait for linked examples to appear
-    const petId = `${testRealmURL}Pet/mango`;
-    await waitFor(`[data-test-links-to-many="linkedExamples"]`);
     assert.dom(`[data-test-card="${petId}"]`).exists();
-
     // Click on the first linked example
     await triggerEvent(`[data-test-card="${petId}"]`, 'mouseenter');
-    await waitFor('[data-test-card-overlay]');
     await click(`[data-test-card="${petId}"]`);
 
     // Verify the card was added to recent files
@@ -929,35 +878,24 @@ module('Acceptance | Spec preview', function (hooks) {
   });
 
   test('updatePlaygroundSelections preserves existing format when selecting different examples card', async function (assert) {
+    const firstPetId = `${testRealmURL}Pet/mango`;
+    const secondPetId = `${testRealmURL}Pet/pudding`;
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-
-    // Open the spec preview panel
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
-
-    // Select the pet-entry-2 spec which has linked examples
-    await waitFor('[data-test-spec-selector]');
     await click('[data-test-spec-selector] > div');
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
       .hasText('pet-entry-2');
     await click('[data-option-index="0"]');
-
-    // Wait for linked examples to appear
-    const firstPetId = `${testRealmURL}Pet/mango`;
-    const secondPetId = `${testRealmURL}Pet/pudding`;
-    await waitFor(`[data-test-links-to-many="linkedExamples"]`);
     assert.dom(`[data-test-card="${firstPetId}"]`).exists();
     assert.dom(`[data-test-card="${secondPetId}"]`).exists();
 
     // Click on the first linked example
     await triggerEvent(`[data-test-card="${firstPetId}"]`, 'mouseenter');
-    await waitFor('[data-test-card-overlay]');
     await click(`[data-test-card="${firstPetId}"]`);
-
     assertCardExists(
       assert,
       firstPetId,
@@ -987,7 +925,6 @@ module('Acceptance | Spec preview', function (hooks) {
     // Go back to spec preview and click the second card
     await click('[data-test-accordion-item="spec-preview"] button');
     await triggerEvent(`[data-test-card="${secondPetId}"]`, 'mouseenter');
-    await waitFor('[data-test-card-overlay]');
     await click(`[data-test-card="${secondPetId}"]`);
 
     // Verify the format was preserved when selecting the second card
@@ -1001,7 +938,6 @@ module('Acceptance | Spec preview', function (hooks) {
     );
 
     // Verify the second card is shown in embedded format
-    await waitFor('[data-test-selected-item]');
     assert.dom('[data-test-selected-item]').hasText('Pudding');
     assertCardExists(
       assert,
@@ -1016,7 +952,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet2');
     assert.dom('[data-test-number-of-instance]').hasText('2 instances');
