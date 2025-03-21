@@ -63,6 +63,7 @@ import type { FileView } from '@cardstack/host/services/operator-mode-state-serv
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { type SpecType } from 'https://cardstack.com/base/spec';
@@ -111,7 +112,7 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-type SelectedAccordionItem =
+export type SelectedAccordionItem =
   | 'schema-editor'
   | 'spec-preview'
   | 'playground'
@@ -154,6 +155,7 @@ export default class CodeSubmode extends Component<Signature> {
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
   @service private declare loaderService: LoaderService;
+  @service private declare specPanelService: SpecPanelService;
 
   @tracked private loadFileError: string | null = null;
   @tracked private userHasDismissedURLError = false;
@@ -530,6 +532,7 @@ export default class CodeSubmode extends Component<Signature> {
       fieldName,
       onLocalSelection: this.updateCursorByName,
     });
+    this.specPanelService.setSelection(null);
   }
 
   private loadScopedCSS = restartableTask(async () => {
@@ -746,6 +749,15 @@ export default class CodeSubmode extends Component<Signature> {
       return null;
     }
     return selection ?? 'schema-editor';
+  }
+
+  @action private openAccordionItem(item: SelectedAccordionItem) {
+    let selection = this.selectedAccordionItem === item ? null : item; // null means toggling the accordion item closed
+    //return if the item is already open
+    if (!selection) {
+      return;
+    }
+    this.selectAccordionItem(selection);
   }
 
   @action private selectAccordionItem(item: SelectedAccordionItem) {
@@ -1034,10 +1046,8 @@ export default class CodeSubmode extends Component<Signature> {
                       {{#if this.showSpecPreview}}
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
-                          @onPlaygroundAccordionToggle={{fn
-                            this.selectAccordionItem
-                            'playground'
-                          }}
+                          @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
+                          @openAccordionItem={{this.openAccordionItem}}
                           as |SpecPreviewTitle SpecPreviewContent|
                         >
                           <A.Item

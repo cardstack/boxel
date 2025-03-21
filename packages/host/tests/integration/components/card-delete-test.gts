@@ -543,7 +543,7 @@ module('Integration | card-delete', function (hooks) {
       'service:recent-cards-service',
     ) as RecentCardsService;
     let mango = await loadCard(`${testRealmURL}Pet/mango`);
-    recentCardsService.add(mango);
+    recentCardsService.add(mango.id);
 
     await setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(

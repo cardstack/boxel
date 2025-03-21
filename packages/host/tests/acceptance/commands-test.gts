@@ -829,6 +829,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: 'Switching to code submode',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
@@ -839,10 +840,6 @@ module('Acceptance | Commands tests', function (hooks) {
           },
         },
       ],
-      'm.relates_to': {
-        rel_type: 'm.replace',
-        event_id: '__EVENT_ID__',
-      },
     });
 
     assert.dom('[data-test-submode-switcher=interact]').exists();
@@ -982,6 +979,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: '',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'abc123',
@@ -1050,6 +1048,7 @@ module('Acceptance | Commands tests', function (hooks) {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       formatted_body: '',
       format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '29e8addb-197b-4d6d-b0a9-547959bf7c96',
