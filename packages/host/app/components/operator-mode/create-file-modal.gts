@@ -619,7 +619,7 @@ export default class CreateFileModal extends Component<Signature> {
       ref: { name: exportName, module },
     } = (this.definitionClass ?? this.selectedSpec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    let absoluteModule = new URL(module, this.selectedSpec!.id);
+    let absoluteModule = new URL(module, this.selectedSpec?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
