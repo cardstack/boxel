@@ -1264,7 +1264,7 @@ export default class MatrixService extends Service {
 
         checkEvents();
       });
-      await this.roomResources.get(roomId)?.loading;
+      await this.roomResources.get(roomId)?.processing;
     } finally {
       this.timelineLoadingState.set(roomId, false);
     }
