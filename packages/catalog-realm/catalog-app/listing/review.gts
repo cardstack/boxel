@@ -1,6 +1,12 @@
-import { CardDef, field, contains, linksTo } from '../card-api';
-import NumberField from '../number';
-import MarkdownField from '../markdown';
+import {
+  CardDef,
+  field,
+  contains,
+  linksTo,
+} from 'https://cardstack.com/base/card-api';
+import NumberField from 'https://cardstack.com/base/number';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+
 import { Listing } from './listing';
 
 export class Review extends CardDef {

@@ -8,9 +8,9 @@ import {
   CardDef,
   realmInfo,
   type BaseDef,
-} from './card-api';
+} from 'https://cardstack.com/base/card-api';
 import { isCardInstance } from '@cardstack/runtime-common';
-import StringField from './string';
+import StringField from 'https://cardstack.com/base/string';
 
 import FilterSection from './components/filter-section';
 import CardSection from './components/card-section';
@@ -60,18 +60,18 @@ class Isolated extends Component<typeof Catalog> {
           <FilterSection />
         </div>
         {{! Note: Content will be display 2 columns: Content Listing Display and Related Listing Cards in the same time }}
-        <div class='content'>
-          <TopBarFilter
-            @filters={{this.specFilterOptions}}
-            @activeFilterId={{this.activeSpecFilterId}}
-            @onChange={{this.handleSpecFilterChanged}}
-            class='spec-filter-bar'
-          />
+        <div class='content-area'>
+          {{! Column 1: Card Listing Section }}
+          {{! TODO: We need to have a single listing display at here after click one of card}}
+          <div class='catalog-content'>
+            <TopBarFilter
+              @filters={{this.specFilterOptions}}
+              @activeFilterId={{this.activeSpecFilterId}}
+              @onChange={{this.handleSpecFilterChanged}}
+              class='catalog-filter-bar'
+            />
 
-          <div class='content-display-container'>
-            {{! Column 1: Card Listing Section }}
-            {{! TODO: We need to have a single listing display at here after click one of card}}
-            <CardListingContainer class='card-listing-section'>
+            <CardListingContainer class='catalog-listing'>
               {{#if (this.shouldShowSection 'apps')}}
                 <CardSection @title='Apps' @cards={{this.mockCards}} />
               {{/if}}
@@ -88,18 +88,18 @@ class Isolated extends Component<typeof Catalog> {
                 <CardSection @title='Skills' @cards={{this.mockCards}} />
               {{/if}}
             </CardListingContainer>
+          </div>
 
-            {{! Column 2: Related Listing Cards }}
-            {{! TODO: Parent & Related Listing Cards will be display at here - can make this to component }}
-            <div class='related-listing-cards'>
-              <CardListingContainer>
-                <h3 class='listing-title'>Parent Listing card</h3>
-              </CardListingContainer>
+          {{! Column 2: Related Card Listing  }}
+          {{! TODO: Parent & Related Listing Cards will be display at here - can make this to component }}
+          <div class='related-card-listing'>
+            <CardListingContainer>
+              <h3 class='listing-title'>Parent Listing card</h3>
+            </CardListingContainer>
 
-              <CardListingContainer>
-                <h3 class='listing-title'>Related Listings from Publisher</h3>
-              </CardListingContainer>
-            </div>
+            <CardListingContainer>
+              <h3 class='listing-title'>Related Listings from Publisher</h3>
+            </CardListingContainer>
           </div>
         </div>
       </section>
@@ -119,7 +119,8 @@ class Isolated extends Component<typeof Catalog> {
         letter-spacing: 0.21px;
       }
       .main-content {
-        padding: var(--catalog-layout-padding-top) 0 0 var(--boxel-sp-sm);
+        padding: var(--boxel-sp-sm);
+        padding-top: var(--catalog-layout-padding-top);
         display: flex;
         gap: var(--boxel-sp-xl);
         height: 100%;
@@ -130,39 +131,34 @@ class Isolated extends Component<typeof Catalog> {
         position: relative;
       }
 
-      .spec-filter-bar {
+      .content-area {
+        flex: 1;
+        display: grid;
+        grid-template-columns: 1fr 247px;
+        gap: var(--boxel-sp-lg);
+        container-name: content-area;
+        container-type: inline-size;
+      }
+      .catalog-content {
+        display: block;
+        overflow-y: auto;
+      }
+      .catalog-filter-bar {
         position: sticky;
         top: 0;
         z-index: 10;
         background-color: var(--boxel-100);
         padding-bottom: var(--boxel-sp-sm);
         border-bottom: 1px solid var(--boxel-200);
-        box-shadow: 0 0 15px var(--boxel-200);
       }
-
-      .content {
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-        overflow-y: auto;
-        padding-right: var(--boxel-sp-sm);
-        container-name: content;
-        container-type: inline-size;
-      }
-      .content-display-container {
-        display: grid;
-        grid-template-columns: 1fr 247px;
-        gap: var(--boxel-sp-lg);
-      }
-      .card-listing-section {
+      .catalog-listing {
         --card-listing-container-background-color: transparent;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
       }
 
-      .related-listing-cards {
+      .related-card-listing {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
@@ -196,10 +192,7 @@ class Isolated extends Component<typeof Catalog> {
         box-shadow: 0 0 0 1px var(--boxel-dark);
       }
 
-      @container content (inline-size <= 768px) {
-        .content-display-container {
-          grid-template-columns: 1fr;
-        }
+      @container content-area (inline-size <= 768px) {
       }
     </style>
   </template>

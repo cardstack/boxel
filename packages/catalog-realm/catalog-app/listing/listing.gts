@@ -5,10 +5,10 @@ import {
   linksToMany,
   StringField,
   linksTo,
-} from '../card-api';
-import MarkdownField from '../markdown';
+} from 'https://cardstack.com/base/card-api';
+import MarkdownField from 'https://cardstack.com/base/markdown';
 
-import { Spec } from '../spec';
+import { Spec } from 'https://cardstack.com/base/spec';
 import { Publisher } from './publisher';
 import { Category, Tag } from './category';
 import { License } from './license';

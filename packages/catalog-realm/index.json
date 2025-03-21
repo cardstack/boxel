@@ -5,7 +5,7 @@
     "relationships": {},
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/catalog",
+        "module": "./catalog-app/catalog",
         "name": "Catalog"
       }
     }
