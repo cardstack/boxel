@@ -855,18 +855,16 @@ module('Acceptance | code submode tests', function (_hooks) {
         submode: 'code',
         codePath: `${testRealmURL}broken.gts`,
       })!;
-
       await visit(
         `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
           operatorModeStateParam,
         )}`,
       );
-
       await waitFor('[data-test-syntax-error]');
-
       assert
         .dom('[data-test-syntax-error]')
         .includesText('/broken.gts: Missing semicolon. (1:4)');
+      assert.dom('[data-test-module-error-panel] > button').isDisabled();
     });
 
     test('it shows card preview errors', async function (assert) {
@@ -1790,29 +1788,38 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-selected-accordion-item="schema-editor"]')
         .exists('defaults to schema-editor view');
-      await click('[data-test-accordion-item="spec-preview"] > button'); // select spec panel
+      await click('[data-test-accordion-item="playground"] > button');
+      assert.dom('[data-test-selected-accordion-item="playground"]').exists();
 
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="address.gts"]');
       assert.dom('[data-test-selected-accordion-item="spec-preview"]').exists();
       assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
+      await click('[data-test-accordion-item="spec-preview"] > button');
+      assert
+        .dom('[data-test-selected-accordion-item="playground"]')
+        .exists('closing the final panel opens the previous panel');
 
       await click('[data-test-file="country.gts"]');
       assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
-      assert.dom('[data-test-selected-accordion-item]').doesNotExist();
-      await click('[data-test-accordion-item="playground"] > button'); // open playground
-      assert.dom('[data-test-selected-accordion-item="playground"]').exists();
+      assert
+        .dom('[data-test-selected-accordion-item="schema-editor"]')
+        .exists();
+      await click('[data-test-accordion-item="spec-preview"] > button'); // open spec preview
+      assert.dom('[data-test-selected-accordion-item="spec-preview"]').exists();
 
       await click('[data-test-file="person.gts"]');
       assert
         .dom('[data-test-selected-accordion-item="schema-editor"]')
         .exists();
-      await click('[data-test-accordion-item="schema-editor"] > button'); // close schema-editor panel
-      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
-      assert.dom('[data-test-selected-accordion-item]').doesNotExist();
 
       await click('[data-test-file="pet-person.gts"]');
       assert.dom('[data-test-selected-accordion-item="playground"]').exists();
+      await click('[data-test-accordion-item="playground"] > button'); // toggle playground closed
+      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert
+        .dom('[data-test-selected-accordion-item="spec-preview"]')
+        .exists('closing panel toggles next panel open');
 
       let currentSelections = window.localStorage.getItem(
         CodeModePanelSelections,
@@ -1820,11 +1827,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.strictEqual(
         currentSelections,
         JSON.stringify({
-          [`${testRealmURL}address.gts`]: 'spec-preview',
-          [`${testRealmURL}country.gts`]: 'playground',
-          [`${testRealmURL}person.gts`]: null,
-          [`${testRealmURL}pet-person.gts`]: 'playground',
-          [`${testRealmURL}pet.gts`]: 'spec-preview',
+          [`${testRealmURL}address.gts`]: 'playground',
+          [`${testRealmURL}country.gts`]: 'spec-preview',
+          [`${testRealmURL}person.gts`]: 'schema-editor',
+          [`${testRealmURL}pet-person.gts`]: 'spec-preview',
+          [`${testRealmURL}pet.gts`]: 'playground',
         }),
       );
     });

@@ -493,10 +493,7 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   get showSpecPreview() {
-    return (
-      this.selectedAccordionItem === 'spec-preview' &&
-      Boolean(this.selectedCardOrField?.exportName)
-    );
+    return Boolean(this.selectedCardOrField?.exportName);
   }
 
   private get itemToDeleteAsCard() {
@@ -1090,6 +1087,7 @@ export default class CodeSubmode extends Component<Signature> {
                         class='accordion-item'
                         @contentClass='accordion-item-content'
                         @isOpen={{true}}
+                        data-test-module-error-panel
                       >
                         <:title>
                           <SchemaEditorTitle @hasModuleError={{true}} />

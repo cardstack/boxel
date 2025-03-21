@@ -561,8 +561,6 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').exists();
-    assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
-    await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
   });
