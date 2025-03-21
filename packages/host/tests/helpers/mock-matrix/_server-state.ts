@@ -98,39 +98,41 @@ export class ServerState {
       { origin_server_ts: timestamp, state_key: sender },
     );
 
-    this.addRoomEvent(
-      sender,
-      {
-        room_id: roomId,
-        type: 'm.room.member',
-        content: {
-          displayname: 'aibot',
-          membership: 'invite',
+    if (!roomId.includes('test-session-room-realm')) {
+      this.addRoomEvent(
+        sender,
+        {
+          room_id: roomId,
+          type: 'm.room.member',
+          content: {
+            displayname: 'aibot',
+            membership: 'invite',
+          },
         },
-      },
-      {
-        origin_server_ts: timestamp,
-        // host application expects this for the bot to join the room
-        state_key: '@aibot:localhost',
-      },
-    );
+        {
+          origin_server_ts: timestamp,
+          // host application expects this for the bot to join the room
+          state_key: '@aibot:localhost',
+        },
+      );
 
-    this.addRoomEvent(
-      '@aibot:localhost',
-      {
-        room_id: roomId,
-        type: 'm.room.member',
-        content: {
-          displayname: 'aibot',
-          membership: 'join',
+      this.addRoomEvent(
+        '@aibot:localhost',
+        {
+          room_id: roomId,
+          type: 'm.room.member',
+          content: {
+            displayname: 'aibot',
+            membership: 'join',
+          },
         },
-      },
-      {
-        origin_server_ts: timestamp,
-        // host application expects this for the bot to join the room
-        state_key: '@aibot:localhost',
-      },
-    );
+        {
+          origin_server_ts: timestamp,
+          // host application expects this for the bot to join the room
+          state_key: '@aibot:localhost',
+        },
+      );
+    }
 
     return roomId;
   }

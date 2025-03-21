@@ -3,6 +3,7 @@ import Service from '@ember/service';
 import { service } from '@ember/service';
 
 import * as MatrixSDK from 'matrix-js-sdk';
+import { SlidingSync } from 'matrix-js-sdk/lib/sliding-sync';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
@@ -22,6 +23,11 @@ export default class MatrixSDKLoader extends Service {
       this.#extended = new ExtendedMatrixSDK(sdk, this.network.authedFetch);
     }
     return this.#extended;
+  }
+
+  // For testing purposes, we need to mock the SlidingSync class
+  get SlidingSync() {
+    return SlidingSync;
   }
 }
 

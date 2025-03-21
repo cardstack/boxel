@@ -2,30 +2,40 @@
   "data": {
     "type": "card",
     "attributes": {
-      "translation": "",
-      "headline": "",
-      "slug": null,
-      "body": "To quote wikipedia:\n\nMicroblogging is a form of blogging using short posts without titles known as microposts[1][2][3] (or status updates on a minority of websites like Meta Platforms'). Microblogs \"allow users to exchange small elements of content such as short sentences, individual images, or video links\",[1] which may be the major reason for their popularity.[4] Some popular social networks such as Twitter, Threads, Mastodon, Tumblr, Koo, and Instagram can be viewed as collections of microblogs.",
+      "translation": "# Breaking Bad : Un Chef-d'œuvre Télévisuel\n\nCréée par Vince Gilligan et diffusée sur AMC en 2008, Breaking Bad s'impose comme l'une des plus grandes réussites télévisuelles. La série suit Walter White (Bryan Cranston), un professeur de chimie au lycée qui, après avoir été diagnostiqué d'un cancer du poumon en phase terminale, s'associe à Jesse Pinkman (Aaron Paul), son ancien élève, pour produire et vendre de la méthamphétamine afin d'assurer l'avenir financier de sa famille.\n\n## Un Casting Parfait\n\nLe succès de la série doit beaucoup à son casting exceptionnel. Bryan Cranston a livré une performance définissant sa carrière, se transformant d'un homme de famille passif et sous-performant en impitoyable baron de la drogue connu sous le nom de \"Heisenberg\". Son interprétation lui a valu quatre Emmy Awards du meilleur acteur principal. Le personnage de Jesse Pinkman, interprété par Aaron Paul, a évolué d'un grossier dealer de drogue à la boussole morale de la série, ce qui lui a valu trois Emmy du meilleur second rôle.\n\nLe casting secondaire était tout aussi impressionnant, avec Anna Gunn dans le rôle de Skyler, la femme de Walter, Dean Norris dans celui de Hank Schrader, son beau-frère agent de la DEA, Bob Odenkirk dans celui de l'avocat véreux Saul Goodman, Giancarlo Esposito dans celui du calculateur Gus Fring, et Jonathan Banks dans celui du stoïque Mike Ehrmantraut.\n\n## Une Narration Parfaitement Construite\n\nL'arc narratif des cinq saisons de Breaking Bad est un chef-d'œuvre de narration. La série retrace méticuleusement la dégradation morale de Walter, décrite par Gilligan comme \"la transformation de M. Chips en Scarface\". Chaque saison augmente les enjeux :\n\n- **Saison 1** : Walter entre dans le monde de la drogue et affronte ses premiers adversaires\n- **Saison 2** : Le partenariat avec Jesse s'approfondit alors que les complications surgissent\n- **Saison 3** : L'introduction de Gus Fring crée de nouveaux dangers\n- **Saison 4** : Walt et Gus s'engagent dans une bataille d'esprits semblable aux échecs\n- **Saison 5** : Tous les secrets sont révélés dans une conclusion dévastatrice\n\n## Acclamation Critique\n\nBreaking Bad a reçu des éloges universels, remportant 16 Emmy Awards et étant nommée l'une des plus grandes séries télévisées de tous les temps par les critiques. La dernière saison a obtenu un rare 99/100 sur Metacritic, avec un final regardé par plus de 10 millions de téléspectateurs.\n\nL'impact de la série s'est étendu au-delà de sa diffusion, engendrant la série préquelle Better Call Saul et le film suite El Camino, tous deux poursuivant la haute qualité narrative établie dans la série originale.\n\n## Héritage Culturel\n\nBreaking Bad a révolutionné la télévision par sa qualité cinématographique, son développement complexe des personnages et son examen sans concession du rêve américain qui tourne mal. Son influence se retrouve dans d'innombrables séries qui ont suivi, cimentant sa place non seulement comme un divertissement incroyable, mais comme une profonde déclaration artistique sur la moralité, la famille et les conséquences de nos choix.",
+      "headline": "Breaking Bad: The Complete Series Analysis",
+      "slug": "breaking-bad-a-television-masterpiece",
+      "body": "# Breaking Bad: A Masterpiece of Television\n\nCreated by Vince Gilligan and premiering on AMC in 2008, Breaking Bad stands as one of television's greatest achievements. The series follows Walter White (Bryan Cranston), a high school chemistry teacher who, after being diagnosed with terminal lung cancer, partners with former student Jesse Pinkman (Aaron Paul) to produce and sell methamphetamine to secure his family's financial future.\n\n## The Perfect Cast\n\nThe show's success owes much to its exceptional cast. Bryan Cranston delivered a career-defining performance, transforming from an underachieving, passive family man into the ruthless drug kingpin known as \"Heisenberg.\" His portrayal earned him four Emmy Awards for Outstanding Lead Actor. Aaron Paul's Jesse Pinkman evolved from a crude drug dealer to the show's moral compass, earning him three Supporting Actor Emmys.\n\nThe supporting cast was equally impressive, with Anna Gunn as Walter's wife Skyler, Dean Norris as his DEA agent brother-in-law Hank Schrader, Bob Odenkirk as criminal lawyer Saul Goodman, Giancarlo Esposito as the calculating Gus Fring, and Jonathan Banks as the stoic enforcer Mike Ehrmantraut.\n\n## A Perfectly Constructed Narrative\n\nBreaking Bad's five-season arc is a masterclass in storytelling. The series meticulously charts Walter's moral degradation, famously described by Gilligan as \"turning Mr. Chips into Scarface.\" Each season raises the stakes:\n\n- **Season 1**: Walter enters the drug world and confronts his first adversaries\n- **Season 2**: The partnership with Jesse deepens as complications arise\n- **Season 3**: The introduction of Gus Fring creates new dangers\n- **Season 4**: Walt and Gus engage in a chess-like battle of wits\n- **Season A**: All secrets are revealed in a devastating conclusion\n\n## Critical Acclaim\n\nBreaking Bad received universal acclaim, winning 16 Emmy Awards and being named one of the greatest television series of all time by critics. The show's final season achieved a rare 99/100 on Metacritic, with the finale watched by over 10 million viewers.\n\nThe series' impact extended beyond its run, spawning the prequel series Better Call Saul and the sequel film El Camino, both continuing the high quality of storytelling established in the original series.\n\n## Cultural Legacy\n\nBreaking Bad revolutionized television with its cinematic quality, complex character development, and unflinching examination of the American dream gone wrong. Its influence can be seen in countless shows that followed, cementing its place not just as incredible entertainment, but as a profound artistic statement on morality, family, and the consequences of our choices.",
       "publishDate": null,
       "featuredImage": {
-        "imageUrl": null,
-        "credit": null,
-        "caption": null,
-        "altText": null,
+        "imageUrl": "https://m.media-amazon.com/images/M/MV5BYmQ4YWMxYjUtNjZmYi00MDQ1LWFjMjMtNjA5ZDdiYjdiODU5XkEyXkFqcGdeQXVyMTMzNDExODE5._V1_.jpg",
+        "credit": "AMC",
+        "caption": "Official Breaking Bad series poster",
+        "altText": "Breaking Bad poster featuring Walter White (Bryan Cranston) and Jesse Pinkman (Aaron Paul) with the show's logo",
         "size": "actual",
-        "height": null,
-        "width": null
+        "height": 1500,
+        "width": 1000
       },
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "authorBio": {
+      "authors": {
         "links": {
           "self": null
         }
       },
       "blog": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "editors": {
         "links": {
           "self": null
         }

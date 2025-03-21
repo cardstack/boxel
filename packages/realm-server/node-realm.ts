@@ -224,7 +224,7 @@ export class NodeAdapter implements RealmAdapter {
 
     try {
       dmRooms =
-        (await matrixClient.getAccountData<Record<string, string>>(
+        (await matrixClient.getAccountDataFromServer<Record<string, string>>(
           'boxel.session-rooms',
         )) ?? {};
     } catch (e) {

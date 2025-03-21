@@ -4,9 +4,9 @@
     "attributes": {
       "firstName": "Alice",
       "lastName": "Enwunder",
-      "bio": null,
+      "bio": "Alice Enwunder is a curious explorer of digital wonderlands. After falling down a rabbit hole of code during a particularly sleepy afternoon, she discovered a world where logic puzzles meet creative storytelling. Known for her adventures through technology landscapes, Alice continues to chase digital white rabbits and unbirthday celebrations.\n\nDuring her journey through the digital realm, Alice encountered talking computers that spoke in riddles and doorways that only opened with the right algorithms. She documented these experiences in her journal, which later became the foundation for her groundbreaking work on human-computer interaction. Her favorite adventure involved a chess game with the Red Queen's quantum computer, where pieces existed in multiple states simultaneously.\n\nNow Alice divides her time between teaching at the School of Impossible Things and writing articles that challenge readers to believe six impossible things before breakfast. When not exploring new technological frontiers, she hosts tea parties where attendees discuss paradoxes and puzzles while enjoying digital scones and virtual tea.",
       "fullBio": null,
-      "quote": "Curiouser and curiouser",
+      "quote": "In the garden of technology, the most beautiful flowers grow from the most impossible ideas.",
       "contactLinks": [
         {
           "label": "X",
