@@ -74,7 +74,7 @@ interface Signature {
   };
 }
 
-const createSpec = modifier((_element: HTMLElement, [fn]: [() => void]) => {
+const runFn = modifier((_element: HTMLElement, [fn]: [() => void]) => {
   if (!fn) {
     throw new Error('No function was provided to createSpec modifier');
   }
@@ -130,8 +130,8 @@ export default class PlaygroundContent extends Component<Signature> {
             (or this.searchFieldSpec.isLoading this.createNewCard.isRunning)
           }}
             <LoadingIndicator @color='var(--boxel-light)' />
-          {{else if this.fieldHasNoSpec}}
-            <div {{createSpec this.createNew}} />
+          {{else if this.generateFieldSpec}}
+            <div {{runFn this.createNew}} />
           {{/if}}
         {{/if}}
       {{/let}}
@@ -215,8 +215,12 @@ export default class PlaygroundContent extends Component<Signature> {
     { isLive: true, isAutoSaved: true },
   );
 
-  private get fieldHasNoSpec() {
-    if (!this.args.isFieldDef || this.createNewCard.isRunning) {
+  private get generateFieldSpec() {
+    if (
+      !this.args.isFieldDef ||
+      !this.canWriteRealm ||
+      this.createNewCard.isRunning
+    ) {
       return false;
     }
     return (
@@ -483,7 +487,7 @@ export default class PlaygroundContent extends Component<Signature> {
     return this.createNewCard.isRunning || this.createNewField.isRunning;
   }
 
-  private createNewCard = restartableTask(async () => {
+  private createNewCard = task(async () => {
     if (this.args.isFieldDef) {
       let fieldCard = await loadCard(this.args.codeRef, {
         loader: this.loaderService.loader,
