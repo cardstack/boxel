@@ -1,5 +1,6 @@
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
+import { on } from '@ember/modifier';
 
 import {
   contains,
@@ -51,8 +52,18 @@ class Isolated extends Component<typeof Catalog> {
     };
   }
 
+  // TODO: Remove this after testing
+  @action goToGrid() {
+    if (!this.args.context?.actions?.viewCard) {
+      throw new Error('viewCard action is not available');
+    }
+    let gridUrl = new URL('http://localhost:4201/catalog/grid.json');
+    this.args.context?.actions?.viewCard(gridUrl);
+  }
+
   <template>
     <div class='catalog-layout'>
+      <button {{on 'click' this.goToGrid}}> Go to Grid </button>
       <section class='main-content'>
         <div class='sidebar'>
           {{! TODO: Add FilterSection component here }}
