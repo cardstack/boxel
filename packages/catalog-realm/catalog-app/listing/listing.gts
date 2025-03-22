@@ -5,12 +5,17 @@ import {
   linksToMany,
   StringField,
   linksTo,
+  Component,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Component } from 'https://cardstack.com/base/card-api';
-import { Spec } from 'https://cardstack.com/base/spec';
+import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import { action } from '@ember/object';
+import { fn } from '@ember/helper';
+import { tracked } from '@glimmer/tracking';
+
+import { Accordion } from '@cardstack/boxel-ui/components';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
 
@@ -19,6 +24,8 @@ import { Category, Tag } from './category';
 import { License } from './license';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
+  @tracked selectedAccordionItem: string | undefined;
+
   @action addToWorkspace() {
     console.log('addToWorkspace');
   }
@@ -30,6 +37,30 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   get publisherName(): string {
     return this.args.model.publisher?.name || '';
   }
+
+  get specBreakdown() {
+    return this.args.model.specs?.reduce(
+      (groupedSpecs, spec) => {
+        const specType = spec.specType as SpecType;
+        if (!groupedSpecs[specType]) {
+          groupedSpecs[specType] = [];
+        }
+        groupedSpecs[specType].push(spec);
+        return groupedSpecs;
+      },
+      {} as Record<SpecType, Spec[]>,
+    );
+  }
+
+  selectAccordionItem = (item: string) => {
+    if (this.selectedAccordionItem === item) {
+      this.selectedAccordionItem = undefined;
+      return;
+    }
+    this.selectedAccordionItem = item;
+  };
+
+  getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   <template>
     <div class='app-listing-embedded'>
@@ -68,6 +99,36 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             </div>
           </div>
         </div>
+
+        {{#if this.specBreakdown}}
+          <div>
+            <h2>Includes These Boxels</h2>
+            <Accordion
+              data-test-selected-accordion-item={{this.selectedAccordionItem}}
+              as |A|
+            >
+              {{#each-in this.specBreakdown as |specType specs|}}
+                <A.Item
+                  @onClick={{fn this.selectAccordionItem specType}}
+                  @isOpen={{eq this.selectedAccordionItem specType}}
+                  data-test-accordion-item={{specType}}
+                >
+                  <:title>
+                    {{specType}}
+                    ({{specs.length}})
+                  </:title>
+                  <:content>
+                    {{#each specs as |spec|}}
+                      {{#let (this.getComponent spec) as |CardComponent|}}
+                        <CardComponent @format='fitted' />
+                      {{/let}}
+                    {{/each}}
+                  </:content>
+                </A.Item>
+              {{/each-in}}
+            </Accordion>
+          </div>
+        {{/if}}
       </div>
     </div>
 
