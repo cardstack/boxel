@@ -360,6 +360,10 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
+      addSpec: async (spec: CardDef, targetRealm: string) => {
+        let card = await here._addSpec.perform(spec, targetRealm);
+        return card;
+      },
     };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
@@ -477,6 +481,15 @@ export default class InteractSubmode extends Component<Signature> {
       }
     },
   );
+
+  private _addSpec = task(async (spec: CardDef, targetRealm: string) => {
+    let { commandContext } = this.commandService;
+    const result = await new CopyCardCommand(commandContext).execute({
+      sourceCard: spec,
+      targetRealmUrl: targetRealm,
+    });
+    return result.newCard;
+  });
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(

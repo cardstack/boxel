@@ -5,12 +5,15 @@ import {
   linksToMany,
   StringField,
   linksTo,
+  Component,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Component } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
 
 import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { task } from 'ember-concurrency';
+import { tracked } from '@glimmer/tracking';
 
 import AppListingHeader from '../components/app-listing-header';
 
@@ -138,6 +141,41 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   </template>
 }
 
+class IsolatedTemplate extends Component<typeof Listing> {
+  @tracked addedSpec = false;
+  @action addToWorkspace() {
+    if (!this.args.context?.actions?.addSpec) {
+      throw new Error('addSpec action is not available');
+    }
+    this._addToWorkspace.perform();
+  }
+
+  _addToWorkspace = task(async () => {
+    let realmUrl = 'http://localhost:4201/experiments/';
+    let res = await Promise.all(
+      this.args.model?.specs?.map((spec) =>
+        this.args.context?.actions?.addSpec?.(spec, realmUrl),
+      ) ?? [],
+    );
+    if (res.length > 0) {
+      this.addedSpec = true;
+    }
+  });
+  <template>
+    <div>
+      <button {{on 'click' this.addToWorkspace}}>
+        {{#if this._addToWorkspace.isRunning}}
+          Adding...
+        {{else if this.addedSpec}}
+          Added
+        {{else}}
+          Add to Workspace
+        {{/if}}
+      </button>
+      <h1>Listing</h1>
+    </div>
+  </template>
+}
 export class Listing extends CardDef {
   static displayName = 'Listing';
   @field name = contains(StringField);
@@ -156,5 +194,6 @@ export class Listing extends CardDef {
     },
   });
 
+  static isolated = IsolatedTemplate;
   static embedded = EmbeddedTemplate;
 }
