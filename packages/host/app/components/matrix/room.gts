@@ -48,12 +48,12 @@ import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
-import LoaderService from '@cardstack/host/services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -223,6 +223,7 @@ export default class Room extends Component<Signature> {
 
   @consume(GetCardContextName) private declare getCard: getCard;
 
+  @service private declare store: StoreService;
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
@@ -614,13 +615,9 @@ export default class Room extends Component<Signature> {
     }
     let myLastMessage = myMessages[myMessages.length - 1];
 
-    let attachedCards = (myLastMessage!.attachedResources(this) || [])
-      .map((resource) => resource.card)
-      .filter((card) => card !== undefined) as CardDef[];
-
     this.doSendMessage.perform(
       myLastMessage.message,
-      attachedCards,
+      myLastMessage!.attachedCardIds || [],
       myLastMessage.attachedFiles,
       true,
       myLastMessage.clientGeneratedId,
@@ -732,7 +729,7 @@ export default class Room extends Component<Signature> {
   private doSendMessage = enqueueTask(
     async (
       message: string | undefined,
-      cards?: CardDef[],
+      cardsOrIds?: CardDef[] | string[],
       files?: FileDef[],
       keepInputAndAttachments: boolean = false,
       clientGeneratedId: string = uuidv4(),
@@ -754,6 +751,21 @@ export default class Room extends Component<Signature> {
       try {
         if (files) {
           files = await this.matrixService.uploadFiles(files);
+        }
+        let cards: CardDef[] | undefined;
+        if (typeof cardsOrIds?.[0] === 'string') {
+          // we use detached instances since these are just
+          // serialized and send to matrix--these don't appear
+          // elsewhere in our app.
+          cards = (
+            await Promise.all(
+              (cardsOrIds as string[]).map((id) =>
+                this.store.getInstanceDetachedFromStore(id),
+              ),
+            )
+          ).filter(Boolean) as CardDef[];
+        } else {
+          cards = cardsOrIds as CardDef[] | undefined;
         }
 
         await this.matrixService.sendMessage(

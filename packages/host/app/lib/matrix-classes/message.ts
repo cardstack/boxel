@@ -5,8 +5,6 @@ import { EventStatus } from 'matrix-js-sdk';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
-
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import { RoomMember } from './member';
@@ -86,17 +84,5 @@ export class Message implements RoomMessageInterface {
       this.errorMessage === undefined ||
       (this.errorMessage && this.errorMessage !== ErrorMessage['M_TOO_LARGE'])
     );
-  }
-
-  attachedResources(owner: object) {
-    if (!this.attachedCardIds?.length) {
-      return undefined;
-    }
-    // TODO this is not using the @consume getCard. please refactor this.
-    // probably this should get pushed up into the consumers of this function.
-    // also, we really want a single resource that holds multiple cards, not
-    // multiple resources holding one card each. Please make ticket for this
-    // refactor.
-    return this.attachedCardIds.map((id) => getCard(owner, () => id));
   }
 }

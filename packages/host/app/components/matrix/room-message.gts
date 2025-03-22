@@ -2,27 +2,30 @@ import { fn } from '@ember/helper';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
+
+import { consume } from 'ember-provide-consume-context';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
 import { bool } from '@cardstack/boxel-ui/helpers';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import {
+  type getCard,
+  GetCardContextName,
+  markdownToHtml,
+} from '@cardstack/runtime-common';
 
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
+import consumeContext from '@cardstack/host/modifiers/consume-context';
 import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import { type CardDef } from 'https://cardstack.com/base/card-api';
-
-import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
@@ -54,14 +57,21 @@ interface Signature {
 const STREAMING_TIMEOUT_MS = 60000;
 
 export default class RoomMessage extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @tracked private streamingTimeout = false;
+  @tracked private attachedCardResources: ReturnType<getCard>[] | undefined;
+
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
-    this.loadMessageResources.perform();
   }
 
-  @tracked private streamingTimeout = false;
+  private makeCardResources = () => {
+    this.attachedCardResources = (this.message.attachedCardIds ?? []).map(
+      (id) => this.getCard(this, () => id),
+    );
+  };
 
   private get message() {
     return this.args.roomResource.messages[this.args.index];
@@ -93,13 +103,14 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   <template>
+    <div class='hide' {{consumeContext consume=this.makeCardResources}} />
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
       it is problematic to ensure the last message sticks to the bottom of the screen.
       In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
       If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
     }}
-    {{#if this.loadedResources}}
+    {{#if this.areResourcesLoaded}}
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
@@ -117,7 +128,8 @@ export default class RoomMessage extends Component<Signature> {
           userId=this.message.author.userId
           displayName=this.message.author.displayName
         }}
-        @resources={{this.loadedResources}}
+        @resources={{this.attachedCardResources}}
+        @files={{this.message.attachedFiles}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
@@ -142,6 +154,9 @@ export default class RoomMessage extends Component<Signature> {
     {{/if}}
 
     <style scoped>
+      .hide {
+        display: none;
+      }
       .room-message {
         --ai-assistant-message-padding: var(--boxel-sp);
       }
@@ -151,53 +166,19 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service declare commandService: CommandService;
-  @tracked loadedResources:
-    | {
-        cards: CardDef[] | undefined;
-        files: FileDef[] | undefined;
-        errors: { id: string; error: Error }[] | undefined;
-      }
-    | undefined;
 
-  loadMessageResources = task(async () => {
-    let cards: CardDef[] = [];
-    let errors: { id: string; error: Error }[] = [];
-
-    let promises = this.message
-      .attachedResources(this)
-      ?.map(async (resource) => {
-        await resource.loaded;
-        if (resource.card) {
-          cards.push(resource.card);
-        } else if (resource.cardError) {
-          let {
-            id,
-            message,
-            title: name,
-            meta: { stack },
-          } = resource.cardError;
-          if (id) {
-            errors.push({
-              id,
-              error: { name, message, stack: stack ?? undefined },
-            });
-          }
-        }
-      });
-
-    if (promises) {
-      await Promise.all(promises);
+  @cached
+  private get areResourcesLoaded() {
+    if (!this.attachedCardResources) {
+      return false;
     }
 
-    this.loadedResources = {
-      cards: cards.length ? cards : undefined,
-      files: this.message.attachedFiles?.length
-        ? this.message.attachedFiles
-        : undefined,
-      errors: errors.length ? errors : undefined,
-    };
-  });
+    return this.attachedCardResources.length === 0
+      ? true
+      : this.attachedCardResources.every((r) => r.isLoaded);
+  }
 
+  @cached
   private get errorMessage() {
     if (this.message.errorMessage) {
       return this.message.errorMessage;
@@ -205,17 +186,12 @@ export default class RoomMessage extends Component<Signature> {
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';
     }
-    if (!this.loadedResources?.errors) {
+    let resourcesWithErrors = (this.attachedCardResources ?? []).filter(
+      (r) => r.cardError,
+    );
+    if (resourcesWithErrors.length === 0) {
       return undefined;
     }
-
-    let hasResourceErrors = this.loadedResources.errors.length > 0;
-    if (hasResourceErrors) {
-      return 'Error rendering attached cards.';
-    }
-
-    return this.loadedResources.errors
-      .map((e: { id: string; error: Error }) => `${e.id}: ${e.error.message}`)
-      .join(', ');
+    return 'Error rendering attached cards.';
   }
 }
