@@ -838,6 +838,19 @@ export class Spec extends CardDef {
   @field ref = contains(CodeRef);
   @field specType = contains(SpecTypeField);
 
+  @field remoteRef = contains(CodeRef, {
+    computeVia: function (this: Spec) {
+      if (!this.ref || !this.id) {
+        return undefined;
+      }
+      let url = new URL(this.id);
+      let ref = codeRefWithAbsoluteURL(this.ref, url);
+      if (!isResolvedCodeRef(ref)) {
+        throw new Error('ref is not a resolved code ref');
+      }
+      return ref;
+    },
+  });
   @field isField = contains(BooleanField, {
     computeVia: function (this: Spec) {
       return this.specType === 'field';

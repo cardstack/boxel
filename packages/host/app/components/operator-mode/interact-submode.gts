@@ -35,8 +35,10 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
+import { loadCard } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import SaveCardCommand from '@cardstack/host/commands/save-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -62,6 +64,7 @@ import type CardService from '../../services/card-service';
 import type CommandService from '../../services/command-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
+import type LoaderService from '../../services/loader-service';
 
 import type { Submode } from '../submode-switcher';
 
@@ -161,6 +164,7 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: Realm;
+  @service private declare loaderService: LoaderService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
@@ -360,9 +364,12 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      addSpec: async (spec: CardDef, targetRealm: string) => {
-        let card = await here._addSpec.perform(spec, targetRealm);
+      fork: async (spec: CardDef, targetRealm: string) => {
+        let card = await here._fork.perform(spec, targetRealm);
         return card;
+      },
+      create: async (spec: CardDef, targetRealm: string) => {
+        await here._create.perform(spec, targetRealm);
       },
     };
   }
@@ -482,13 +489,30 @@ export default class InteractSubmode extends Component<Signature> {
     },
   );
 
-  private _addSpec = task(async (spec: CardDef, targetRealm: string) => {
+  private _fork = task(async (spec: CardDef, targetRealm: string) => {
     let { commandContext } = this.commandService;
     const result = await new CopyCardCommand(commandContext).execute({
       sourceCard: spec,
       targetRealmUrl: targetRealm,
     });
     return result.newCard;
+  });
+
+  private _create = task(async (spec: CardDef, targetRealm: string) => {
+    if (!spec.remoteRef) {
+      throw new Error('No ref exists');
+    }
+    let ref = spec.remoteRef;
+    let Klass = await loadCard(ref, {
+      loader: this.loaderService.loader,
+    });
+    let card = new Klass({});
+    let result = await new SaveCardCommand(
+      this.commandService.commandContext,
+    ).execute({
+      card,
+      realm: targetRealm,
+    });
   });
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
