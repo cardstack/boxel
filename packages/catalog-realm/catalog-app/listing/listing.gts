@@ -6,6 +6,7 @@ import {
   StringField,
   linksTo,
   Component,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
@@ -203,36 +204,64 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
 class IsolatedTemplate extends Component<typeof Listing> {
   @tracked addedSpec = false;
-  @action addToWorkspace() {
-    if (!this.args.context?.actions?.addSpec) {
-      throw new Error('addSpec action is not available');
-    }
-    this._addToWorkspace.perform();
-  }
-
-  _addToWorkspace = task(async () => {
+  @tracked createdInstances = false;
+  _install = task(async () => {
     let realmUrl = 'http://localhost:4201/experiments/';
     let res = await Promise.all(
       this.args.model?.specs?.map((spec) =>
-        this.args.context?.actions?.addSpec?.(spec, realmUrl),
+        this.args.context?.actions?.fork?.(spec, realmUrl),
       ) ?? [],
     );
     if (res.length > 0) {
       this.addedSpec = true;
     }
   });
+
+  @action fork() {
+    if (!this.args.context?.actions?.fork) {
+      throw new Error('fork action is not available');
+    }
+    this._install.perform();
+  }
+
+  _create = task(async () => {
+    let realmUrl = 'http://localhost:4201/experiments/';
+    await Promise.all(
+      this.args.model?.specs?.map((spec: Spec) =>
+        this.args.context?.actions?.create?.(spec, realmUrl),
+      ) ?? [],
+    );
+    this.createdInstances = true;
+  });
+
+  @action create() {
+    if (!this.args.context?.actions?.create) {
+      throw new Error('create action is not available');
+    }
+    this._create.perform();
+  }
   <template>
     <div>
-      <button {{on 'click' this.addToWorkspace}}>
-        {{#if this._addToWorkspace.isRunning}}
-          Adding...
+      <button {{on 'click' this.fork}}>
+        {{#if this._install.isRunning}}
+          Installing...
         {{else if this.addedSpec}}
-          Added
+          Installed
         {{else}}
-          Add to Workspace
+          Install
         {{/if}}
       </button>
-      <h1>Listing</h1>
+    </div>
+    <div>
+      <button {{on 'click' this.create}}>
+        {{#if this._create.isRunning}}
+          Creating...
+        {{else if this.createdInstances}}
+          Created Instances in Realm
+        {{else}}
+          New
+        {{/if}}
+      </button>
     </div>
   </template>
 }
