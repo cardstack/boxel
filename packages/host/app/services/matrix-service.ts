@@ -1250,20 +1250,8 @@ export default class MatrixService extends Service {
       // Wait for all events to be loaded in roomResource
       let timeline = room.getLiveTimeline();
       let events = timeline.getEvents();
-      await new Promise<void>((resolve) => {
-        let checkEvents = () => {
-          let allEventsConsumed = events.every((event) =>
-            roomData.events.some((e) => e.event_id === event.getId()),
-          );
-          if (allEventsConsumed) {
-            resolve();
-          } else {
-            setTimeout(checkEvents, 100);
-          }
-        };
-
-        checkEvents();
-      });
+      this.timelineQueue.push(...events.map((e) => ({ event: e })));
+      await this.drainTimeline();
       await this.roomResources.get(roomId)?.processing;
     } finally {
       this.timelineLoadingState.set(roomId, false);
