@@ -155,6 +155,7 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type Spec } from 'https://cardstack.com/base/spec';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
 
@@ -360,7 +361,7 @@ export interface SearchQuery {
   isLoading: boolean;
 }
 
-export interface Actions {
+export interface CardActions {
   createCard: (
     ref: CodeRef,
     relativeTo: URL | undefined,
@@ -391,8 +392,16 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
-  addSpec: (spec: CardDef, targetRealm: string) => void;
 }
+
+export interface CatalogActions {
+  create: (spec: Spec, targetRealm: string) => void;
+  allRealmsInfo: () => Promise<
+    Record<string, { canWrite: boolean; info: RealmInfo }>
+  >;
+}
+
+export type Actions = CardActions & CatalogActions;
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {

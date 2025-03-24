@@ -32,11 +32,16 @@ import {
   type getCard,
   type getCards,
   type Actions,
+  type CatalogActions,
+  type CardActions,
   type CodeRef,
   type LooseSingleCardDocument,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import { loadCard } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import SaveCardCommand from '@cardstack/host/commands/save-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -49,6 +54,7 @@ import {
   type CardDef,
   type Format,
 } from 'https://cardstack.com/base/card-api';
+import { type Spec } from 'https://cardstack.com/base/spec';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -60,6 +66,7 @@ import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
 import type CommandService from '../../services/command-service';
+import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
 
@@ -161,6 +168,7 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: Realm;
+  @service private declare loaderService: LoaderService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
@@ -177,7 +185,7 @@ export default class InteractSubmode extends Component<Signature> {
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
   // to which stack the cards will be added to, or from which stack the cards will be removed from.
   private publicAPI(here: InteractSubmode, stackIndex: number): Actions {
-    return {
+    let actions: CardActions = {
       createCard: async (
         ref: CodeRef,
         relativeTo: URL | undefined,
@@ -360,11 +368,16 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      addSpec: async (spec: CardDef, targetRealm: string) => {
-        let card = await here._addSpec.perform(spec, targetRealm);
-        return card;
+    };
+    let catalogActions: CatalogActions = {
+      create: async (spec: Spec, targetRealm: string) => {
+        await here._createFromSpec.perform(spec, targetRealm);
+      },
+      allRealmsInfo: async () => {
+        return await here.realm.allRealmsInfo;
       },
     };
+    return { ...actions, ...catalogActions };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
 
@@ -482,13 +495,20 @@ export default class InteractSubmode extends Component<Signature> {
     },
   );
 
-  private _addSpec = task(async (spec: CardDef, targetRealm: string) => {
-    let { commandContext } = this.commandService;
-    const result = await new CopyCardCommand(commandContext).execute({
-      sourceCard: spec,
-      targetRealmUrl: targetRealm,
+  private _createFromSpec = task(async (spec: Spec, targetRealm: string) => {
+    let url = new URL(spec.id);
+    let ref = codeRefWithAbsoluteURL(spec.ref, url);
+    if (!isResolvedCodeRef(ref)) {
+      throw new Error('ref is not a resolved code ref');
+    }
+    let Klass = await loadCard(ref, {
+      loader: this.loaderService.loader,
     });
-    return result.newCard;
+    let card = new Klass({}) as CardDef;
+    await new SaveCardCommand(this.commandService.commandContext).execute({
+      card,
+      realm: targetRealm,
+    });
   });
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done

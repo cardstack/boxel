@@ -11,12 +11,17 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import { action } from '@ember/object';
-import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 
-import { Accordion } from '@cardstack/boxel-ui/components';
+import {
+  Accordion,
+  BoxelDropdown,
+  BoxelButton,
+  Menu as BoxelMenu,
+} from '@cardstack/boxel-ui/components';
+import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
@@ -202,37 +207,91 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 }
 
 class IsolatedTemplate extends Component<typeof Listing> {
-  @tracked addedSpec = false;
-  @action addToWorkspace() {
-    if (!this.args.context?.actions?.addSpec) {
-      throw new Error('addSpec action is not available');
-    }
-    this._addToWorkspace.perform();
+  @tracked createdInstances = false;
+  @tracked writableRealms: string[] = [];
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this._setup.perform();
   }
 
-  _addToWorkspace = task(async () => {
-    let realmUrl = 'http://localhost:4201/experiments/';
-    let res = await Promise.all(
-      this.args.model?.specs?.map((spec) =>
-        this.args.context?.actions?.addSpec?.(spec, realmUrl),
-      ) ?? [],
-    );
-    if (res.length > 0) {
-      this.addedSpec = true;
+  _setup = task(async () => {
+    let allRealmsInfo =
+      (await this.args.context?.actions?.allRealmsInfo?.()) ?? {};
+    let writableRealms: string[] = [];
+    if (allRealmsInfo) {
+      Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
+        if (realmInfo.canWrite) {
+          writableRealms.push(realmUrl);
+        }
+      });
     }
+    this.writableRealms = writableRealms;
   });
+
+  get realmOptions() {
+    return this.writableRealms.map((realmUrl) => {
+      return new MenuItem(realmUrl, 'action', {
+        action: () => {
+          this.create(realmUrl);
+        },
+      });
+    });
+  }
+
+  _create = task(async (realmUrl: string) => {
+    await Promise.all(
+      this.args.model?.specs
+        ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
+        .map((spec: Spec) =>
+          this.args.context?.actions?.create?.(spec, realmUrl),
+        ) ?? [],
+    );
+    this.createdInstances = true;
+  });
+
+  @action create(realmUrl: string) {
+    this._create.perform(realmUrl);
+  }
+
+  get hasOneOrMoreSpec() {
+    return this.args.model.specs && this.args.model?.specs?.length > 0;
+  }
+
+  get createButtonDisabled() {
+    return (
+      this.createdInstances ||
+      !this.args.context?.actions?.create ||
+      !this.hasOneOrMoreSpec
+    );
+  }
+
   <template>
     <div>
-      <button {{on 'click' this.addToWorkspace}}>
-        {{#if this._addToWorkspace.isRunning}}
-          Adding...
-        {{else if this.addedSpec}}
-          Added
-        {{else}}
-          Add to Workspace
-        {{/if}}
-      </button>
-      <h1>Listing</h1>
+      {{#if this._setup.isRunning}}
+        Loading...
+      {{else}}
+        <BoxelDropdown>
+          <:trigger as |bindings|>
+            <BoxelButton
+              @disabled={{this.createButtonDisabled}}
+              class='sort-button'
+              {{bindings}}
+            >
+              {{#if this._create.isRunning}}
+                Creating...
+              {{else if this.createdInstances}}
+                Created Instances
+              {{else}}
+                Create
+              {{/if}}
+            </BoxelButton>
+          </:trigger>
+          <:content as |dd|>
+            <BoxelMenu @closeMenu={{dd.close}} @items={{this.realmOptions}} />
+          </:content>
+        </BoxelDropdown>
+      {{/if}}
     </div>
   </template>
 }
