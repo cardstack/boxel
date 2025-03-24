@@ -56,6 +56,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -85,10 +86,11 @@ import type {
   CommandResultWithOutputContent,
   RealmEventContent,
   CommandDefinitionsContent,
+  CommandDefinitionSchema,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Tool } from 'https://cardstack.com/base/matrix-event';
-import { CommandField, SkillCard } from 'https://cardstack.com/base/skill-card';
+import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { importResource } from '../resources/import';
@@ -109,6 +111,7 @@ import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type { Skill as RoomSkill } from '../components/ai-assistant/skill-menu';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -164,7 +167,7 @@ export default class MatrixService extends Service {
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
-  private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
+  private commandDefHashes: string[] = []; // hashes
 
   constructor(owner: Owner) {
     super(owner);
@@ -612,15 +615,17 @@ export default class MatrixService extends Service {
   }
 
   async addCommandDefinitionsToRoomHistory(
-    commandDefinitions: CommandField[],
+    commandDefinitions: SkillCardModule.CommandField[],
     roomId: string,
   ) {
+    console.trace(
+      'addCommandDefinitionsToRoomHistory',
+      commandDefinitions,
+      roomId,
+    );
     // Create the command defs so getting the json schema
     // and send it to the matrix room.
-    let commandDefinitionSchemas: {
-      codeRef: ResolvedCodeRef;
-      tool: Tool;
-    }[] = [];
+    let commandDefinitionSchemas: CommandDefinitionSchema[] = [];
     const mappings = await basicMappings(this.loaderService.loader);
     for (let commandDef of commandDefinitions) {
       let absoluteCodeRef = codeRefWithAbsoluteURL(
@@ -633,10 +638,10 @@ export default class MatrixService extends Service {
       );
       const command = new Command(this.commandService.commandContext);
       const name = commandDef.functionName;
-      commandDefinitionSchemas.push({
+      const schema: CommandDefinitionSchema = {
         codeRef: absoluteCodeRef,
         tool: {
-          type: 'function',
+          type: 'function' as Tool['type'],
           function: {
             name,
             description: command.description,
@@ -652,61 +657,140 @@ export default class MatrixService extends Service {
             },
           },
         },
+      };
+      let hashKey = this.generateCommandDefHashKey(roomId, schema);
+      if (!this.commandDefHashes.includes(hashKey)) {
+        commandDefinitionSchemas.push(schema);
+        this.commandDefHashes.push(hashKey);
+      }
+    }
+    if (commandDefinitionSchemas.length) {
+      await this.sendEvent(roomId, 'm.room.message', {
+        msgtype: APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+        body: 'Command Definitions',
+        data: {
+          commandDefinitions: commandDefinitionSchemas,
+        },
       });
     }
-    await this.sendEvent(roomId, 'm.room.message', {
-      msgtype: APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-      body: 'Command Definitions',
-      data: {
-        commandDefinitions: commandDefinitionSchemas,
-      },
-    });
   }
 
   async addSkillCardsToRoomHistory(
-    skills: SkillCard[],
+    skills: SkillCardModule.SkillCard[],
     roomId: string,
-    opts?: CardAPI.SerializeOpts,
   ): Promise<string[]> {
     const commandDefinitions = skills.flatMap((skill) => skill.commands);
-    await this.addCommandDefinitionsToRoomHistory(commandDefinitions, roomId);
-    return this.addCardsToRoom(skills, roomId, this.skillCardHashes, opts);
+    if (commandDefinitions.length) {
+      await this.addCommandDefinitionsToRoomHistory(commandDefinitions, roomId);
+    }
+    return this.addCardsToRoom(skills, roomId);
   }
 
-  async addCardsToRoom(
-    cards: CardDef[],
-    roomId: string,
-    cardHashes: Map<string, string> = this.cardHashes,
-    opts: CardAPI.SerializeOpts = { useAbsoluteURL: true },
-  ): Promise<string[]> {
+  async addCardsToRoom(cards: CardDef[], roomId: string): Promise<string[]> {
     if (!cards.length) {
       return [];
     }
-    let serializedCards = await Promise.all(
+    let cardEntries: {
+      card: CardDef;
+      serialization: LooseSingleCardDocument;
+      eventId?: string;
+      wasPreviouslySaved?: boolean;
+      matchingRoomSkill?: RoomSkill;
+    }[] = [];
+    cardEntries = await Promise.all(
       cards.map(async (card) => {
+        let opts: CardAPI.SerializeOpts = { useAbsoluteURL: true };
+        if (isSkillCard(card)) {
+          opts['includeComputeds'] = true;
+        }
+
         let { Base64ImageField } = await this.loaderService.loader.import<{
           Base64ImageField: typeof Base64ImageFieldType;
         }>(`${baseRealm.url}base64-image`);
-        return await this.cardService.serializeCard(card, {
+        let serialization = await this.cardService.serializeCard(card, {
           omitFields: [Base64ImageField],
           ...opts,
         });
+        return { card, serialization };
       }),
     );
 
-    let eventIds: string[] = [];
-    if (serializedCards.length) {
-      for (let card of serializedCards) {
-        let eventId = cardHashes.get(this.generateCardHashKey(roomId, card));
-        if (eventId === undefined) {
-          let responses = await this.sendCardFragments(roomId, card);
+    if (cardEntries.length) {
+      for (let entry of cardEntries) {
+        console.log(JSON.stringify(entry.serialization, null, 2));
+        let hashKey = this.generateCardHashKey(roomId, entry.serialization);
+        let eventId = this.cardHashes.get(hashKey);
+        if (eventId) {
+          entry.wasPreviouslySaved = true;
+        } else {
+          entry.wasPreviouslySaved = false;
+          let responses = await this.sendCardFragments(
+            roomId,
+            entry.serialization,
+          );
           eventId = responses[0].event_id; // we only care about the first fragment
-          cardHashes.set(this.generateCardHashKey(roomId, card), eventId!);
+          this.cardHashes.set(hashKey, eventId!);
         }
-        eventIds.push(eventId!);
+        entry.eventId = eventId;
       }
     }
-    return eventIds;
+    const skillCardEntries = cardEntries.filter((entry) =>
+      isSkillCard(entry.card),
+    );
+    const roomResource = this.roomResourcesCache.get(roomId);
+    const roomSkills = roomResource?.skills ?? [];
+    for (const skillCardEntry of skillCardEntries) {
+      skillCardEntry.matchingRoomSkill = roomSkills.find(
+        (roomSkill) => roomSkill.card.id === skillCardEntry.card.id,
+      );
+      if (skillCardEntry.matchingRoomSkill) {
+        let commandDefinitions = (
+          skillCardEntry.card as SkillCardModule.SkillCard
+        ).commands;
+        if (commandDefinitions.length) {
+          await this.addCommandDefinitionsToRoomHistory(
+            commandDefinitions,
+            roomId,
+          );
+        }
+      }
+    }
+    let savedSkillCardEntries = skillCardEntries.filter(
+      (entry) => !entry.wasPreviouslySaved,
+    );
+    if (savedSkillCardEntries.some((entry) => entry.matchingRoomSkill)) {
+      await this.updateStateEvent(
+        roomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        '',
+        async (currentSkillsConfig) => {
+          let newSkillsConfig = {
+            enabledEventIds: [...(currentSkillsConfig.enabledEventIds || [])],
+            disabledEventIds: [...(currentSkillsConfig.disabledEventIds || [])],
+          };
+          for (const skillCardEntry of savedSkillCardEntries) {
+            if (skillCardEntry.matchingRoomSkill) {
+              // replace the old skillEventId with the new one
+              newSkillsConfig.enabledEventIds =
+                newSkillsConfig.enabledEventIds.map((eventId: string) =>
+                  eventId === skillCardEntry.matchingRoomSkill!.skillEventId
+                    ? skillCardEntry.eventId!
+                    : eventId,
+                );
+              newSkillsConfig.disabledEventIds =
+                newSkillsConfig.disabledEventIds.map((eventId: string) =>
+                  eventId === skillCardEntry.matchingRoomSkill!.skillEventId
+                    ? skillCardEntry.eventId!
+                    : eventId,
+                );
+            }
+          }
+          return newSkillsConfig;
+        },
+      );
+    }
+
+    return cardEntries.map((entry) => entry.eventId!);
   }
 
   async uploadFiles(files: FileDef[]) {
@@ -800,6 +884,13 @@ export default class MatrixService extends Service {
 
   private generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
     return md5(roomId + JSON.stringify(card));
+  }
+
+  private generateCommandDefHashKey(
+    roomId: string,
+    commandDefSchema: CommandDefinitionsContent['data']['commandDefinitions'][0],
+  ) {
+    return md5(roomId + JSON.stringify(commandDefSchema));
   }
 
   private async sendCardFragments(
@@ -922,7 +1013,9 @@ export default class MatrixService extends Service {
       defaultSkills.map(async (skillCardURL) => {
         // WARNING This card is not part of the identity map!
         // TODO refactor this to use CardResource (please make ticket)
-        return await this.cardService.getCard<SkillCard>(skillCardURL);
+        return await this.cardService.getCard<SkillCardModule.SkillCard>(
+          skillCardURL,
+        );
       }),
     );
   }
@@ -951,7 +1044,6 @@ export default class MatrixService extends Service {
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
     this.cardHashes = new Map();
-    this.skillCardHashes = new Map();
     this._currentRoomId = undefined;
     this.messagesToSend = new TrackedMap();
     this.cardsToSend = new TrackedMap();
@@ -1563,4 +1655,24 @@ function getAuth(): LoginResponse | undefined {
     return;
   }
   return JSON.parse(auth) as LoginResponse;
+}
+
+// we check this way because instanceof is unreliable with different module contexts
+// TODO: consider a static symbol instead!
+function isSkillCard(card: CardDef): boolean {
+  // Start with the current card's constructor
+  let proto = Object.getPrototypeOf(card);
+
+  // Walk up the prototype chain
+  while (proto) {
+    const constructor = proto.constructor;
+    // Check if the constructor name is "SkillCard"
+    if (constructor && constructor.name === 'SkillCard') {
+      return true;
+    }
+    // Move up the prototype chain
+    proto = Object.getPrototypeOf(proto);
+  }
+
+  return false;
 }

@@ -235,7 +235,9 @@ export class RoomResource extends Resource<Args> {
         card: skillCard,
         skillEventId,
         isActive:
-          this.matrixRoom?.skillsConfig.enabledEventIds.includes(skillEventId),
+          this.matrixRoom?.skillsConfig.enabledEventIds.includes(
+            skillEventId,
+          ) ?? false,
       });
     }
     return result;

@@ -239,18 +239,19 @@ export interface CommandResultEvent extends BaseMatrixEvent {
     prev_sender?: string;
   };
 }
+export interface CommandDefinitionSchema {
+  codeRef: {
+    module: string;
+    name: string;
+  };
+  tool: Tool;
+}
 
 export interface CommandDefinitionsContent {
   msgtype: typeof APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
   body: string;
   data: {
-    commandDefinitions: {
-      codeRef: {
-        module: string;
-        name: string;
-      };
-      tool: Tool;
-    }[];
+    commandDefinitions: CommandDefinitionSchema[];
   };
 }
 export interface CommandResultWithOutputContent {
