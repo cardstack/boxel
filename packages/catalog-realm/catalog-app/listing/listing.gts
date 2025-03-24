@@ -16,7 +16,7 @@ import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 
-import { Accordion } from '@cardstack/boxel-ui/components';
+import { Accordion, Pill } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
@@ -28,6 +28,15 @@ import { License } from './license';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
+
+  mockCards = [
+    { name: 'Card 1' },
+    { name: 'Card 2' },
+    { name: 'Card 3' },
+    { name: 'Card 4' },
+    { name: 'Card 5' },
+    { name: 'Card 6' },
+  ];
 
   @action addToWorkspace() {
     console.log('addToWorkspace');
@@ -74,7 +83,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         @buttonText='Add to Workspace'
       />
 
-      <div class='app-listing-info'>
+      <section class='app-listing-info'>
         <ContentContainer
           @displayBoundaries={{true}}
           class='app-listing-summary'
@@ -107,36 +116,94 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           </div>
         </div>
 
-        {{#if this.specBreakdown}}
-          <div>
-            <h2>Includes These Boxels</h2>
-            <Accordion
-              data-test-selected-accordion-item={{this.selectedAccordionItem}}
-              as |A|
-            >
-              {{#each-in this.specBreakdown as |specType specs|}}
-                <A.Item
-                  @onClick={{fn this.selectAccordionItem specType}}
-                  @isOpen={{eq this.selectedAccordionItem specType}}
-                  data-test-accordion-item={{specType}}
-                >
-                  <:title>
-                    {{specType}}
-                    ({{specs.length}})
-                  </:title>
-                  <:content>
-                    {{#each specs as |spec|}}
-                      {{#let (this.getComponent spec) as |CardComponent|}}
-                        <CardComponent @format='fitted' />
-                      {{/let}}
-                    {{/each}}
-                  </:content>
-                </A.Item>
-              {{/each-in}}
-            </Accordion>
-          </div>
-        {{/if}}
-      </div>
+        <div class='pricing-plans'>
+          {{! Todo: Add price plan section while getting the real data }}
+          <ContentContainer @displayBoundaries={{true}} class='price-plan-item'>
+            <span class='price-plan-label'>$250</span>
+            <span class='price-plan-info'>= $250USD</span>
+            <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
+              <:default>One-time purchase</:default>
+            </Pill>
+          </ContentContainer>
+
+          <ContentContainer @displayBoundaries={{true}} class='price-plan-item'>
+            <span class='price-plan-label'>$ 0.50</span>
+            <span class='price-plan-info'>per month</span>
+            <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
+              <:default>Cancel anytime</:default>
+            </Pill>
+          </ContentContainer>
+
+          <ContentContainer
+            @displayBoundaries={{true}}
+            class='price-plan-item premium-plan-item'
+          >
+            <span class='price-plan-label'>$ 250</span>
+            <span class='price-plan-info'>with Boxel Creator</span>
+            <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
+              <:default>Premium plan</:default>
+            </Pill>
+          </ContentContainer>
+        </div>
+      </section>
+
+      <hr class='divider' />
+
+      <section class='app-listing-images-videos'>
+        <h2>Images & Videos</h2>
+        {{! Todo: Add images and videos section while getting the real data }}
+        <ul class='images-videos-list'>
+          {{#each this.mockCards as |card|}}
+            <li class='images-videos-item'>
+              {{card.name}}
+            </li>
+          {{/each}}
+        </ul>
+      </section>
+
+      <section class='app-listing-examples'>
+        <h2>Examples</h2>
+        {{! Todo: Add examples section while getting the real data }}
+        <ul class='examples-list'>
+          {{#each this.mockCards as |card|}}
+            <li class='examples-item'>
+              {{card.name}}
+            </li>
+          {{/each}}
+        </ul>
+      </section>
+
+      <hr class='divider' />
+
+      {{#if this.specBreakdown}}
+        <div>
+          <h2>Includes These Boxels</h2>
+          <Accordion
+            data-test-selected-accordion-item={{this.selectedAccordionItem}}
+            as |A|
+          >
+            {{#each-in this.specBreakdown as |specType specs|}}
+              <A.Item
+                @onClick={{fn this.selectAccordionItem specType}}
+                @isOpen={{eq this.selectedAccordionItem specType}}
+                data-test-accordion-item={{specType}}
+              >
+                <:title>
+                  {{specType}}
+                  ({{specs.length}})
+                </:title>
+                <:content>
+                  {{#each specs as |spec|}}
+                    {{#let (this.getComponent spec) as |CardComponent|}}
+                      <CardComponent @format='fitted' />
+                    {{/let}}
+                  {{/each}}
+                </:content>
+              </A.Item>
+            {{/each-in}}
+          </Accordion>
+        </div>
+      {{/if}}
     </div>
 
     <style scoped>
@@ -149,15 +216,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       .app-listing-embedded {
         container-name: app-listing-embedded;
         container-type: inline-size;
+        padding: var(--boxel-sp);
       }
       .app-listing-info {
-        margin-left: 60px;
-        padding: var(--boxel-sp);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xl);
-        container-name: app-listing-info;
-        container-type: inline-size;
+        margin-left: 60px;
+        margin-top: var(--boxel-sp-lg);
       }
       .app-listing-summary {
         --content-container-padding: var(--boxel-sp);
@@ -186,15 +252,98 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       .stat-value {
         font: 600 var(--boxel-font);
       }
+      .pricing-plans {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: var(--boxel-sp);
+        margin-top: var(--boxel-sp-lg);
+      }
+      .price-plan-item {
+        --content-container-padding: var(--boxel-sp-lg) var(--boxel-sp);
+        --content-container-background-color: var(--boxel-dark);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: var(--boxel-sp-xs);
+      }
+      .premium-plan-item {
+        --content-container-background-color: var(--boxel-purple);
+      }
+      .price-plan-label {
+        font: 600 var(--boxel-font-lg);
+        color: var(--boxel-light);
+        text-align: center;
+      }
+      .price-plan-info {
+        font: 400 var(--boxel-font);
+        color: var(--boxel-light);
+        text-align: center;
+      }
+      .price-plan-pill {
+        --pill-font-color: var(--boxel-light);
+        margin-top: var(--boxel-sp-sm);
+      }
+
+      .divider {
+        width: 100%;
+        margin: var(--boxel-sp-xl) 0;
+        border: 0.5px solid var(--boxel-border-color);
+      }
+
+      .app-listing-images-videos {
+        margin-top: var(--boxel-sp-xl);
+      }
+      .images-videos-list {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: var(--boxel-sp);
+        list-style: none;
+        margin-block: 0;
+        padding-inline-start: 0;
+      }
+      .images-videos-item {
+        height: auto;
+        max-width: 100%;
+        min-height: 100px;
+        background-color: var(--boxel-300);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--boxel-border-radius);
+      }
+
+      .app-listing-examples {
+        margin-top: var(--boxel-sp-xl);
+      }
+      .examples-list {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: var(--boxel-sp);
+        list-style: none;
+        margin-block: 0;
+        padding-inline-start: 0;
+      }
+      .examples-item {
+        height: auto;
+        max-width: 100%;
+        min-height: 100px;
+        background-color: var(--boxel-300);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--boxel-border-radius);
+      }
 
       @container app-listing-embedded (inline-size <= 500px) {
         .app-listing-info {
           margin-left: 0;
         }
-      }
-      @container app-listing-info (inline-size <= 500px) {
         .license-statistic,
-        .stats-container {
+        .stats-container,
+        .pricing-plans,
+        .images-videos-list,
+        .examples-list {
           grid-template-columns: 1fr;
         }
       }
