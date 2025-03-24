@@ -58,10 +58,19 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
         /* container */
         .app-listing-header {
           --app-listing-thumbnail-size: 60px;
-          padding: var(--boxel-sp-sm);
-          background-color: var(--boxel-light);
-          border-radius: var(--boxel-border-radius);
-          box-shadow: var(--boxel-box-shadow-sm);
+          padding: var(--app-listing-header-padding, 0);
+          background-color: var(
+            --app-listing-header-background-color,
+            transparent
+          );
+          border-radius: var(
+            --app-listing-header-border-radius,
+            var(--boxel-border-radius)
+          );
+          box-shadow: var(
+            --app-listing-header-box-shadow,
+            var(--boxel-box-shadow-sm)
+          );
           container-name: app-listing-header-container;
           container-type: inline-size;
         }
