@@ -11,7 +11,8 @@ export default class ShowCardCommand extends HostBaseCommand<
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
 
-  description = 'Show a card in the UI';
+  description =
+    'Show a card in the UI. The cardIdToShow mush be a fully qualified URL.';
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
