@@ -361,7 +361,7 @@ export interface SearchQuery {
   isLoading: boolean;
 }
 
-export interface Actions {
+export interface CardActions {
   createCard: (
     ref: CodeRef,
     relativeTo: URL | undefined,
@@ -392,10 +392,16 @@ export interface Actions {
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
-
-  // Catalog Actions
-  create?: (spec: Spec, targetRealm: string) => void;
 }
+
+export interface CatalogActions {
+  create: (spec: Spec, targetRealm: string) => void;
+  allRealmsInfo: () => Promise<
+    Record<string, { canWrite: boolean; info: RealmInfo }>
+  >;
+}
+
+export type Actions = CardActions & CatalogActions;
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {

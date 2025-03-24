@@ -32,6 +32,8 @@ import {
   type getCard,
   type getCards,
   type Actions,
+  type CatalogActions,
+  type CardActions,
   type CodeRef,
   type LooseSingleCardDocument,
   isResolvedCodeRef,
@@ -183,7 +185,7 @@ export default class InteractSubmode extends Component<Signature> {
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
   // to which stack the cards will be added to, or from which stack the cards will be removed from.
   private publicAPI(here: InteractSubmode, stackIndex: number): Actions {
-    return {
+    let actions: CardActions = {
       createCard: async (
         ref: CodeRef,
         relativeTo: URL | undefined,
@@ -366,10 +368,16 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
+    };
+    let catalogActions: CatalogActions = {
       create: async (spec: Spec, targetRealm: string) => {
-        await here._create.perform(spec, targetRealm);
+        await here._createFromSpec.perform(spec, targetRealm);
+      },
+      allRealmsInfo: async () => {
+        return await here.realm.allRealmsInfo;
       },
     };
+    return { ...actions, ...catalogActions };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
 
@@ -487,7 +495,7 @@ export default class InteractSubmode extends Component<Signature> {
     },
   );
 
-  private _create = task(async (spec: Spec, targetRealm: string) => {
+  private _createFromSpec = task(async (spec: Spec, targetRealm: string) => {
     let url = new URL(spec.id);
     let ref = codeRefWithAbsoluteURL(spec.ref, url);
     if (!isResolvedCodeRef(ref)) {
