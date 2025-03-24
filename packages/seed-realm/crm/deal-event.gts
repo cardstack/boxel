@@ -10,12 +10,15 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import DateTimeField from 'https://cardstack.com/base/datetime';
 import TextAreaField from 'https://cardstack.com/base/text-area';
-import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
+import {
+  FieldContainer,
+  BoxelSelect,
+  EntityDisplayWithIcon,
+} from '@cardstack/boxel-ui/components';
 import CalendarPlus from '@cardstack/boxel-icons/calendar-plus';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import Info from '@cardstack/boxel-icons/info';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 class IsolatedTemplate extends Component<typeof DealEvent> {
   <template>
