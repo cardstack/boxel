@@ -1,10 +1,4 @@
-import {
-  StringField,
-  Component,
-  field,
-  CardDef,
-  contains,
-} from 'https://cardstack.com/base/card-api';
+import { StringField, Component, field, CardDef, contains } from './card-api';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
 

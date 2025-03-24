@@ -5,6 +5,7 @@ import {
   StringField,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
+import { UrlField } from 'https://cardstack.com/base/url';
 
 import {
   BoxelSelect,
@@ -16,8 +17,6 @@ import type IconComponent from '@cardstack/boxel-icons/captions';
 import Email from '@cardstack/boxel-icons/mail';
 import Link from '@cardstack/boxel-icons/link';
 import Phone from '@cardstack/boxel-icons/phone';
-
-import { UrlField } from './url';
 
 export interface ContactLink {
   type: 'email' | 'tel' | 'link' | string;

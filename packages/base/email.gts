@@ -1,12 +1,7 @@
-import {
-  StringField,
-  Component,
-  field,
-  CardDef,
-  contains,
-} from 'https://cardstack.com/base/card-api';
+import { StringField, Component, field, CardDef, contains } from './card-api';
 import {
   BoxelInput,
+  EntityDisplayWithIcon,
   type BoxelInputValidationState,
 } from '@cardstack/boxel-ui/components';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -15,7 +10,6 @@ import MailIcon from '@cardstack/boxel-icons/mail';
 import { debounce } from 'lodash';
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 // We use simple regex here to validate common email formats
 // This is definitely NOT a full email validation

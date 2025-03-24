@@ -1,22 +1,22 @@
-import GlimmerComponent from '@glimmer/component';
 import { concat } from '@ember/helper';
+import GlimmerComponent from '@glimmer/component';
 
 interface EntityDisplayWithIconArgs {
   Args: {
-    title?: string; //prefer using args.title if the title is just a string
+    //prefer using args.title if the title is just a string
     center?: boolean;
+    title?: string;
     underline?: boolean;
   };
   Blocks: {
-    title?: []; //we can choose use this to pass instead of using args.title if the title block HTML is complex
+    content?: []; //we can choose use this to pass instead of using args.title if the title block HTML is complex
     icon?: [];
     tag?: [];
-    content?: [];
+    title?: [];
   };
   Element: HTMLElement;
 }
 
-// TODO: refactor EntityDisplayWithIcon and EntityDisplayWithThumbnail
 export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDisplayWithIconArgs> {
   get shouldAlignCenter() {
     return this.args.center;
@@ -35,9 +35,9 @@ export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDispla
       ...attributes
     >
       {{#if (has-block 'icon')}}
-        <aside class='entity-icon'>
+        <span class='entity-icon'>
           {{yield to='icon'}}
-        </aside>
+        </span>
       {{/if}}
 
       <div class='entity-info'>

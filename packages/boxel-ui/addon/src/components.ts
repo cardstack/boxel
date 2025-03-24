@@ -19,6 +19,8 @@ import DndKanbanBoard, {
 import BoxelDropdown, {
   type DropdownAPI as BoxelDropdownAPI,
 } from './components/dropdown/index.gts';
+import EntityDisplayWithIcon from './components/entity-icon-display/index.gts';
+import EntityDisplayWithThumbnail from './components/entity-thumbnail-display/index.gts';
 import FieldContainer from './components/field-container/index.gts';
 import FilterList, { type Filter } from './components/filter-list/index.gts';
 import GridContainer from './components/grid-container/index.gts';
@@ -89,6 +91,8 @@ export {
   DndColumn,
   DndItem,
   DndKanbanBoard,
+  EntityDisplayWithIcon,
+  EntityDisplayWithThumbnail,
   FieldContainer,
   Filter,
   FilterList,

@@ -1,23 +1,24 @@
-import GlimmerComponent from '@glimmer/component';
 import { concat } from '@ember/helper';
+import GlimmerComponent from '@glimmer/component';
 
-interface EntityDisplayWithIconArgs {
+interface EntityDisplayWithThumbnailArgs {
   Args: {
-    title?: string; //prefer using args.title if the title is just a string
+    //prefer using args.title if the title is just a string
     center?: boolean;
+    title?: string;
     underline?: boolean;
   };
   Blocks: {
-    title?: []; //we can choose use this to pass instead of using args.title if the title block HTML is complex
-    icon?: [];
-    tag?: [];
     content?: [];
+    tag?: [];
+    //we can choose use this to pass instead of using args.title if the title block HTML is complex
+    thumbnail?: [];
+    title?: [];
   };
   Element: HTMLElement;
 }
 
-// TODO: refactor EntityDisplayWithIcon and EntityDisplayWithThumbnail
-export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDisplayWithIconArgs> {
+export default class EntityDisplayWithThumbnail extends GlimmerComponent<EntityDisplayWithThumbnailArgs> {
   get shouldAlignCenter() {
     return this.args.center;
   }
@@ -29,14 +30,14 @@ export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDispla
   <template>
     <div
       class={{concat
-        'entity-icon-display'
+        'entity-thumbnail-display'
         (if this.shouldAlignCenter ' center')
       }}
       ...attributes
     >
-      {{#if (has-block 'icon')}}
-        <aside class='entity-icon'>
-          {{yield to='icon'}}
+      {{#if (has-block 'thumbnail')}}
+        <aside class='entity-thumbnail'>
+          {{yield to='thumbnail'}}
         </aside>
       {{/if}}
 
@@ -72,22 +73,25 @@ export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDispla
 
     </div>
     <style scoped>
-      .entity-icon-display {
+      .entity-thumbnail-display {
         display: var(--entity-display-display, flex);
         align-items: var(--entity-display-align-items, flex-start);
-        flex-direction: var(--entity-display-flex-direction, row);
         gap: var(--entity-display-gap, var(--boxel-sp-xxxs));
       }
-      .entity-icon-display.center {
+      .entity-thumbnail-display.center {
         align-items: center;
       }
-      .entity-icon {
-        display: var(--entity-display-icon-display, inline-flex);
-        align-items: var(--entity-display-icon-align-items, center);
-        justify-content: var(--entity-display-icon-justify-content, center);
+      .entity-thumbnail {
+        display: var(--entity-display-thumbnail-display, inline-flex);
+        align-items: var(--entity-display-thumbnail-align-items, center);
+        justify-content: var(
+          --entity-display-thumbnail-justify-content,
+          center
+        );
         flex-shrink: 0;
-        width: var(--entity-display-icon-size, var(--boxel-icon-sm));
-        height: var(--entity-display-icon-size, var(--boxel-icon-sm));
+        width: var(--entity-display-thumbnail-size, var(--boxel-icon-sm));
+        height: var(--entity-display-thumbnail-size, var(--boxel-icon-sm));
+        overflow: hidden;
       }
       .entity-info {
         display: var(--entity-display-info-display, flex);
