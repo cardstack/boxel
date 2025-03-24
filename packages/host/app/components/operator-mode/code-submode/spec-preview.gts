@@ -86,7 +86,8 @@ interface Signature {
   Args: {
     selectedDeclaration?: ModuleDeclaration;
     isLoadingNewModule: boolean;
-    openAccordionItem: (item: SelectedAccordionItem) => void;
+    toggleAccordionItem: (item: SelectedAccordionItem) => void;
+    isPanelOpen: boolean;
   };
   Blocks: {
     default: [
@@ -494,7 +495,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         await this.cardService.saveModel(card);
         if (card.id) {
           this.specPanelService.setSelection(card.id);
-          this.args.openAccordionItem('spec-preview');
+          if (!this.args.isPanelOpen) {
+            this.args.toggleAccordionItem('spec-preview');
+          }
         }
       } catch (e: any) {
         console.log('Error saving', e);
@@ -629,7 +632,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   get showCreateSpec() {
-    return !this.search.isLoading && this.cards.length === 0 && this.canWrite;
+    return (
+      Boolean(this.args.selectedDeclaration?.exportName) &&
+      !this.search.isLoading &&
+      this.cards.length === 0 &&
+      this.canWrite
+    );
   }
 
   get isLoading() {
@@ -693,7 +701,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
     this.recentFilesService.addRecentFileUrl(fileUrl);
     this.updatePlaygroundSelections(id);
-    this.args.openAccordionItem('playground');
+    this.args.toggleAccordionItem('playground');
   };
 
   <template>

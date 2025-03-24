@@ -1,17 +1,12 @@
-import DateField from 'https://cardstack.com/base/date';
-import {
-  FieldDef,
-  contains,
-  field,
-  Component,
-} from 'https://cardstack.com/base/card-api';
+import DateField from './date';
+import { FieldDef, contains, field, Component } from './card-api';
 import {
   DateRangePicker,
   BoxelDropdown,
   Pill,
   BoxelButton,
 } from '@cardstack/boxel-ui/components';
-import StringField from 'https://cardstack.com/base/string';
+import StringField from './string';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';

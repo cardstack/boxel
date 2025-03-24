@@ -1,10 +1,7 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import { WebsiteField } from '../fields/website';
-import { Address } from '../fields/address';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
-import { CrmApp } from '../crm-app';
-
+import { WebsiteField } from 'https://cardstack.com/base/website';
+import { Address } from 'https://cardstack.com/base/address';
 import {
   Component,
   CardDef,
@@ -12,7 +9,12 @@ import {
   contains,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
-import { FieldContainer } from '@cardstack/boxel-ui/components';
+
+import { CrmApp } from '../crm-app';
+import {
+  EntityDisplayWithIcon,
+  FieldContainer,
+} from '@cardstack/boxel-ui/components';
 import CompanyIcon from '@cardstack/boxel-icons/building';
 
 class CompanyEditTemplate extends Component<typeof Company> {

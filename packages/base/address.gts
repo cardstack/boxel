@@ -1,13 +1,8 @@
-import {
-  contains,
-  field,
-  Component,
-  FieldDef,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import { CountryField } from '../country';
+import { contains, field, Component, FieldDef } from './card-api';
+import StringField from './string';
+import { CountryField } from './country';
 import MapPinIcon from '@cardstack/boxel-icons/map-pin';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
+import { EntityDisplayWithIcon } from '@cardstack/boxel-ui/components';
 
 function getAddressRows(
   addressLine1: string | undefined,

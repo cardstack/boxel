@@ -1,14 +1,10 @@
-import {
-  contains,
-  field,
-  Component,
-  FieldDef,
-  StringField,
-} from 'https://cardstack.com/base/card-api';
+import { contains, field, Component, FieldDef, StringField } from './card-api';
 import { PhoneInput, Pill } from '@cardstack/boxel-ui/components';
-import { RadioInput } from '@cardstack/boxel-ui/components';
-import NumberField from 'https://cardstack.com/base/number';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
+import {
+  RadioInput,
+  EntityDisplayWithIcon,
+} from '@cardstack/boxel-ui/components';
+import NumberField from './number';
 
 import { tracked } from '@glimmer/tracking';
 import { fn } from '@ember/helper';

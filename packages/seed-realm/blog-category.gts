@@ -6,9 +6,9 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
+import { ColorField } from 'https://cardstack.com/base/color';
 import { BlogApp as BlogAppCard } from './blog-app';
 import { htmlSafe } from '@ember/template';
-import { ColorField } from './fields/color';
 import { cssVar, getContrastColor } from '@cardstack/boxel-ui/helpers';
 
 export const categoryStyle = (category: Partial<BlogCategory>) => {
