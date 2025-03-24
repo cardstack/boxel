@@ -141,7 +141,7 @@ class Isolated extends Component<typeof Spec> {
               class='spec-example-incompatible-message'
               data-test-spec-example-incompatible-primitives
             >
-              Spec examples are not supported for primitive fields.
+              <span>Spec cannot render examples for primitive fields</span>
             </p>
           {{else}}
             <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
