@@ -24,7 +24,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -1017,7 +1017,14 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.codeRefWithModule}}
+                      {{#if
+                        (and
+                          this.codeRefWithModule
+                          (not
+                            (isPrimitive this.selectedCardOrField.cardOrField)
+                          )
+                        )
+                      }}
                         <PlaygroundTitle
                           @codeRef={{this.codeRefWithModule.codeRef}}
                           @moduleId={{this.codeRefWithModule.moduleId}}
@@ -1044,30 +1051,16 @@ export default class CodeSubmode extends Component<Signature> {
                               {{#if
                                 (eq this.selectedAccordionItem 'playground')
                               }}
-                                {{#if
-                                  (isPrimitive
+                                <PlaygroundPanel
+                                  @codeRef={{this.codeRefWithModule.codeRef}}
+                                  @isUpdating={{this.moduleContentsResource.isLoading}}
+                                  @isFieldDef={{isFieldDef
                                     this.selectedCardOrField.cardOrField
-                                  )
-                                }}
-                                  <p
-                                    class='file-incompatible-message'
-                                    data-test-incompatible-primitives
-                                  >
-                                    <span>Playground is not currently supported
-                                      for primitive fields.</span>
-                                  </p>
-                                {{else}}
-                                  <PlaygroundPanel
-                                    @codeRef={{this.codeRefWithModule.codeRef}}
-                                    @isUpdating={{this.moduleContentsResource.isLoading}}
-                                    @isFieldDef={{isFieldDef
-                                      this.selectedCardOrField.cardOrField
-                                    }}
-                                    @card={{playgroundTitle.card}}
-                                    @field={{playgroundTitle.field}}
-                                    @createNewFieldInstance={{playgroundTitle.createNewFieldInstance}}
-                                  />
-                                {{/if}}
+                                  }}
+                                  @card={{playgroundTitle.card}}
+                                  @field={{playgroundTitle.field}}
+                                  @createNewFieldInstance={{playgroundTitle.createNewFieldInstance}}
+                                />
                               {{/if}}
                             </:content>
                           </A.Item>
