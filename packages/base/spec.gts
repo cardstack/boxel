@@ -55,35 +55,35 @@ class Isolated extends Component<typeof Spec> {
   }
 
   get icon() {
-    return this.card?.icon as CardOrFieldTypeIcon | undefined;
+    return this.cardDef?.icon;
   }
 
-  @use private loadCard = resource(() => {
-    let card = new TrackedObject<{ value: BaseDef | undefined }>({
+  @use private loadCardDef = resource(() => {
+    let cardDef = new TrackedObject<{ value: typeof BaseDef | undefined }>({
       value: undefined,
     });
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let loadedCard = await loadCard(this.args.model.ref, {
+          let cardDef = await loadCard(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
-          card.value = loadedCard;
+          cardDef.value = cardDef;
         }
       } catch (e) {
-        card.value = undefined;
+        cardDef.value = undefined;
       }
     })();
-    return card;
+    return cardDef;
   });
 
-  get card() {
-    return this.loadCard.value;
+  get cardDef() {
+    return this.loadCardDef.value;
   }
 
   get isPrimitiveField() {
-    return isPrimitive(this.card);
+    return isPrimitive(this.cardDef);
   }
 
   get absoluteRef() {
@@ -564,35 +564,35 @@ class Edit extends Component<typeof Spec> {
   }
 
   get icon() {
-    return this.card?.icon;
+    return this.cardDef?.icon;
   }
 
-  @use private loadCard = resource(() => {
-    let card = new TrackedObject<{ value: BaseDef | undefined }>({
+  @use private loadCardDef = resource(() => {
+    let cardDef = new TrackedObject<{ value: typeof BaseDef | undefined }>({
       value: undefined,
     });
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let loadedCard = await loadCard(this.args.model.ref, {
+          let cardDef = await loadCard(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
-          card.value = loadedCard;
+          cardDef.value = cardDef;
         }
       } catch (e) {
-        card.value = undefined;
+        cardDef.value = undefined;
       }
     })();
-    return card;
+    return cardDef;
   });
 
-  get card() {
-    return this.loadCard.value;
+  get cardDef() {
+    return this.loadCardDef.value;
   }
 
   get isPrimitiveField() {
-    return isPrimitive(this.card);
+    return isPrimitive(this.cardDef);
   }
 
   get absoluteRef() {
