@@ -7,7 +7,7 @@ import { action } from '@ember/object';
 import { restartableTask } from 'ember-concurrency';
 import type Owner from '@ember/owner';
 // @ts-ignore
-import countryDataFind from 'https://esm.run/country-data-find@0.0.5';
+import { countries as countryData } from './helpers/country';
 
 export class Country extends CardDef {
   static displayName = 'Country';
@@ -56,7 +56,7 @@ class CountryFieldEdit extends Component<typeof CountryField> {
   }
 
   private loadCountries = restartableTask(async () => {
-    this.countries = countryDataFind.Array().map((country: any) => {
+    this.countries = Object.values(countryData).map((country: any) => {
       return {
         code: country.ISO2_CODE,
         name: country.LIST_OF_NAME.ENG[0],
