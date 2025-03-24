@@ -9,6 +9,7 @@ import {
   containsMany,
   getCardMeta,
   type CardOrFieldTypeIcon,
+  BaseDef,
 } from './card-api';
 import StringField from './string';
 import BooleanField from './boolean';
@@ -25,6 +26,7 @@ import {
   Loader,
   loadCard,
   isResolvedCodeRef,
+  isPrimitive,
 } from '@cardstack/runtime-common';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
@@ -53,28 +55,36 @@ class Isolated extends Component<typeof Spec> {
   }
 
   get icon() {
-    return this.loadCardIcon.value;
+    return this.card?.icon as CardOrFieldTypeIcon | undefined;
   }
 
-  @use private loadCardIcon = resource(() => {
-    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
+  @use private loadCard = resource(() => {
+    let card = new TrackedObject<{ value: BaseDef | undefined }>({
       value: undefined,
     });
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let card = await loadCard(this.args.model.ref, {
+          let loadedCard = await loadCard(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
-          icon.value = card.icon;
+          card.value = loadedCard;
         }
       } catch (e) {
-        icon.value = undefined;
+        card.value = undefined;
       }
     })();
-    return icon;
+    return card;
   });
+
+  get card() {
+    return this.loadCard.value;
+  }
+
+  get isPrimitiveField() {
+    return isPrimitive(this.card);
+  }
 
   get absoluteRef() {
     if (!this.args.model.ref || !this.args.model.id) {
@@ -126,9 +136,16 @@ class Isolated extends Component<typeof Spec> {
           <h2 id='examples'>Examples</h2>
         </header>
         {{#if (eq @model.specType 'field')}}
-          <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
-        {{else}}
-          <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
+          {{#if this.isPrimitiveField}}
+            <p
+              class='spec-example-incompatible-message'
+              data-test-spec-example-incompatible-primitives
+            >
+              Spec examples are not supported for primitive fields.
+            </p>
+          {{else}}
+            <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
+          {{/if}}
         {{/if}}
       </section>
       <section class='module section'>
@@ -271,6 +288,12 @@ class Isolated extends Component<typeof Spec> {
         width: 18px;
         height: 18px;
         border: 1px solid var(--boxel-dark);
+      }
+      .spec-example-incompatible-message {
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        margin-block: 0;
       }
     </style>
   </template>
@@ -541,28 +564,36 @@ class Edit extends Component<typeof Spec> {
   }
 
   get icon() {
-    return this.cardIconResource.value;
+    return this.card?.icon;
   }
 
-  @use private cardIconResource = resource(() => {
-    let icon = new TrackedObject<{ value: CardOrFieldTypeIcon | undefined }>({
+  @use private loadCard = resource(() => {
+    let card = new TrackedObject<{ value: BaseDef | undefined }>({
       value: undefined,
     });
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let card = await loadCard(this.args.model.ref, {
+          let loadedCard = await loadCard(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
-          icon.value = card.icon;
+          card.value = loadedCard;
         }
       } catch (e) {
-        icon.value = undefined;
+        card.value = undefined;
       }
     })();
-    return icon;
+    return card;
   });
+
+  get card() {
+    return this.loadCard.value;
+  }
+
+  get isPrimitiveField() {
+    return isPrimitive(this.card);
+  }
 
   get absoluteRef() {
     if (!this.args.model.ref || !this.args.model.id) {
@@ -619,7 +650,17 @@ class Edit extends Component<typeof Spec> {
           <h2 id='examples'>Examples</h2>
         </header>
         {{#if (eq @model.specType 'field')}}
-          <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
+          {{#if this.isPrimitiveField}}
+            <p
+              class='spec-example-incompatible-message'
+              data-test-spec-example-incompatible-primitives
+            >
+
+              <span>Spec cannot render examples for primitive fields</span>
+            </p>
+          {{else}}
+            <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
+          {{/if}}
         {{else}}
           <@fields.linkedExamples @typeConstraint={{this.absoluteRef}} />
         {{/if}}
@@ -755,6 +796,12 @@ class Edit extends Component<typeof Spec> {
         width: 18px;
         height: 18px;
         border: 1px solid var(--boxel-dark);
+      }
+      .spec-example-incompatible-message {
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        margin-block: 0;
       }
     </style>
   </template>

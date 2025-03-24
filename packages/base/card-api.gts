@@ -1672,6 +1672,10 @@ export class BaseDef {
     return instance.constructor.icon;
   }
 
+  get icon() {
+    return this.constructor.icon;
+  }
+
   static [serialize](
     value: any,
     doc: JSONAPISingleResourceDocument,
