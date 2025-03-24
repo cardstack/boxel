@@ -1,7 +1,8 @@
+import { hash } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
-import { on } from '@ember/modifier';
 
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -46,6 +47,7 @@ import { type PrerenderedCard } from '../../../prerendered-card-search';
 
 import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
+import { FieldOption, SelectedInstance } from './playground-content';
 
 interface Signature {
   Args: {
@@ -62,21 +64,24 @@ export default class PlaygroundTitle extends Component<Signature> {
       {{consumeContext consume=this.makeCardResource}}
     >
       <span>Playground</span>
-      <div
+      <button
         class='instance-chooser-container'
         {{on 'click' this.handleClick}}
-        {{on 'mousedown' this.handleClick}}
+        {{on 'mouseup' this.handleClick}}
       >
         <InstanceSelectDropdown
-          @query={{this.query}}
-          @realms={{this.recentRealms}}
-          @card={{this.card}}
+          @prerenderedCardQuery={{hash
+            query=this.query
+            realms=this.recentRealms
+          }}
+          @fieldOptions={{this.fieldInstances}}
+          @selection={{this.dropdownSelection}}
           @onSelect={{this.onSelect}}
           @chooseCard={{this.chooseInstance}}
           @createNew={{if this.canWriteRealm this.createNew}}
           @createNewIsRunning={{this.createNewIsRunning}}
         />
-      </div>
+      </button>
     </div>
 
     {{#if this.fieldChooserIsOpen}}
@@ -152,9 +157,9 @@ export default class PlaygroundTitle extends Component<Signature> {
     ];
   }
 
-  private get query(): Query {
+  private get query(): Query | undefined {
     if (this.args.isFieldDef) {
-      // TODO
+      return undefined;
     }
     return {
       filter: {
@@ -201,15 +206,22 @@ export default class PlaygroundTitle extends Component<Signature> {
     return this.args.isFieldDef ? 0 : undefined;
   }
 
-  private get fieldInstances(): FieldDef[] | undefined {
+  private get fieldInstances(): FieldOption[] | undefined {
     if (!this.args.isFieldDef) {
       return undefined;
     }
-    let instances = (this.card as Spec)?.containedExamples;
+    let instances = (this.card as Spec | undefined)?.containedExamples;
     if (!instances?.length) {
       return undefined;
     }
-    return instances;
+    return instances.map((field, i) => {
+      let option: FieldOption = {
+        index: i,
+        displayIndex: i + 1,
+        field,
+      };
+      return option;
+    });
   }
 
   private get field(): FieldDef | undefined {
@@ -221,7 +233,7 @@ export default class PlaygroundTitle extends Component<Signature> {
       // display the next available instance if item was deleted
       index = this.fieldInstances.length - 1;
     }
-    return this.fieldInstances[index];
+    return this.fieldInstances[index].field;
   }
 
   private persistSelections = (
@@ -253,8 +265,34 @@ export default class PlaygroundTitle extends Component<Signature> {
     );
   };
 
-  @action private onSelect(card: PrerenderedCard) {
-    this.persistSelections(card.url.replace(/\.json$/, ''));
+  @action private onSelect(item: PrerenderedCard | FieldOption) {
+    if (this.args.isFieldDef) {
+      this.persistSelections(
+        this.card!.id,
+        this.format,
+        (item as FieldOption).index,
+      );
+    } else {
+      this.persistSelections(
+        (item as PrerenderedCard).url.replace(/\.json$/, ''),
+      );
+    }
+  }
+
+  private get dropdownSelection(): SelectedInstance | undefined {
+    if (!this.card) {
+      return undefined;
+    }
+    if (this.args.isFieldDef) {
+      return {
+        card: this.card,
+        fieldIndex: this.fieldIndex,
+      };
+    }
+    return {
+      card: this.card,
+      fieldIndex: undefined,
+    };
   }
 
   // only closes the dropdown if it's open

@@ -22,6 +22,10 @@ export async function retry<T>(
   return null;
 }
 
+export async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 /**
  * Encodes a string to web-safe base64 format.
  * Standard base64 uses '+', '/' and '=' which can cause issues in URLs and other web contexts.

@@ -108,7 +108,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     import DatetimeField from 'https://cardstack.com/base/datetime';
     import MarkdownField from 'https://cardstack.com/base/markdown';
     import StringField from "https://cardstack.com/base/string";
-    import { Sparkle } from '@cardstack/boxel-ui/icons';
     import { Author } from './author';
 
     export class Status extends StringField {
@@ -119,7 +118,6 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
     export class Comment extends FieldDef {
       static displayName = 'Comment';
-      static icon = Sparkle;
       @field title = contains(StringField);
       @field name = contains(StringField);
       @field message = contains(StringField);
@@ -141,6 +139,24 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     }
 
     class LocalCommentField extends Comment {}
+
+    export class ContactInfo extends FieldDef {
+      @field email = contains(StringField);
+      static atom = class Atom extends Component<typeof this> {
+        <template>
+          <div data-test-atom-contact-info>
+            <@fields.email />
+          </div>
+        </template>
+      }
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <div data-test-embedded-contact-info>
+            <@fields.email />
+          </div>
+        </template>
+      }
+    }
 
     export class BlogPost extends CardDef {
       static displayName = 'Blog Post';
@@ -331,6 +347,52 @@ module('Acceptance | code-submode | field playground', function (hooks) {
             },
           },
         },
+        'Spec/contact-info.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'ContactInfo',
+                module: '../blog-post',
+              },
+              specType: 'field',
+              containedExamples: [
+                { email: 'marcelius@email.com' },
+                { email: 'lilian@email.com' },
+                { email: 'susie@email.com' },
+              ],
+              title: 'Contact Info',
+            },
+            meta: {
+              fields: {
+                containedExamples: [
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'ContactInfo',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'ContactInfo',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: '../blog-post',
+                      name: 'ContactInfo',
+                    },
+                  },
+                ],
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
       },
     }));
     setRecentFiles([
@@ -400,9 +462,54 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-incompatible-nonexports]').exists();
   });
 
+  test('can populate instance chooser dropdown options with containedExamples from Spec', async function (assert) {
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'ContactInfo');
+    assertFieldExists(assert, 'embedded');
+    assert.dom('[data-test-selected-item]').hasText('Contact Info - Example 1');
+    assert
+      .dom('[data-test-embedded-contact-info]')
+      .hasText('marcelius@email.com');
+
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 3 });
+    assert.dom('[data-option-index="0"]').hasText('marcelius@email.com');
+    assert.dom('[data-option-index="1"]').hasText('lilian@email.com');
+    assert.dom('[data-option-index="2"]').hasText('susie@email.com');
+
+    await click('[data-option-index="2"]');
+    assert.dom('[data-test-selected-item]').hasText('Contact Info - Example 3');
+    assert.dom('[data-test-embedded-contact-info]').hasText('susie@email.com');
+  });
+
+  test('can update the instance chooser when selected declaration changes', async function (assert) {
+    await openFileInPlayground('blog-post.gts', testRealmURL, 'ContactInfo');
+    assertFieldExists(assert, 'embedded');
+    assert.dom('[data-test-selected-item]').hasText('Contact Info - Example 1');
+    assert
+      .dom('[data-test-embedded-contact-info]')
+      .hasText('marcelius@email.com');
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 3 });
+    assert.dom('[data-option-index="0"]').hasText('marcelius@email.com');
+
+    await selectDeclaration('Comment');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
+    assert
+      .dom('[data-test-embedded-comment-title]')
+      .hasText('Terrible product');
+    await click('[data-test-instance-chooser]');
+    assert.dom('[data-option-index]').exists({ count: 2 });
+    assert.dom('[data-option-index="0"]').hasText('Terrible product');
+    assert.dom('[data-option-index="1"]').hasText('Needs better packaging');
+
+    await selectDeclaration('BlogPost'); // card def selected
+    assert.dom('[data-test-selected-item]').doesNotExist();
+    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+  });
+
   test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
@@ -422,15 +529,15 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .hasValue('Comment spec');
     assert
       .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-      .containsText('Spec/comment-1.json');
+      .containsText('Spec/comment-1');
     await click('[data-test-spec-selector] > div');
     assert
       .dom('[data-option-index="1"] [data-test-spec-selector-item-path]')
-      .hasText('Spec/comment-2.json');
+      .hasText('Spec/comment-2');
     await click('[data-option-index="1"]');
     assert
       .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
-      .containsText('Spec/comment-2.json');
+      .containsText('Spec/comment-2');
     assert
       .dom(
         `[data-test-card="${testRealmURL}Spec/comment-2"] [data-test-boxel-input-id="spec-title"]`,
@@ -438,7 +545,9 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .hasValue('Comment spec II');
 
     await togglePlaygroundPanel();
-    assert.dom('[data-test-selected-item]').hasText('Comment spec II');
+    assert
+      .dom('[data-test-selected-item]')
+      .hasText('Comment spec II - Example 1');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Spec 2 Example 1');
@@ -452,7 +561,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
   test("can select a different instance to preview from the spec's containedExamples collection", async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
@@ -496,7 +605,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       },
     });
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 2');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Needs better packaging');
@@ -542,24 +651,23 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     assert.dom('[data-test-create-spec-button]').exists();
 
     await createNewInstance();
-    assert.dom('[data-test-selected-item]').hasText('Quote');
+    assert.dom('[data-test-selected-item]').hasText('Quote - Example 1');
     assertFieldExists(assert, 'edit');
     assert.dom('[data-test-field="quote"] input').hasNoValue();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
 
-    // TODO: spec panel updates when spec is created from playground
-    // await toggleAccordionPanel('spec-preview');
-    // assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Quote');
-    // assert
-    //   .dom(
-    //     '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="quote"] input',
-    //   )
-    //   .hasNoValue();
+    await toggleSpecPanel();
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Quote');
+    assert
+      .dom(
+        '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="quote"] input',
+      )
+      .hasNoValue();
   });
 
   test('can create new field instance (has preexisting Spec)', async function (assert) {
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
-    assert.dom('[data-test-selected-item]').hasText('Comment spec');
+    assert.dom('[data-test-selected-item]').hasText('Comment spec - Example 1');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
@@ -601,7 +709,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
   test('can create new field instance when spec exists but has no examples', async function (assert) {
     await openFileInPlayground('author.gts', testRealmURL, 'FullNameField');
-    assert.dom('[data-test-selected-item]').hasText('FullNameField spec');
+    assert.dom('[data-test-instance-chooser]').hasText('Please Select');
 
     await click('[data-test-add-field-instance]');
     assertFieldExists(assert, 'edit');

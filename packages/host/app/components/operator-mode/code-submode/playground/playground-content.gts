@@ -8,7 +8,6 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
-import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -17,7 +16,6 @@ import { and, bool, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
-  cardTypeDisplayName,
   loadCard,
   specRef,
   GetCardContextName,
@@ -45,8 +43,18 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 
 import FormatChooser from '../format-chooser';
 
-import FieldPickerModal from './field-chooser-modal';
 import PlaygroundPreview from './playground-preview';
+
+export type FieldOption = {
+  index: number;
+  displayIndex: number;
+  field: FieldDef;
+};
+
+export type SelectedInstance = {
+  card: CardDef;
+  fieldIndex: number | undefined;
+};
 
 interface Signature {
   Args: {
@@ -103,20 +111,6 @@ export default class PlaygroundContent extends Component<Signature> {
       {{/let}}
     </div>
 
-    {{#if this.fieldChooserIsOpen}}
-      <ToElsewhere
-        @named='playground-field-picker'
-        @send={{component
-          FieldPickerModal
-          instances=this.fieldInstances
-          selectedIndex=this.fieldIndex
-          onSelect=this.chooseField
-          onClose=this.closeFieldChooser
-          name=(if this.field (cardTypeDisplayName this.field))
-        }}
-      />
-    {{/if}}
-
     <style scoped>
       .playground-panel-content {
         display: flex;
@@ -166,7 +160,6 @@ export default class PlaygroundContent extends Component<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
-  @tracked private fieldChooserIsOpen = false;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
@@ -208,15 +201,22 @@ export default class PlaygroundContent extends Component<Signature> {
     return this.args.isFieldDef ? 0 : undefined;
   }
 
-  private get fieldInstances(): FieldDef[] | undefined {
+  private get fieldInstances(): FieldOption[] | undefined {
     if (!this.args.isFieldDef) {
       return undefined;
     }
-    let instances = (this.card as Spec)?.containedExamples;
+    let instances = (this.card as Spec | undefined)?.containedExamples;
     if (!instances?.length) {
       return undefined;
     }
-    return instances;
+    return instances.map((field, i) => {
+      let option: FieldOption = {
+        index: i,
+        displayIndex: i + 1,
+        field,
+      };
+      return option;
+    });
   }
 
   private get field(): FieldDef | undefined {
@@ -228,7 +228,7 @@ export default class PlaygroundContent extends Component<Signature> {
       // display the next available instance if item was deleted
       index = this.fieldInstances.length - 1;
     }
-    return this.fieldInstances[index];
+    return this.fieldInstances[index].field;
   }
 
   private copyToClipboard = task(async (id: string) => {
@@ -308,18 +308,6 @@ export default class PlaygroundContent extends Component<Signature> {
         '[data-playground-instance-chooser][aria-expanded="true"]',
       ) as BoxelSelect | null
     )?.click();
-
-  @action private chooseField(index: number) {
-    if (!this.card?.id) {
-      return;
-    }
-    this.persistSelections(this.card.id, this.format, index);
-    this.closeFieldChooser();
-  }
-
-  @action private closeFieldChooser() {
-    this.fieldChooserIsOpen = false;
-  }
 
   @action private createNew() {
     this.args.isFieldDef && this.card

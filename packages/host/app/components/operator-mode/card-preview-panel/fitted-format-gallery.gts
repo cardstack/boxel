@@ -4,6 +4,7 @@ import { cached } from '@glimmer/tracking';
 
 import { provide } from 'ember-provide-consume-context';
 
+import { CardContainer } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
 import { DefaultFormatsContextName } from '@cardstack/runtime-common';
@@ -14,6 +15,7 @@ interface Signature {
   Args: {
     card: BaseDef;
     isDarkMode?: boolean;
+    isFieldDef?: boolean;
   };
 }
 
@@ -154,11 +156,21 @@ export default class FittedFormatGallery extends Component<Signature> {
                   -
                   {{spec.width}}x{{spec.height}}
                 </div>
-                <this.renderedCard
-                  class='item'
-                  @displayContainer={{true}}
-                  style={{setContainerSize spec}}
-                />
+                {{#if @isFieldDef}}
+                  <CardContainer
+                    class='item'
+                    @displayBoundaries={{true}}
+                    style={{setContainerSize spec}}
+                  >
+                    <this.renderedCard class='field' />
+                  </CardContainer>
+                {{else}}
+                  <this.renderedCard
+                    class='item'
+                    @displayContainer={{true}}
+                    style={{setContainerSize spec}}
+                  />
+                {{/if}}
               </li>
             {{/each}}
           </ul>
@@ -201,6 +213,9 @@ export default class FittedFormatGallery extends Component<Signature> {
       }
       .item {
         color: initial;
+      }
+      .item > .field {
+        height: 100%;
       }
 
       /* Dark mode */

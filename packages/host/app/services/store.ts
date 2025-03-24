@@ -11,6 +11,7 @@ import {
   hasExecutableExtension,
   isCardInstance,
   isSingleCardDocument,
+  type LooseCardResource,
   type AutoSaveState,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -217,6 +218,23 @@ export default class StoreService extends Service {
     }
     await this.handleUpdatedCard(undefined, cardOrError);
     return { url, card, error };
+  }
+
+  // This method is used for specific scenarios where you just want an instance
+  // that is _not_ part of the identity map and detached from the store. This
+  // may include things like tests, freestyle usage guide, etc.
+  async getInstanceDetachedFromStore(
+    url: string,
+  ): Promise<CardDef | undefined> {
+    let doc = await this.cardService.fetchJSON(url);
+    if (!doc) {
+      return undefined;
+    }
+    return await this.cardService.createFromSerialized(
+      doc.data as LooseCardResource,
+      doc,
+      new URL(url),
+    );
   }
 
   private handleInvalidations = (event: RealmEventContent) => {

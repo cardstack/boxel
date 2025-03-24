@@ -29,7 +29,11 @@ interface Signature {
 const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
   {{#if (or (eq @format 'isolated') (eq @format 'edit'))}}
     <CardContainer
-      class={{if @isFieldDef 'field-preview-container' 'full-height-preview'}}
+      class={{if
+        @isFieldDef
+        'field-preview-container'
+        'full-height-preview isolated-and-edit-preview'
+      }}
     >
       {{#unless @isFieldDef}}
         <CardHeader
@@ -64,7 +68,11 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
       commodo consequat.</div>
   {{else if (eq @format 'fitted')}}
-    <FittedFormatGallery @card={{@card}} @isDarkMode={{true}} />
+    <FittedFormatGallery
+      @card={{@card}}
+      @isDarkMode={{true}}
+      @isFieldDef={{@isFieldDef}}
+    />
   {{/if}}
 
   <style scoped>
@@ -106,6 +114,11 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       font: 600 var(--boxel-font-xs);
       line-height: 1.27;
       letter-spacing: 0.17px;
+    }
+    .isolated-and-edit-preview {
+      margin-left: calc(-1 * var(--boxel-sp));
+      width: calc(100% + calc(2 * var(--boxel-sp)));
+      margin-right: calc(-1 * var(--boxel-sp));
     }
   </style>
 </template>;
