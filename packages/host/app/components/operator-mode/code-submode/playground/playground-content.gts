@@ -99,7 +99,7 @@ export default class PlaygroundContent extends Component<Signature> {
             data-test-field-preview-card={{@isFieldDef}}
           >
             <PlaygroundPreview
-              @fieldOrCard={{card}}
+              @card={{card}}
               @format={{this.format}}
               @realmInfo={{this.realmInfo}}
               @contextMenuItems={{this.contextMenuItems}}

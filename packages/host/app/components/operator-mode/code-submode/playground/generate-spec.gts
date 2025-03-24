@@ -1,5 +1,6 @@
-import Component from '@glimmer/component';
 import type Owner from '@ember/owner';
+import Component from '@glimmer/component';
+
 import type { TaskForAsyncTaskFunction } from 'ember-concurrency';
 
 interface Signature {
