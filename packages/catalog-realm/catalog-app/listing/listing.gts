@@ -80,6 +80,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
+  get hasCategories() {
+    return Boolean(this.args.model.categories?.length);
+  }
+
   <template>
     <div class='app-listing-embedded'>
       <AppListingHeader
@@ -181,6 +185,27 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       <hr class='divider' />
 
+      <section class='app-listing-categories'>
+        <h2>Categories</h2>
+        {{#if this.hasCategories}}
+
+          <ul class='categories-list'>
+            {{#each @model.categories as |category|}}
+              <li class='categories-item'>
+                <Pill>{{category.name}}</Pill>
+              </li>
+            {{/each}}
+          </ul>
+        {{else}}
+          No categories
+        {{/if}}
+      </section>
+
+      <hr class='divider' />
+
+      {{! Todo: Adjust this after fixing the bug related to displaying the spec breakdown. }}
+      {{! Todo: Small improvement: change <div> to <section>. }}
+      {{! Todo: Consider always showing the "Includes These Boxels" title, regardless of whether this.specBreakdown is present or not. }}
       {{#if this.specBreakdown}}
         <div>
           <h2>Includes These Boxels</h2>
@@ -289,17 +314,15 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       .price-plan-pill {
         --pill-font-color: var(--boxel-light);
         margin-top: var(--boxel-sp-sm);
+        text-align: center;
       }
 
       .divider {
         width: 100%;
-        margin: var(--boxel-sp-xl) 0;
+        margin: var(--boxel-sp-xxl) 0;
         border: 0.5px solid var(--boxel-border-color);
       }
 
-      .app-listing-images-videos {
-        margin-top: var(--boxel-sp-xl);
-      }
       .images-videos-list {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -339,6 +362,15 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         align-items: center;
         justify-content: center;
         border-radius: var(--boxel-border-radius);
+      }
+
+      .categories-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-sm);
+        list-style: none;
+        margin-block: 0;
+        padding-inline-start: 0;
       }
 
       @container app-listing-embedded (inline-size <= 500px) {
