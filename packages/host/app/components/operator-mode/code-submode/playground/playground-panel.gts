@@ -7,12 +7,17 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
+import { CardDef, FieldDef } from 'https://cardstack.com/base/card-api';
+
 import PlaygroundContent from './playground-content';
 
 interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
+    createNewFieldInstance: () => void;
     isFieldDef?: boolean;
+    card?: CardDef;
+    field?: FieldDef;
     isUpdating?: boolean;
   };
   Element: HTMLElement;
@@ -25,8 +30,10 @@ export default class PlaygroundPanel extends Component<Signature> {
         <LoadingIndicator @color='var(--boxel-light)' />
       {{else}}
         <PlaygroundContent
-          @codeRef={{@codeRef}}
+          @card={{@card}}
+          @field={{@field}}
           @moduleId={{this.moduleId}}
+          @createNewFieldInstance={{@createNewFieldInstance}}
           @isFieldDef={{@isFieldDef}}
         />
       {{/if}}

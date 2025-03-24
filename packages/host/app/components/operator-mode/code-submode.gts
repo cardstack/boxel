@@ -24,7 +24,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -487,6 +487,16 @@ export default class CodeSubmode extends Component<Signature> {
       return this.selectedDeclaration;
     }
     return undefined;
+  }
+
+  private get codeRefWithModule():
+    | { codeRef: ResolvedCodeRef; moduleId: string }
+    | undefined {
+    if (!this.selectedCodeRef || !this.moduleId) return undefined;
+    return {
+      codeRef: this.selectedCodeRef,
+      moduleId: this.moduleId,
+    };
   }
 
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
@@ -1007,27 +1017,71 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      <A.Item
-                        class='accordion-item'
-                        @contentClass='accordion-item-content'
-                        @onClick={{fn this.toggleAccordionItem 'playground'}}
-                        @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                        data-test-accordion-item='playground'
-                      >
-                        <:title>
-                          {{#if (and this.selectedCodeRef this.moduleId)}}
-                            <PlaygroundTitle
-                              @codeRef={{this.selectedCodeRef}}
-                              @moduleId={{this.moduleId}}
-                              @isFieldDef={{isFieldDef
-                                this.selectedCardOrField.cardOrField
+                      {{#if this.codeRefWithModule}}
+                        <PlaygroundTitle
+                          @codeRef={{this.codeRefWithModule.codeRef}}
+                          @moduleId={{this.codeRefWithModule.moduleId}}
+                          @isFieldDef={{isFieldDef
+                            this.selectedCardOrField.cardOrField
+                          }}
+                          as |playgroundTitle|
+                        >
+                          <A.Item
+                            class='accordion-item'
+                            @contentClass='accordion-item-content'
+                            @onClick={{fn
+                              this.toggleAccordionItem
+                              'playground'
+                            }}
+                            @isOpen={{eq
+                              this.selectedAccordionItem
+                              'playground'
+                            }}
+                            data-test-accordion-item='playground'
+                          >
+                            <:title><playgroundTitle.element /></:title>
+                            <:content>
+                              {{#if
+                                (eq this.selectedAccordionItem 'playground')
                               }}
-                            />
-                          {{else}}
-                            Playground
-                          {{/if}}</:title>
-                        <:content>
-                          {{#if (eq this.selectedAccordionItem 'playground')}}
+                                {{#if
+                                  (isPrimitive
+                                    this.selectedCardOrField.cardOrField
+                                  )
+                                }}
+                                  <p
+                                    class='file-incompatible-message'
+                                    data-test-incompatible-primitives
+                                  >
+                                    <span>Playground is not currently supported
+                                      for primitive fields.</span>
+                                  </p>
+                                {{else}}
+                                  <PlaygroundPanel
+                                    @codeRef={{this.codeRefWithModule.codeRef}}
+                                    @isUpdating={{this.moduleContentsResource.isLoading}}
+                                    @isFieldDef={{isFieldDef
+                                      this.selectedCardOrField.cardOrField
+                                    }}
+                                    @card={{playgroundTitle.card}}
+                                    @field={{playgroundTitle.field}}
+                                    @createNewFieldInstance={{playgroundTitle.createNewFieldInstance}}
+                                  />
+                                {{/if}}
+                              {{/if}}
+                            </:content>
+                          </A.Item>
+                        </PlaygroundTitle>
+                      {{else}}
+                        <A.Item
+                          class='accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn this.toggleAccordionItem 'playground'}}
+                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                          data-test-accordion-item='playground'
+                        >
+                          <:title>Playground</:title>
+                          <:content>
                             {{#if
                               (isPrimitive this.selectedCardOrField.cardOrField)
                             }}
@@ -1038,14 +1092,6 @@ export default class CodeSubmode extends Component<Signature> {
                                 <span>Playground is not currently supported for
                                   primitive fields.</span>
                               </p>
-                            {{else if this.selectedCodeRef}}
-                              <PlaygroundPanel
-                                @codeRef={{this.selectedCodeRef}}
-                                @isUpdating={{this.moduleContentsResource.isLoading}}
-                                @isFieldDef={{isFieldDef
-                                  this.selectedCardOrField.cardOrField
-                                }}
-                              />
                             {{else}}
                               <p
                                 class='file-incompatible-message'
@@ -1056,9 +1102,9 @@ export default class CodeSubmode extends Component<Signature> {
                                   exported.</span>
                               </p>
                             {{/if}}
-                          {{/if}}
-                        </:content>
-                      </A.Item>
+                          </:content>
+                        </A.Item>
+                      {{/if}}
                       <SpecPreview
                         @selectedDeclaration={{this.selectedDeclaration}}
                         @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}

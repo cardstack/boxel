@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -7,6 +8,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { ComponentLike } from '@glint/template';
 import { task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
@@ -49,40 +51,105 @@ import FieldPickerModal from './field-chooser-modal';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import { FieldOption, SelectedInstance } from './playground-content';
 
+interface TitleSignature {
+  Args: {
+    makeCardResource: () => void;
+    query: Query | undefined;
+    recentRealms: string[];
+    fieldOptions: FieldOption[] | undefined;
+    selection: SelectedInstance | undefined;
+    onSelect: (item: PrerenderedCard | FieldOption) => void;
+    chooseCard: () => void;
+    createNew: () => void;
+    createNewIsRunning: boolean;
+    canWriteRealm: boolean;
+    handleClick: (e: MouseEvent) => void;
+  };
+}
+
+const Title: TemplateOnlyComponent<TitleSignature> = <template>
+  <div class='playground-title' {{consumeContext consume=@makeCardResource}}>
+    <span>Playground</span>
+    <button
+      class='instance-chooser-container'
+      {{on 'click' @handleClick}}
+      {{on 'mouseup' @handleClick}}
+    >
+      <InstanceSelectDropdown
+        @prerenderedCardQuery={{hash query=@query realms=@recentRealms}}
+        @fieldOptions={{@fieldOptions}}
+        @selection={{@selection}}
+        @onSelect={{@onSelect}}
+        @chooseCard={{@chooseCard}}
+        @createNew={{if @canWriteRealm @createNew}}
+        @createNewIsRunning={{@createNewIsRunning}}
+      />
+    </button>
+  </div>
+
+  <style scoped>
+    .playground-title {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      gap: var(--boxel-sp-xxl);
+    }
+    .instance-chooser-container {
+      display: flex;
+      justify-content: end;
+      background: none;
+      border: none;
+      cursor: auto;
+      width: 271px;
+    }
+    .instance-chooser-container > :deep(.ember-basic-dropdown) {
+      max-width: 100%;
+    }
+  </style>
+</template>;
+
 interface Signature {
   Args: {
     codeRef: ResolvedCodeRef;
     moduleId: string;
     isFieldDef?: boolean;
   };
+  Blocks: {
+    default: [
+      {
+        card: CardDef | undefined;
+        field: FieldDef | undefined;
+        createNewFieldInstance: () => void;
+        element: ComponentLike;
+      },
+    ];
+  };
 }
 
 export default class PlaygroundTitle extends Component<Signature> {
   <template>
-    <div
-      class='playground-title'
-      {{consumeContext consume=this.makeCardResource}}
-    >
-      <span>Playground</span>
-      <button
-        class='instance-chooser-container'
-        {{on 'click' this.handleClick}}
-        {{on 'mouseup' this.handleClick}}
-      >
-        <InstanceSelectDropdown
-          @prerenderedCardQuery={{hash
-            query=this.query
-            realms=this.recentRealms
-          }}
-          @fieldOptions={{this.fieldInstances}}
-          @selection={{this.dropdownSelection}}
-          @onSelect={{this.onSelect}}
-          @chooseCard={{this.chooseInstance}}
-          @createNew={{if this.canWriteRealm this.createNew}}
-          @createNewIsRunning={{this.createNewIsRunning}}
-        />
-      </button>
-    </div>
+    {{yield
+      (hash
+        card=this.card
+        field=this.field
+        createNewFieldInstance=this.createNew
+        element=(component
+          Title
+          makeCardResource=this.makeCardResource
+          query=this.query
+          recentRealms=this.recentRealms
+          fieldOptions=this.fieldInstances
+          selection=this.dropdownSelection
+          onSelect=this.onSelect
+          chooseCard=this.chooseInstance
+          createNew=this.createNew
+          createNewIsRunning=this.createNewIsRunning
+          canWriteRealm=this.canWriteRealm
+          handleClick=this.handleClick
+        )
+      )
+    }}
 
     {{#if this.fieldChooserIsOpen}}
       <ToElsewhere
@@ -97,24 +164,6 @@ export default class PlaygroundTitle extends Component<Signature> {
         }}
       />
     {{/if}}
-
-    <style scoped>
-      .playground-title {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        width: 100%;
-        gap: var(--boxel-sp-xxl);
-      }
-      .instance-chooser-container {
-        display: flex;
-        justify-content: end;
-        flex: 70;
-      }
-      .instance-chooser-container > :deep(.ember-basic-dropdown) {
-        max-width: 100%;
-      }
-    </style>
   </template>
 
   @consume(GetCardContextName) private declare getCard: getCard;
