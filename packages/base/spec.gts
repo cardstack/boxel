@@ -59,7 +59,7 @@ class Isolated extends Component<typeof Spec> {
   }
 
   @use private loadCardDef = resource(() => {
-    let cardDef = new TrackedObject<{ value: typeof BaseDef | undefined }>({
+    let cardDefObj = new TrackedObject<{ value: typeof BaseDef | undefined }>({
       value: undefined,
     });
     (async () => {
@@ -69,13 +69,13 @@ class Isolated extends Component<typeof Spec> {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
-          cardDef.value = cardDef;
+          cardDefObj.value = cardDef;
         }
       } catch (e) {
-        cardDef.value = undefined;
+        cardDefObj.value = undefined;
       }
     })();
-    return cardDef;
+    return cardDefObj;
   });
 
   get cardDef() {
@@ -568,7 +568,9 @@ class Edit extends Component<typeof Spec> {
   }
 
   @use private loadCardDef = resource(() => {
-    let cardDef = new TrackedObject<{ value: typeof BaseDef | undefined }>({
+    let cardDefObject = new TrackedObject<{
+      value: typeof BaseDef | undefined;
+    }>({
       value: undefined,
     });
     (async () => {
@@ -578,13 +580,13 @@ class Edit extends Component<typeof Spec> {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
-          cardDef.value = cardDef;
+          cardDefObject.value = cardDef;
         }
       } catch (e) {
-        cardDef.value = undefined;
+        cardDefObject.value = undefined;
       }
     })();
-    return cardDef;
+    return cardDefObject;
   });
 
   get cardDef() {
