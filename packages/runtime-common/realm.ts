@@ -288,9 +288,6 @@ export class Realm {
       ),
     ]);
 
-    // TODO: remove after running in all environments; CS-7875
-    this.backfillRetentionPolicies();
-
     this.#disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
@@ -420,23 +417,6 @@ export class Realm {
       },
       requestContext,
     });
-  }
-
-  // TODO: remove after running in all environments; CS-7875
-  private async backfillRetentionPolicies() {
-    try {
-      await this.#matrixClient.waitForLogin();
-
-      let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
-      for (let roomId of roomIds) {
-        await this.#matrixClient.setRoomRetentionPolicy(
-          roomId,
-          REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
-        );
-      }
-    } catch (e) {
-      console.error('backfillRetentionPolicies: error', e);
-    }
   }
 
   async indexing() {
