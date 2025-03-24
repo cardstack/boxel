@@ -2,6 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
 import cn from '../../../helpers/cn.ts';
+import optional from '../../../helpers/optional.ts';
 import DropdownArrowDown from '../../../icons/dropdown-arrow-down.gts';
 
 export interface AccordionItemSignature {
@@ -9,7 +10,7 @@ export interface AccordionItemSignature {
     className?: string;
     contentClass?: string;
     isOpen: boolean;
-    onClick: (event: MouseEvent) => void;
+    onClick?: (event: MouseEvent) => void;
   };
   Blocks: {
     content: [];
@@ -20,7 +21,11 @@ export interface AccordionItemSignature {
 
 const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
   <div class={{cn 'accordion-item' @className open=@isOpen}} ...attributes>
-    <button class='title' {{on 'click' @onClick}}>
+    <button
+      class='title'
+      {{on 'click' (optional @onClick)}}
+      disabled={{if @onClick false true}}
+    >
       <DropdownArrowDown class='caret' width='12' height='12' />
       {{yield to='title'}}
     </button>
@@ -62,13 +67,14 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       align-items: center;
       gap: var(--boxel-sp-xxs);
       padding: var(--accordion-item-title-padding);
+      color: inherit;
       font: var(--accordion-item-title-font);
       letter-spacing: var(--accordion-item-title-letter-spacing);
       background-color: transparent;
       border: none;
       text-align: left;
     }
-    .title:hover {
+    .title:hover:not(:disabled) {
       cursor: pointer;
     }
     .caret {
