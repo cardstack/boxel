@@ -254,8 +254,16 @@ class IsolatedTemplate extends Component<typeof Listing> {
     this._create.perform(realmUrl);
   }
 
+  get hasOneOrMoreSpec() {
+    return this.args.model.specs && this.args.model?.specs?.length > 0;
+  }
+
   get createButtonDisabled() {
-    return this.createdInstances || !this.args.context?.actions?.create;
+    return (
+      this.createdInstances ||
+      !this.args.context?.actions?.create ||
+      !this.hasOneOrMoreSpec
+    );
   }
 
   <template>
