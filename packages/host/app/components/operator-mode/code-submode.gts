@@ -24,7 +24,7 @@ import { TrackedObject } from 'tracked-built-ins';
 import { Accordion } from '@cardstack/boxel-ui/components';
 
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { and, not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -489,10 +489,16 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  private get codeRefWithModule():
+  private get playgroundData():
     | { codeRef: ResolvedCodeRef; moduleId: string }
     | undefined {
-    if (!this.selectedCodeRef || !this.moduleId) return undefined;
+    if (
+      !this.selectedCodeRef ||
+      !this.moduleId ||
+      isPrimitive(this.selectedCardOrField?.cardOrField)
+    ) {
+      return undefined;
+    }
     return {
       codeRef: this.selectedCodeRef,
       moduleId: this.moduleId,
@@ -1017,17 +1023,10 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if
-                        (and
-                          this.codeRefWithModule
-                          (not
-                            (isPrimitive this.selectedCardOrField.cardOrField)
-                          )
-                        )
-                      }}
+                      {{#if this.playgroundData}}
                         <PlaygroundTitle
-                          @codeRef={{this.codeRefWithModule.codeRef}}
-                          @moduleId={{this.codeRefWithModule.moduleId}}
+                          @codeRef={{this.playgroundData.codeRef}}
+                          @moduleId={{this.playgroundData.moduleId}}
                           @isFieldDef={{isFieldDef
                             this.selectedCardOrField.cardOrField
                           }}
@@ -1052,7 +1051,7 @@ export default class CodeSubmode extends Component<Signature> {
                                 (eq this.selectedAccordionItem 'playground')
                               }}
                                 <PlaygroundPanel
-                                  @codeRef={{this.codeRefWithModule.codeRef}}
+                                  @codeRef={{this.playgroundData.codeRef}}
                                   @isUpdating={{this.moduleContentsResource.isLoading}}
                                   @isFieldDef={{isFieldDef
                                     this.selectedCardOrField.cardOrField
