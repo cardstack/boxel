@@ -64,9 +64,9 @@ import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
 import type CommandService from '../../services/command-service';
+import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
-import type LoaderService from '../../services/loader-service';
 
 import type { Submode } from '../submode-switcher';
 
