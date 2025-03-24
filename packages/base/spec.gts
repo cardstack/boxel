@@ -854,6 +854,9 @@ export class Spec extends CardDef {
   });
   @field moduleHref = contains(StringField, {
     computeVia: function (this: Spec) {
+      if (!this.ref || !this.ref.module) {
+        return undefined;
+      }
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });
