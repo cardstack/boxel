@@ -15,7 +15,7 @@ import StringField from 'https://cardstack.com/base/string';
 
 import FilterSection from './components/filter-section';
 import CardSection from './components/card-section';
-import CardListingContainer from './components/card-listing-container';
+import ContentContainer from './components/content-container';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import TopBarFilter, { type FilterOption } from './components/top-bar-filter';
@@ -83,7 +83,7 @@ class Isolated extends Component<typeof Catalog> {
                 class='catalog-filter-bar'
               />
 
-              <CardListingContainer class='catalog-listing'>
+              <ContentContainer class='catalog-listing'>
                 {{#if (this.shouldShowSection 'apps')}}
                   <CardSection @title='Apps' @cards={{this.mockCards}} />
                 {{/if}}
@@ -99,19 +99,19 @@ class Isolated extends Component<typeof Catalog> {
                 {{#if (this.shouldShowSection 'skills')}}
                   <CardSection @title='Skills' @cards={{this.mockCards}} />
                 {{/if}}
-              </CardListingContainer>
+              </ContentContainer>
             </div>
 
             {{! Column 2: Related Card Listing  }}
             {{! TODO: Parent & Related Listing Cards will be display at here - can make this to component }}
             <div class='related-card-listing'>
-              <CardListingContainer>
+              <ContentContainer>
                 <h3 class='listing-title'>Parent Listing card</h3>
-              </CardListingContainer>
+              </ContentContainer>
 
-              <CardListingContainer>
+              <ContentContainer>
                 <h3 class='listing-title'>Related Listings from Publisher</h3>
-              </CardListingContainer>
+              </ContentContainer>
             </div>
           </div>
         </div>
@@ -170,7 +170,7 @@ class Isolated extends Component<typeof Catalog> {
         border-bottom: 1px solid var(--boxel-200);
       }
       .catalog-listing {
-        --card-listing-container-background-color: transparent;
+        --content-container-background-color: transparent;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
