@@ -35,9 +35,9 @@ export default class EntityDisplayWithIcon extends GlimmerComponent<EntityDispla
       ...attributes
     >
       {{#if (has-block 'icon')}}
-        <aside class='entity-icon'>
+        <span class='entity-icon'>
           {{yield to='icon'}}
-        </aside>
+        </span>
       {{/if}}
 
       <div class='entity-info'>
