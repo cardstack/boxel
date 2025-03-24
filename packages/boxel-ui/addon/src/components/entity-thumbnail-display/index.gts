@@ -1,17 +1,19 @@
-import GlimmerComponent from '@glimmer/component';
 import { concat } from '@ember/helper';
+import GlimmerComponent from '@glimmer/component';
 
 interface EntityDisplayWithThumbnailArgs {
   Args: {
-    title?: string; //prefer using args.title if the title is just a string
+    //prefer using args.title if the title is just a string
     center?: boolean;
+    title?: string;
     underline?: boolean;
   };
   Blocks: {
-    title?: []; //we can choose use this to pass instead of using args.title if the title block HTML is complex
-    thumbnail?: [];
-    tag?: [];
     content?: [];
+    tag?: [];
+    //we can choose use this to pass instead of using args.title if the title block HTML is complex
+    thumbnail?: [];
+    title?: [];
   };
   Element: HTMLElement;
 }

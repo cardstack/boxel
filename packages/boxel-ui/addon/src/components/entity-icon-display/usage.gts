@@ -1,8 +1,8 @@
+import PhoneIcon from '@cardstack/boxel-icons/phone';
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import PhoneIcon from '@cardstack/boxel-icons/phone';
 
 import EntityDisplayWithIcon from './index.gts';
 

@@ -3,9 +3,9 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import EntityDisplayWithThumbnail from './index.gts';
 import Avatar from '../avatar/index.gts';
 import Pill from '../pill/index.gts';
+import EntityDisplayWithThumbnail from './index.gts';
 
 export default class EntityThumbnailDisplayUsage extends Component {
   @tracked title: string = 'John Doe';
