@@ -7,6 +7,7 @@ import {
 
 export class Category extends CardDef {
   static displayName = 'Category';
+  static headerColor = '#00ebac';
   @field name = contains(StringField);
   @field title = contains(StringField, {
     computeVia: function (this: Category) {

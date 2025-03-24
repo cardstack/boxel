@@ -480,6 +480,7 @@ class IsolatedTemplate extends Component<typeof Listing> {
 }
 export class Listing extends CardDef {
   static displayName = 'Listing';
+  static headerColor = '#00ebac';
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);
   @field specs = linksToMany(() => Spec);

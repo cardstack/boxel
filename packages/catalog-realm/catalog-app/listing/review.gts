@@ -11,6 +11,7 @@ import { Listing } from './listing';
 
 export class Review extends CardDef {
   static displayName = 'Review';
+  static headerColor = '#00ebac';
   @field score = contains(NumberField);
   @field comment = contains(MarkdownField);
   @field listing = linksTo(() => Listing);

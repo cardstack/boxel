@@ -228,6 +228,7 @@ export class Catalog extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
+  static headerColor = '#00ebac';
   @field realmName = contains(StringField, {
     computeVia: function (this: Catalog) {
       return this[realmInfo]?.name;
