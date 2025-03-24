@@ -198,7 +198,6 @@ class Isolated extends Component<typeof Spec> {
         -webkit-line-clamp: 2;
         overflow: hidden;
         text-wrap: pretty;
-        word-break: break-word;
       }
       .box {
         border: 1px solid var(--boxel-border-color);
@@ -855,6 +854,9 @@ export class Spec extends CardDef {
   });
   @field moduleHref = contains(StringField, {
     computeVia: function (this: Spec) {
+      if (!this.ref || !this.ref.module) {
+        return undefined;
+      }
       return new URL(this.ref.module, this[relativeTo]).href;
     },
   });

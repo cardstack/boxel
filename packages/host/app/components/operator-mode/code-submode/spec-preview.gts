@@ -86,7 +86,8 @@ interface Signature {
   Args: {
     selectedDeclaration?: ModuleDeclaration;
     isLoadingNewModule: boolean;
-    openAccordionItem: (item: SelectedAccordionItem) => void;
+    toggleAccordionItem: (item: SelectedAccordionItem) => void;
+    isPanelOpen: boolean;
   };
   Blocks: {
     default: [
@@ -203,7 +204,7 @@ interface ContentSignature {
     spec: Spec | undefined;
     isLoading: boolean;
     viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
-    onSpecView: (specId: string) => void;
+    onSpecView: (spec: Spec) => void;
   };
 }
 
@@ -351,7 +352,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 @card={{@spec}}
                 @format='edit'
                 @cardContext={{this.cardContext}}
-                {{SpecPreviewModifier id=@spec.id onSpecView=@onSpecView}}
+                {{SpecPreviewModifier spec=@spec onSpecView=@onSpecView}}
               />
             {{/if}}
           </div>
@@ -494,7 +495,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         await this.cardService.saveModel(card);
         if (card.id) {
           this.specPanelService.setSelection(card.id);
-          this.args.openAccordionItem('spec-preview');
+          if (!this.args.isPanelOpen) {
+            this.args.toggleAccordionItem('spec-preview');
+          }
         }
       } catch (e: any) {
         console.log('Error saving', e);
@@ -629,7 +632,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   get showCreateSpec() {
-    return !this.search.isLoading && this.cards.length === 0 && this.canWrite;
+    return (
+      Boolean(this.args.selectedDeclaration?.exportName) &&
+      !this.search.isLoading &&
+      this.cards.length === 0 &&
+      this.canWrite
+    );
   }
 
   get isLoading() {
@@ -675,8 +683,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  private onSpecView = (id: string) => {
-    this.updatePlaygroundSelections(id, true);
+  private onSpecView = (spec: Spec) => {
+    if (!spec.isField) {
+      return; // not a field spec
+    }
+    if (
+      this.getSelectedDeclarationAsCodeRef.name !== spec.ref.name ||
+      this.getSelectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
+    ) {
+      return; // not the right field spec
+    }
+    this.updatePlaygroundSelections(spec.id, true);
   };
 
   private viewCardInPlayground = (card: CardDefOrId) => {
@@ -684,7 +701,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
     this.recentFilesService.addRecentFileUrl(fileUrl);
     this.updatePlaygroundSelections(id);
-    this.args.openAccordionItem('playground');
+    this.args.toggleAccordionItem('playground');
   };
 
   <template>
@@ -786,8 +803,8 @@ function getRelativePath(baseUrl: string, targetUrl: string) {
 interface ModifierSignature {
   Args: {
     Named: {
-      id?: string;
-      onSpecView?: (id: string) => void;
+      spec?: Spec;
+      onSpecView?: (spec: Spec) => void;
     };
   };
 }
@@ -798,13 +815,13 @@ export class SpecPreviewModifier extends Modifier<ModifierSignature> {
   modify(
     _element: HTMLElement,
     _positional: [],
-    { id, onSpecView }: ModifierSignature['Args']['Named'],
+    { spec, onSpecView }: ModifierSignature['Args']['Named'],
   ) {
-    if (!id || !onSpecView) {
-      throw new Error('bug: no id or onSpecView hook');
+    if (!spec || !onSpecView) {
+      throw new Error('bug: no spec or onSpecView hook');
     }
     next(() => {
-      onSpecView(id);
+      onSpecView(spec);
     });
   }
 }

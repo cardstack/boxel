@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -22,7 +21,7 @@ import {
   Pill,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { eq, or } from '@cardstack/boxel-ui/helpers';
+import { not, eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   specRef,
@@ -70,7 +69,6 @@ export const newFileTypes: NewFileType[] = [
   'field-definition',
   'spec-instance',
 ];
-const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
 export interface FileType {
   id: NewFileType;
@@ -99,17 +97,17 @@ export default class CreateFileModal extends Component<Signature> {
           @isOpen={{this.isModalOpen}}
           @onClose={{this.onCancel}}
           {{focusTrap
-            isActive=this.onSetup.isIdle
+            isActive=this.isReady
             focusTrapOptions=(hash
               initialFocus=this.initialFocusSelector allowOutsideClick=true
             )
           }}
-          data-test-ready={{this.onSetup.isIdle}}
+          data-test-ready={{this.isReady}}
           data-test-create-file-modal
         >
           <:content>
             {{#if this.isModalOpen}}
-              {{#if this.onSetup.isRunning}}
+              {{#if (not this.isReady)}}
                 <LoadingIndicator />
               {{else}}
                 <FieldContainer @label='Create In' @tag='label' class='field'>
@@ -202,7 +200,7 @@ export default class CreateFileModal extends Component<Signature> {
           </:content>
           <:footer>
             {{#if this.isModalOpen}}
-              {{#unless this.onSetup.isRunning}}
+              {{#if this.isReady}}
                 <div class='footer-buttons'>
                   <Button
                     {{on 'click' this.onCancel}}
@@ -255,7 +253,7 @@ export default class CreateFileModal extends Component<Signature> {
                     </Button>
                   {{/if}}
                 </div>
-              {{/unless}}
+              {{/if}}
             {{/if}}
           </:footer>
         </ModalContainer>
@@ -328,12 +326,13 @@ export default class CreateFileModal extends Component<Signature> {
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardContextName) private declare getCard: getCard<Spec>;
 
   @service private declare cardService: CardService;
   @service private declare network: NetworkService;
 
-  @tracked private selectedSpec: Spec | undefined = undefined;
+  @tracked private defaultSpecResource: ReturnType<getCard<Spec>> | undefined;
+  @tracked private chosenSpec: Spec | undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
   @tracked private hasUserEditedFileName = false;
@@ -389,6 +388,16 @@ export default class CreateFileModal extends Component<Signature> {
     return !!this.currentRequest;
   }
 
+  private get isReady() {
+    return this.definitionClass
+      ? true
+      : Boolean(this.defaultSpecResource?.isLoaded);
+  }
+
+  private get selectedSpec() {
+    return this.chosenSpec || this.defaultSpecResource?.card;
+  }
+
   private makeCreateFileRequst = enqueueTask(
     async (
       fileType: FileType,
@@ -407,7 +416,19 @@ export default class CreateFileModal extends Component<Signature> {
         definitionClass,
         sourceInstance,
       };
-      await this.onSetup.perform();
+      if (!this.definitionClass) {
+        let specEntryPath =
+          this.fileType.id === 'field-definition'
+            ? 'fields/field'
+            : 'types/card';
+        this.defaultSpecResource = this.getCard(
+          this,
+          () => `${baseRealm.url}${specEntryPath}`,
+          {
+            isLive: false,
+          },
+        );
+      }
       let url = await this.currentRequest.newFileDeferred.promise;
       this.clearState();
       return url;
@@ -415,7 +436,8 @@ export default class CreateFileModal extends Component<Signature> {
   );
 
   private clearState() {
-    this.selectedSpec = undefined;
+    this.defaultSpecResource = undefined;
+    this.chosenSpec = undefined;
     this.currentRequest = undefined;
     this.fileNameError = undefined;
     this.displayName = '';
@@ -532,34 +554,11 @@ export default class CreateFileModal extends Component<Signature> {
     return this.createCardInstance.isRunning || this.createDefinition.isRunning;
   }
 
-  private onSetup = restartableTask(async () => {
-    let token = waiter.beginAsync();
-    try {
-      if (!this.definitionClass) {
-        let specEntryPath =
-          this.fileType.id === 'field-definition'
-            ? 'fields/field'
-            : 'types/card';
-        let resource = this.getCard(
-          this,
-          () => `${baseRealm.url}${specEntryPath}`,
-          {
-            isLive: false,
-          },
-        );
-        await resource.loaded;
-        this.selectedSpec = resource.card as Spec;
-      }
-    } finally {
-      waiter.endAsync(token);
-    }
-  });
-
   private chooseType = restartableTask(async () => {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
 
-    this.selectedSpec = await chooseCard({
+    this.chosenSpec = await chooseCard({
       filter: {
         on: specRef,
         // REMEMBER ME
