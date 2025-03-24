@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import CardListingContainer from '../components/card-listing-container';
+import ContentContainer from '../components/content-container';
 
 interface FilterSectionArgs {
   Blocks: {};
@@ -8,7 +8,7 @@ interface FilterSectionArgs {
 
 export default class FilterSection extends GlimmerComponent<FilterSectionArgs> {
   <template>
-    <CardListingContainer
+    <ContentContainer
       role='complementary'
       aria-label='Filters'
       class='filter-section'
@@ -38,15 +38,14 @@ export default class FilterSection extends GlimmerComponent<FilterSectionArgs> {
       <section class='filter-group'>
         {{! Todo: Price Range }}
       </section>
-    </CardListingContainer>
+    </ContentContainer>
 
     <style scoped>
       @layer {
         .filter-section {
-          --card-listing-container-height: 100%;
-          --card-listing-container-width: 247px;
-          --card-listing-container-background-color: var(--boxel-light);
-          --card-listing-container-border-radius: var(--boxel-border-radius);
+          --content-container-height: 100%;
+          --content-container-width: 247px;
+          --content-container-background-color: var(--boxel-light);
 
           position: sticky;
           top: 0;

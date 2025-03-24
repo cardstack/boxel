@@ -20,6 +20,7 @@ import { Accordion } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
+import ContentContainer from '../components/content-container';
 
 import { Publisher } from './publisher';
 import { Category, Tag } from './category';
@@ -74,10 +75,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       />
 
       <div class='app-listing-info'>
-        <div class='app-listing-summary'>
+        <ContentContainer
+          @displayBoundaries={{true}}
+          class='app-listing-summary'
+        >
           <h2>Summary</h2>
           {{@model.summary}}
-        </div>
+        </ContentContainer>
 
         <div class='license-statistic'>
           {{! Todo: Add license section while getting the real data }}
@@ -90,14 +94,15 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           <div class='statistics-section'>
             <h2>Statistics</h2>
             <div class='stats-container'>
-              <div class='stat-item'>
+              <ContentContainer @displayBoundaries={{true}} class='stat-item'>
                 <span class='stat-label'>Downloads</span>
                 <span class='stat-value'>16,842</span>
-              </div>
-              <div class='stat-item'>
+              </ContentContainer>
+
+              <ContentContainer @displayBoundaries={{true}} class='stat-item'>
                 <span class='stat-label'>Subscriptions</span>
                 <span class='stat-value'>5,439</span>
-              </div>
+              </ContentContainer>
             </div>
           </div>
         </div>
@@ -138,7 +143,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       h2 {
         font-weight: 600;
         margin: 0;
-        margin-bottom: var(--boxel-sp);
+        margin-bottom: var(--boxel-sp-sm);
       }
       /* container */
       .app-listing-embedded {
@@ -155,10 +160,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         container-type: inline-size;
       }
       .app-listing-summary {
-        border: 1px solid var(--boxel-border-color);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
-        background-color: var(--boxel-100);
+        --content-container-padding: var(--boxel-sp);
+        --content-container-background-color: var(--boxel-100);
       }
       .license-statistic {
         display: grid;
@@ -171,9 +174,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         gap: var(--boxel-sp);
       }
       .stat-item {
-        border: 1px solid var(--boxel-border-color);
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp-sm);
+        --content-container-padding: var(--boxel-sp-xs);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
