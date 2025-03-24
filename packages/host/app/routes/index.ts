@@ -11,11 +11,12 @@ import { type SerializedState as OperatorModeSerializedState } from '@cardstack/
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { Submodes } from '../components/submode-switcher';
-import BillingService from '../services/billing-service';
-import CardService from '../services/card-service';
-import MatrixService from '../services/matrix-service';
-import RealmService from '../services/realm';
-import StoreService from '../services/store';
+
+import type BillingService from '../services/billing-service';
+import type CardService from '../services/card-service';
+import type MatrixService from '../services/matrix-service';
+import type RealmService from '../services/realm';
+import type StoreService from '../services/store';
 
 const { hostsOwnAssets } = ENV;
 
@@ -75,7 +76,8 @@ export default class Index extends Route<void> {
 
       // we only get a card to understand its canonical URL so it's ok to fetch
       // a card that is detached from the store as we only care about it's ID.
-      let canonicalCardUrl = (
+      let canonicalCardUrl: string | undefined;
+      canonicalCardUrl = (
         await this.store.getInstanceDetachedFromStore(cardUrl)
       )?.id;
       if (!canonicalCardUrl) {

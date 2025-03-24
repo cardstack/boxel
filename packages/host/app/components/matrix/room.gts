@@ -36,6 +36,7 @@ import {
   GetCardContextName,
   ResolvedCodeRef,
   internalKeyFor,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
@@ -763,7 +764,9 @@ export default class Room extends Component<Signature> {
                 this.store.getInstanceDetachedFromStore(id),
               ),
             )
-          ).filter(Boolean) as CardDef[];
+          )
+            .filter(Boolean)
+            .filter(isCardInstance) as CardDef[];
         } else {
           cards = cardsOrIds as CardDef[] | undefined;
         }

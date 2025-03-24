@@ -225,16 +225,33 @@ export default class StoreService extends Service {
   // may include things like tests, freestyle usage guide, etc.
   async getInstanceDetachedFromStore(
     url: string,
-  ): Promise<CardDef | undefined> {
-    let doc = await this.cardService.fetchJSON(url);
-    if (!doc) {
-      return undefined;
+  ): Promise<CardDef | CardError> {
+    try {
+      let doc = await this.cardService.fetchJSON(url);
+      if (!doc) {
+        return {
+          id: url,
+          status: 404,
+          title: 'Card Not Found',
+          message: `The card ${url} does not exist`,
+          realm: undefined,
+          meta: {
+            lastKnownGoodHtml: null,
+            scopedCssUrls: [],
+            stack: null,
+            cardTitle: null,
+          },
+        };
+      }
+      return await this.cardService.createFromSerialized(
+        doc.data as LooseCardResource,
+        doc,
+        new URL(url),
+      );
+    } catch (error: any) {
+      let errorResponse = processCardError(url, error);
+      return errorResponse.errors[0];
     }
-    return await this.cardService.createFromSerialized(
-      doc.data as LooseCardResource,
-      doc,
-      new URL(url),
-    );
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
@@ -314,7 +331,7 @@ export default class StoreService extends Service {
         // file was deleted
         isDelete = true;
       } else {
-        let errorResponse = processCardError(new URL(card.id), err);
+        let errorResponse = processCardError(card.id, err);
         maybeReloadedCard = errorResponse.errors[0];
       }
     }
@@ -441,10 +458,7 @@ export default class StoreService extends Service {
       );
       return card;
     } catch (error: any) {
-      let errorResponse = processCardError(
-        url ? new URL(url) : undefined,
-        error,
-      );
+      let errorResponse = processCardError(url, error);
       return errorResponse.errors[0];
     }
   }
@@ -529,7 +543,7 @@ export default class StoreService extends Service {
   }
 }
 
-function processCardError(url: URL | undefined, error: any): CardErrors {
+function processCardError(url: string | undefined, error: any): CardErrors {
   try {
     let errorResponse = JSON.parse(error.responseText) as CardErrors;
     return errorResponse;
@@ -540,10 +554,10 @@ function processCardError(url: URL | undefined, error: any): CardErrors {
         return {
           errors: [
             {
-              id: url?.href,
+              id: url,
               status: 404,
               title: 'Card Not Found',
-              message: `The card ${url?.href} does not exist`,
+              message: `The card ${url} does not exist`,
               realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
               meta: {
                 lastKnownGoodHtml: null,
@@ -558,7 +572,7 @@ function processCardError(url: URL | undefined, error: any): CardErrors {
         return {
           errors: [
             {
-              id: url?.href,
+              id: url,
               status: error.status ?? 500,
               title: error.status
                 ? status.message[error.status]
