@@ -16,7 +16,7 @@ export default defineConfig({
     baseURL: 'http://localhost:4202/test',
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
-    trace: 'on-first-retry',
+    trace: 'on',
   },
   // General timeout per test
   timeout: 60000,
