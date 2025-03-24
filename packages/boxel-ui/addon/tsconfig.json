@@ -29,7 +29,9 @@
       "https://cardstack.com/base/*": ["../../base/*"],
       "*": ["./src/types/*"],
       "@cardstack/boxel-ui": ["./src"],
-      "@cardstack/boxel-ui/*": ["./src/*"]
+      "@cardstack/boxel-ui/*": ["./src/*"],
+      "@cardstack/boxel-icons": ["../../boxel-icons/src"],
+      "@cardstack/boxel-icons/*": ["../../boxel-icons/src/*"]
     },
     "typeRoots": ["./src/types"]
   },
