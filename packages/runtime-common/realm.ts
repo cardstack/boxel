@@ -977,6 +977,7 @@ export class Realm {
     let { lastModified } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
+      request.headers.get('X-Boxel-Client-Request-Id'),
     );
     return createResponse({
       body: null,
