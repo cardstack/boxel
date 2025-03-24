@@ -8,7 +8,6 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask, task } from 'ember-concurrency';
 import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
-import { modifier } from 'ember-modifier';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -52,6 +51,7 @@ import { type PrerenderedCard } from '../../../prerendered-card-search';
 import FormatChooser from '../format-chooser';
 
 import FieldPickerModal from './field-chooser-modal';
+import GenerateSpec from './generate-spec';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
 
@@ -73,13 +73,6 @@ interface Signature {
     isFieldDef?: boolean;
   };
 }
-
-const runFn = modifier((_element: HTMLElement, [fn]: [() => void]) => {
-  if (!fn) {
-    throw new Error('No function was provided to createSpec modifier');
-  }
-  fn();
-});
 
 export default class PlaygroundContent extends Component<Signature> {
   <template>
@@ -106,7 +99,7 @@ export default class PlaygroundContent extends Component<Signature> {
             data-test-field-preview-card={{@isFieldDef}}
           >
             <PlaygroundPreview
-              @card={{card}}
+              @fieldOrCard={{card}}
               @format={{this.format}}
               @realmInfo={{this.realmInfo}}
               @contextMenuItems={{this.contextMenuItems}}
@@ -131,7 +124,7 @@ export default class PlaygroundContent extends Component<Signature> {
           }}
             <LoadingIndicator @color='var(--boxel-light)' />
           {{else if this.canGenerateFieldSpec}}
-            <div {{runFn this.createNew}} />
+            <GenerateSpec @createNewCard={{this.createNewCard}} />
           {{/if}}
         {{/if}}
       {{/let}}
@@ -216,11 +209,7 @@ export default class PlaygroundContent extends Component<Signature> {
   );
 
   private get canGenerateFieldSpec() {
-    if (
-      !this.args.isFieldDef ||
-      !this.canWriteRealm ||
-      this.createNewCard.isRunning
-    ) {
+    if (!this.args.isFieldDef || !this.canWriteRealm) {
       return false;
     }
     return (
