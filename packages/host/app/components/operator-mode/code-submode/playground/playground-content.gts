@@ -130,7 +130,7 @@ export default class PlaygroundContent extends Component<Signature> {
             (or this.searchFieldSpec.isLoading this.createNewCard.isRunning)
           }}
             <LoadingIndicator @color='var(--boxel-light)' />
-          {{else if this.generateFieldSpec}}
+          {{else if this.canGenerateFieldSpec}}
             <div {{runFn this.createNew}} />
           {{/if}}
         {{/if}}
@@ -215,7 +215,7 @@ export default class PlaygroundContent extends Component<Signature> {
     { isLive: true, isAutoSaved: true },
   );
 
-  private get generateFieldSpec() {
+  private get canGenerateFieldSpec() {
     if (
       !this.args.isFieldDef ||
       !this.canWriteRealm ||
@@ -537,7 +537,6 @@ export default class PlaygroundContent extends Component<Signature> {
   });
 
   private createNewField = restartableTask(async (specCard: Spec) => {
-    console.log('start task');
     let fieldCard = await loadCard(this.args.codeRef, {
       loader: this.loaderService.loader,
     });
@@ -546,7 +545,6 @@ export default class PlaygroundContent extends Component<Signature> {
     let index = examples?.length ? examples.length - 1 : 0;
     this.persistSelections(specCard.id, 'edit', index);
     this.closeInstanceChooser();
-    console.log('added field');
   });
 
   private get realmInfo() {
