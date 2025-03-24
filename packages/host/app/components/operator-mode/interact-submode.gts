@@ -34,6 +34,7 @@ import {
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
+  isResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { loadCard } from '@cardstack/runtime-common/code-ref';
 
@@ -51,6 +52,7 @@ import {
   type CardDef,
   type Format,
 } from 'https://cardstack.com/base/card-api';
+import { type Spec } from 'https://cardstack.com/base/spec';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -364,11 +366,7 @@ export default class InteractSubmode extends Component<Signature> {
         here.operatorModeStateService.updateCodePath(url);
         here.operatorModeStateService.updateSubmode(submode);
       },
-      fork: async (spec: CardDef, targetRealm: string) => {
-        let card = await here._fork.perform(spec, targetRealm);
-        return card;
-      },
-      create: async (spec: CardDef, targetRealm: string) => {
+      create: async (spec: Spec, targetRealm: string) => {
         await here._create.perform(spec, targetRealm);
       },
     };
@@ -489,27 +487,17 @@ export default class InteractSubmode extends Component<Signature> {
     },
   );
 
-  private _fork = task(async (spec: CardDef, targetRealm: string) => {
-    let { commandContext } = this.commandService;
-    const result = await new CopyCardCommand(commandContext).execute({
-      sourceCard: spec,
-      targetRealmUrl: targetRealm,
-    });
-    return result.newCard;
-  });
-
-  private _create = task(async (spec: CardDef, targetRealm: string) => {
-    if (!spec.remoteRef) {
-      throw new Error('No ref exists');
+  private _create = task(async (spec: Spec, targetRealm: string) => {
+    let url = new URL(spec.id);
+    let ref = codeRefWithAbsoluteURL(spec.ref, url);
+    if (!isResolvedCodeRef(ref)) {
+      throw new Error('ref is not a resolved code ref');
     }
-    let ref = spec.remoteRef;
     let Klass = await loadCard(ref, {
       loader: this.loaderService.loader,
     });
-    let card = new Klass({});
-    let result = await new SaveCardCommand(
-      this.commandService.commandContext,
-    ).execute({
+    let card = new Klass({}) as CardDef;
+    await new SaveCardCommand(this.commandService.commandContext).execute({
       card,
       realm: targetRealm,
     });

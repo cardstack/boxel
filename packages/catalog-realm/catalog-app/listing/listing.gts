@@ -203,26 +203,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 }
 
 class IsolatedTemplate extends Component<typeof Listing> {
-  @tracked addedSpec = false;
   @tracked createdInstances = false;
-  _install = task(async () => {
-    let realmUrl = 'http://localhost:4201/experiments/';
-    let res = await Promise.all(
-      this.args.model?.specs?.map((spec) =>
-        this.args.context?.actions?.fork?.(spec, realmUrl),
-      ) ?? [],
-    );
-    if (res.length > 0) {
-      this.addedSpec = true;
-    }
-  });
-
-  @action fork() {
-    if (!this.args.context?.actions?.fork) {
-      throw new Error('fork action is not available');
-    }
-    this._install.perform();
-  }
 
   _create = task(async () => {
     let realmUrl = 'http://localhost:4201/experiments/';
@@ -241,17 +222,6 @@ class IsolatedTemplate extends Component<typeof Listing> {
     this._create.perform();
   }
   <template>
-    <div>
-      <button {{on 'click' this.fork}}>
-        {{#if this._install.isRunning}}
-          Installing...
-        {{else if this.addedSpec}}
-          Installed
-        {{else}}
-          Install
-        {{/if}}
-      </button>
-    </div>
     <div>
       <button {{on 'click' this.create}}>
         {{#if this._create.isRunning}}

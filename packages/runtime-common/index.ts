@@ -155,6 +155,7 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type Spec } from 'https://cardstack.com/base/spec';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
 
@@ -393,9 +394,7 @@ export interface Actions {
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
 
   // Catalog Actions
-  create?: (spec: CardDef, targetRealm: string) => void;
-  fork?: (spec: CardDef, targetRealm: string) => void;
-  customize?: (spec: CardDef, targetRealm: string) => void;
+  create?: (spec: Spec, targetRealm: string) => void;
 }
 
 export function hasExecutableExtension(path: string): boolean {
