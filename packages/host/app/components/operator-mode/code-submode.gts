@@ -1012,7 +1012,9 @@ export default class CodeSubmode extends Component<Signature> {
                         >
                           <:title><PlaygroundTitle /></:title>
                           <:content>
-                            <PlaygroundContent />
+                            {{#if (eq this.selectedAccordionItem 'playground')}}
+                              <PlaygroundContent />
+                            {{/if}}
                           </:content>
                         </A.Item>
                       </Playground>

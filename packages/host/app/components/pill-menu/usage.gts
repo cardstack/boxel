@@ -11,7 +11,11 @@ import { TrackedObject } from 'tracked-built-ins';
 
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import { baseRealm, getPlural } from '@cardstack/runtime-common';
+import {
+  baseRealm,
+  getPlural,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
 
@@ -50,7 +54,9 @@ export default class PillMenuUsage extends Component {
           this.store.getInstanceDetachedFromStore(url),
         ),
       )
-    ).filter(Boolean) as CardDef[];
+    )
+      .filter(Boolean)
+      .filter(isCardInstance) as CardDef[];
     this.items = cards.map(
       (card) =>
         new TrackedObject({

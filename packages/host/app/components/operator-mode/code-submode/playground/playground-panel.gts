@@ -3,7 +3,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 
 import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -76,7 +76,10 @@ interface Signature {
             | 'card'
             | 'field'
             | 'moduleId'
-            | 'createNewFieldInstance'
+            | 'codeRef'
+            | 'createNewField'
+            | 'createNewCard'
+            | 'createNewIsRunning'
             | 'isFieldDef'
           >
         | WithBoundArgs<typeof LoadingIndicator, never>
@@ -162,11 +165,13 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get fieldInstances(): FieldOption[] | undefined {
-    if (!this.args.isFieldDef) {
+    if (!this.args.isFieldDef || !this.card) {
       return undefined;
     }
-    let instances = (this.card as Spec | undefined)?.containedExamples;
+    let spec = this.card as Spec;
+    let instances = spec.containedExamples;
     if (!instances?.length) {
+      this.createNewField.perform(spec);
       return undefined;
     }
     return instances.map((field, i) => ({
@@ -317,8 +322,11 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.createNewCard.isRunning || this.createNewField.isRunning;
   }
 
-  private createNewCard = task(async () => {
+  private createNewCard = restartableTask(async () => {
     if (this.args.isFieldDef) {
+      let fieldCard = await loadCard(this.args.codeRef, {
+        loader: this.loaderService.loader,
+      });
       // for field def, create a new spec card instance
       this.newCardJSON = {
         data: {
@@ -326,8 +334,16 @@ export default class PlaygroundPanel extends Component<Signature> {
             specType: 'field',
             ref: this.args.codeRef,
             title: this.args.codeRef.name,
+            containedExamples: [new fieldCard()],
           },
           meta: {
+            fields: {
+              containedExamples: [
+                {
+                  adoptsFrom: this.args.codeRef,
+                },
+              ],
+            },
             adoptsFrom: specRef,
             realmURL: this.operatorModeStateService.realmURL.href,
           },
@@ -346,15 +362,16 @@ export default class PlaygroundPanel extends Component<Signature> {
     await this.cardResource?.loaded; // TODO: remove await when card-resource is refactored
     if (this.card) {
       this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
-      if (this.args.isFieldDef) {
-        this.createNewField.perform(this.card as Spec);
-      } else {
-        this.persistSelections(this.card.id, 'edit'); // open new instance in playground in edit format
-      }
+      this.persistSelections(
+        this.card.id,
+        'edit',
+        this.args.isFieldDef ? 0 : undefined,
+      ); // open new instance in playground in edit format
+      this.closeInstanceChooser();
     }
   });
 
-  private createNewField = task(async (specCard: Spec) => {
+  private createNewField = restartableTask(async (specCard: Spec) => {
     let fieldCard = await loadCard(this.args.codeRef, {
       loader: this.loaderService.loader,
     });
@@ -400,7 +417,10 @@ export default class PlaygroundPanel extends Component<Signature> {
           card=this.card
           field=this.field
           moduleId=this.moduleId
-          createNewFieldInstance=this.createNew
+          codeRef=@codeRef
+          createNewField=this.createNew
+          createNewCard=this.createNewCard
+          createNewIsRunning=this.createNewIsRunning
           isFieldDef=@isFieldDef
         )
       )

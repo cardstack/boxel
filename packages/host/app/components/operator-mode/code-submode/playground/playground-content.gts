@@ -1,20 +1,25 @@
 import { fn } from '@ember/helper';
-import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
 
-import { task } from 'ember-concurrency';
+import { task, type TaskForAsyncTaskFunction } from 'ember-concurrency';
 
 import { consume } from 'ember-provide-consume-context';
 
-import { AddButton } from '@cardstack/boxel-ui/components';
-import { and, bool, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
-import { GetCardContextName, type getCard } from '@cardstack/runtime-common';
+import {
+  GetCardContextName,
+  type getCard,
+  type Query,
+  type ResolvedCodeRef,
+  specRef,
+} from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -29,6 +34,7 @@ import { CardDef, FieldDef, Format } from 'https://cardstack.com/base/card-api';
 import FormatChooser from '../format-chooser';
 
 import PlaygroundPreview from './playground-preview';
+import SpecSearch from './spec-search';
 
 export type FieldOption = {
   index: number;
@@ -44,7 +50,10 @@ export type SelectedInstance = {
 interface Signature {
   Args: {
     moduleId: string;
-    createNewFieldInstance: () => void;
+    codeRef: ResolvedCodeRef;
+    createNewField: () => void;
+    createNewCard: TaskForAsyncTaskFunction<unknown, () => Promise<void>>;
+    createNewIsRunning: boolean;
     isFieldDef?: boolean;
     card?: CardDef;
     field?: FieldDef;
@@ -81,17 +90,15 @@ export default class PlaygroundContent extends Component<Signature> {
               @setFormat={{this.setFormat}}
               data-test-playground-format-chooser
             />
-          {{else if (and (bool @card) this.canWriteRealm)}}
-            <AddButton
-              class='add-field-button'
-              @variant='full-width'
-              @iconWidth='12px'
-              @iconHeight='12px'
-              {{on 'click' @createNewFieldInstance}}
-              data-test-add-field-instance
-            >
-              Add Field
-            </AddButton>
+          {{else if @createNewIsRunning}}
+            <LoadingIndicator @color='var(--boxel-light)' />
+          {{else if this.maybeGenerateFieldSpec}}
+            <SpecSearch
+              @query={{this.specQuery}}
+              @realms={{this.realmServer.availableRealmURLs}}
+              @canWriteRealm={{this.canWriteRealm}}
+              @createNewCard={{@createNewCard}}
+            />
           {{/if}}
         {{/let}}
       </div>
@@ -118,10 +125,6 @@ export default class PlaygroundContent extends Component<Signature> {
         --boxel-format-chooser-button-bg-color: var(--boxel-light);
         --boxel-format-chooser-button-width: 85px;
         --boxel-format-chooser-button-min-width: 85px;
-      }
-      .add-field-button {
-        max-width: 500px;
-        margin-inline: auto;
       }
       .playground-panel {
         position: relative;
@@ -151,6 +154,19 @@ export default class PlaygroundContent extends Component<Signature> {
   @service private declare playgroundPanelService: PlaygroundPanelService;
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
+
+  private get specQuery(): Query {
+    return {
+      filter: {
+        on: specRef,
+        eq: { ref: this.args.codeRef },
+      },
+    };
+  }
+
+  private get maybeGenerateFieldSpec() {
+    return this.args.isFieldDef && !this.args.card;
+  }
 
   private get defaultFormat() {
     return this.args.isFieldDef ? 'embedded' : 'isolated';
