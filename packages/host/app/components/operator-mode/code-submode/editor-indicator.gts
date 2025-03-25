@@ -32,6 +32,7 @@ const CodeSubmodeEditorIndicator: TemplateOnlyComponent<Signature> = <template>
       transition: all var(--boxel-transition);
       transition-delay: 5s;
       min-width: 140px;
+      z-index: 1;
     }
 
     .indicator-icon {
