@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
 
-import { task, type TaskForAsyncTaskFunction } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 import { consume } from 'ember-provide-consume-context';
 
@@ -51,8 +51,7 @@ interface Signature {
   Args: {
     moduleId: string;
     codeRef: ResolvedCodeRef;
-    createNewField: () => void;
-    createNewCard: TaskForAsyncTaskFunction<unknown, () => Promise<void>>;
+    createNew: () => void;
     createNewIsRunning: boolean;
     isFieldDef?: boolean;
     card?: CardDef;
@@ -97,7 +96,7 @@ export default class PlaygroundContent extends Component<Signature> {
               @query={{this.specQuery}}
               @realms={{this.realmServer.availableRealmURLs}}
               @canWriteRealm={{this.canWriteRealm}}
-              @createNewCard={{@createNewCard}}
+              @createNewCard={{@createNew}}
             />
           {{/if}}
         {{/let}}

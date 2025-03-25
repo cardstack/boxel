@@ -2,7 +2,6 @@ import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { type TaskForAsyncTaskFunction } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -20,7 +19,7 @@ interface Signature {
     query: Query;
     realms: string[];
     canWriteRealm: boolean;
-    createNewCard: TaskForAsyncTaskFunction<unknown, () => Promise<void>>;
+    createNewCard: () => void;
   };
 }
 
@@ -58,12 +57,12 @@ export default class SpecSearch extends Component<Signature> {
 
 interface CreateCardSignature {
   Args: {
-    createNewCard: TaskForAsyncTaskFunction<unknown, () => Promise<void>>;
+    createNewCard: () => void;
   };
 }
 class CreateCard extends Component<CreateCardSignature> {
   constructor(owner: Owner, args: CreateCardSignature['Args']) {
     super(owner, args);
-    this.args.createNewCard.perform();
+    this.args.createNewCard();
   }
 }

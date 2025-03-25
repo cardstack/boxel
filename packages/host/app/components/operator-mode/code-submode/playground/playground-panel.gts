@@ -77,8 +77,7 @@ interface Signature {
             | 'field'
             | 'moduleId'
             | 'codeRef'
-            | 'createNewField'
-            | 'createNewCard'
+            | 'createNew'
             | 'createNewIsRunning'
             | 'isFieldDef'
           >
@@ -418,8 +417,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           field=this.field
           moduleId=this.moduleId
           codeRef=@codeRef
-          createNewField=this.createNew
-          createNewCard=this.createNewCard
+          createNew=this.createNew
           createNewIsRunning=this.createNewIsRunning
           isFieldDef=@isFieldDef
         )

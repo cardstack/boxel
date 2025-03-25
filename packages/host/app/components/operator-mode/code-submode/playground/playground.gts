@@ -105,8 +105,7 @@ interface Signature {
             | 'field'
             | 'moduleId'
             | 'codeRef'
-            | 'createNewField'
-            | 'createNewCard'
+            | 'createNew'
             | 'createNewIsRunning'
             | 'isFieldDef'
           >
