@@ -43,6 +43,19 @@ import type MatrixService from '../services/matrix-service';
 const MAX_CARD_SIZE_KB = 60;
 export const isSkillCard = Symbol.for('is-skill-card');
 
+/**
+ * The `CardEventPublisher` class is responsible for managing the publishing
+ * of card-related events to a Matrix room. It handles serialization of cards,
+ * sending card fragments, adding skill cards and their supporting command
+ * definitions, and updating room state with skill configurations.
+ *
+ * Key responsibilities include:
+ * - Serializing and publishing cards to a Matrix room.
+ * - Managing card hashes to avoid duplicate publishing.
+ * - Handling skill cards and their associated commands.
+ * - Updating room state with skill configurations.
+ * - Sending command definitions to the room's history.
+ */
 export default class CardEventPublisher {
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
   private commandDefHashes: string[] = []; // hashes
