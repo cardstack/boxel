@@ -49,6 +49,9 @@ class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
 }
 
+const PRIMITIVE_INCOMPATIBILITY_MESSAGE =
+  'Examples are not currently supported for primitive fields';
+
 class Isolated extends Component<typeof Spec> {
   get defaultIcon() {
     return this.args.model.constructor?.icon;
@@ -141,7 +144,7 @@ class Isolated extends Component<typeof Spec> {
               class='spec-example-incompatible-message'
               data-test-spec-example-incompatible-primitives
             >
-              <span>Spec cannot render examples for primitive fields</span>
+              <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
             </p>
           {{else}}
             <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
@@ -657,8 +660,7 @@ class Edit extends Component<typeof Spec> {
               class='spec-example-incompatible-message'
               data-test-spec-example-incompatible-primitives
             >
-
-              <span>Spec cannot render examples for primitive fields</span>
+              <span>{{PRIMITIVE_INCOMPATIBILITY_MESSAGE}}</span>
             </p>
           {{else}}
             <@fields.containedExamples @typeConstraint={{this.absoluteRef}} />
