@@ -669,13 +669,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           containedExamples: [],
         },
-        relationships: {
-          linkedExamples: {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/spec',
@@ -702,7 +695,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
-        linkedExamples: null,
         containedExamples: null,
         isCard: true,
         isField: false,
@@ -793,13 +785,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           containedExamples: [],
         },
-        relationships: {
-          linkedExamples: {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/spec',
@@ -826,7 +811,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
-        linkedExamples: null,
         containedExamples: null,
         isCard: true,
         isField: false,
@@ -2238,7 +2222,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       description: 'Spec for Booking',
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
-      linkedExamples: null,
       containedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
@@ -2607,13 +2590,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           isCard: true,
           isField: false,
         },
-        relationships: {
-          linkedExamples: {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/spec',
@@ -2646,7 +2622,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         id: `${testRealmURL}pet-person-spec`,
         title: 'PetPerson',
         description: 'Spec for PetPerson',
-        linkedExamples: null,
         containedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
