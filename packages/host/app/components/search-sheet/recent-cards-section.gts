@@ -7,6 +7,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
+import { trackedFunction } from 'ember-resources/util/function';
+
 import { TrackedArray } from 'tracked-built-ins';
 
 import { and, bool } from '@cardstack/boxel-ui/helpers';
@@ -31,17 +33,27 @@ interface Signature {
 export default class RecentCardsSection extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @service private declare recentCardsService: RecentCards;
-  @tracked private recentCardResources:
-    | TrackedArray<ReturnType<getCard>>
+  @tracked private recentCardCollectionResource:
+    | {
+        value: TrackedArray<ReturnType<getCard>> | null;
+      }
     | undefined;
 
   private makeCardResources = () => {
-    this.recentCardResources = new TrackedArray(
-      this.recentCardsService.recentCardIds.map((id) =>
-        this.getCard(this, () => id),
-      ),
+    this.recentCardCollectionResource = trackedFunction(
+      this,
+      () =>
+        new TrackedArray(
+          this.recentCardsService.recentCardIds.map((id) =>
+            this.getCard(this, () => id),
+          ),
+        ),
     );
   };
+
+  private get recentCardResources() {
+    return this.recentCardCollectionResource?.value;
+  }
 
   get hasRecentCards() {
     return this.recentCardResources
