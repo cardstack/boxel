@@ -29,9 +29,7 @@ import { File } from '@cardstack/boxel-ui/icons';
 
 import {
   identifyCard,
-  isFieldDef,
   isCardDocumentString,
-  isPrimitive,
   hasExecutableExtension,
   RealmPaths,
   isResolvedCodeRef,
@@ -40,7 +38,6 @@ import {
   CodeRef,
   type ResolvedCodeRef,
   type getCard,
-  internalKeyFor,
 } from '@cardstack/runtime-common';
 import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
@@ -85,8 +82,7 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import PlaygroundPanel from './code-submode/playground/playground-panel';
-import PlaygroundTitle from './code-submode/playground/playground-title';
+import Playground from './code-submode/playground/playground';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import SpecPreview from './code-submode/spec-preview';
 import CreateFileModal, { type FileType } from './create-file-modal';
@@ -489,22 +485,6 @@ export default class CodeSubmode extends Component<Signature> {
     return undefined;
   }
 
-  private get playgroundData():
-    | { codeRef: ResolvedCodeRef; moduleId: string }
-    | undefined {
-    if (
-      !this.selectedCodeRef ||
-      !this.moduleId ||
-      isPrimitive(this.selectedCardOrField?.cardOrField)
-    ) {
-      return undefined;
-    }
-    return {
-      codeRef: this.selectedCodeRef,
-      moduleId: this.moduleId,
-    };
-  }
-
   private get selectedCodeRef(): ResolvedCodeRef | undefined {
     let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
     return isResolvedCodeRef(codeRef) ? codeRef : undefined;
@@ -807,13 +787,6 @@ export default class CodeSubmode extends Component<Signature> {
       : this.itemToDelete.id;
   }
 
-  private get moduleId() {
-    if (this.selectedCodeRef) {
-      return internalKeyFor(this.selectedCodeRef, undefined);
-    }
-    return undefined;
-  }
-
   <template>
     <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
@@ -1023,48 +996,13 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      {{#if this.playgroundData}}
-                        <PlaygroundTitle
-                          @codeRef={{this.playgroundData.codeRef}}
-                          @moduleId={{this.playgroundData.moduleId}}
-                          @isFieldDef={{isFieldDef
-                            this.selectedCardOrField.cardOrField
-                          }}
-                          as |playgroundTitle|
-                        >
-                          <A.Item
-                            class='accordion-item'
-                            @contentClass='accordion-item-content'
-                            @onClick={{fn
-                              this.toggleAccordionItem
-                              'playground'
-                            }}
-                            @isOpen={{eq
-                              this.selectedAccordionItem
-                              'playground'
-                            }}
-                            data-test-accordion-item='playground'
-                          >
-                            <:title><playgroundTitle.element /></:title>
-                            <:content>
-                              {{#if
-                                (eq this.selectedAccordionItem 'playground')
-                              }}
-                                <PlaygroundPanel
-                                  @codeRef={{this.playgroundData.codeRef}}
-                                  @isUpdating={{this.moduleContentsResource.isLoading}}
-                                  @isFieldDef={{isFieldDef
-                                    this.selectedCardOrField.cardOrField
-                                  }}
-                                  @card={{playgroundTitle.card}}
-                                  @field={{playgroundTitle.field}}
-                                  @createNewFieldInstance={{playgroundTitle.createNewFieldInstance}}
-                                />
-                              {{/if}}
-                            </:content>
-                          </A.Item>
-                        </PlaygroundTitle>
-                      {{else}}
+                      <Playground
+                        @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                        @codeRef={{this.selectedCodeRef}}
+                        @isUpdating={{this.moduleContentsResource.isLoading}}
+                        @cardOrField={{this.selectedCardOrField.cardOrField}}
+                        as |PlaygroundTitle PlaygroundContent|
+                      >
                         <A.Item
                           class='accordion-item'
                           @contentClass='accordion-item-content'
@@ -1072,31 +1010,12 @@ export default class CodeSubmode extends Component<Signature> {
                           @isOpen={{eq this.selectedAccordionItem 'playground'}}
                           data-test-accordion-item='playground'
                         >
-                          <:title>Playground</:title>
+                          <:title><PlaygroundTitle /></:title>
                           <:content>
-                            {{#if
-                              (isPrimitive this.selectedCardOrField.cardOrField)
-                            }}
-                              <p
-                                class='file-incompatible-message'
-                                data-test-incompatible-primitives
-                              >
-                                <span>Playground is not currently supported for
-                                  primitive fields.</span>
-                              </p>
-                            {{else}}
-                              <p
-                                class='file-incompatible-message'
-                                data-test-incompatible-nonexports
-                              >
-                                <span>Playground is not currently supported for
-                                  card or field definitions that are not
-                                  exported.</span>
-                              </p>
-                            {{/if}}
+                            <PlaygroundContent />
                           </:content>
                         </A.Item>
-                      {{/if}}
+                      </Playground>
                       <SpecPreview
                         @selectedDeclaration={{this.selectedDeclaration}}
                         @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}

@@ -53,47 +53,49 @@ interface Signature {
 
 export default class PlaygroundContent extends Component<Signature> {
   <template>
-    <div class='playground-panel-content'>
-      {{#let (if @isFieldDef @field @card) as |card|}}
-        {{#if card}}
-          <div
-            class='preview-area'
-            data-test-field-preview-card={{@isFieldDef}}
-          >
-            <PlaygroundPreview
-              @card={{card}}
+    <section class='playground-panel' data-test-playground-panel>
+      <div class='playground-panel-content'>
+        {{#let (if @isFieldDef @field @card) as |card|}}
+          {{#if card}}
+            <div
+              class='preview-area'
+              data-test-field-preview-card={{@isFieldDef}}
+            >
+              <PlaygroundPreview
+                @card={{card}}
+                @format={{this.format}}
+                @realmInfo={{this.realmInfo}}
+                @contextMenuItems={{this.contextMenuItems}}
+                @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
+                @onFinishEditing={{if
+                  (eq this.format 'edit')
+                  (fn this.setFormat this.defaultFormat)
+                }}
+                @isFieldDef={{@isFieldDef}}
+              />
+            </div>
+            <FormatChooser
+              class='format-chooser'
+              @formats={{if @isFieldDef this.fieldFormats}}
               @format={{this.format}}
-              @realmInfo={{this.realmInfo}}
-              @contextMenuItems={{this.contextMenuItems}}
-              @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
-              @onFinishEditing={{if
-                (eq this.format 'edit')
-                (fn this.setFormat this.defaultFormat)
-              }}
-              @isFieldDef={{@isFieldDef}}
+              @setFormat={{this.setFormat}}
+              data-test-playground-format-chooser
             />
-          </div>
-          <FormatChooser
-            class='format-chooser'
-            @formats={{if @isFieldDef this.fieldFormats}}
-            @format={{this.format}}
-            @setFormat={{this.setFormat}}
-            data-test-playground-format-chooser
-          />
-        {{else if (and (bool @card) this.canWriteRealm)}}
-          <AddButton
-            class='add-field-button'
-            @variant='full-width'
-            @iconWidth='12px'
-            @iconHeight='12px'
-            {{on 'click' @createNewFieldInstance}}
-            data-test-add-field-instance
-          >
-            Add Field
-          </AddButton>
-        {{/if}}
-      {{/let}}
-    </div>
+          {{else if (and (bool @card) this.canWriteRealm)}}
+            <AddButton
+              class='add-field-button'
+              @variant='full-width'
+              @iconWidth='12px'
+              @iconHeight='12px'
+              {{on 'click' @createNewFieldInstance}}
+              data-test-add-field-instance
+            >
+              Add Field
+            </AddButton>
+          {{/if}}
+        {{/let}}
+      </div>
+    </section>
 
     <style scoped>
       .playground-panel-content {
@@ -120,6 +122,21 @@ export default class PlaygroundContent extends Component<Signature> {
       .add-field-button {
         max-width: 500px;
         margin-inline: auto;
+      }
+      .playground-panel {
+        position: relative;
+        background-image: url('./playground-background.png');
+        background-position: left top;
+        background-repeat: repeat;
+        background-size: 22.5px;
+        height: 100%;
+        width: 100%;
+        padding: var(--boxel-sp);
+        padding-top: 0;
+        background-color: var(--boxel-dark);
+        font: var(--boxel-font-sm);
+        letter-spacing: var(--boxel-lsp-xs);
+        overflow: auto;
       }
     </style>
   </template>
