@@ -660,6 +660,13 @@ module('Acceptance | code-submode | field playground', function (hooks) {
         '[data-test-contains-many="containedExamples"] [data-test-item="0"] [data-test-field="quote"] input',
       )
       .hasNoValue();
+
+    await togglePlaygroundPanel();
+    assertFieldExists(assert, 'edit');
+    await toggleSpecPanel();
+    assert
+      .dom('[data-test-spec-selector] > .ember-basic-dropdown-trigger')
+      .hasAttribute('aria-disabled', 'true', 'still has only 1 spec instance');
   });
 
   test('can create new field instance (has preexisting Spec)', async function (assert) {

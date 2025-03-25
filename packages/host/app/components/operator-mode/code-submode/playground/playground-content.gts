@@ -12,7 +12,7 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 import { consume } from 'ember-provide-consume-context';
 
 import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -21,9 +21,7 @@ import {
   loadCard,
   specRef,
   GetCardContextName,
-  GetCardsContextName,
   type getCard,
-  type getCards,
   type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
@@ -51,9 +49,9 @@ import { type PrerenderedCard } from '../../../prerendered-card-search';
 import FormatChooser from '../format-chooser';
 
 import FieldPickerModal from './field-chooser-modal';
-import GenerateSpec from './generate-spec';
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 import PlaygroundPreview from './playground-preview';
+import SpecSearch from './spec-search';
 
 export type FieldOption = {
   index: number;
@@ -77,7 +75,6 @@ interface Signature {
 export default class PlaygroundContent extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResource}}
-    {{consumeContext this.searchFieldSpec}}
     <div class='playground-panel-content'>
       <div class='instance-chooser-container'>
         <InstanceSelectDropdown
@@ -119,12 +116,15 @@ export default class PlaygroundContent extends Component<Signature> {
             @setFormat={{this.setFormat}}
             data-test-playground-format-chooser
           />
-        {{else if @isFieldDef}}
-          {{#if (or this.fieldSpec.isLoading this.createNewCard.isRunning)}}
-            <LoadingIndicator @color='var(--boxel-light)' />
-          {{else if this.canGenerateFieldSpec}}
-            <GenerateSpec @createNewCard={{this.createNewCard}} />
-          {{/if}}
+        {{else if this.createNewIsRunning}}
+          <LoadingIndicator @color='var(--boxel-light)' />
+        {{else if this.maybeGenerateFieldSpec}}
+          <SpecSearch
+            @query={{this.specQuery}}
+            @realms={{this.realmServer.availableRealmURLs}}
+            @canWriteRealm={{this.canWriteRealm}}
+            @createNewCard={{this.createNewCard}}
+          />
         {{/if}}
       {{/let}}
     </div>
@@ -179,7 +179,6 @@ export default class PlaygroundContent extends Component<Signature> {
   </template>
 
   @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
 
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
@@ -191,34 +190,6 @@ export default class PlaygroundContent extends Component<Signature> {
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
   @tracked private fieldChooserIsOpen = false;
   @tracked private cardResource: ReturnType<getCard> | undefined;
-  @tracked private fieldSpec: ReturnType<getCards> | undefined;
-
-  private get specQuery(): Query {
-    return {
-      filter: {
-        on: specRef,
-        eq: { ref: this.args.codeRef },
-      },
-    };
-  }
-
-  private searchFieldSpec = () => {
-    this.fieldSpec = this.getCards(
-      this,
-      () => this.specQuery,
-      () => this.realmServer.availableRealmURLs,
-      { isLive: true },
-    );
-  };
-
-  private get canGenerateFieldSpec() {
-    if (!this.args.isFieldDef || !this.canWriteRealm) {
-      return false;
-    }
-    return (
-      !this.fieldSpec?.isLoading && this.fieldSpec?.instances?.length === 0
-    );
-  }
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
 
@@ -267,6 +238,19 @@ export default class PlaygroundContent extends Component<Signature> {
         },
       ],
     };
+  }
+
+  private get specQuery(): Query {
+    return {
+      filter: {
+        on: specRef,
+        eq: { ref: this.args.codeRef },
+      },
+    };
+  }
+
+  private get maybeGenerateFieldSpec() {
+    return this.args.isFieldDef && !this.card;
   }
 
   private get playgroundSelection() {
