@@ -104,7 +104,10 @@ interface Signature {
             | 'card'
             | 'field'
             | 'moduleId'
-            | 'createNewFieldInstance'
+            | 'codeRef'
+            | 'createNewField'
+            | 'createNewCard'
+            | 'createNewIsRunning'
             | 'isFieldDef'
           >
         | WithBoundArgs<typeof LoadingIndicator, 'color'>
