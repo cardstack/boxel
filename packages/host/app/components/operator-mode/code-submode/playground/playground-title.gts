@@ -88,6 +88,7 @@ export default class PlaygroundTitle extends Component<Signature> {
         display: flex;
         align-items: center;
         justify-content: space-between;
+        flex-wrap: nowrap;
         width: 100%;
         min-width: 0;
         gap: var(--boxel-sp);
