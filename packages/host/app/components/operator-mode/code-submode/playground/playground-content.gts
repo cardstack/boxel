@@ -309,12 +309,12 @@ export default class PlaygroundContent extends Component<Signature> {
     await navigator.clipboard.writeText(id);
   });
 
-  private openInInteractMode = task(async (id: string) => {
-    await this.operatorModeStateService.openCardInInteractMode(
-      new URL(id),
+  private openInInteractMode = (id: string) => {
+    this.operatorModeStateService.openCardInInteractMode(
+      id,
       this.format === 'edit' ? 'edit' : 'isolated',
     );
-  });
+  };
 
   private get contextMenuItems() {
     if (!this.card?.id) {
@@ -332,7 +332,7 @@ export default class PlaygroundContent extends Component<Signature> {
         icon: IconCode,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode.perform(cardId),
+        action: () => this.openInInteractMode,
         icon: Eye,
       }),
     ];
@@ -433,13 +433,15 @@ export default class PlaygroundContent extends Component<Signature> {
   }
 
   private chooseCard = task(async () => {
-    let chosenCard: CardDef | undefined = await chooseCard({
+    let chosenCardResource = await chooseCard(this, {
       filter: { type: this.args.codeRef },
     });
 
-    if (chosenCard) {
-      this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
-      this.persistSelections(chosenCard.id);
+    if (chosenCardResource?.url) {
+      this.recentFilesService.addRecentFileUrl(
+        `${chosenCardResource.url}.json`,
+      );
+      this.persistSelections(chosenCardResource.url);
     }
   });
 

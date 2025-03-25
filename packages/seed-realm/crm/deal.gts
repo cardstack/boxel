@@ -284,6 +284,7 @@ class IsolatedTemplate extends Component<typeof Deal> {
     };
 
     await this.args.context?.actions?.createCard?.(
+      this,
       taskSource,
       new URL(taskSource.module),
       {

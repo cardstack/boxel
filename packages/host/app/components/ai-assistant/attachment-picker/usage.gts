@@ -8,30 +8,33 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
+import { type getCard } from '@cardstack/runtime-common';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import AiAssistantAttachmentPicker from './index';
 
 export default class AiAssistantCardPickerUsage extends Component {
-  cards: TrackedArray<CardDef> = new TrackedArray([]);
+  cardIds: TrackedArray<string> = new TrackedArray([]);
   @tracked maxNumberOfCards: number | undefined = undefined;
-  @tracked autoAttachedCards?: TrackedSet<CardDef> = new TrackedSet();
+  @tracked autoAttachedCardIds?: TrackedSet<string> = new TrackedSet();
   @tracked autoAttachedFile?: FileDef | undefined;
   @tracked filesToAttach: TrackedArray<FileDef> = new TrackedArray([]);
 
-  @action chooseCard(card: CardDef) {
-    if (!this.cards?.find((c) => c.id === card.id)) {
-      this.cards.push(card);
+  @action chooseCard(cardResource: ReturnType<getCard>) {
+    if (!cardResource.url) {
+      return;
+    }
+    if (!this.cardIds.includes(cardResource.url)) {
+      this.cardIds.push(cardResource.url);
     }
   }
 
-  @action removeCard(card: CardDef) {
-    let index = this.cards.findIndex((c) => c.id === card.id);
-    this.cards.splice(index, 1);
+  @action removeCard(cardId: string) {
+    let index = this.cardIds.findIndex((id) => id === cardId);
+    this.cardIds.splice(index, 1);
   }
 
   @action chooseFile(file: FileDef) {
@@ -56,8 +59,9 @@ export default class AiAssistantCardPickerUsage extends Component {
       </:description>
       <:example>
         <AiAssistantAttachmentPicker
-          @autoAttachedCards={{this.autoAttachedCards}}
-          @cardsToAttach={{this.cards}}
+          @autoAttachedCardIds={{this.autoAttachedCardIds}}
+          @cardIdsToAttach={{this.cardIds}}
+          @cardChoosingOwner={{this}}
           @chooseCard={{this.chooseCard}}
           @removeCard={{this.removeCard}}
           @chooseFile={{this.chooseFile}}
@@ -71,14 +75,14 @@ export default class AiAssistantCardPickerUsage extends Component {
       </:example>
       <:api as |Args|>
         <Args.Object
-          @name='cardsToAttach'
-          @description='An array of cards to attach to the message.'
-          @value={{this.cards}}
+          @name='cardIdsToAttach'
+          @description='An array of card ids to attach to the message.'
+          @value={{this.cardIds}}
         />
         <Args.Object
           @name='autoAttachedCard'
           @description='A card automatically attached to the message from the top of the stack.'
-          @value={{this.autoAttachedCards}}
+          @value={{this.autoAttachedCardIds}}
         />
         <Args.Object
           @name='autoAttachedFile'
@@ -89,6 +93,11 @@ export default class AiAssistantCardPickerUsage extends Component {
           @name='filesToAttach'
           @description='An array of files to attach to the message.'
           @value={{this.filesToAttach}}
+        />
+        <Args.Action
+          @name='cardChoosingOwner'
+          @description='the owner of the life time for the card resource of the chosen card'
+          @value={{this}}
         />
         <Args.Action
           @name='chooseCard'

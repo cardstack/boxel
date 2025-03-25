@@ -6,7 +6,7 @@ import Service, { service } from '@ember/service';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
@@ -23,7 +23,6 @@ import {
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
 import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -94,6 +93,7 @@ export default class OperatorModeStateService extends Service {
   @tracked private _aiAssistantOpen = false;
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
+  #title: string | undefined;
 
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
@@ -135,8 +135,8 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  async restore(rawState: SerializedState) {
-    this.state = await this.deserialize(rawState);
+  restore(rawState: SerializedState) {
+    this.state = this.deserialize(rawState);
   }
 
   addItemToStack(item: StackItem) {
@@ -145,8 +145,8 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
     this.state.stacks[stackIndex].push(item);
-    if (!item.cardError) {
-      this.recentCardsService.add(item.card.id);
+    if (item.url) {
+      this.recentCardsService.add(item.url);
     }
     this.schedulePersist();
   }
@@ -174,17 +174,17 @@ export default class OperatorModeStateService extends Service {
     }
     await this.cardService.patchCard(card, document, patch);
     // TODO: if we introduce an identity map, we would not need this
-    await this.reloadCardIfOpen(card.id);
+    // await this.reloadCardIfOpen(card.id);
   });
 
-  async reloadCardIfOpen(id: string) {
-    let stackItems = this.state?.stacks.flat() ?? [];
-    for (let item of stackItems) {
-      if ('card' in item && item.card.id == id) {
-        this.cardService.reloadCard(item.card);
-      }
-    }
-  }
+  // async reloadCardIfOpen(id: string) {
+  //   let stackItems = this.state?.stacks.flat() ?? [];
+  //   for (let item of stackItems) {
+  //     if (item.url === url) {
+  //       this.cardService.reloadCard(item.card);
+  //     }
+  //   }
+  // }
 
   async deleteCard(cardId: string) {
     let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(
@@ -201,7 +201,7 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this.state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i) => i.url?.href && removeFileExtension(i.url.href) === cardId,
+          (i) => i.url && removeFileExtension(i.url) === cardId,
         ) as StackItem[]),
       );
     }
@@ -410,6 +410,7 @@ export default class OperatorModeStateService extends Service {
     });
   }
 
+  // TODO control of title is delegated to the stack items
   @cached
   get title() {
     if (this.state.submode === Submodes.Code) {
@@ -417,8 +418,9 @@ export default class OperatorModeStateService extends Service {
         this.realm.info(this.realmURL.href).name
       }`;
     } else {
-      let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
-      return itemForTitle?.title ?? 'Boxel';
+      return this.#title ?? 'Boxel';
+      // let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
+      // return itemForTitle?.title ?? 'Boxel';
     }
   }
 
@@ -499,7 +501,7 @@ export default class OperatorModeStateService extends Service {
         }
         if (item.url) {
           serializedStack.push({
-            id: item.url.href,
+            id: item.url,
             format: item.format,
           });
         }
@@ -515,24 +517,22 @@ export default class OperatorModeStateService extends Service {
     return stringify(this.rawStateWithSavedCardsOnly())!;
   }
 
-  async createStackItem(
-    url: URL,
+  createStackItem(
+    url: string,
     stackIndex: number,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
     let stackItem = new StackItem({
       url,
       stackIndex,
-      owner: this,
       format,
     });
-    await stackItem.ready();
     return stackItem;
   }
 
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
-  async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
+  deserialize(rawState: SerializedState): OperatorModeState {
     let openDirs = new TrackedMap<string, string[]>(
       Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
         realmURL,
@@ -562,16 +562,15 @@ export default class OperatorModeStateService extends Service {
         // cards at this layer and see if we can get rid of resource usage here
         // altogether. Please refactor as part of eliminating the
         // CardService.loaded promise.
-        let cardResource = getCard(this, () => item.id, {
-          isAutoSaved: true,
-        });
+        // let cardResource = getCard(this, () => item.id, {
+        //   isAutoSaved: true,
+        // });
         let stackItem = new StackItem({
-          owner: this, // ugh, not a great owner...
-          cardResource,
+          url: item.id,
           format,
           stackIndex,
         });
-        await stackItem.ready();
+        // await stackItem.ready();
         newStack.push(stackItem);
       }
       newState.stacks.push(newStack);
@@ -683,28 +682,24 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  async openCardInInteractMode(url: URL, format: Format = 'isolated') {
+  openCardInInteractMode(url: string, format: Format = 'isolated') {
     this.clearStacks();
     let newItem = new StackItem({
       url,
       stackIndex: 0,
-      owner: this, // We need to think for better owner
       format,
     });
-    await newItem.ready();
     this.addItemToStack(newItem);
     this.updateSubmode(Submodes.Interact);
   }
 
-  openWorkspace = restartableTask(async (realmUrl: string) => {
-    let url = new URL(`${realmUrl}index`);
+  openWorkspace = (realmUrl: string) => {
+    let url = `${realmUrl}index`;
     let stackItem = new StackItem({
-      owner: this,
       url,
       format: 'isolated',
       stackIndex: 0,
     });
-    await stackItem.ready();
     this.clearStacks();
     this.addItemToStack(stackItem);
 
@@ -714,11 +709,11 @@ export default class OperatorModeStateService extends Service {
     this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : url,
+        : new URL(url),
     );
 
     this.operatorModeController.workspaceChooserOpened = false;
-  });
+  };
 
   get workspaceChooserOpened() {
     return this.operatorModeController.workspaceChooserOpened;

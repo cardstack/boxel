@@ -21,7 +21,7 @@ interface CardPillSignature {
   Args: {
     card: CardDef;
     isAutoAttachedCard?: boolean;
-    removeCard?: (card: CardDef) => void;
+    removeCard?: (cardId: string) => void;
     onToggle?: () => void;
     isEnabled?: boolean;
   };
@@ -76,7 +76,7 @@ export default class CardPill extends Component<CardPillSignature> {
             @icon={{IconX}}
             @height='10'
             @width='10'
-            {{on 'click' (fn @removeCard @card)}}
+            {{on 'click' (fn @removeCard @card.id)}}
             data-test-remove-card-btn
           />
         {{/if}}

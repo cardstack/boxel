@@ -467,6 +467,14 @@ export default class StoreService extends Service {
     return this.autoSaveStates.get(card);
   }
 
+  async save(id: string) {
+    let card = this.identityContext.get(id);
+    if (!card) {
+      return;
+    }
+    await this.cardService.saveModel(card);
+  }
+
   private initiateAutoSaveTask = restartableTask(async (id: string) => {
     let card = this.identityContext.get(id);
     if (!card) {

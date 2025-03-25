@@ -2,6 +2,7 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import {
   restartableTask,
+  waitForProperty,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import {
@@ -150,7 +151,8 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
-    let chosenCard: CardDef | undefined = await chooseCard(
+    let chosenCardResource = await chooseCard(
+      this,
       { filter: { type } },
       {
         offerToCreate: {
@@ -162,8 +164,9 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
-    if (chosenCard) {
-      this.args.model.value = chosenCard;
+    if (chosenCardResource) {
+      await waitForProperty(chosenCardResource, 'card', (c) => !!c);
+      this.args.model.value = chosenCardResource.card;
     }
   });
 }

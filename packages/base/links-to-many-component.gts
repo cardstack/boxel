@@ -20,6 +20,7 @@ import {
 import { AddButton, IconButton, Pill } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
+  waitForProperty,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import {
@@ -106,7 +107,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let filter = {
       every: [{ type }, ...selectedCardsQuery],
     };
-    let chosenCard: CardDef | undefined = await chooseCard(
+    let chosenCardResource = await chooseCard(
+      this,
       { filter },
       {
         offerToCreate: {
@@ -119,8 +121,9 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
-    if (chosenCard) {
-      selectedCards = [...selectedCards, chosenCard];
+    if (chosenCardResource) {
+      await waitForProperty(chosenCardResource, 'card', (c) => !!c);
+      selectedCards = [...selectedCards, chosenCardResource.card];
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
     }
   });

@@ -5,6 +5,8 @@ import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import { TrackedObject } from 'tracked-built-ins';
 
+import { type getCard } from '@cardstack/runtime-common';
+
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -16,11 +18,11 @@ import type { Skill } from './index';
 export default class AiAssistantSkillMenuUsage extends Component {
   @tracked skills: Skill[] = [];
 
-  @action attachSkill(card: SkillCard) {
+  @action attachSkill(cardResource: ReturnType<getCard<SkillCard>>) {
     this.skills = [
       ...this.skills,
       new TrackedObject({
-        card,
+        cardResource,
         skillEventId: 'abc123',
         isActive: true,
       }),
@@ -36,6 +38,7 @@ export default class AiAssistantSkillMenuUsage extends Component {
       <:example>
         <AiAssistantSkillMenu
           @skills={{this.skills}}
+          @cardChoosingOwner={{this}}
           @onChooseCard={{this.attachSkill}}
         />
         <CardCatalogModal />

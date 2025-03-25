@@ -1,6 +1,6 @@
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, waitForProperty } from 'ember-concurrency';
 import {
   contains,
   field,
@@ -394,7 +394,8 @@ class Isolated extends Component<typeof CardsGrid> {
         ],
       };
     }
-    let card = await chooseCard<Spec>(
+    let specResource = await chooseCard<Spec>(
+      this,
       {
         filter: {
           on: specRef,
@@ -403,13 +404,20 @@ class Isolated extends Component<typeof CardsGrid> {
       },
       { preselectedCardTypeQuery },
     );
-    if (!card) {
+    if (!specResource?.url) {
       return;
     }
 
-    await this.args.context?.actions?.createCard?.(card.ref, new URL(card.id), {
-      realmURL: this.args.model[realmURL],
-    });
+    await waitForProperty(specResource, 'card', (c) => !!c);
+
+    await this.args.context?.actions?.createCard?.(
+      this,
+      specResource.card!.ref,
+      new URL(specResource.url),
+      {
+        realmURL: this.args.model[realmURL],
+      },
+    );
   });
 
   private loadFilterList = restartableTask(async () => {

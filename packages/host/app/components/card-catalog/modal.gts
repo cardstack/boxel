@@ -22,6 +22,7 @@ import {
   type CodeRef,
   type CreateNewCard,
   type getCards,
+  type getCard,
   createNewCard,
   baseRealm,
   Deferred,
@@ -29,6 +30,7 @@ import {
   RealmInfo,
   CardCatalogQuery,
   isCardInstance,
+  GetCardContextName,
   GetCardsContextName,
 } from '@cardstack/runtime-common';
 
@@ -66,14 +68,16 @@ import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
 import type RealmServerService from '../../services/realm-server';
+import type StoreService from '../../services/store';
 
 interface Signature {
   Args: {};
 }
 
 type Request = {
+  owner: object;
   search: ReturnType<getCards>;
-  deferred: Deferred<CardDef | undefined>;
+  deferred: Deferred<ReturnType<getCard> | undefined>;
   opts?: {
     offerToCreate?: {
       ref: CodeRef;
@@ -232,6 +236,7 @@ export default class CardCatalogModal extends Component<Signature> {
     </style>
   </template>
 
+  @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
 
   private stateStack: State[] = new TrackedArray<State>();
@@ -241,6 +246,7 @@ export default class CardCatalogModal extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realmServer: RealmServerService;
   @service private declare realm: RealmService;
+  @service private declare store: StoreService;
 
   constructor(owner: Owner, args: {}) {
     super(owner, args);
@@ -307,6 +313,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
   // This is part of our public API for runtime-common to invoke the card chooser
   async chooseCard<T extends CardDef>(
+    owner: object,
     query: CardCatalogQuery,
     opts?: {
       offerToCreate?: {
@@ -319,8 +326,9 @@ export default class CardCatalogModal extends Component<Signature> {
       preselectedCardTypeQuery?: Query;
       consumingRealm?: URL;
     },
-  ): Promise<undefined | T> {
+  ): Promise<undefined | ReturnType<getCard<T>>> {
     return (await this._chooseCard.perform(
+      owner,
       {
         // default to title sort so that we can maintain stability in
         // the ordering of the search results (server sorts results
@@ -337,11 +345,12 @@ export default class CardCatalogModal extends Component<Signature> {
         ...query,
       },
       opts,
-    )) as T | undefined;
+    )) as undefined | ReturnType<getCard<T>>;
   }
 
   private _chooseCard = task(
     async <T extends CardDef>(
+      owner: object,
       query: CardCatalogQuery,
       opts: {
         offerToCreate?: {
@@ -361,6 +370,7 @@ export default class CardCatalogModal extends Component<Signature> {
         opts?.multiSelect,
       );
       let request = new TrackedObject<Request>({
+        owner,
         search: this.getCards(this, () => query),
         deferred: new Deferred(),
         opts,
@@ -399,9 +409,9 @@ export default class CardCatalogModal extends Component<Signature> {
       });
       this.stateStack.push(cardCatalogState);
 
-      let card = await request.deferred.promise;
-      if (card) {
-        return card as T;
+      let cardResource = await request.deferred.promise;
+      if (cardResource) {
+        return cardResource as ReturnType<getCard<T>>;
       } else {
         return undefined;
       }
@@ -536,40 +546,33 @@ export default class CardCatalogModal extends Component<Signature> {
       if (!this.state) {
         return;
       }
-      let card: CardDef | undefined;
+      let cardResource: ReturnType<getCard> | undefined;
       if (selectedItem) {
-        let realmOfSelectedCard: string | undefined;
         let newCard: NewCardArgs | undefined;
         if (isCardInstance(selectedItem)) {
-          card = selectedItem;
-          realmOfSelectedCard = (await this.cardService.getRealmURL(card))
-            ?.href;
+          cardResource = this.getCard(
+            this.state.request.owner,
+            () => selectedItem.id,
+          );
         } else if (typeof selectedItem === 'string') {
-          // WARNING This card is not part of the identity map!
-          // TODO refactor this to use CardResource (please make ticket)
-          card = await this.cardService.getCard(selectedItem);
-          realmOfSelectedCard = (
-            card ? await this.cardService.getRealmURL(card) : undefined
-          )?.href;
+          cardResource = this.getCard(
+            this.state.request.owner,
+            () => selectedItem,
+          );
         } else {
-          realmOfSelectedCard = selectedItem.realmURL;
           newCard = selectedItem;
         }
-        if (!realmOfSelectedCard) {
-          throw new Error(
-            `could not determine realm of selected card ${card?.id}`,
-          );
-        }
 
-        if (this.state.consumingRealm) {
+        if (this.state.consumingRealm && cardResource?.url) {
           await this.ensureRealmReadPermissions.perform(
             this.state.consumingRealm.href,
-            realmOfSelectedCard,
+            cardResource.url,
           );
         }
 
         if (newCard) {
-          card = await this.createNewTask.perform(
+          cardResource = this.createNew(
+            this.state.request.owner,
             newCard.ref,
             newCard.relativeTo ? new URL(newCard.relativeTo) : undefined,
             new URL(newCard.realmURL),
@@ -579,7 +582,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
       let request = state ? state.request : this.state.request;
       if (request) {
-        request.deferred.fulfill(card);
+        request.deferred.fulfill(cardResource);
       }
 
       // In the 'createNewCard' case, auto-save doesn't follow any specific order,
@@ -595,9 +598,18 @@ export default class CardCatalogModal extends Component<Signature> {
   );
 
   private ensureRealmReadPermissions = restartableTask(
-    async (realmOfConsumer: string, realmOfSelectedCard: string) => {
+    async (realmOfConsumer: string, cardId: string) => {
       if (!this.state) {
         return;
+      }
+      let maybeCard = await this.store.getInstanceDetachedFromStore(cardId);
+      if (!isCardInstance(maybeCard)) {
+        return;
+      }
+      let realmOfSelectedCard = (await this.cardService.getRealmURL(maybeCard))
+        ?.href;
+      if (!realmOfSelectedCard) {
+        throw new Error(`could not determine realm of selected card ${cardId}`);
       }
       if (realmOfConsumer !== realmOfSelectedCard) {
         await this.realm.ensureRealmMeta(realmOfConsumer);
@@ -646,32 +658,32 @@ export default class CardCatalogModal extends Component<Signature> {
     this.pickCard.perform(item, state);
   }
 
-  private createNewTask = task(
-    async (
-      ref: CodeRef,
-      relativeTo: URL | undefined /* this should be the spec ID */,
-      realmURL: URL | undefined,
-    ) => {
-      if (!this.state) {
-        return;
-      }
-      let newCard;
-      this.state.dismissModal = true;
-      if (this.state.request.opts?.createNewCard) {
-        newCard = await this.state.request.opts?.createNewCard(
-          ref,
-          relativeTo,
-          {
-            isLinkedCard: true,
-            realmURL,
-          },
-        );
-      } else {
-        newCard = await createNewCard(ref, relativeTo, { realmURL });
-      }
-      return newCard;
-    },
-  );
+  private createNew = (
+    owner: object,
+    ref: CodeRef,
+    relativeTo: URL | undefined /* this should be the spec ID */,
+    realmURL: URL | undefined,
+  ) => {
+    if (!this.state) {
+      return;
+    }
+    let newCardResource: ReturnType<getCard>;
+    this.state.dismissModal = true;
+    if (this.state.request.opts?.createNewCard) {
+      newCardResource = this.state.request.opts?.createNewCard(
+        owner,
+        ref,
+        relativeTo,
+        {
+          isLinkedCard: true,
+          realmURL,
+        },
+      );
+    } else {
+      newCardResource = createNewCard(owner, ref, relativeTo, { realmURL });
+    }
+    return newCardResource;
+  };
 }
 
 async function chooseCardTitle(

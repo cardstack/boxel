@@ -147,7 +147,7 @@ export default class MatrixService extends Service {
 
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
-  cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+  cardsToSend: TrackedMap<string, string[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
   reasoningExpandedState: TrackedMap<string, boolean> = new TrackedMap();

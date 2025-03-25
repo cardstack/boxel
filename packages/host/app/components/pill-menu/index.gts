@@ -13,15 +13,14 @@ import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
   baseCardRef,
+  type getCard,
   type CardCatalogQuery,
 } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 export type PillMenuItem = {
-  card: CardDef;
+  cardResource: ReturnType<getCard>;
   isActive: boolean;
 };
 
@@ -32,10 +31,11 @@ interface Signature {
     items: PillMenuItem[];
     itemDisplayName?: string;
     isExpandableHeader?: boolean;
+    cardChoosingOwner: object;
     headerAction?: () => void;
     canAttachCard?: boolean;
     query?: CardCatalogQuery;
-    onChooseCard?: (card: CardDef) => void;
+    onChooseCard?: (cardResource: ReturnType<getCard>) => void;
     onChangeItemIsActive: (item: PillMenuItem, isActive: boolean) => void;
   };
   Blocks: {
@@ -86,12 +86,14 @@ export default class PillMenu extends Component<Signature> {
               <ul class='pill-list'>
                 {{#each @items as |item|}}
                   <li>
-                    <CardPill
-                      @card={{item.card}}
-                      @onToggle={{fn this.toggleActive item}}
-                      @isEnabled={{item.isActive}}
-                      data-test-pill-menu-item={{item.card.id}}
-                    />
+                    {{#if item.cardResource.card}}
+                      <CardPill
+                        @card={{item.cardResource.card}}
+                        @onToggle={{fn this.toggleActive item}}
+                        @isEnabled={{item.isActive}}
+                        data-test-pill-menu-item={{item.cardResource.url}}
+                      />
+                    {{/if}}
                   </li>
                 {{/each}}
               </ul>
@@ -243,9 +245,9 @@ export default class PillMenu extends Component<Signature> {
 
   private doAttachCard = restartableTask(async () => {
     let query = this.args.query ?? { filter: { type: baseCardRef } };
-    let card: CardDef | undefined = await chooseCard(query);
-    if (card) {
-      this.args.onChooseCard?.(card);
+    let cardResource = await chooseCard(this.args.cardChoosingOwner, query);
+    if (cardResource) {
+      this.args.onChooseCard?.(cardResource);
     }
   });
 }

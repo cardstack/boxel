@@ -83,7 +83,7 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
       let operatorModeStateService = this.owner.lookup(
         'service:operator-mode-state-service',
       ) as OperatorModeStateService;
-      await operatorModeStateService.restore({
+      operatorModeStateService.restore({
         stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
       });
       await waitFor('[data-test-stack-item-content]');

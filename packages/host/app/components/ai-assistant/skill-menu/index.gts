@@ -2,15 +2,14 @@ import Component from '@glimmer/component';
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { skillCardRef } from '@cardstack/runtime-common';
+import { skillCardRef, type getCard } from '@cardstack/runtime-common';
 
 import PillMenu, { PillMenuItem } from '@cardstack/host/components/pill-menu';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 export type Skill = {
-  card: SkillCard;
+  cardResource: ReturnType<getCard<SkillCard>>;
   skillEventId: string;
   isActive: boolean;
 };
@@ -19,7 +18,8 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     skills: Skill[];
-    onChooseCard?: (card: SkillCard) => void;
+    cardChoosingOwner: object;
+    onChooseCard?: (cardResource: ReturnType<getCard<SkillCard>>) => void;
     onUpdateSkillIsActive?: (skillEventId: string, isActive: boolean) => void;
   };
 }
@@ -33,6 +33,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
       @itemDisplayName='Skill'
       @isExpandableHeader={{true}}
       @canAttachCard={{true}}
+      @cardChoosingOwner={{@cardChoosingOwner}}
       @onChooseCard={{this.attachSkill}}
       @onChangeItemIsActive={{this.updateItemIsActive}}
       tabindex='0'
@@ -94,7 +95,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   private get query() {
     let selectedCardIds =
       this.args.skills?.map((skill: Skill) => ({
-        not: { eq: { id: skill.card.id } },
+        not: { eq: { id: skill.cardResource.url! } }, // only unsaved cards have undefined url
       })) ?? [];
     // query for only displaying skill cards that are not already selected
     return {
@@ -108,8 +109,10 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     return this.args.skills?.filter((skill) => skill.isActive) ?? [];
   }
 
-  attachSkill = (card: CardDef) => {
-    this.args.onChooseCard?.(card as SkillCard);
+  attachSkill = (skillCardResource: ReturnType<getCard>) => {
+    this.args.onChooseCard?.(
+      skillCardResource as ReturnType<getCard<SkillCard>>,
+    );
   };
 
   updateItemIsActive = (item: PillMenuItem, isActive: boolean) => {

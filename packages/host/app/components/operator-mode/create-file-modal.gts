@@ -7,7 +7,11 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import camelCase from 'camelcase';
-import { restartableTask, enqueueTask } from 'ember-concurrency';
+import {
+  restartableTask,
+  enqueueTask,
+  waitForProperty,
+} from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
@@ -77,6 +81,7 @@ export interface FileType {
 
 interface Signature {
   Args: {
+    owner: object;
     onCreate: (instance: CreateFileModal) => void;
   };
 }
@@ -130,10 +135,10 @@ export default class CreateFileModal extends Component<Signature> {
                           @id={{this.definitionClass.ref.module}}
                         />
                       {{else}}
-                        {{#if this.selectedSpec}}
+                        {{#if this.selectedSpecResource.card}}
                           <SelectedTypePill
-                            @title={{this.selectedSpec.title}}
-                            @id={{this.selectedSpec.id}}
+                            @title={{this.selectedSpecResource.card.title}}
+                            @id={{this.selectedSpecResource.card.id}}
                           />
                         {{/if}}
                         <Button
@@ -143,7 +148,7 @@ export default class CreateFileModal extends Component<Signature> {
                           {{on 'click' (perform this.chooseType)}}
                           data-test-select-card-type
                         >
-                          {{if this.selectedSpec 'Change' 'Select'}}
+                          {{if this.selectedSpecResource 'Change' 'Select'}}
                         </Button>
                       {{/if}}
                     </div>
@@ -332,7 +337,7 @@ export default class CreateFileModal extends Component<Signature> {
   @service private declare network: NetworkService;
 
   @tracked private defaultSpecResource: ReturnType<getCard<Spec>> | undefined;
-  @tracked private chosenSpec: Spec | undefined;
+  @tracked private chosenSpecResource: ReturnType<getCard<Spec>> | undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
   @tracked private hasUserEditedFileName = false;
@@ -394,8 +399,8 @@ export default class CreateFileModal extends Component<Signature> {
       : Boolean(this.defaultSpecResource?.isLoaded);
   }
 
-  private get selectedSpec() {
-    return this.chosenSpec || this.defaultSpecResource?.card;
+  private get selectedSpecResource() {
+    return this.chosenSpecResource || this.defaultSpecResource;
   }
 
   private makeCreateFileRequst = enqueueTask(
@@ -437,7 +442,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private clearState() {
     this.defaultSpecResource = undefined;
-    this.chosenSpec = undefined;
+    this.chosenSpecResource = undefined;
     this.currentRequest = undefined;
     this.fileNameError = undefined;
     this.displayName = '';
@@ -530,7 +535,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateCardInstanceButtonDisabled() {
     return (
-      (!this.selectedSpec && !this.definitionClass) ||
+      (!this.selectedSpecResource && !this.definitionClass) ||
       !this.selectedRealmURL ||
       this.createCardInstance.isRunning
     );
@@ -542,7 +547,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateDefinitionButtonDisabled() {
     return (
-      (!this.selectedSpec && !this.definitionClass) ||
+      (!this.selectedSpecResource && !this.definitionClass) ||
       !this.selectedRealmURL ||
       !this.fileName ||
       !this.displayName ||
@@ -558,10 +563,9 @@ export default class CreateFileModal extends Component<Signature> {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
 
-    this.chosenSpec = await chooseCard({
+    this.chosenSpecResource = await chooseCard(this, {
       filter: {
         on: specRef,
-        // REMEMBER ME
         every: [{ eq: { specType: isField ? 'field' : 'card' } }],
       },
     });
@@ -579,7 +583,7 @@ export default class CreateFileModal extends Component<Signature> {
         `bug: cannot call createDefinition without a selected realm URL`,
       );
     }
-    if (!this.selectedSpec && !this.definitionClass) {
+    if (!this.selectedSpecResource && !this.definitionClass) {
       throw new Error(
         `bug: cannot call createDefinition without a selected spec or definitionClass `,
       );
@@ -615,11 +619,15 @@ export default class CreateFileModal extends Component<Signature> {
       // we expect a 404 here
     }
 
+    if (this.selectedSpecResource) {
+      await waitForProperty(this.selectedSpecResource, 'card', (c) => !!c);
+    }
+
     let {
       ref: { name: exportName, module },
-    } = (this.definitionClass ?? this.selectedSpec)!; // we just checked above to make sure one of these exists
+    } = (this.definitionClass ?? this.selectedSpecResource?.card)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    let absoluteModule = new URL(module, this.selectedSpec?.id);
+    let absoluteModule = new URL(module, this.selectedSpecResource?.url);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
@@ -729,8 +737,12 @@ export class ${className} extends ${exportName} {
         `Cannot createCardInstance when there is no this.currentRequest`,
       );
     }
+    if (this.selectedSpecResource) {
+      await waitForProperty(this.selectedSpecResource, 'card', (c) => !!c);
+    }
+
     if (
-      (!this.selectedSpec?.ref && !this.definitionClass) ||
+      (!this.selectedSpecResource?.card?.ref && !this.definitionClass) ||
       !this.selectedRealmURL
     ) {
       throw new Error(
@@ -739,11 +751,13 @@ export class ${className} extends ${exportName} {
     }
 
     let { ref } = (
-      this.definitionClass ? this.definitionClass : this.selectedSpec
+      this.definitionClass
+        ? this.definitionClass
+        : this.selectedSpecResource?.card
     )!; // we just checked above to make sure one of these exist
 
-    let relativeTo = this.selectedSpec
-      ? new URL(this.selectedSpec.id)
+    let relativeTo = this.selectedSpecResource
+      ? new URL(this.selectedSpecResource.url!) // only new cards are missing urls
       : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
