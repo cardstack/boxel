@@ -228,8 +228,6 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
     }
     .instance-chooser {
       height: 26px;
-      min-width: 270px;
-      max-width: 100%;
       border: 1px solid var(--boxel-dark);
       outline: none;
     }

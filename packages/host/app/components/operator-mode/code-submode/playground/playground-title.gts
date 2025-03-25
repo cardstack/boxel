@@ -96,10 +96,12 @@ export default class PlaygroundTitle extends Component<Signature> {
         background: none;
         border: none;
         cursor: auto;
-        width: 271px;
+        max-width: 271px;
+        flex: 1;
+        padding: 0;
       }
       .instance-chooser-container > :deep(.ember-basic-dropdown) {
-        max-width: 100%;
+        width: 100%;
       }
     </style>
   </template>
