@@ -89,7 +89,8 @@ export default class PlaygroundTitle extends Component<Signature> {
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        gap: var(--boxel-sp-xxl);
+        min-width: 0;
+        gap: var(--boxel-sp);
       }
       .instance-chooser-container {
         display: flex;
@@ -98,6 +99,7 @@ export default class PlaygroundTitle extends Component<Signature> {
         border: none;
         cursor: auto;
         max-width: 271px;
+        min-width: 45px;
         flex: 1;
         padding: 0;
       }
