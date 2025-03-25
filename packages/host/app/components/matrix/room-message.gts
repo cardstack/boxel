@@ -9,6 +9,8 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { consume } from 'ember-provide-consume-context';
 
+import { trackedFunction } from 'ember-resources/util/function';
+
 import { Avatar } from '@cardstack/boxel-ui/components';
 
 import { bool } from '@cardstack/boxel-ui/helpers';
@@ -59,7 +61,9 @@ const STREAMING_TIMEOUT_MS = 60000;
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @tracked private streamingTimeout = false;
-  @tracked private attachedCardResources: ReturnType<getCard>[] | undefined;
+  @tracked private attachedCardCollectionResource:
+    | { value: ReturnType<getCard>[] | null }
+    | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -68,10 +72,16 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private makeCardResources = () => {
-    this.attachedCardResources = (this.message.attachedCardIds ?? []).map(
-      (id) => this.getCard(this, () => id),
+    this.attachedCardCollectionResource = trackedFunction(this, () =>
+      (this.message.attachedCardIds ?? []).map((id) =>
+        this.getCard(this, () => id),
+      ),
     );
   };
+
+  private get attachedCardResources() {
+    return this.attachedCardCollectionResource?.value ?? [];
+  }
 
   private get message() {
     return this.args.roomResource.messages[this.args.index];
