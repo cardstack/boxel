@@ -8,12 +8,12 @@ interface CardSectionArgs {
   Element: HTMLElement;
 }
 
-export default class CardSection extends GlimmerComponent<CardSectionArgs> {
+export default class CardsDisplaySection extends GlimmerComponent<CardSectionArgs> {
   <template>
     {{! TODO: Modify this section once we got the real data or query }}
     {{! TODO: Now we using grid layout for cards }}
     {{! TODO: Remember all card display will be fitted format }}
-    <section class='card-section' ...attributes>
+    <section class='cards-display-section' ...attributes>
       <h2>{{@title}}</h2>
       <ul class='cards'>
         {{#each @cards as |card|}}
@@ -25,7 +25,7 @@ export default class CardSection extends GlimmerComponent<CardSectionArgs> {
     </section>
     <style scoped>
       @layer {
-        .card-section {
+        .cards-display-section {
           --grid-card-min-width: 10.625rem; /* 170px */
           --grid-card-max-width: 10.625rem; /* 170px */
           --grid-card-height: 10.625rem; /* 170px */
