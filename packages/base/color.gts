@@ -1,4 +1,4 @@
-import { Component, StringField } from 'https://cardstack.com/base/card-api';
+import { Component, StringField } from './card-api';
 import { ColorPalette } from '@cardstack/boxel-ui/components';
 import { ColorPicker } from '@cardstack/boxel-ui/components';
 

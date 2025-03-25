@@ -40,13 +40,13 @@ jobs:
             exit 1;
           fi
 
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
-
       - name: Build boxel-icons
         run: pnpm build
         working-directory: packages/boxel-icons
+
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
 
       - name: Build host
         run: pnpm deploy:boxel-host build-only --verbose

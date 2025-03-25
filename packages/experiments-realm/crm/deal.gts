@@ -15,8 +15,11 @@ import {
 import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
 import MarkdownField from 'https://cardstack.com/base/markdown';
+import { Address as AddressField } from 'https://cardstack.com/base/address';
+import { WebsiteField } from 'https://cardstack.com/base/website';
+import { PercentageField } from 'https://cardstack.com/base/percentage';
 
-import { type Query } from '@cardstack/runtime-common';
+import { Query } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
@@ -31,15 +34,11 @@ import { DealEvent } from './deal-event';
 import { DealPriority } from './deal-priority';
 import { DealStatus } from './deal-status';
 
-import { Address as AddressField } from '../fields/address';
 import { AmountWithCurrency as AmountWithCurrencyField } from '../fields/amount-with-currency';
-import { PercentageField } from '../fields/percentage';
-import { WebsiteField } from '../fields/website';
 
 import AccountHeader from '../components/account-header';
 import { ContactRow } from '../components/contact-row';
 import CrmProgressBar from '../components/crm-progress-bar';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
 import PageLayout from '../components/page-layout';
 import SummaryCard from '../components/summary-card';
 import SummaryGridContainer from '../components/summary-grid-container';
@@ -49,6 +48,7 @@ import {
   FieldContainer,
   Pill,
   SkeletonPlaceholder,
+  EntityDisplayWithIcon,
 } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 

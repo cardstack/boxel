@@ -1357,7 +1357,6 @@ test('Return host result of tool call back to open ai', async () => {
         clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
-          attachedSkillEventIds: ['attached-skill-event-id-1'],
           context: {
             openCardIds: ['http://localhost:4201/drafts/Author/1'],
             tools: [
@@ -1497,7 +1496,6 @@ test('Return host result of tool call back to open ai', async () => {
         clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
-          attachedSkillEventIds: ['attached-skill-event-id-1'],
           context: {
             openCardIds: ['http://localhost:4201/drafts/Author/1'],
             tools: [

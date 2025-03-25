@@ -9,7 +9,7 @@ import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/modifiers/consume-context';
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 
 import type { FieldDef } from 'https://cardstack.com/base/card-api';
 
@@ -49,7 +49,8 @@ export default class PlaygroundTitle extends Component<Signature> {
   }
 
   <template>
-    <div class='playground-title' {{consumeContext consume=@makeCardResource}}>
+    {{consumeContext @makeCardResource}}
+    <div class='playground-title'>
       <span>Playground</span>
       <button
         class='instance-chooser-container'

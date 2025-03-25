@@ -6,12 +6,12 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
+import { ColorField } from 'https://cardstack.com/base/color';
 
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 
-import { ColorField } from '../fields/color';
 import { StatusPill } from '../components/status-pill';
 
 import ClockExclamation from '@cardstack/boxel-icons/clock-exclamation';
