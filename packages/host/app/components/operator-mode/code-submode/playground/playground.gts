@@ -17,11 +17,7 @@ import PlaygroundTitle from './playground-title';
 
 import type { WithBoundArgs } from '@glint/template';
 
-const DefaultTitle: TemplateOnlyComponent = <template>
-  <span class='playground-title'>
-    Playground
-  </span>
-</template>;
+const DefaultTitle: TemplateOnlyComponent = <template>Playground</template>;
 
 interface UnsupportedMessageSignature {
   Args: {

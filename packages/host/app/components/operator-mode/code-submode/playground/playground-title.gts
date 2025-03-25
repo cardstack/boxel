@@ -50,24 +50,22 @@ export default class PlaygroundTitle extends Component<Signature> {
 
   <template>
     {{consumeContext @makeCardResource}}
-    <div class='playground-title'>
-      <span>Playground</span>
-      <button
-        class='instance-chooser-container'
-        {{on 'click' this.handleClick}}
-        {{on 'mouseup' this.handleClick}}
-      >
-        <InstanceSelectDropdown
-          @prerenderedCardQuery={{hash query=@query realms=@recentRealms}}
-          @fieldOptions={{@fieldOptions}}
-          @selection={{@selection}}
-          @onSelect={{@onSelect}}
-          @chooseCard={{@chooseCard}}
-          @createNew={{if @canWriteRealm @createNew}}
-          @createNewIsRunning={{@createNewIsRunning}}
-        />
-      </button>
-    </div>
+    Playground
+    <button
+      class='instance-chooser-container'
+      {{on 'click' this.handleClick}}
+      {{on 'mouseup' this.handleClick}}
+    >
+      <InstanceSelectDropdown
+        @prerenderedCardQuery={{hash query=@query realms=@recentRealms}}
+        @fieldOptions={{@fieldOptions}}
+        @selection={{@selection}}
+        @onSelect={{@onSelect}}
+        @chooseCard={{@chooseCard}}
+        @createNew={{if @canWriteRealm @createNew}}
+        @createNewIsRunning={{@createNewIsRunning}}
+      />
+    </button>
 
     {{#if @fieldChooserIsOpen}}
       <ToElsewhere
@@ -84,25 +82,14 @@ export default class PlaygroundTitle extends Component<Signature> {
     {{/if}}
 
     <style scoped>
-      .playground-title {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        flex-wrap: nowrap;
-        width: 100%;
-        min-width: 0;
-        gap: var(--boxel-sp);
-      }
       .instance-chooser-container {
-        display: flex;
-        justify-content: end;
         background: none;
         border: none;
         cursor: auto;
         max-width: 271px;
         min-width: 45px;
-        flex: 1;
         padding: 0;
+        margin-left: auto;
       }
       .instance-chooser-container > :deep(.ember-basic-dropdown) {
         width: 100%;
