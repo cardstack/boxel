@@ -14,13 +14,44 @@ import { isCardInstance } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 
 import FilterSection from './components/filter-section';
-import CardSection from './components/card-section';
+import CardsDisplaySection from './components/cards-display-section';
 import ContentContainer from './components/content-container';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
-import TopBarFilter, { type FilterOption } from './components/top-bar-filter';
+import { TabbedHeader } from '@cardstack/boxel-ui/components';
 
 class Isolated extends Component<typeof Catalog> {
+  mockShowcaseCards = [
+    {
+      name: 'Blog Post App',
+    },
+    {
+      name: 'Black Jack',
+    },
+  ];
+
+  mockNewToThisWeekCards = [
+    {
+      name: 'Basic CV',
+    },
+    {
+      name: 'Daily Feed',
+    },
+    { name: 'Card 3' },
+    { name: 'Card 4' },
+    { name: 'Card 5' },
+    { name: 'Card 6' },
+    { name: 'Card 7' },
+    { name: 'Card 8' },
+  ];
+  mockFeaturedCards = [
+    {
+      name: 'Sprint Tracker',
+    },
+    {
+      name: 'Todo List',
+    },
+  ];
   mockCards = [
     { name: 'Card 1' },
     { name: 'Card 2' },
@@ -28,28 +59,47 @@ class Isolated extends Component<typeof Catalog> {
     { name: 'Card 4' },
   ];
 
-  specFilterOptions: FilterOption[] = [
-    { id: 'all', displayName: 'All' },
-    { id: 'apps', displayName: 'Apps' },
-    { id: 'cards', displayName: 'Cards' },
-    { id: 'fields', displayName: 'Fields' },
-    { id: 'skills', displayName: 'Skills' },
+  tabFilterOptions = [
+    {
+      tabId: 'showcase',
+      displayName: 'Showcase',
+    },
+    {
+      tabId: 'apps',
+      displayName: 'Apps',
+    },
+    {
+      tabId: 'cards',
+      displayName: 'Cards',
+    },
+    {
+      tabId: 'fields',
+      displayName: 'Fields',
+    },
+    {
+      tabId: 'skills',
+      displayName: 'Skills',
+    },
   ];
 
-  @tracked activeSpecFilterId: string = this.specFilterOptions[0].id;
+  @tracked activeTabId: string = this.tabFilterOptions[0].tabId;
 
   @action
-  handleSpecFilterChanged(filterId: string) {
-    this.activeSpecFilterId = filterId;
+  setActiveTab(tabId: string) {
+    this.activeTabId = tabId;
   }
 
-  get shouldShowSection() {
-    return (sectionId: string) => {
-      if (this.activeSpecFilterId === 'all') {
-        return true;
-      }
-      return this.activeSpecFilterId === sectionId.toLowerCase();
+  get shouldShowTab() {
+    return (tabId: string) => {
+      return this.activeTabId === tabId;
     };
+  }
+
+  get headerColor() {
+    return (
+      Object.getPrototypeOf(this.args.model).constructor.headerColor ??
+      undefined
+    );
   }
 
   // TODO: Remove this after testing
@@ -62,8 +112,18 @@ class Isolated extends Component<typeof Catalog> {
   }
 
   <template>
+    <TabbedHeader
+      @tabs={{this.tabFilterOptions}}
+      @setActiveTab={{this.setActiveTab}}
+      @activeTabId={{this.activeTabId}}
+      @headerBackgroundColor={{this.headerColor}}
+      class='catalog-tab-header'
+    />
+
+    {{! Todo: Create a standalone Catalog Layout if needed }}
     <div class='catalog-layout'>
       <button {{on 'click' this.goToGrid}}> Go to Grid </button>
+
       <section class='main-content'>
         <div class='sidebar'>
           {{! TODO: Add FilterSection component here }}
@@ -74,30 +134,78 @@ class Isolated extends Component<typeof Catalog> {
         <div class='content-area-container'>
           <div class='content-area'>
             {{! Column 1: Card Listing Section }}
-            {{! TODO: We need to have a single listing display at here after click one of card}}
             <div class='catalog-content'>
-              <TopBarFilter
-                @filters={{this.specFilterOptions}}
-                @activeFilterId={{this.activeSpecFilterId}}
-                @onChange={{this.handleSpecFilterChanged}}
-                class='catalog-filter-bar'
-              />
-
               <ContentContainer class='catalog-listing'>
-                {{#if (this.shouldShowSection 'apps')}}
-                  <CardSection @title='Apps' @cards={{this.mockCards}} />
+                {{#if (this.shouldShowTab 'showcase')}}
+                  <CardsDisplaySection
+                    @cards={{this.mockShowcaseCards}}
+                    class='showcase-cards-display'
+                  >
+                    <:intro>
+                      <div class='intro-title'>
+                        <h2>Start Here</h2>
+                        <p>The starter stack — Install these first</p>
+                      </div>
+                      <p>These are the foundational tools we think every builder
+                        should have. Whether you’re just exploring or setting up
+                        your workspace for serious work, start with these
+                        must-haves.</p>
+                    </:intro>
+                  </CardsDisplaySection>
+
+                  <CardsDisplaySection @cards={{this.mockNewToThisWeekCards}}>
+                    <:intro>
+                      <div class='intro-title'>
+                        <h2>New this Week</h2>
+                        <p>Hand-picked by our editors — What’s buzzing right now</p>
+                      </div>
+                      <p>These new entries have caught the community’s eye,
+                        whether for creative flair, clever utility, or just
+                        plain polish.</p>
+                    </:intro>
+                  </CardsDisplaySection>
+
+                  <CardsDisplaySection
+                    @cards={{this.mockFeaturedCards}}
+                    class='featured-cards-display'
+                  >
+                    <:intro>
+                      <div class='intro-title'>
+                        <h2>Feature Collection</h2>
+                        <p>:Personal Organization</p>
+                      </div>
+                      <p>A hand-picked duo of focused, flexible tools for
+                        personal</p>
+                    </:intro>
+                  </CardsDisplaySection>
                 {{/if}}
 
-                {{#if (this.shouldShowSection 'cards')}}
-                  <CardSection @title='Cards' @cards={{this.mockCards}} />
+                {{#if (this.shouldShowTab 'apps')}}
+                  <CardsDisplaySection
+                    @title='Apps'
+                    @cards={{this.mockCards}}
+                  />
                 {{/if}}
 
-                {{#if (this.shouldShowSection 'fields')}}
-                  <CardSection @title='Fields' @cards={{this.mockCards}} />
+                {{#if (this.shouldShowTab 'cards')}}
+                  <CardsDisplaySection
+                    @title='Cards'
+                    @cards={{this.mockCards}}
+                  />
                 {{/if}}
 
-                {{#if (this.shouldShowSection 'skills')}}
-                  <CardSection @title='Skills' @cards={{this.mockCards}} />
+                {{#if (this.shouldShowTab 'fields')}}
+                  <CardsDisplaySection
+                    @title='Fields'
+                    @cards={{this.mockCards}}
+                  />
+                {{/if}}
+
+                {{#if (this.shouldShowTab 'skills')}}
+                  <CardsDisplaySection
+                    @title='Skills'
+                    @cards={{this.mockCards}}
+                  />
                 {{/if}}
               </ContentContainer>
             </div>
@@ -121,6 +229,9 @@ class Isolated extends Component<typeof Catalog> {
     <style scoped>
       :global(:root) {
         --catalog-layout-padding-top: var(--boxel-sp-lg);
+      }
+      .catalog-tab-header :deep(.app-title-group) {
+        display: none;
       }
       .catalog-layout {
         height: 100%;
@@ -175,6 +286,28 @@ class Isolated extends Component<typeof Catalog> {
         flex-direction: column;
         gap: var(--boxel-sp-lg);
       }
+
+      /* Mock data display */
+      .showcase-cards-display :deep(.cards),
+      .featured-cards-display :deep(.cards) {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      h2,
+      p {
+        margin-block: 0;
+        margin-bottom: var(--boxel-sp);
+      }
+      .intro-title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .intro-title p {
+        font-style: italic;
+      }
+      /* End of Mock data display */
 
       .related-card-listing {
         display: flex;
