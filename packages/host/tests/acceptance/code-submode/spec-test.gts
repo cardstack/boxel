@@ -136,6 +136,24 @@ const newSkillCardSource = `
   }
 `;
 
+const primitiveFieldCardSource = `
+  import {
+    field,
+    Component,
+    FieldDef,
+    primitive,
+  } from 'https://cardstack.com/base/card-api';
+
+   export class PrimitiveField extends FieldDef {
+    static displayName = 'PrimitiveField';
+    static [primitive]: number 
+   }
+
+   export class SubclassPrimitiveField extends PrimitiveField {
+    static displayName = 'SubclassPrimitiveField';
+   }
+`;
+
 const polymorphicFieldCardSource = `
   import {
     Component,
@@ -250,6 +268,7 @@ module('Acceptance | Spec preview', function (hooks) {
         'pet.gts': petCardSource,
         'employee.gts': employeeCardSource,
         'new-skill.gts': newSkillCardSource,
+        'primitive-field.gts': primitiveFieldCardSource,
         'polymorphic-field.gts': polymorphicFieldCardSource,
         'person-entry.json': {
           data: {
@@ -469,6 +488,46 @@ module('Acceptance | Spec preview', function (hooks) {
               ref: {
                 module: `./person`,
                 name: 'DifferentField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'primitve-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'PrimitiveField',
+              description: 'Spec for PrimitiveField',
+              specType: 'field',
+              ref: {
+                module: `./primitive-field`,
+                name: 'PrimitiveField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'subclass-primitive-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'SubclassPrimitiveField',
+              description: 'Spec for SubclassPrimitiveField',
+              specType: 'field',
+              ref: {
+                module: `./primitive-field`,
+                name: 'SubclassPrimitiveField',
               },
             },
             meta: {
@@ -799,6 +858,19 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-edit]').exists({ count: 1 });
     assert.dom('[data-test-item="0"] [data-test-edit]').containsText('Edit');
     await percySnapshot(assert);
+  });
+
+  test('primitive fields do not have examples', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}primitive-field.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-spec-example-incompatible-primitives]').exists();
+    await click(
+      '[data-test-boxel-selector-item-text="SubclassPrimitiveField"]',
+    );
+    assert.dom('[data-test-spec-example-incompatible-primitives]').exists();
   });
 
   test('updatePlaygroundSelections persists card selection in playground when clicking an example card', async function (assert) {
