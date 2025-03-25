@@ -878,4 +878,11 @@ module('Acceptance | code-submode | card playground', function (hooks) {
       },
     ]);
   });
+
+  test<TestContextWithSave>('instance chooser only appears when panel is opened', async function (assert) {
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
+    assert.dom('[data-test-instance-chooser]').exists();
+    await click('[data-test-accordion-item="playground"] button');
+    assert.dom('[data-test-instance-chooser]').doesNotExist();
+  });
 });
