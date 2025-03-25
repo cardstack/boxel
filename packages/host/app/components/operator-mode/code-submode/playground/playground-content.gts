@@ -28,7 +28,7 @@ import {
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/modifiers/consume-context';
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -74,10 +74,8 @@ interface Signature {
 
 export default class PlaygroundContent extends Component<Signature> {
   <template>
-    <div
-      class='playground-panel-content'
-      {{consumeContext consume=this.makeCardResource}}
-    >
+    {{consumeContext this.makeCardResource}}
+    <div class='playground-panel-content'>
       <div class='instance-chooser-container'>
         <InstanceSelectDropdown
           @prerenderedCardQuery={{hash

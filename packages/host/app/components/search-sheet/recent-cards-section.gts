@@ -7,13 +7,15 @@ import { tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
+import { trackedFunction } from 'ember-resources/util/function';
+
 import { TrackedArray } from 'tracked-built-ins';
 
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/modifiers/consume-context';
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 
 import RecentCards from '@cardstack/host/services/recent-cards-service';
 
@@ -31,17 +33,27 @@ interface Signature {
 export default class RecentCardsSection extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @service private declare recentCardsService: RecentCards;
-  @tracked private recentCardResources:
-    | TrackedArray<ReturnType<getCard>>
+  @tracked private recentCardCollectionResource:
+    | {
+        value: TrackedArray<ReturnType<getCard>> | null;
+      }
     | undefined;
 
   private makeCardResources = () => {
-    this.recentCardResources = new TrackedArray(
-      this.recentCardsService.recentCardIds.map((id) =>
-        this.getCard(this, () => id),
-      ),
+    this.recentCardCollectionResource = trackedFunction(
+      this,
+      () =>
+        new TrackedArray(
+          this.recentCardsService.recentCardIds.map((id) =>
+            this.getCard(this, () => id),
+          ),
+        ),
     );
   };
+
+  private get recentCardResources() {
+    return this.recentCardCollectionResource?.value;
+  }
 
   get hasRecentCards() {
     return this.recentCardResources
@@ -50,7 +62,7 @@ export default class RecentCardsSection extends Component<Signature> {
   }
 
   <template>
-    <div class='hide' {{consumeContext consume=this.makeCardResources}} />
+    {{consumeContext this.makeCardResources}}
 
     {{#if (and (bool this.recentCardResources) this.hasRecentCards)}}
       <ResultsSection
@@ -73,10 +85,5 @@ export default class RecentCardsSection extends Component<Signature> {
         {{/each}}
       </ResultsSection>
     {{/if}}
-    <style scoped>
-      .hide {
-        display: none;
-      }
-    </style>
   </template>
 }
