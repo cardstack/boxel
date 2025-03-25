@@ -19,7 +19,7 @@ import {
   markdownToHtml,
 } from '@cardstack/runtime-common';
 
-import ConsumeContext from '@cardstack/host/components/consume-context';
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';
@@ -103,7 +103,7 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   <template>
-    <ConsumeContext @consume={{this.makeCardResources}} />
+    {{consumeContext this.makeCardResources}}
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
       it is problematic to ensure the last message sticks to the bottom of the screen.

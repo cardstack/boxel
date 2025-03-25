@@ -13,7 +13,7 @@ import { and, bool } from '@cardstack/boxel-ui/helpers';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import ConsumeContext from '@cardstack/host/components/consume-context';
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 
 import RecentCards from '@cardstack/host/services/recent-cards-service';
 
@@ -50,7 +50,7 @@ export default class RecentCardsSection extends Component<Signature> {
   }
 
   <template>
-    <ConsumeContext @consume={{this.makeCardResources}} />
+    {{consumeContext this.makeCardResources}}
 
     {{#if (and (bool this.recentCardResources) this.hasRecentCards)}}
       <ResultsSection
