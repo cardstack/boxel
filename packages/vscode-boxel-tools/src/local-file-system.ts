@@ -808,10 +808,10 @@ export class LocalFileSystem {
 
   shouldSyncFile(fileUri: vscode.Uri): boolean {
     // Skip dot files
-    const pathParts = fileUri.fsPath.split('/');
+    const pathParts = fileUri.path.split('/');
     for (const part of pathParts) {
       if (part.startsWith('.')) {
-        console.log(`Skipping dotfile/dot folder: ${fileUri.fsPath}`);
+        console.log(`Skipping dotfile/dot folder: ${fileUri.path}`);
         return false;
       }
     }
