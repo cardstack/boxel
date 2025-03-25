@@ -35,6 +35,9 @@ jobs:
             echo "unrecognized environment"
             exit 1;
           fi
+      - name: Build boxel-icons
+        run: pnpm build
+        working-directory: packages/boxel-icons
       - name: Build boxel-ui addon
         run: pnpm build
         working-directory: packages/boxel-ui/addon

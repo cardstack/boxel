@@ -7,21 +7,25 @@ import {
   linksTo,
   containsMany,
 } from 'https://cardstack.com/base/card-api';
+import { ContactPhoneNumber } from 'https://cardstack.com/base/phone-number';
+import { EmailField } from 'https://cardstack.com/base/email';
 
-import { Avatar, FieldContainer } from '@cardstack/boxel-ui/components';
+import {
+  Avatar,
+  FieldContainer,
+  EntityDisplayWithThumbnail,
+} from '@cardstack/boxel-ui/components';
 import AvatarGroup from '../components/avatar-group';
 
 import ContactIcon from '@cardstack/boxel-icons/contact';
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
-import EntityDisplayWithThumbnail from '../components/entity-thumbnail-display';
 
 import { CrmApp } from '../crm-app';
 import { Company } from './company';
 import { StatusTagField } from './contact-status-tag';
-import { ContactPhoneNumber } from '../fields/phone-number';
-import { EmailField } from '../fields/email';
+
 import { ContactLinkField } from '../fields/contact-link';
 
 export class SocialLinkField extends ContactLinkField {

@@ -12,6 +12,7 @@ import {
   Pill,
   ProgressBar,
   ProgressRadial,
+  EntityDisplayWithIcon,
 } from '@cardstack/boxel-ui/components';
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import Calendar from '@cardstack/boxel-icons/calendar';
@@ -24,7 +25,6 @@ import { Representative } from './representative';
 
 import { Task, getDueDateStatus, TaskCompletionStatus } from '../task';
 import { CRMTaskStatusField } from './shared';
-import EntityDisplayWithIcon from '../components/entity-icon-display';
 
 export class Issues extends CardDef {
   static displayName = 'Issues';
@@ -483,19 +483,13 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
 
       <aside class='task-desktop-side-info'>
         {{#if this.hasShortId}}
-          <Pill
-            class='task-status-pill'
-            @pillBackgroundColor='#f8f7fa'
-          >
+          <Pill class='task-status-pill' @pillBackgroundColor='#f8f7fa'>
             <:default>{{@model.shortId}}</:default>
           </Pill>
         {{/if}}
 
         {{#if this.hasDueDate}}
-          <Pill
-            class='task-status-pill'
-            @pillBackgroundColor='#f8f7fa'
-          >
+          <Pill class='task-status-pill' @pillBackgroundColor='#f8f7fa'>
             <:iconLeft>
               <Calendar width='14px' height='14px' class='calendar-icon' />
             </:iconLeft>

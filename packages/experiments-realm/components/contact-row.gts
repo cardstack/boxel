@@ -1,5 +1,8 @@
-import { Avatar, Pill } from '@cardstack/boxel-ui/components';
-import EntityDisplayWithThumbnail from './entity-thumbnail-display';
+import {
+  Avatar,
+  Pill,
+  EntityDisplayWithThumbnail,
+} from '@cardstack/boxel-ui/components';
 import GlimmerComponent from '@glimmer/component';
 
 interface ContactRowArgs {

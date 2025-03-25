@@ -1,5 +1,5 @@
-import { Component } from 'https://cardstack.com/base/card-api';
-import NumberField from 'https://cardstack.com/base/number';
+import { Component } from './card-api';
+import NumberField from './number';
 
 import PercentageIcon from '@cardstack/boxel-icons/square-percentage';
 
