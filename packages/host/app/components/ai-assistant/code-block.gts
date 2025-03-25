@@ -60,6 +60,8 @@ interface Signature {
     monacoSDK: MonacoSDK;
     code: string;
     language: string;
+    originalCode: string;
+    modifiedCode: string;
   };
   Blocks: {
     default: [
@@ -89,6 +91,13 @@ export default class CodeBlock extends Component<Signature> {
       (hash
         editor=(component
           CodeBlockEditor monacoSDK=@monacoSDK code=@code language=@language
+        )
+        diffEditor=(component
+          CodeBlockDiffEditor
+          monacoSDK=@monacoSDK
+          originalCode=@originalCode
+          modifiedCode=@modifiedCode
+          language=@language
         )
         actions=(component CodeBlockActionsComponent code=@code)
       )
@@ -189,6 +198,46 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
   }
 }
 
+class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
+  private monacoState: {
+    editor: _MonacoSDK.editor.IStandaloneDiffEditor;
+  } | null = null;
+
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    {
+      monacoSDK,
+      editorDisplayOptions,
+      originalCode,
+      modifiedCode,
+      language,
+    }: MonacoDiffEditorSignature['Args']['Named'],
+  ) {
+    debugger;
+    let editor = monacoSDK.editor.createDiffEditor(
+      element,
+      editorDisplayOptions,
+    );
+
+    let originalModel = monacoSDK.editor.createModel(originalCode, language);
+    let modifiedModel = monacoSDK.editor.createModel(modifiedCode, language);
+
+    editor.setModel({ original: originalModel, modified: modifiedModel });
+
+    this.monacoState = {
+      editor,
+    };
+
+    registerDestructor(this, () => {
+      let editor = this.monacoState?.editor;
+      if (editor) {
+        editor.dispose();
+      }
+    });
+  }
+}
+
 class CodeBlockEditor extends Component<Signature> {
   editorDisplayOptions: MonacoEditorOptions = {
     wordWrap: 'on',
@@ -223,6 +272,43 @@ class CodeBlockEditor extends Component<Signature> {
       class='code-block'
       data-test-editor
       data-test-percy-hide
+    >
+      {{! Don't put anything here in this div as monaco modifier will override this element }}
+    </div>
+  </template>
+}
+
+class CodeBlockDiffEditor extends Component<Signature> {
+  private editorDisplayOptions = {
+    originalEditable: false,
+    folding: true,
+    hideUnchangedRegions: {
+      enabled: true,
+      revealLineCount: 40,
+      minimumLineCount: 1,
+      contextLineCount: 1,
+    },
+  };
+
+  <template>
+    <style scoped>
+      .code-block {
+        margin-bottom: 15px;
+        width: calc(100% + 2 * var(--boxel-sp));
+        margin-left: calc(-1 * var(--boxel-sp));
+        height: 120px;
+      }
+    </style>
+    <div
+      {{MonacoDiffEditor
+        monacoSDK=@monacoSDK
+        editorDisplayOptions=this.editorDisplayOptions
+        language=@language
+        originalCode=@originalCode
+        modifiedCode=@modifiedCode
+      }}
+      class='code-block'
+      data-test-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
     </div>

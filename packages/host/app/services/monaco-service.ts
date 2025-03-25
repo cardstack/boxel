@@ -53,6 +53,7 @@ export default class MonacoService extends Service {
       if (cssClass?.includes('code-block')) {
         return;
       }
+      return; // dont commit
       this.editor = editor;
       this.editor.onDidFocusEditorText(() => {
         this.hasFocus = true;
