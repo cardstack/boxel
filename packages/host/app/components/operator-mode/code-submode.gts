@@ -1004,7 +1004,7 @@ export default class CodeSubmode extends Component<Signature> {
                         as |PlaygroundTitle PlaygroundContent|
                       >
                         <A.Item
-                          class='accordion-item'
+                          class='accordion-item playground-accordion-item'
                           @contentClass='accordion-item-content'
                           @onClick={{fn this.toggleAccordionItem 'playground'}}
                           @isOpen={{eq this.selectedAccordionItem 'playground'}}
@@ -1233,6 +1233,9 @@ export default class CodeSubmode extends Component<Signature> {
       .accordion-item {
         --accordion-item-title-font: 600 var(--boxel-font-sm);
         box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
+      }
+      .playground-accordion-item > :deep(.title) {
+        padding-block: var(--boxel-sp-4xs);
       }
       .accordion-item > :deep(.title) {
         height: var(--accordion-item-closed-height);
