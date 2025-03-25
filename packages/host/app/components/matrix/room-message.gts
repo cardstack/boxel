@@ -9,6 +9,8 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { consume } from 'ember-provide-consume-context';
 
+import { trackedFunction } from 'ember-resources/util/function';
+
 import { Avatar } from '@cardstack/boxel-ui/components';
 
 import { bool } from '@cardstack/boxel-ui/helpers';
@@ -19,8 +21,8 @@ import {
   markdownToHtml,
 } from '@cardstack/runtime-common';
 
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
-import consumeContext from '@cardstack/host/modifiers/consume-context';
 import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -59,7 +61,9 @@ const STREAMING_TIMEOUT_MS = 60000;
 export default class RoomMessage extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @tracked private streamingTimeout = false;
-  @tracked private attachedCardResources: ReturnType<getCard>[] | undefined;
+  @tracked private attachedCardCollectionResource:
+    | { value: ReturnType<getCard>[] | null }
+    | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
@@ -68,10 +72,16 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private makeCardResources = () => {
-    this.attachedCardResources = (this.message.attachedCardIds ?? []).map(
-      (id) => this.getCard(this, () => id),
+    this.attachedCardCollectionResource = trackedFunction(this, () =>
+      (this.message.attachedCardIds ?? []).map((id) =>
+        this.getCard(this, () => id),
+      ),
     );
   };
+
+  private get attachedCardResources() {
+    return this.attachedCardCollectionResource?.value ?? [];
+  }
 
   private get message() {
     return this.args.roomResource.messages[this.args.index];
@@ -103,7 +113,7 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   <template>
-    <div class='hide' {{consumeContext consume=this.makeCardResources}} />
+    {{consumeContext this.makeCardResources}}
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
       it is problematic to ensure the last message sticks to the bottom of the screen.
@@ -154,9 +164,6 @@ export default class RoomMessage extends Component<Signature> {
     {{/if}}
 
     <style scoped>
-      .hide {
-        display: none;
-      }
       .room-message {
         --ai-assistant-message-padding: var(--boxel-sp);
       }
