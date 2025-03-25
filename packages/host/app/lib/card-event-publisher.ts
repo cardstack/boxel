@@ -34,14 +34,14 @@ import type {
 
 import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 
-//TODO: move this type out of component
-import type { Skill as RoomSkill } from '../components/ai-assistant/skill-menu';
+import type { RoomSkill } from '../resources/room';
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type LoaderService from '../services/loader-service';
 import type MatrixService from '../services/matrix-service';
 
 const MAX_CARD_SIZE_KB = 60;
+export const isSkillCard = Symbol.for('is-skill-card');
 
 export default class CardEventPublisher {
   private cardHashes: Map<string, string> = new Map(); // hashes <> event id
@@ -73,7 +73,7 @@ export default class CardEventPublisher {
     cardEntries = await Promise.all(
       cards.map(async (card) => {
         let opts: CardAPI.SerializeOpts = { useAbsoluteURL: true };
-        if (isSkillCard(card)) {
+        if (isSkillCard in card) {
           opts['includeComputeds'] = true;
         }
 
@@ -107,8 +107,8 @@ export default class CardEventPublisher {
         entry.eventId = eventId;
       }
     }
-    const skillCardEntries = cardEntries.filter((entry) =>
-      isSkillCard(entry.card),
+    const skillCardEntries = cardEntries.filter(
+      (entry) => isSkillCard in entry.card,
     );
     const roomResource = this.matrixService.roomResourcesCache.get(roomId);
     const roomSkills = roomResource?.skills ?? [];
@@ -285,24 +285,4 @@ function generateCommandDefHashKey(
   commandDefSchema: CommandDefinitionSchema,
 ) {
   return md5(roomId + JSON.stringify(commandDefSchema));
-}
-
-// we check this way because instanceof is unreliable with different module contexts
-// TODO: consider a static symbol instead!
-function isSkillCard(card: CardDef): boolean {
-  // Start with the current card's constructor
-  let proto = Object.getPrototypeOf(card);
-
-  // Walk up the prototype chain
-  while (proto) {
-    const constructor = proto.constructor;
-    // Check if the constructor name is "SkillCard"
-    if (constructor && constructor.name === 'SkillCard') {
-      return true;
-    }
-    // Move up the prototype chain
-    proto = Object.getPrototypeOf(proto);
-  }
-
-  return false;
 }

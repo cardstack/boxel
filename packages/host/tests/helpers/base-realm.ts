@@ -15,9 +15,9 @@ import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
+import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
-import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 
 type StringField = (typeof StringFieldModule)['default'];
 let StringField: StringField;

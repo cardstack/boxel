@@ -1,4 +1,5 @@
 import { getOwner } from '@ember/owner';
+import Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -132,7 +133,7 @@ export default class MatrixService extends Service {
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
   private startedAtTs = -1;
   private cardEventPublisher = new CardEventPublisher(
-    getOwner(this),
+    getOwner(this) as Owner,
     () => this.cardAPI,
   );
 
@@ -832,7 +833,7 @@ export default class MatrixService extends Service {
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
     this.cardEventPublisher = new CardEventPublisher(
-      getOwner(this),
+      getOwner(this) as Owner,
       () => this.cardAPI,
     );
     this._currentRoomId = undefined;
