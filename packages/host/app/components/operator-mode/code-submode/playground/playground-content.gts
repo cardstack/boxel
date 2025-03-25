@@ -21,15 +21,15 @@ import {
   loadCard,
   specRef,
   GetCardContextName,
+  GetCardsContextName,
   type getCard,
+  type getCards,
   type Query,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import { consumeContext } from '@cardstack/host/helpers/consume-context';
-
-import { getSearch } from '@cardstack/host/resources/search';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -77,6 +77,7 @@ interface Signature {
 export default class PlaygroundContent extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResource}}
+    {{consumeContext this.searchFieldSpec}}
     <div class='playground-panel-content'>
       <div class='instance-chooser-container'>
         <InstanceSelectDropdown
@@ -119,9 +120,7 @@ export default class PlaygroundContent extends Component<Signature> {
             data-test-playground-format-chooser
           />
         {{else if @isFieldDef}}
-          {{#if
-            (or this.searchFieldSpec.isLoading this.createNewCard.isRunning)
-          }}
+          {{#if (or this.fieldSpec.isLoading this.createNewCard.isRunning)}}
             <LoadingIndicator @color='var(--boxel-light)' />
           {{else if this.canGenerateFieldSpec}}
             <GenerateSpec @createNewCard={{this.createNewCard}} />
@@ -180,6 +179,7 @@ export default class PlaygroundContent extends Component<Signature> {
   </template>
 
   @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) private declare getCards: getCards;
 
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
@@ -191,6 +191,7 @@ export default class PlaygroundContent extends Component<Signature> {
   @tracked private newCardJSON: LooseSingleCardDocument | undefined;
   @tracked private fieldChooserIsOpen = false;
   @tracked private cardResource: ReturnType<getCard> | undefined;
+  @tracked private fieldSpec: ReturnType<getCards> | undefined;
 
   private get specQuery(): Query {
     return {
@@ -201,20 +202,21 @@ export default class PlaygroundContent extends Component<Signature> {
     };
   }
 
-  private searchFieldSpec = getSearch(
-    this,
-    () => this.specQuery,
-    () => this.realmServer.availableRealmURLs,
-    { isLive: true, isAutoSaved: true },
-  );
+  private searchFieldSpec = () => {
+    this.fieldSpec = this.getCards(
+      this,
+      () => this.specQuery,
+      () => this.realmServer.availableRealmURLs,
+      { isLive: true },
+    );
+  };
 
   private get canGenerateFieldSpec() {
     if (!this.args.isFieldDef || !this.canWriteRealm) {
       return false;
     }
     return (
-      !this.searchFieldSpec.isLoading &&
-      this.searchFieldSpec.instances?.length === 0
+      !this.fieldSpec?.isLoading && this.fieldSpec?.instances?.length === 0
     );
   }
 
@@ -476,7 +478,7 @@ export default class PlaygroundContent extends Component<Signature> {
     return this.createNewCard.isRunning || this.createNewField.isRunning;
   }
 
-  private createNewCard = task(async () => {
+  private createNewCard = restartableTask(async () => {
     if (this.args.isFieldDef) {
       let fieldCard = await loadCard(this.args.codeRef, {
         loader: this.loaderService.loader,
