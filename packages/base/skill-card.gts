@@ -15,6 +15,8 @@ import RobotIcon from '@cardstack/boxel-icons/robot';
 import SquareChevronRightIcon from '@cardstack/boxel-icons/square-chevron-right';
 import { buildCommandFunctionName } from '@cardstack/runtime-common';
 
+export const isSkillCard = Symbol.for('is-skill-card');
+
 export class CommandField extends FieldDef {
   static displayName = 'CommandField';
   static icon = SquareChevronRightIcon;
@@ -90,8 +92,11 @@ export class CommandField extends FieldDef {
 export class SkillCard extends CardDef {
   static displayName = 'Skill';
   static icon = RobotIcon;
+  [isSkillCard] = true;
+
   @field instructions = contains(MarkdownField);
   @field commands = containsMany(CommandField);
+
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       <@fields.title />

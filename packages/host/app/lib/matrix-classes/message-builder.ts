@@ -21,7 +21,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { Skill } from '@cardstack/host/components/ai-assistant/skill-menu';
+import { RoomSkill } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -54,7 +54,7 @@ export default class MessageBuilder {
       author: RoomMember;
       index: number;
       serializedCardFromFragments: (eventId: string) => LooseSingleCardDocument;
-      skills: Skill[];
+      skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
       commandResultEvent?: CommandResultEvent;
     },

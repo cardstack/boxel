@@ -206,10 +206,7 @@ export default class PastSessionItem extends Component<Signature> {
   }
 
   get isStreaming() {
-    if (!this.args.session.lastMessage) {
-      return false;
-    }
-    return !this.args.session.lastMessage.isStreamingFinished;
+    return this.args.session.lastMessage?.isStreamingFinished === false;
   }
 
   get hasUnseenMessage() {

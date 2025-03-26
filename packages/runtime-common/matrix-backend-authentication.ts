@@ -71,7 +71,7 @@ export class MatrixBackendAuthentication {
     }
 
     let dmRooms =
-      (await this.matrixClient.getAccountData<Record<string, string>>(
+      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
         'boxel.session-rooms',
       )) ?? {};
     let roomId = dmRooms[user];
@@ -136,7 +136,7 @@ export class MatrixBackendAuthentication {
     }
 
     let dmRooms =
-      (await this.matrixClient.getAccountData<Record<string, string>>(
+      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
         'boxel.session-rooms',
       )) ?? {};
     let roomId = dmRooms[user];
