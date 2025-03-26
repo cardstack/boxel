@@ -298,6 +298,7 @@ class Isolated extends Component<typeof Catalog> {
       /* Mock data display */
       .showcase-cards-display :deep(.cards),
       .featured-cards-display :deep(.cards) {
+        --grid-view-height: 390px;
         grid-template-columns: 1fr 1fr;
       }
 
@@ -368,6 +369,14 @@ class Isolated extends Component<typeof Catalog> {
           overflow-y: unset;
         }
       }
+
+      @container content-area-container (inline-size <= 500px) {
+        .showcase-cards-display :deep(.cards),
+        .featured-cards-display :deep(.cards) {
+          grid-template-columns: 1fr;
+        }
+      }
+
       .go-to-grid {
         font-weight: 600;
       }
