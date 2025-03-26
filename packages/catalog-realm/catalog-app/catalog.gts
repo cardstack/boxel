@@ -10,8 +10,9 @@ import {
   realmInfo,
   type BaseDef,
   linksToMany,
+  realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { isCardInstance } from '@cardstack/runtime-common';
+import { isCardInstance, Query } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 
 import FilterSection from './components/filter-section';
@@ -21,9 +22,26 @@ import ContentContainer from './components/content-container';
 import CatalogLayout from './layouts/catalog-layout';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
-import { TabbedHeader, BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  Grid3x3 as GridIcon,
+  Rows4 as StripIcon,
+} from '@cardstack/boxel-ui/icons';
+import {
+  TabbedHeader,
+  BoxelButton,
+  ViewSelector,
+  type ViewItem,
+} from '@cardstack/boxel-ui/components';
 
 import { Listing } from './listing/listing';
+import { CardsGrid } from '../components/grid';
+
+type ViewOption = 'card' | 'strip' | 'grid';
+
+const CATALOG_VIEW_OPTIONS: ViewItem[] = [
+  { id: 'strip', icon: StripIcon },
+  { id: 'grid', icon: GridIcon },
+];
 
 class Isolated extends Component<typeof Catalog> {
   mockShowcaseCards = [
@@ -70,15 +88,15 @@ class Isolated extends Component<typeof Catalog> {
       displayName: 'Showcase',
     },
     {
-      tabId: 'apps',
+      tabId: 'app',
       displayName: 'Apps',
     },
     {
-      tabId: 'cards',
+      tabId: 'card',
       displayName: 'Cards',
     },
     {
-      tabId: 'fields',
+      tabId: 'field',
       displayName: 'Fields',
     },
     {
@@ -88,10 +106,15 @@ class Isolated extends Component<typeof Catalog> {
   ];
 
   @tracked activeTabId: string = this.tabFilterOptions[0].tabId;
+  @tracked private selectedView: ViewOption = 'grid';
 
   @action
   setActiveTab(tabId: string) {
     this.activeTabId = tabId;
+  }
+
+  @action private onChangeView(id: ViewOption) {
+    this.selectedView = id;
   }
 
   get shouldShowTab() {
@@ -130,6 +153,29 @@ class Isolated extends Component<typeof Catalog> {
 
   get featuredListings() {
     return this.args.model.featured;
+  }
+
+  get listingQuery() {
+    return {
+      filter: {
+        on: {
+          module: new URL('./listing/listing', import.meta.url).href,
+          name: 'Listing',
+        },
+        eq: {
+          listingType: this.activeTabId,
+        },
+      },
+    };
+  }
+
+  get tabTitle() {
+    return this.tabFilterOptions.find((tab) => tab.tabId === this.activeTabId)
+      ?.displayName;
+  }
+
+  private get realms() {
+    return [this.args.model[realmURL]!];
   }
 
   getComponent = (card: CardDef) => card.constructor.getComponent(card);
@@ -211,35 +257,24 @@ class Isolated extends Component<typeof Catalog> {
                         flexible tools for personal</p>
                     </:intro>
                   </CardsDisplaySection>
-                {{/if}}
-
-                {{!-- {{#if (this.shouldShowTab 'apps')}}
-                  <CardsDisplaySection
-                    @title='Apps'
-                    @cards={{this.mockCards}}
+                {{else}}
+                  <ViewSelector
+                    @selectedId={{this.selectedView}}
+                    @onChange={{this.onChangeView}}
+                    @items={{CATALOG_VIEW_OPTIONS}}
                   />
-                {{/if}}
 
-                {{#if (this.shouldShowTab 'cards')}}
-                  <CardsDisplaySection
-                    @title='Cards'
-                    @cards={{this.mockCards}}
-                  />
+                  <CardsDisplaySection @title={{this.tabTitle}}>
+                    <:content>
+                      <CardsGrid
+                        @query={{this.listingQuery}}
+                        @realms={{this.realms}}
+                        @selectedView={{this.selectedView}}
+                        @context={{@context}}
+                      />
+                    </:content>
+                  </CardsDisplaySection>
                 {{/if}}
-
-                {{#if (this.shouldShowTab 'fields')}}
-                  <CardsDisplaySection
-                    @title='Fields'
-                    @cards={{this.mockCards}}
-                  />
-                {{/if}}
-
-                {{#if (this.shouldShowTab 'skills')}}
-                  <CardsDisplaySection
-                    @title='Skills'
-                    @cards={{this.mockCards}}
-                  />
-                {{/if}} --}}
               </ContentContainer>
             </div>
           </div>

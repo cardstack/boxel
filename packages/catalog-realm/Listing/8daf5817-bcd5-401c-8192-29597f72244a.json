@@ -2,26 +2,34 @@
   "data": {
     "type": "card",
     "attributes": {
+      "name": "Cursor Coding",
+      "summary": null,
+      "listingType": "Skill",
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "startHere.0": {
-        "links": {
-          "self": "./Listing/blog-listing"
-        }
-      },
-      "startHere.1": {
-        "links": {
-          "self": "./Listing/5721ca5d-f89a-42d6-aa60-421f4c1c1c30"
-        }
-      },
-      "new": {
+      "specs": {
         "links": {
           "self": null
         }
       },
-      "featured": {
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -29,8 +37,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "./catalog-app/catalog",
-        "name": "Catalog"
+        "module": "../catalog-app/listing/listing",
+        "name": "Listing"
       }
     }
   }
