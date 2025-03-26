@@ -1,4 +1,5 @@
-import type Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
+import Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
@@ -12,24 +13,18 @@ import {
   type MatrixEvent,
   type RoomMember,
   type EmittedEvents,
-  type ISendEventResponse,
 } from 'matrix-js-sdk';
 import stringify from 'safe-stable-stringify';
-import { md5 } from 'super-fast-md5';
 import { TrackedMap } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
   aiBotUsername,
   baseRealm,
-  codeRefWithAbsoluteURL,
-  getClass,
   LooseCardResource,
   logger,
   markdownToHtml,
   ResolvedCodeRef,
-  splitStringIntoChunks,
-  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import {
@@ -42,9 +37,7 @@ import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/h
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
-  APP_BOXEL_CARD_FORMAT,
   APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -68,12 +61,7 @@ import Room, { TempEvent } from '@cardstack/host/lib/matrix-classes/room';
 import { getRandomBackgroundURL, iconURLFor } from '@cardstack/host/lib/utils';
 import { getMatrixProfile } from '@cardstack/host/resources/matrix-profile';
 
-import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import type {
-  relativeTo,
-  BaseDef,
-  CardDef,
-} from 'https://cardstack.com/base/card-api';
+import type { BaseDef, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -85,12 +73,13 @@ import type {
   CommandResultWithOutputContent,
   RealmEventContent,
   CommandDefinitionsContent,
+  Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type { Tool } from 'https://cardstack.com/base/matrix-event';
-import { CommandField, SkillCard } from 'https://cardstack.com/base/skill-card';
+import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import CardEventPublisher from '../lib/card-event-publisher';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -113,7 +102,6 @@ import type ResetService from './reset';
 import type * as MatrixSDK from 'matrix-js-sdk';
 
 const { matrixURL } = ENV;
-const MAX_CARD_SIZE_KB = 60;
 const STATE_EVENTS_OF_INTEREST = ['m.room.create', 'm.room.name'];
 
 const realmEventsLogger = logger('realm:events');
@@ -144,6 +132,10 @@ export default class MatrixService extends Service {
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
   private startedAtTs = -1;
+  private cardEventPublisher = new CardEventPublisher(
+    getOwner(this) as Owner,
+    () => this.cardAPI,
+  );
 
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
@@ -163,8 +155,6 @@ export default class MatrixService extends Service {
   #eventBindings: [EmittedEvents, (...arg: any[]) => void][] | undefined;
   currentUserEventReadReceipts: TrackedMap<string, { readAt: Date }> =
     new TrackedMap();
-  private cardHashes: Map<string, string> = new Map(); // hashes <> event id
-  private skillCardHashes: Map<string, string> = new Map(); // hashes <> event id
 
   constructor(owner: Owner) {
     super(owner);
@@ -559,6 +549,25 @@ export default class MatrixService extends Service {
     });
   }
 
+  async addCardsToRoom(cards: CardDef[], roomId: string) {
+    let cardEventIds = await this.cardEventPublisher.addCardsToRoom(
+      cards,
+      roomId,
+    );
+    return cardEventIds;
+  }
+
+  async addSkillCardsToRoomHistory(
+    skillCards: SkillCardModule.SkillCard[],
+    roomId: string,
+  ) {
+    let cardEventIds = await this.cardEventPublisher.addSkillCardsToRoomHistory(
+      skillCards,
+      roomId,
+    );
+    return cardEventIds;
+  }
+
   async sendCommandResultEvent(
     roomId: string,
     invokedToolFromEventId: string,
@@ -567,7 +576,10 @@ export default class MatrixService extends Service {
   ) {
     let resultCardEventId: string | undefined;
     if (resultCard) {
-      [resultCardEventId] = await this.addCardsToRoom([resultCard], roomId);
+      [resultCardEventId] = await this.cardEventPublisher.addCardsToRoom(
+        [resultCard],
+        roomId,
+      );
     }
     let content:
       | CommandResultWithNoOutputContent
@@ -609,104 +621,6 @@ export default class MatrixService extends Service {
         }`,
       );
     }
-  }
-
-  async addCommandDefinitionsToRoomHistory(
-    commandDefinitions: CommandField[],
-    roomId: string,
-  ) {
-    // Create the command defs so getting the json schema
-    // and send it to the matrix room.
-    let commandDefinitionSchemas: {
-      codeRef: ResolvedCodeRef;
-      tool: Tool;
-    }[] = [];
-    const mappings = await basicMappings(this.loaderService.loader);
-    for (let commandDef of commandDefinitions) {
-      let absoluteCodeRef = codeRefWithAbsoluteURL(
-        commandDef.codeRef,
-        commandDef[Symbol.for('cardstack-relative-to') as typeof relativeTo],
-      ) as ResolvedCodeRef;
-      const Command = await getClass(
-        absoluteCodeRef,
-        this.loaderService.loader,
-      );
-      const command = new Command(this.commandService.commandContext);
-      const name = commandDef.functionName;
-      commandDefinitionSchemas.push({
-        codeRef: absoluteCodeRef,
-        tool: {
-          type: 'function',
-          function: {
-            name,
-            description: command.description,
-            parameters: {
-              type: 'object',
-              properties: {
-                description: {
-                  type: 'string',
-                },
-                ...(await command.getInputJsonSchema(this.cardAPI, mappings)),
-              },
-              required: ['attributes', 'description'],
-            },
-          },
-        },
-      });
-    }
-    await this.sendEvent(roomId, 'm.room.message', {
-      msgtype: APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-      body: 'Command Definitions',
-      data: {
-        commandDefinitions: commandDefinitionSchemas,
-      },
-    });
-  }
-
-  async addSkillCardsToRoomHistory(
-    skills: SkillCard[],
-    roomId: string,
-    opts?: CardAPI.SerializeOpts,
-  ): Promise<string[]> {
-    const commandDefinitions = skills.flatMap((skill) => skill.commands);
-    await this.addCommandDefinitionsToRoomHistory(commandDefinitions, roomId);
-    return this.addCardsToRoom(skills, roomId, this.skillCardHashes, opts);
-  }
-
-  async addCardsToRoom(
-    cards: CardDef[],
-    roomId: string,
-    cardHashes: Map<string, string> = this.cardHashes,
-    opts: CardAPI.SerializeOpts = { useAbsoluteURL: true },
-  ): Promise<string[]> {
-    if (!cards.length) {
-      return [];
-    }
-    let serializedCards = await Promise.all(
-      cards.map(async (card) => {
-        let { Base64ImageField } = await this.loaderService.loader.import<{
-          Base64ImageField: typeof Base64ImageFieldType;
-        }>(`${baseRealm.url}base64-image`);
-        return await this.cardService.serializeCard(card, {
-          omitFields: [Base64ImageField],
-          ...opts,
-        });
-      }),
-    );
-
-    let eventIds: string[] = [];
-    if (serializedCards.length) {
-      for (let card of serializedCards) {
-        let eventId = cardHashes.get(this.generateCardHashKey(roomId, card));
-        if (eventId === undefined) {
-          let responses = await this.sendCardFragments(roomId, card);
-          eventId = responses[0].event_id; // we only care about the first fragment
-          cardHashes.set(this.generateCardHashKey(roomId, card), eventId!);
-        }
-        eventIds.push(eventId!);
-      }
-    }
-    return eventIds;
   }
 
   async uploadFiles(files: FileDef[]) {
@@ -775,7 +689,7 @@ export default class MatrixService extends Service {
       }
     }
 
-    let attachedCardsEventIds = await this.addCardsToRoom(
+    let attachedCardsEventIds = await this.cardEventPublisher.addCardsToRoom(
       attachedCards,
       roomId,
     );
@@ -796,40 +710,6 @@ export default class MatrixService extends Service {
         },
       },
     } as CardMessageContent);
-  }
-
-  private generateCardHashKey(roomId: string, card: LooseSingleCardDocument) {
-    return md5(roomId + JSON.stringify(card));
-  }
-
-  private async sendCardFragments(
-    roomId: string,
-    card: LooseSingleCardDocument,
-  ): Promise<ISendEventResponse[]> {
-    let fragments = splitStringIntoChunks(
-      JSON.stringify(card),
-      MAX_CARD_SIZE_KB,
-    );
-    let responses: ISendEventResponse[] = [];
-    for (let index = fragments.length - 1; index >= 0; index--) {
-      let cardFragment = fragments[index];
-      let response = await this.sendEvent(roomId, 'm.room.message', {
-        msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-        format: APP_BOXEL_CARD_FORMAT,
-        body: `card fragment ${index + 1} of ${fragments.length}`,
-        formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
-        data: {
-          ...(index < fragments.length - 1
-            ? { nextFragment: responses[0].event_id }
-            : {}),
-          cardFragment,
-          index,
-          totalParts: fragments.length,
-        },
-      } as CardFragmentContent);
-      responses.unshift(response);
-    }
-    return responses;
   }
 
   getLastActiveTimestamp(roomId: string, defaultTimestamp: number) {
@@ -922,7 +802,9 @@ export default class MatrixService extends Service {
       defaultSkills.map(async (skillCardURL) => {
         // WARNING This card is not part of the identity map!
         // TODO refactor this to use CardResource (please make ticket)
-        return await this.cardService.getCard<SkillCard>(skillCardURL);
+        return await this.cardService.getCard<SkillCardModule.SkillCard>(
+          skillCardURL,
+        );
       }),
     );
   }
@@ -950,8 +832,10 @@ export default class MatrixService extends Service {
     this.flushRoomState = undefined;
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
-    this.cardHashes = new Map();
-    this.skillCardHashes = new Map();
+    this.cardEventPublisher = new CardEventPublisher(
+      getOwner(this) as Owner,
+      () => this.cardAPI,
+    );
     this._currentRoomId = undefined;
     this.messagesToSend = new TrackedMap();
     this.cardsToSend = new TrackedMap();

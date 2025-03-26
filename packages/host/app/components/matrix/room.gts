@@ -72,7 +72,7 @@ import { Submodes } from '../submode-switcher';
 import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
-import type { Skill } from '../ai-assistant/skill-menu';
+import type { RoomSkill } from '../../resources/room';
 
 interface Signature {
   Args: {
@@ -564,7 +564,7 @@ export default class Room extends Component<Signature> {
     return this.args.roomResource.messages;
   }
 
-  private get skills(): Skill[] {
+  private get skills(): RoomSkill[] {
     return this.args.roomResource.skills;
   }
 
@@ -572,7 +572,7 @@ export default class Room extends Component<Signature> {
     return DEFAULT_LLM_LIST.sort();
   }
 
-  private get sortedSkills(): Skill[] {
+  private get sortedSkills(): RoomSkill[] {
     return [...this.skills].sort((a, b) => {
       // Not all of the skills have a title, so we use the skillEventId as a fallback
       // which should be consistent.
