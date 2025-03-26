@@ -29,9 +29,10 @@ import {
   getPlural,
   CardContextName,
   RealmURLContextName,
-  type ResolvedCodeRef,
   getNarrowestType,
   Loader,
+  isCardInstance,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -121,10 +122,11 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     );
     if (chosenCardResource) {
-      // TODO need to talk to ed about how to deal with this
-      await chosenCardResource.loaded;
-      selectedCards = [...selectedCards, chosenCardResource.card!]; // the wait above asserts card exists on resource
-      (this.args.model.value as any)[this.args.field.name] = selectedCards;
+      let card = await chosenCardResource.detachFromStore();
+      if (card && isCardInstance(card)) {
+        selectedCards = [...selectedCards, card];
+        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+      }
     }
   });
 

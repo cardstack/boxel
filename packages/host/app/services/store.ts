@@ -249,14 +249,13 @@ export default class StoreService extends Service {
   }
 
   // This method is used for specific scenarios where you just want an instance
-  // that is not necessarily part of the identity map and is detached from the
-  // store, such that it is not auto saving and not receiving live updates. This
-  // may include things like tests, freestyle usage guide, etc.
-  async getInstanceDetachedFromStore(
-    url: string,
-  ): Promise<CardDef | CardError> {
+  // that is not auto saving and not receiving live updates. This may include
+  // things like tests, freestyle usage guide, instances that we immediately
+  // consume, etc.
+  async peek(url: string): Promise<CardDef | CardError> {
     let cached = this.identityContext.get(url);
     if (cached) {
+      this.markForGarbageCollection(url);
       return cached;
     }
     try {

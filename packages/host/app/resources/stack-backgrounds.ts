@@ -54,9 +54,7 @@ export class StackBackgroundsResource extends Resource<Args> {
         if (!bottomMostStackItem.url) {
           return;
         }
-        let bottomMostCard = await this.store.getInstanceDetachedFromStore(
-          bottomMostStackItem.url,
-        );
+        let bottomMostCard = await this.store.peek(bottomMostStackItem.url);
         if (!isCardInstance(bottomMostCard)) {
           let realm = bottomMostCard.realm;
           if (!realm) {

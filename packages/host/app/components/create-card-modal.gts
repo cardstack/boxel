@@ -9,9 +9,13 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask } from 'ember-concurrency';
 
+import { consume } from 'ember-provide-consume-context';
+
 import {
   Deferred,
   RealmPaths,
+  GetCardContextName,
+  type getCard,
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -31,7 +35,7 @@ import type CardService from '../services/card-service';
 
 export default class CreateCardModal extends Component {
   <template>
-    {{#let this.currentRequest.card as |card|}}
+    {{#let this.currentRequest.cardResource.card as |card|}}
       {{#if card}}
         <ModalContainer
           @title='Create New Card'
@@ -46,11 +50,12 @@ export default class CreateCardModal extends Component {
     {{/let}}
   </template>
 
+  @consume(GetCardContextName) private declare getCard: getCard;
   @service declare cardService: CardService;
   @tracked currentRequest:
     | {
-        card: CardDef;
-        deferred: Deferred<CardDef | undefined>;
+        cardResource: ReturnType<getCard>;
+        deferred: Deferred<string | undefined>;
       }
     | undefined = undefined;
 
@@ -62,26 +67,30 @@ export default class CreateCardModal extends Component {
     });
   }
 
-  async create<T extends CardDef>(
+  async create(
+    owner: object,
     ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: {
       realmURL?: URL;
       doc?: LooseSingleCardDocument;
     },
-  ): Promise<undefined | T> {
-    return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
+  ): Promise<undefined | string> {
+    return (await this._create.perform(owner, ref, relativeTo, opts)) as
+      | string
+      | undefined;
   }
 
   private _create = enqueueTask(
-    async <T extends CardDef>(
+    async (
+      owner: object,
       ref: CodeRef,
       relativeTo: URL | undefined, // this relativeTo should be the spec ID that the CodeRef comes from
       opts?: {
         doc?: LooseSingleCardDocument;
         realmURL?: URL;
       },
-    ) => {
+    ): Promise<string | undefined> => {
       let cardModule = new URL(moduleFrom(ref), relativeTo);
       // we make the code ref use an absolute URL for safety in
       // the case it's being created in a different realm than where the card
@@ -100,26 +109,18 @@ export default class CreateCardModal extends Component {
           },
         },
       };
+      let cardResource = this.getCard(owner, () => doc, { isAutoSaved: true });
       this.currentRequest = {
-        card: await this.cardService.createFromSerialized(
-          doc.data,
-          doc,
-          relativeTo,
-        ),
+        cardResource,
         deferred: new Deferred(),
       };
-      let card = await this.currentRequest.deferred.promise;
-      if (card) {
-        return card as T;
-      } else {
-        return undefined;
-      }
+      return await this.currentRequest.deferred.promise;
     },
   );
 
   @action save(card?: CardDef): void {
     if (this.currentRequest) {
-      this.currentRequest.deferred.fulfill(card);
+      this.currentRequest.deferred.fulfill(card?.id);
       this.currentRequest = undefined;
     }
   }

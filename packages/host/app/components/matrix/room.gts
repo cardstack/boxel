@@ -689,12 +689,6 @@ export default class Room extends Component<Signature> {
         cardResource.url,
       ]);
     }
-    let removedCardIndex = this.removedAttachedCardIds.findIndex(
-      (id) => id === cardResource.url,
-    );
-    if (removedCardIndex > -1) {
-      this.removedAttachedCardIds.splice(removedCardIndex, 1);
-    }
   }
 
   @action
@@ -786,9 +780,7 @@ export default class Room extends Component<Signature> {
           // elsewhere in our app.
           cards = (
             await Promise.all(
-              (cardsOrIds as string[]).map((id) =>
-                this.store.getInstanceDetachedFromStore(id),
-              ),
+              (cardsOrIds as string[]).map((id) => this.store.peek(id)),
             )
           )
             .filter(Boolean)

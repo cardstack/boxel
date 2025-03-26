@@ -18,6 +18,7 @@ import {
   type LocalPath,
   CodeRef,
   isResolvedCodeRef,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -42,6 +43,7 @@ import NetworkService from './network';
 
 import type CardService from './card-service';
 import type ResetService from './reset';
+import type StoreService from './store';
 
 import type IndexController from '../controllers';
 
@@ -105,6 +107,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private reset: ResetService;
   @service declare private network: NetworkService;
   @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -152,27 +155,26 @@ export default class OperatorModeStateService extends Service {
   }
 
   patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
-    // WARNING This card is not part of the identity map! Unsure if that is
-    // necessary for the way this card is used. TODO consider refactor this to
-    // use CardResource (please make ticket for this investigation)
-    let card = await this.cardService.getCard(id);
-    let document = await this.cardService.serializeCard(card);
-    if (patch.attributes) {
-      document.data.attributes = mergeWith(
-        document.data.attributes,
-        patch.attributes,
-      );
-    }
-    if (patch.relationships) {
-      let mergedRel = mergeRelationships(
-        document.data.relationships,
-        patch.relationships,
-      );
-      if (mergedRel && Object.keys(mergedRel).length !== 0) {
-        document.data.relationships = mergedRel;
+    let card = await this.store.peek(id);
+    if (card && isCardInstance(card)) {
+      let document = await this.cardService.serializeCard(card);
+      if (patch.attributes) {
+        document.data.attributes = mergeWith(
+          document.data.attributes,
+          patch.attributes,
+        );
       }
+      if (patch.relationships) {
+        let mergedRel = mergeRelationships(
+          document.data.relationships,
+          patch.relationships,
+        );
+        if (mergedRel && Object.keys(mergedRel).length !== 0) {
+          document.data.relationships = mergedRel;
+        }
+      }
+      await this.cardService.patchCard(card, document, patch);
     }
-    await this.cardService.patchCard(card, document, patch);
   });
 
   async deleteCard(cardId: string) {

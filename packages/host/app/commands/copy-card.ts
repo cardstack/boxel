@@ -59,7 +59,7 @@ export default class CopyCardCommand extends HostBaseCommand<
       let item =
         this.operatorModeStateService.topMostStackItems()[targetStackIndex];
       if (item.url) {
-        let topCard = await this.store.getInstanceDetachedFromStore(item.url);
+        let topCard = await this.store.peek(item.url);
         if (isCardInstance(topCard)) {
           let url = await this.cardService.getRealmURL(topCard);
           // open card might be from a realm in which we don't have write permissions

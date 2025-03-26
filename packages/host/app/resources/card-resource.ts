@@ -199,9 +199,10 @@ export class CardResource extends Resource<Args> {
   // There are scenarios where we have a resource and we literally don't care
   // about the life time because we need to grab a property off of it (like
   // using a Spec when creating a new card). in that case we can throw away the
-  // resource and just get the underlying card. This means that the card will
-  // now be detached from the store.
-  async detachFromStore() {
+  // resource and just get the underlying card. This means that the card will no
+  // longer get updates from the server nor auto save. The card will also be
+  // eligible for garbage collection from the store.
+  async dispose() {
     await this._loading?.promise;
     try {
       return this.card ?? this.cardError;

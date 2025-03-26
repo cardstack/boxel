@@ -603,7 +603,7 @@ export default class CardCatalogModal extends Component<Signature> {
       if (!this.state) {
         return;
       }
-      let maybeCard = await this.store.getInstanceDetachedFromStore(cardId);
+      let maybeCard = await this.store.peek(cardId);
       if (!isCardInstance(maybeCard)) {
         return;
       }

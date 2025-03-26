@@ -484,10 +484,9 @@ export default class InteractSubmode extends Component<Signature> {
         if (!destinationIndexCardUrl) {
           throw new Error(`destination index card has no URL`);
         }
-        let destinationIndexCard =
-          await this.store.getInstanceDetachedFromStore(
-            destinationIndexCardUrl,
-          );
+        let destinationIndexCard = await this.store.peek(
+          destinationIndexCardUrl,
+        );
         if (!isCardInstance(destinationIndexCard)) {
           throw new Error(
             `destination index card ${destinationIndexCardUrl} is not a card`,
@@ -547,7 +546,7 @@ export default class InteractSubmode extends Component<Signature> {
           selectedCards.map((cardDefOrId: CardDefOrId) => {
             if (typeof cardDefOrId === 'string') {
               // WARNING This card is not part of the identity map!
-              return this.store.getInstanceDetachedFromStore(cardDefOrId);
+              return this.store.peek(cardDefOrId);
             }
             return cardDefOrId;
           }),

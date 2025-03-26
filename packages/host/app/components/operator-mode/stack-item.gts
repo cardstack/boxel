@@ -559,7 +559,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private setWindowTitle = () => {
     if (this.url && this.cardTitle) {
-      this.operatorModeStateService.set(this.url, this.cardTitle);
+      this.operatorModeStateService.setCardTitle(this.url, this.cardTitle);
     }
   };
 
