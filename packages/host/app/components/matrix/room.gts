@@ -803,9 +803,18 @@ export default class Room extends Component<Signature> {
     },
   );
 
+  @cached
   private get topMostStackItems(): StackItem[] {
+    // side effect: whenever the stack changes we reset the
+    // auto-attached removed items state in a task to prevent rerender cycles
+    this.resetAutoAttachedRemovedStateTask.perform();
     return this.operatorModeStateService.topMostStackItems();
   }
+
+  private resetAutoAttachedRemovedStateTask = task(async () => {
+    await Promise.resolve();
+    this.removedAttachedCardIds.splice(0);
+  });
 
   private get autoAttachedCardIds() {
     if (this.operatorModeStateService.state.submode === Submodes.Code) {
@@ -817,7 +826,7 @@ export default class Room extends Component<Signature> {
     return this.autoAttachmentResource.cardIds;
   }
 
-  updateSkillIsActiveTask = task(
+  private updateSkillIsActiveTask = task(
     async (skillEventId: string, isActive: boolean) => {
       await new UpdateSkillActivationCommand(
         this.commandService.commandContext,
