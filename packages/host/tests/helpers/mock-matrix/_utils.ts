@@ -25,7 +25,7 @@ export class MockUtils {
   };
 
   getRoomIdForRealmAndUser = (realmURL: string, userId: string) => {
-    return `test-session-room-realm-${realmURL}-user-${userId}`;
+    return getRoomIdForRealmAndUser(realmURL, userId);
   };
 
   getRoomState = (roomId: string, eventType: string, stateKey?: string) => {
@@ -108,4 +108,8 @@ export class MockUtils {
 
 function isRealmEvent(e: IEvent): e is RealmEvent {
   return e.type === APP_BOXEL_REALM_EVENT_TYPE;
+}
+
+export function getRoomIdForRealmAndUser(realmURL: string, userId: string) {
+  return `test-session-room-realm-${realmURL}-user-${userId}`;
 }

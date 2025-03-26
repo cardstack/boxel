@@ -28,8 +28,8 @@ import { TrackedObject, TrackedSet } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCard,
@@ -88,8 +88,14 @@ export default class Room extends Component<Signature> {
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
         class='room'
-        data-room-settled={{this.doWhenRoomChanges.isIdle}}
-        data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
+        data-room-settled={{(and
+          this.doWhenRoomChanges.isIdle
+          (not this.matrixService.isLoadingTimeline)
+        )}}
+        data-test-room-settled={{(and
+          this.doWhenRoomChanges.isIdle
+          (not this.matrixService.isLoadingTimeline)
+        )}}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
       >
@@ -110,7 +116,14 @@ export default class Room extends Component<Signature> {
               data-test-message-idx={{i}}
             />
           {{else}}
-            <NewSession @sendPrompt={{this.sendMessage}} />
+            {{#if this.matrixService.isLoadingTimeline}}
+              <LoadingIndicator
+                @color='var(--boxel-light)'
+                class='loading-indicator'
+              />
+            {{else}}
+              <NewSession @sendPrompt={{this.sendMessage}} />
+            {{/if}}
           {{/each}}
           {{#if this.room}}
             {{#if this.showUnreadIndicator}}
@@ -218,6 +231,12 @@ export default class Room extends Component<Signature> {
       }
       :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
         padding-bottom: var(--boxel-sp-xl);
+      }
+      .loading-indicator {
+        margin-top: auto;
+        margin-bottom: auto;
+        margin-left: auto;
+        margin-right: auto;
       }
     </style>
   </template>
@@ -820,7 +839,8 @@ export default class Room extends Component<Signature> {
           this.autoAttachedCards.size !== 0,
       ) &&
       !!this.room &&
-      !this.messages.some((m) => this.isPendingMessage(m))
+      !this.messages.some((m) => this.isPendingMessage(m)) &&
+      !this.matrixService.isLoadingTimeline
     );
   }
 

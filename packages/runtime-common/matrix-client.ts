@@ -212,7 +212,7 @@ export class MatrixClient {
     }
   }
 
-  async getAccountData<T>(type: string) {
+  async getAccountDataFromServer<T>(type: string) {
     if (!this.access) {
       await this.login();
     }
@@ -222,7 +222,7 @@ export class MatrixClient {
       )}/account_data/${type}`,
     );
     if (response.status === 404) {
-      return;
+      return null;
     }
     let json = await response.json();
     if (!response.ok) {
