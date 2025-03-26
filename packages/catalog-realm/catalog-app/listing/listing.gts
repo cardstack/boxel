@@ -34,6 +34,64 @@ import { License } from './license';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
+  @tracked createdInstances = false;
+  @tracked writableRealms: string[] = [];
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this._setup.perform();
+  }
+
+  get realmOptions() {
+    return this.writableRealms.map((realmUrl) => {
+      return new MenuItem(realmUrl, 'action', {
+        action: () => {
+          this.create(realmUrl);
+        },
+      });
+    });
+  }
+
+  _setup = task(async () => {
+    let allRealmsInfo =
+      (await this.args.context?.actions?.allRealmsInfo?.()) ?? {};
+    let writableRealms: string[] = [];
+    if (allRealmsInfo) {
+      Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
+        if (realmInfo.canWrite) {
+          writableRealms.push(realmUrl);
+        }
+      });
+    }
+    this.writableRealms = writableRealms;
+  });
+
+  _create = task(async (realmUrl: string) => {
+    await Promise.all(
+      this.args.model?.specs
+        ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
+        .map((spec: Spec) =>
+          this.args.context?.actions?.create?.(spec, realmUrl),
+        ) ?? [],
+    );
+    this.createdInstances = true;
+  });
+
+  get hasOneOrMoreSpec() {
+    return this.args.model.specs && this.args.model?.specs?.length > 0;
+  }
+
+  get createButtonDisabled() {
+    return (
+      this.createdInstances ||
+      !this.args.context?.actions?.create ||
+      !this.hasOneOrMoreSpec
+    );
+  }
+
+  @action create(realmUrl: string) {
+    this._create.perform(realmUrl);
+  }
 
   mockCards = [
     { name: 'Card 1' },
@@ -86,154 +144,191 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   <template>
     <div class='app-listing-embedded'>
-      <AppListingHeader
-        @name={{this.appName}}
-        @publisher={{this.publisherName}}
-        @onButtonClick={{this.addToWorkspace}}
-        @buttonText='Add to Workspace'
-      />
+      {{#if this._setup.isRunning}}
+        Loading...
+      {{else}}
 
-      <section class='app-listing-info'>
-        <ContentContainer
-          @displayBoundaries={{true}}
-          class='app-listing-summary'
+        <AppListingHeader
+          @name={{this.appName}}
+          @publisher={{this.publisherName}}
+          @onButtonClick={{this.addToWorkspace}}
+          @buttonText='Add to Workspace'
         >
-          <h2>Summary</h2>
-          {{@model.summary}}
-        </ContentContainer>
+          <:action>
+            <BoxelDropdown>
+              <:trigger as |bindings|>
+                <BoxelButton
+                  class='action-button'
+                  @disabled={{this.createButtonDisabled}}
+                  {{bindings}}
+                >
+                  {{#if this._create.isRunning}}
+                    Creating...
+                  {{else if this.createdInstances}}
+                    Created Instances
+                  {{else}}
+                    Add to Workspace
+                  {{/if}}
+                </BoxelButton>
+              </:trigger>
+              <:content as |dd|>
+                <BoxelMenu
+                  @closeMenu={{dd.close}}
+                  @items={{this.realmOptions}}
+                />
+              </:content>
+            </BoxelDropdown>
+          </:action>
+        </AppListingHeader>
 
-        <div class='license-statistic'>
-          {{! Todo: Add license section while getting the real data }}
-          <div class='license-section'>
-            <h2>License</h2>
-            {{@model.license.name}}
-          </div>
-
-          {{! Todo: Add statistics section while getting the real data }}
-          <div class='statistics-section'>
-            <h2>Statistics</h2>
-            <div class='stats-container'>
-              <ContentContainer @displayBoundaries={{true}} class='stat-item'>
-                <span class='stat-label'>Downloads</span>
-                <span class='stat-value'>16,842</span>
-              </ContentContainer>
-
-              <ContentContainer @displayBoundaries={{true}} class='stat-item'>
-                <span class='stat-label'>Subscriptions</span>
-                <span class='stat-value'>5,439</span>
-              </ContentContainer>
-            </div>
-          </div>
-        </div>
-
-        <div class='pricing-plans'>
-          {{! Todo: Add price plan section while getting the real data }}
-          <ContentContainer @displayBoundaries={{true}} class='price-plan-item'>
-            <span class='price-plan-label'>$250</span>
-            <span class='price-plan-info'>= $250USD</span>
-            <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-              <:default>One-time purchase</:default>
-            </Pill>
-          </ContentContainer>
-
-          <ContentContainer @displayBoundaries={{true}} class='price-plan-item'>
-            <span class='price-plan-label'>$ 0.50</span>
-            <span class='price-plan-info'>per month</span>
-            <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-              <:default>Cancel anytime</:default>
-            </Pill>
-          </ContentContainer>
-
+        <section class='app-listing-info'>
           <ContentContainer
             @displayBoundaries={{true}}
-            class='price-plan-item premium-plan-item'
+            class='app-listing-summary'
           >
-            <span class='price-plan-label'>$ 250</span>
-            <span class='price-plan-info'>with Boxel Creator</span>
-            <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-              <:default>Premium plan</:default>
-            </Pill>
+            <h2>Summary</h2>
+            {{@model.summary}}
           </ContentContainer>
-        </div>
-      </section>
 
-      <hr class='divider' />
+          <div class='license-statistic'>
+            {{! Todo: Add license section while getting the real data }}
+            <div class='license-section'>
+              <h2>License</h2>
+              {{@model.license.name}}
+            </div>
 
-      <section class='app-listing-images-videos'>
-        <h2>Images & Videos</h2>
-        {{! Todo: Add images and videos section while getting the real data }}
-        <ul class='images-videos-list'>
-          {{#each this.mockCards as |card|}}
-            <li class='images-videos-item'>
-              {{card.name}}
-            </li>
-          {{/each}}
-        </ul>
-      </section>
+            {{! Todo: Add statistics section while getting the real data }}
+            <div class='statistics-section'>
+              <h2>Statistics</h2>
+              <div class='stats-container'>
+                <ContentContainer @displayBoundaries={{true}} class='stat-item'>
+                  <span class='stat-label'>Downloads</span>
+                  <span class='stat-value'>16,842</span>
+                </ContentContainer>
 
-      <section class='app-listing-examples'>
-        <h2>Examples</h2>
-        {{! Todo: Add examples section while getting the real data }}
-        <ul class='examples-list'>
-          {{#each this.mockCards as |card|}}
-            <li class='examples-item'>
-              {{card.name}}
-            </li>
-          {{/each}}
-        </ul>
-      </section>
+                <ContentContainer @displayBoundaries={{true}} class='stat-item'>
+                  <span class='stat-label'>Subscriptions</span>
+                  <span class='stat-value'>5,439</span>
+                </ContentContainer>
+              </div>
+            </div>
+          </div>
 
-      <hr class='divider' />
+          <div class='pricing-plans'>
+            {{! Todo: Add price plan section while getting the real data }}
+            <ContentContainer
+              @displayBoundaries={{true}}
+              class='price-plan-item'
+            >
+              <span class='price-plan-label'>$250</span>
+              <span class='price-plan-info'>= $250USD</span>
+              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
+                <:default>One-time purchase</:default>
+              </Pill>
+            </ContentContainer>
 
-      <section class='app-listing-categories'>
-        <h2>Categories</h2>
-        {{#if this.hasCategories}}
+            <ContentContainer
+              @displayBoundaries={{true}}
+              class='price-plan-item'
+            >
+              <span class='price-plan-label'>$ 0.50</span>
+              <span class='price-plan-info'>per month</span>
+              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
+                <:default>Cancel anytime</:default>
+              </Pill>
+            </ContentContainer>
 
-          <ul class='categories-list'>
-            {{#each @model.categories as |category|}}
-              <li class='categories-item'>
-                <Pill>{{category.name}}</Pill>
+            <ContentContainer
+              @displayBoundaries={{true}}
+              class='price-plan-item premium-plan-item'
+            >
+              <span class='price-plan-label'>$ 250</span>
+              <span class='price-plan-info'>with Boxel Creator</span>
+              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
+                <:default>Premium plan</:default>
+              </Pill>
+            </ContentContainer>
+          </div>
+        </section>
+
+        <hr class='divider' />
+
+        <section class='app-listing-images-videos'>
+          <h2>Images & Videos</h2>
+          {{! Todo: Add images and videos section while getting the real data }}
+          <ul class='images-videos-list'>
+            {{#each this.mockCards as |card|}}
+              <li class='images-videos-item'>
+                {{card.name}}
               </li>
             {{/each}}
           </ul>
-        {{else}}
-          No categories
+        </section>
+
+        <section class='app-listing-examples'>
+          <h2>Examples</h2>
+          {{! Todo: Add examples section while getting the real data }}
+          <ul class='examples-list'>
+            {{#each this.mockCards as |card|}}
+              <li class='examples-item'>
+                {{card.name}}
+              </li>
+            {{/each}}
+          </ul>
+        </section>
+
+        <hr class='divider' />
+
+        <section class='app-listing-categories'>
+          <h2>Categories</h2>
+          {{#if this.hasCategories}}
+
+            <ul class='categories-list'>
+              {{#each @model.categories as |category|}}
+                <li class='categories-item'>
+                  <Pill>{{category.name}}</Pill>
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            No categories
+          {{/if}}
+        </section>
+
+        <hr class='divider' />
+
+        {{! Todo: Adjust this after fixing the bug related to displaying the spec breakdown. }}
+        {{! Todo: Small improvement: change <div> to <section>. }}
+        {{! Todo: Consider always showing the "Includes These Boxels" title, regardless of whether this.specBreakdown is present or not. }}
+        {{#if this.specBreakdown}}
+          <div>
+            <h2>Includes These Boxels</h2>
+            <Accordion
+              data-test-selected-accordion-item={{this.selectedAccordionItem}}
+              as |A|
+            >
+              {{#each-in this.specBreakdown as |specType specs|}}
+                <A.Item
+                  @onClick={{fn this.selectAccordionItem specType}}
+                  @isOpen={{eq this.selectedAccordionItem specType}}
+                  data-test-accordion-item={{specType}}
+                >
+                  <:title>
+                    {{specType}}
+                    ({{specs.length}})
+                  </:title>
+                  <:content>
+                    {{#each specs as |spec|}}
+                      {{#let (this.getComponent spec) as |CardComponent|}}
+                        <CardComponent @format='fitted' />
+                      {{/let}}
+                    {{/each}}
+                  </:content>
+                </A.Item>
+              {{/each-in}}
+            </Accordion>
+          </div>
         {{/if}}
-      </section>
-
-      <hr class='divider' />
-
-      {{! Todo: Adjust this after fixing the bug related to displaying the spec breakdown. }}
-      {{! Todo: Small improvement: change <div> to <section>. }}
-      {{! Todo: Consider always showing the "Includes These Boxels" title, regardless of whether this.specBreakdown is present or not. }}
-      {{#if this.specBreakdown}}
-        <div>
-          <h2>Includes These Boxels</h2>
-          <Accordion
-            data-test-selected-accordion-item={{this.selectedAccordionItem}}
-            as |A|
-          >
-            {{#each-in this.specBreakdown as |specType specs|}}
-              <A.Item
-                @onClick={{fn this.selectAccordionItem specType}}
-                @isOpen={{eq this.selectedAccordionItem specType}}
-                data-test-accordion-item={{specType}}
-              >
-                <:title>
-                  {{specType}}
-                  ({{specs.length}})
-                </:title>
-                <:content>
-                  {{#each specs as |spec|}}
-                    {{#let (this.getComponent spec) as |CardComponent|}}
-                      <CardComponent @format='fitted' />
-                    {{/let}}
-                  {{/each}}
-                </:content>
-              </A.Item>
-            {{/each-in}}
-          </Accordion>
-        </div>
       {{/if}}
     </div>
 
@@ -389,95 +484,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   </template>
 }
 
-class IsolatedTemplate extends Component<typeof Listing> {
-  @tracked createdInstances = false;
-  @tracked writableRealms: string[] = [];
-
-  constructor(owner: any, args: any) {
-    super(owner, args);
-    this._setup.perform();
-  }
-
-  _setup = task(async () => {
-    let allRealmsInfo =
-      (await this.args.context?.actions?.allRealmsInfo?.()) ?? {};
-    let writableRealms: string[] = [];
-    if (allRealmsInfo) {
-      Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
-        if (realmInfo.canWrite) {
-          writableRealms.push(realmUrl);
-        }
-      });
-    }
-    this.writableRealms = writableRealms;
-  });
-
-  get realmOptions() {
-    return this.writableRealms.map((realmUrl) => {
-      return new MenuItem(realmUrl, 'action', {
-        action: () => {
-          this.create(realmUrl);
-        },
-      });
-    });
-  }
-
-  _create = task(async (realmUrl: string) => {
-    await Promise.all(
-      this.args.model?.specs
-        ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
-        .map((spec: Spec) =>
-          this.args.context?.actions?.create?.(spec, realmUrl),
-        ) ?? [],
-    );
-    this.createdInstances = true;
-  });
-
-  @action create(realmUrl: string) {
-    this._create.perform(realmUrl);
-  }
-
-  get hasOneOrMoreSpec() {
-    return this.args.model.specs && this.args.model?.specs?.length > 0;
-  }
-
-  get createButtonDisabled() {
-    return (
-      this.createdInstances ||
-      !this.args.context?.actions?.create ||
-      !this.hasOneOrMoreSpec
-    );
-  }
-
-  <template>
-    <div>
-      {{#if this._setup.isRunning}}
-        Loading...
-      {{else}}
-        <BoxelDropdown>
-          <:trigger as |bindings|>
-            <BoxelButton
-              @disabled={{this.createButtonDisabled}}
-              class='sort-button'
-              {{bindings}}
-            >
-              {{#if this._create.isRunning}}
-                Creating...
-              {{else if this.createdInstances}}
-                Created Instances
-              {{else}}
-                Create
-              {{/if}}
-            </BoxelButton>
-          </:trigger>
-          <:content as |dd|>
-            <BoxelMenu @closeMenu={{dd.close}} @items={{this.realmOptions}} />
-          </:content>
-        </BoxelDropdown>
-      {{/if}}
-    </div>
-  </template>
-}
 export class Listing extends CardDef {
   static displayName = 'Listing';
   static headerColor = '#00ebac';
@@ -497,6 +503,6 @@ export class Listing extends CardDef {
     },
   });
 
-  static isolated = IsolatedTemplate; //temporary
+  static isolated = EmbeddedTemplate; //temporary
   static embedded = EmbeddedTemplate;
 }
