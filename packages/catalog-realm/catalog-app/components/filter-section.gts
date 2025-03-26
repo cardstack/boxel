@@ -44,11 +44,9 @@ export default class FilterSection extends GlimmerComponent<FilterSectionArgs> {
       @layer {
         .filter-section {
           --content-container-height: 100%;
-          --content-container-width: 247px;
+          --content-container-width: 100%;
           --content-container-background-color: var(--boxel-light);
 
-          position: sticky;
-          top: 0;
           display: flex;
           flex-direction: column;
           gap: var(--filter-section-gap, var(--boxel-sp-sm));
