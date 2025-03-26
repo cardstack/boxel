@@ -214,20 +214,50 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       language,
     }: MonacoDiffEditorSignature['Args']['Named'],
   ) {
-    debugger;
-    let editor = monacoSDK.editor.createDiffEditor(
-      element,
-      editorDisplayOptions,
-    );
+    if (this.monacoState) {
+      let { editor } = this.monacoState;
+      let model = editor.getModel();
+      let originalModel = model?.original;
+      let modifiedModel = model?.modified;
 
-    let originalModel = monacoSDK.editor.createModel(originalCode, language);
-    let modifiedModel = monacoSDK.editor.createModel(modifiedCode, language);
+      let newModifiedCode = modifiedCode;
+      let currentModifiedCode = modifiedModel?.getValue();
+      let codeDelta = newModifiedCode.slice(currentModifiedCode.length);
 
-    editor.setModel({ original: originalModel, modified: modifiedModel });
+      let lineCount = modifiedModel.getLineCount();
+      let lastLineLength = modifiedModel.getLineLength(lineCount);
 
-    this.monacoState = {
-      editor,
-    };
+      let range = {
+        startLineNumber: lineCount,
+        startColumn: lastLineLength + 1,
+        endLineNumber: lineCount,
+        endColumn: lastLineLength + 1,
+      };
+
+      let editOperation = {
+        range: range,
+        text: codeDelta,
+        forceMoveMarkers: true,
+      };
+
+      // originalModel.setValue(originalCode);
+      debugger;
+      modifiedModel.applyEdits([editOperation]);
+    } else {
+      let editor = monacoSDK.editor.createDiffEditor(
+        element,
+        editorDisplayOptions,
+      );
+
+      let originalModel = monacoSDK.editor.createModel(originalCode, language);
+      let modifiedModel = monacoSDK.editor.createModel(modifiedCode, language);
+
+      editor.setModel({ original: originalModel, modified: modifiedModel });
+
+      this.monacoState = {
+        editor,
+      };
+    }
 
     registerDestructor(this, () => {
       let editor = this.monacoState?.editor;
@@ -281,13 +311,16 @@ class CodeBlockEditor extends Component<Signature> {
 class CodeBlockDiffEditor extends Component<Signature> {
   private editorDisplayOptions = {
     originalEditable: false,
-    folding: true,
+    compactMode: true,
+    renderSideBySide: false,
+    diffAlgorithm: 'advanced',
     hideUnchangedRegions: {
       enabled: true,
-      revealLineCount: 40,
+      revealLineCount: 20,
       minimumLineCount: 1,
       contextLineCount: 1,
     },
+    readOnly: true,
   };
 
   <template>
@@ -298,6 +331,10 @@ class CodeBlockDiffEditor extends Component<Signature> {
         margin-left: calc(-1 * var(--boxel-sp));
         height: 120px;
       }
+
+      :deep(.line-insert) {
+        background-color: rgb(19 255 32 / 66%) !important;
+      }
     </style>
     <div
       {{MonacoDiffEditor
@@ -307,7 +344,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
         originalCode=@originalCode
         modifiedCode=@modifiedCode
       }}
-      class='code-block'
+      class='code-block code-block-diff'
       data-test-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}
