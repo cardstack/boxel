@@ -215,7 +215,7 @@ export default class PlaygroundContent extends Component<Signature> {
         icon: IconCode,
       }),
       new MenuItem('Open in Interact Mode', 'action', {
-        action: () => this.openInInteractMode,
+        action: () => this.openInInteractMode(cardId),
         icon: Eye,
       }),
     ];

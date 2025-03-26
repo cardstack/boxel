@@ -122,7 +122,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     );
     if (chosenCardResource) {
-      let card = await chosenCardResource.detachFromStore();
+      let card = await chosenCardResource.dispose();
       if (card && isCardInstance(card)) {
         selectedCards = [...selectedCards, card];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;

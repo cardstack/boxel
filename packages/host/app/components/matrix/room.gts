@@ -858,7 +858,7 @@ export default class Room extends Component<Signature> {
         this.commandService.commandContext,
       );
 
-      let skillCard = await cardResource.detachFromStore();
+      let skillCard = await cardResource.dispose();
       if (skillCard && isCardInstance(skillCard)) {
         await addSkillsToRoomCommand.execute({
           roomId: this.args.roomId,

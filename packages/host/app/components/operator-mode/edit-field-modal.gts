@@ -180,7 +180,7 @@ export default class EditFieldModal extends Component<Signature> {
     });
 
     if (chosenSpecResource) {
-      let spec = await chosenSpecResource.detachFromStore();
+      let spec = await chosenSpecResource.dispose();
       if (spec && isCardInstance<Spec>(spec)) {
         this.fieldCard = await loadCard(spec.ref, {
           loader: this.loaderService.loader,

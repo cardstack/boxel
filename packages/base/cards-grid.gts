@@ -408,7 +408,7 @@ class Isolated extends Component<typeof CardsGrid> {
       return;
     }
 
-    let spec = await specResource.detachFromStore();
+    let spec = await specResource.dispose();
 
     if (spec?.id && isCardInstance<Spec>(spec)) {
       await this.args.context?.actions?.createCard?.(
