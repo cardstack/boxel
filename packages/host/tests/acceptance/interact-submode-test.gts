@@ -828,7 +828,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(7);
+      assert.expect(9);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });

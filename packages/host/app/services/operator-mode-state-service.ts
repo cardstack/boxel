@@ -147,6 +147,14 @@ export default class OperatorModeStateService extends Service {
     if (!this.state.stacks[stackIndex]) {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
+    if (
+      item.url &&
+      this.state.stacks[stackIndex].find((i) => i.url === item.url)
+    ) {
+      // this card is already in the stack, do nothing (maybe we could hoist
+      // this card to the top instead?)
+      return;
+    }
     this.state.stacks[stackIndex].push(item);
     if (item.url) {
       this.recentCardsService.add(item.url);
@@ -402,8 +410,15 @@ export default class OperatorModeStateService extends Service {
   }
 
   setCardTitle(url: string, title: string) {
-    this.cardTitles.set(url, title);
+    this.setCardTitleTask.perform(url, title);
   }
+
+  // we use a task to organize simultaneous updates, otherwise you may get error
+  // around updating a value previously used in a computation
+  private setCardTitleTask = task(async (url: string, title: string) => {
+    await Promise.resolve(); // wait 1 micro task
+    this.cardTitles.set(url, title);
+  });
 
   @cached
   get title() {
