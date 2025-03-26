@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { isCardInstance } from '@cardstack/runtime-common';
+
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -7,6 +9,7 @@ import HostBaseCommand from '../lib/host-base-command';
 import type CardService from '../services/card-service';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RealmService from '../services/realm';
+import type StoreService from '../services/store';
 
 export default class CopyCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.CopyCardInput,
@@ -15,6 +18,7 @@ export default class CopyCardCommand extends HostBaseCommand<
   @service declare private cardService: CardService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private store: StoreService;
 
   description = 'Copy a card to a realm';
 
@@ -52,14 +56,16 @@ export default class CopyCardCommand extends HostBaseCommand<
     }
     if (targetStackIndex !== undefined) {
       // use existing card in stack to determine realm url,
-      let topCard =
-        this.operatorModeStateService.topMostStackItems()[targetStackIndex]
-          ?.card;
-      if (topCard) {
-        let url = await this.cardService.getRealmURL(topCard);
-        // open card might be from a realm in which we don't have write permissions
-        if (url && this.realm.canWrite(url.href)) {
-          return url.href;
+      let item =
+        this.operatorModeStateService.topMostStackItems()[targetStackIndex];
+      if (item.url) {
+        let topCard = await this.store.getInstanceDetachedFromStore(item.url);
+        if (isCardInstance(topCard)) {
+          let url = await this.cardService.getRealmURL(topCard);
+          // open card might be from a realm in which we don't have write permissions
+          if (url && this.realm.canWrite(url.href)) {
+            return url.href;
+          }
         }
       }
     }

@@ -63,7 +63,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               <Tooltip @placement='top'>
                 <:trigger>
                   <CardPill
-                    @card={{item}}
+                    @cardId={{item.id}}
                     @isAutoAttachedCard={{true}}
                     @removeCard={{@removeCard}}
                   />
@@ -79,7 +79,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               </Tooltip>
             {{else}}
               <CardPill
-                @card={{item}}
+                @cardId={{item.id}}
                 @isAutoAttachedCard={{false}}
                 @removeCard={{@removeCard}}
               />

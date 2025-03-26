@@ -123,7 +123,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     );
     if (chosenCardResource) {
       await waitForProperty(chosenCardResource, 'card', (c) => !!c);
-      selectedCards = [...selectedCards, chosenCardResource.card];
+      selectedCards = [...selectedCards, chosenCardResource.card!]; // the wait above asserts card exists on resource
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
     }
   });

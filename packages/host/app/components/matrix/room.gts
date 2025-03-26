@@ -579,8 +579,8 @@ export default class Room extends Component<Signature> {
     return [...this.skills].sort((a, b) => {
       // Not all of the skills have a title, so we use the skillEventId as a fallback
       // which should be consistent.
-      let aTitle = a.cardResource.url || a.skillEventId;
-      let bTitle = b.cardResource.url || b.skillEventId;
+      let aTitle = a.cardId || a.skillEventId;
+      let bTitle = b.cardId || b.skillEventId;
       return aTitle.localeCompare(bTitle);
     });
   }

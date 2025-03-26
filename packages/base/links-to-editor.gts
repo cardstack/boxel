@@ -166,7 +166,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     );
     if (chosenCardResource) {
       await waitForProperty(chosenCardResource, 'card', (c) => !!c);
-      this.args.model.value = chosenCardResource.card;
+      this.args.model.value = chosenCardResource.card!; // the wait above asserts card exists
     }
   });
 }

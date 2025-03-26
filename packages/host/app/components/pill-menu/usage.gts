@@ -46,15 +46,13 @@ export default class PillMenuUsage extends Component {
   private headerIconURL = headerIcon;
 
   private makeCardResources = () => {
-    this.items = sampleCardURLs
-      .map((url) => this.getCard(this, () => url))
-      .map(
-        (cardResource) =>
-          new TrackedObject({
-            cardResource,
-            isActive: true,
-          }),
-      );
+    this.items = sampleCardURLs.map(
+      (cardId) =>
+        new TrackedObject({
+          cardId,
+          isActive: true,
+        }),
+    );
   };
 
   private get activeItems() {
@@ -68,7 +66,7 @@ export default class PillMenuUsage extends Component {
   @action private onChooseCard(cardResource: ReturnType<getCard>) {
     this.items = [
       ...this.items,
-      new TrackedObject({ cardResource, isActive: true }),
+      new TrackedObject({ cardId: cardResource.url!, isActive: true }),
     ];
   }
 

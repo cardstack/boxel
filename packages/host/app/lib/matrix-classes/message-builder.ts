@@ -35,6 +35,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { RoomMember } from './member';
 import { Message } from './message';
@@ -57,6 +58,7 @@ export default class MessageBuilder {
       skills: Skill[];
       events: DiscreteMatrixEvent[];
       commandResultEvent?: CommandResultEvent;
+      skillCardsCache: Map<string, SkillCard>;
     },
   ) {
     setOwner(this, owner);
@@ -245,7 +247,11 @@ export default class MessageBuilder {
       | { codeRef: ResolvedCodeRef; requiresApproval: boolean }
       | undefined;
     findCommand: for (let skill of this.builderContext.skills) {
-      for (let candidateSkillCommand of skill.card.commands) {
+      let skillCard = this.builderContext.skillCardsCache.get(skill.cardId);
+      if (!skillCard) {
+        continue;
+      }
+      for (let candidateSkillCommand of skillCard.commands) {
         if (commandRequest.name === candidateSkillCommand.functionName) {
           skillCommand = candidateSkillCommand;
           break findCommand;

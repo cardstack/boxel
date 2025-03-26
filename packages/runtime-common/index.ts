@@ -287,6 +287,7 @@ export type getCard<T extends CardDef = CardDef> = (
   cardError: CardErrorJSONAPI | undefined;
   // TODO remove this
   loaded: Promise<void>;
+  api: typeof CardAPI;
 };
 
 export type getCards = (

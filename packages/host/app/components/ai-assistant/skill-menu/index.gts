@@ -9,7 +9,7 @@ import PillMenu, { PillMenuItem } from '@cardstack/host/components/pill-menu';
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 export type Skill = {
-  cardResource: ReturnType<getCard<SkillCard>>;
+  cardId: string;
   skillEventId: string;
   isActive: boolean;
 };
@@ -95,7 +95,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   private get query() {
     let selectedCardIds =
       this.args.skills?.map((skill: Skill) => ({
-        not: { eq: { id: skill.cardResource.url! } }, // only unsaved cards have undefined url
+        not: { eq: { id: skill.cardId } },
       })) ?? [];
     // query for only displaying skill cards that are not already selected
     return {

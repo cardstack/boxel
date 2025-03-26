@@ -93,7 +93,7 @@ export default class OperatorModeStateService extends Service {
   @tracked private _aiAssistantOpen = false;
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
-  #title: string | undefined;
+  private cardTitles = new TrackedMap<string, string>();
 
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
@@ -410,7 +410,10 @@ export default class OperatorModeStateService extends Service {
     });
   }
 
-  // TODO control of title is delegated to the stack items
+  setCardTitle(url: string, title: string) {
+    this.cardTitles.set(url, title);
+  }
+
   @cached
   get title() {
     if (this.state.submode === Submodes.Code) {
@@ -418,9 +421,11 @@ export default class OperatorModeStateService extends Service {
         this.realm.info(this.realmURL.href).name
       }`;
     } else {
-      return this.#title ?? 'Boxel';
-      // let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
-      // return itemForTitle?.title ?? 'Boxel';
+      let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
+      return (
+        (itemForTitle?.url ? this.cardTitles.get(itemForTitle.url) : 'Boxel') ??
+        'Boxel'
+      );
     }
   }
 

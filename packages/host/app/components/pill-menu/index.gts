@@ -20,7 +20,7 @@ import {
 import CardPill from '@cardstack/host/components/card-pill';
 
 export type PillMenuItem = {
-  cardResource: ReturnType<getCard>;
+  cardId: string;
   isActive: boolean;
 };
 
@@ -86,14 +86,12 @@ export default class PillMenu extends Component<Signature> {
               <ul class='pill-list'>
                 {{#each @items as |item|}}
                   <li>
-                    {{#if item.cardResource.card}}
-                      <CardPill
-                        @card={{item.cardResource.card}}
-                        @onToggle={{fn this.toggleActive item}}
-                        @isEnabled={{item.isActive}}
-                        data-test-pill-menu-item={{item.cardResource.url}}
-                      />
-                    {{/if}}
+                    <CardPill
+                      @cardId={{item.cardId}}
+                      @onToggle={{fn this.toggleActive item}}
+                      @isEnabled={{item.isActive}}
+                      data-test-pill-menu-item={{item.cardId}}
+                    />
                   </li>
                 {{/each}}
               </ul>

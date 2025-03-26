@@ -8,7 +8,7 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { restartableTask, waitForProperty } from 'ember-concurrency';
 
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
@@ -172,16 +172,18 @@ export default class EditFieldModal extends Component<Signature> {
   });
 
   private chooseCardTask = restartableTask(async () => {
-    let chosenSpec = await chooseCard<Spec>({
+    let chosenSpecResource = await chooseCard<Spec>(this, {
       filter: {
         type: specRef,
       },
     });
 
-    if (chosenSpec) {
+    if (chosenSpecResource) {
+      await waitForProperty(chosenSpecResource, 'card', (c) => !!c);
+      let chosenSpec = chosenSpecResource.card!; // the wait above asserts the card exists on resource
       this.fieldCard = await loadCard(chosenSpec.ref, {
         loader: this.loaderService.loader,
-        relativeTo: new URL(chosenSpec.id),
+        relativeTo: new URL(chosenSpecResource.url!),
       });
 
       this.isFieldDef = chosenSpec.isField;
