@@ -1,0 +1,49 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Blog App",
+      "summary": "A modern, card-based blogging platform built with Cardstack framework.\n\n# Features\n\n- Create and manage blog posts, author profiles, and categories\n- Track publish dates, update history, word counts, and content status\n- Easy content creation with one-click \"New\" button",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/blog"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/review-blog"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/745fd9d2-f690-42ee-a815-0c0d7ee5df01"
+        }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "Listing"
+      }
+    }
+  }
+}

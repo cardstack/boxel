@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "longName": "TV Series",
+      "shortName": "TV",
+      "slug": "tv-series",
+      "pillColor": "#9D00FF",
+      "description": null,
+      "title": "TV Series",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../ReviewBlog/583df6bb-5739-418a-9186-978bd72816c1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-category",
+        "name": "BlogCategory"
+      }
+    }
+  }
+}

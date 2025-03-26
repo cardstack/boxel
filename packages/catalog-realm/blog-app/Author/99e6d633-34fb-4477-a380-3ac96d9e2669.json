@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Nina",
+      "lastName": "Kapoor",
+      "bio": "Nina finds stories where others see chaos. She weaves narratives about community-building, whether it’s through a neighborhood block party or the ensemble dynamics of a prestige TV series. She's a fan of slow-burn dramas and quick-witted comedies. Why she’s cool: Nina’s the friend who can turn any dinner table chat into a fascinating dialogue about character arcs—and recommend the perfect show for your mood.",
+      "fullBio": "A narrative alchemist at heart, Nina Kapoor discovers stories in the most unexpected places. Her vision for community-building and human connections translates into evocative, heartwarming tales. With a penchant for subtle storytelling, she unravels character arcs masterfully.",
+      "quote": "Nina’s the friend who can turn any dinner table chat into a fascinating dialogue about character arcs—and recommend the perfect show for your mood.",
+      "contactLinks": [],
+      "email": "nina.kapoor@example.com",
+      "featuredImage": {
+        "imageUrl": "https://boxel-images.boxel.ai/app-assets/authors/nina.jpeg",
+        "credit": null,
+        "caption": "Nina Kapoor at a neighborhood event",
+        "altText": "Nina Kapoor at a community event",
+        "size": "actual",
+        "height": 400,
+        "width": 300
+      },
+      "description": "Narrative Alchemist",
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/authors/nina.jpeg"
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../author",
+        "name": "Author"
+      }
+    }
+  }
+}

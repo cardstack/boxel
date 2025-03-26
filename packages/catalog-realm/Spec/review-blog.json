@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "ReviewBlog",
+        "module": "../blog-app/review-blog"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Review Blog",
+      "description": "Spec for Review Blog card",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../blog-app/ReviewBlog/583df6bb-5739-418a-9186-978bd72816c1"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

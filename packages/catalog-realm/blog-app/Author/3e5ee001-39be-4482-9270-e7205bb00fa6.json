@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Jonah",
+      "lastName": "Ashworth",
+      "bio": "Jonah is a writer who splits his time between dissecting urban design trends and ranking obscure ‘90s sci-fi movies. With a knack for connecting architecture to film sets, his perspective brings Hollywood to the streets of any city. Why he’s cool: He’s the guy explaining how Blade Runner influenced your favorite coworking space, all while winning trivia night with a random Oscar fact.",
+      "fullBio": "Jonah is a writer who splits his time between dissecting urban design trends and ranking obscure ‘90s sci-fi movies. With a knack for connecting architecture to film sets, his perspective brings Hollywood to the streets of any city.",
+      "quote": "He’s the guy explaining how Blade Runner influenced your favorite coworking space, all while winning trivia night with a random Oscar fact.",
+      "contactLinks": [],
+      "email": "jonah.ashworth@example.com",
+      "featuredImage": {
+        "imageUrl": "https://boxel-images.boxel.ai/app-assets/authors/jonah.jpeg",
+        "credit": "John Doe Photography",
+        "caption": "Headshot of Jonah Ashworth",
+        "altText": "Jonah Ashworth",
+        "size": "actual",
+        "height": 450,
+        "width": 300
+      },
+      "description": "Cine-Urbanist",
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/authors/jonah.jpeg"
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../author",
+        "name": "Author"
+      }
+    }
+  }
+}
