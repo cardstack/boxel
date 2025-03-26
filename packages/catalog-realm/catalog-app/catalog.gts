@@ -9,6 +9,7 @@ import {
   CardDef,
   realmInfo,
   type BaseDef,
+  linksToMany,
 } from 'https://cardstack.com/base/card-api';
 import { isCardInstance } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
@@ -19,6 +20,8 @@ import ContentContainer from './components/content-container';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import { TabbedHeader } from '@cardstack/boxel-ui/components';
+
+import { Listing } from './listing/listing';
 
 class Isolated extends Component<typeof Catalog> {
   mockShowcaseCards = [
@@ -372,6 +375,9 @@ export class Catalog extends CardDef {
       return this.realmName;
     },
   });
+  @field startHere = linksToMany(() => Listing);
+  @field newToThisWeek = linksToMany(() => Listing);
+  @field featured = linksToMany(() => Listing);
 
   static getDisplayName(instance: BaseDef) {
     if (isCardInstance(instance)) {
