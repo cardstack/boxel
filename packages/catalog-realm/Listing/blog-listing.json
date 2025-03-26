@@ -11,12 +11,12 @@
     "relationships": {
       "specs.0": {
         "links": {
-          "self": "../Spec/blog"
+          "self": "../Spec/review-blog"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/review-blog"
+          "self": "../Spec/blog"
         }
       },
       "publisher": {
