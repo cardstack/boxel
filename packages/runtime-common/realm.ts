@@ -36,6 +36,7 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
+  userInitiatedPriority,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -85,6 +86,7 @@ import type {
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
+import type { LintArgs, LintResult } from './lint';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -227,6 +229,7 @@ export class Realm {
     ],
   ]);
   #dbAdapter: DBAdapter;
+  #queue: QueuePublisher;
 
   #disableMatrixRealmEvents = false;
 
@@ -296,6 +299,7 @@ export class Realm {
     this.loaderTemplate = loader;
 
     this.#adapter = adapter;
+    this.#queue = queue;
     this.#realmIndexUpdater = new RealmIndexUpdater({
       realm: this,
       dbAdapter,
@@ -330,6 +334,7 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
       )
+      .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get(
         '/_types',
         SupportedMimeType.CardTypeSummary,
@@ -1612,6 +1617,28 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async lint(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let source = await request.text();
+    let job = await this.#queue.publish<LintResult>({
+      jobType: `lint-source`,
+      concurrencyGroup: `linting:${this.url}`,
+      timeout: 10,
+      priority: userInitiatedPriority,
+      args: { source } satisfies LintArgs,
+    });
+    let result = await job.done;
+    return createResponse({
+      body: JSON.stringify(result),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
       },
       requestContext,
     });
