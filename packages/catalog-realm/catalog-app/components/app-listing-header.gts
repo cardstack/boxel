@@ -9,7 +9,6 @@ interface AppListingHeaderArgs {
     rating?: string; // TODO: add rating
     reviewCount?: string; // TODO: add review count
     buttonText: string;
-    onButtonClick: () => void;
   };
   Blocks: {
     default: [];

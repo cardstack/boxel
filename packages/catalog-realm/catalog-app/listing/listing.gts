@@ -102,10 +102,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     { name: 'Card 6' },
   ];
 
-  @action addToWorkspace() {
-    console.log('addToWorkspace');
-  }
-
   get appName(): string {
     return this.args.model.name || '';
   }
@@ -151,7 +147,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         <AppListingHeader
           @name={{this.appName}}
           @publisher={{this.publisherName}}
-          @onButtonClick={{this.addToWorkspace}}
           @buttonText='Add to Workspace'
         >
           <:action>
