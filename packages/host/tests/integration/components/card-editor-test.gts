@@ -27,8 +27,8 @@ import CardEditor from '@cardstack/host/components/card-editor';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 
-import { getSearch } from '@cardstack/host/resources/search';
 import { getCard } from '@cardstack/host/resources/card-resource';
+import { getSearch } from '@cardstack/host/resources/search';
 
 import { CardDef } from 'https://cardstack.com/base/card-api';
 
