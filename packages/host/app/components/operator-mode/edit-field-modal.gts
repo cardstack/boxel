@@ -8,7 +8,7 @@ import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, waitForProperty } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
@@ -27,6 +27,7 @@ import {
   identifyCard,
   specRef,
   CodeRef,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
@@ -179,20 +180,21 @@ export default class EditFieldModal extends Component<Signature> {
     });
 
     if (chosenSpecResource) {
-      await waitForProperty(chosenSpecResource, 'card', (c) => !!c);
-      let chosenSpec = chosenSpecResource.card!; // the wait above asserts the card exists on resource
-      this.fieldCard = await loadCard(chosenSpec.ref, {
-        loader: this.loaderService.loader,
-        relativeTo: new URL(chosenSpecResource.url!),
-      });
+      let spec = await chosenSpecResource.detachFromStore();
+      if (spec && isCardInstance<Spec>(spec)) {
+        this.fieldCard = await loadCard(spec.ref, {
+          loader: this.loaderService.loader,
+          relativeTo: new URL(chosenSpecResource.url!),
+        });
 
-      this.isFieldDef = chosenSpec.isField;
-      this.cardURL = new URL(chosenSpec.id);
-      this.fieldRef = chosenSpec.ref;
+        this.isFieldDef = spec.isField;
+        this.cardURL = new URL(spec.id);
+        this.fieldRef = spec.ref;
 
-      // This transforms relative module paths, such as "../person", to absolute ones -
-      // we need that absolute path to load realm info
-      this.fieldModuleURL = new URL(chosenSpec.ref.module, chosenSpec.id);
+        // This transforms relative module paths, such as "../person", to absolute ones -
+        // we need that absolute path to load realm info
+        this.fieldModuleURL = new URL(spec.ref.module, spec.id);
+      }
     }
   });
 

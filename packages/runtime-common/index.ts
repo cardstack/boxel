@@ -184,7 +184,7 @@ export type CreateNewCard = (
     doc?: LooseSingleCardDocument;
     realmURL?: URL;
   },
-) => ReturnType<getCard>;
+) => Promise<string>;
 
 export interface CardChooser {
   chooseCard<T extends CardDef>(
@@ -287,6 +287,8 @@ export type getCard<T extends CardDef = CardDef> = (
   cardError: CardErrorJSONAPI | undefined;
   // TODO remove this
   loaded: Promise<void>;
+  detachFromStore(): Promise<T | CardErrorJSONAPI | undefined>;
+  getNewCardURL(): Promise<string>;
   api: typeof CardAPI;
 };
 
@@ -310,7 +312,7 @@ export interface CardCatalogQuery extends Query {
 }
 
 export interface CardCreator {
-  create<T extends CardDef>(
+  create(
     owner: object,
     ref: CodeRef,
     relativeTo: URL | undefined,
@@ -318,10 +320,10 @@ export interface CardCreator {
       realmURL?: URL;
       doc?: LooseSingleCardDocument;
     },
-  ): ReturnType<getCard<T>>;
+  ): Promise<string>;
 }
 
-export function createNewCard<T extends CardDef>(
+export async function createNewCard(
   owner: object,
   ref: CodeRef,
   relativeTo: URL | undefined,
@@ -329,7 +331,7 @@ export function createNewCard<T extends CardDef>(
     realmURL?: URL;
     doc?: LooseSingleCardDocument;
   },
-): ReturnType<getCard<T>> {
+): Promise<string> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
     throw new Error(
@@ -338,7 +340,7 @@ export function createNewCard<T extends CardDef>(
   }
   let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
 
-  return cardCreator.create<T>(owner, ref, relativeTo, opts);
+  return await cardCreator.create(owner, ref, relativeTo, opts);
 }
 
 export interface RealmSubscribe {
@@ -379,7 +381,7 @@ export interface Actions {
       doc?: LooseSingleCardDocument; // initial data for the card
       cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
     },
-  ) => ReturnType<getCard>;
+  ) => Promise<string>;
   viewCard: (
     cardOrURL: CardDef | URL,
     format?: Format,

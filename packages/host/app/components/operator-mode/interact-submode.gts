@@ -180,7 +180,7 @@ export default class InteractSubmode extends Component<Signature> {
   // to which stack the cards will be added to, or from which stack the cards will be removed from.
   private publicAPI(here: InteractSubmode, stackIndex: number): Actions {
     return {
-      createCard: (
+      createCard: async (
         owner: object,
         ref: CodeRef,
         relativeTo: URL | undefined,
@@ -190,7 +190,7 @@ export default class InteractSubmode extends Component<Signature> {
           doc?: LooseSingleCardDocument; // fill in card data with values
           cardModeAfterCreation?: Format;
         },
-      ): ReturnType<getCard> => {
+      ): Promise<string> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
         // we make the code ref use an absolute URL for safety in
         // the case it's being created in a different realm than where the card
@@ -214,14 +214,6 @@ export default class InteractSubmode extends Component<Signature> {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        let newItem = new StackItem({
-          newCard: { doc, relativeTo },
-          format: opts?.cardModeAfterCreation ?? 'edit',
-          request: new Deferred(),
-          isLinkedCard: opts?.isLinkedCard,
-          stackIndex,
-        });
-
         // await newItem.ready();
         // if (newItem.cardError) {
         //   console.error(
@@ -233,9 +225,17 @@ export default class InteractSubmode extends Component<Signature> {
         //   );
         //   return undefined;
         // }
+        let cardResource = here.getCard(owner, () => doc, { relativeTo });
+        let url = await cardResource.getNewCardURL();
+        let newItem = new StackItem({
+          url,
+          format: opts?.cardModeAfterCreation ?? 'edit',
+          request: new Deferred(),
+          isLinkedCard: opts?.isLinkedCard,
+          stackIndex,
+        });
         here.addToStack(newItem);
-        return this.getCard(owner, () => doc, { relativeTo });
-        // return newItem.card;
+        return url;
       },
       viewCard: (
         cardOrURL: CardDef | URL,
@@ -405,7 +405,7 @@ export default class InteractSubmode extends Component<Signature> {
     // edit and isolated formats
     if (url && item.format === 'edit') {
       this.store.save(url); // intentionally ignoring promise so caller is not waiting for save to complete
-      request?.fulfill();
+      request?.fulfill(url);
       // let updatedCard = this.args.saveCard(card);
       // request?.fulfill(updatedCard);
     }

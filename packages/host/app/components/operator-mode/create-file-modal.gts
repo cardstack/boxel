@@ -7,11 +7,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import camelCase from 'camelcase';
-import {
-  restartableTask,
-  enqueueTask,
-  waitForProperty,
-} from 'ember-concurrency';
+import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
@@ -36,6 +32,7 @@ import {
   SupportedMimeType,
   maybeRelativeURL,
   GetCardContextName,
+  isCardInstance,
   type getCard,
   type LocalPath,
   type LooseSingleCardDocument,
@@ -619,15 +616,20 @@ export default class CreateFileModal extends Component<Signature> {
       // we expect a 404 here
     }
 
+    let spec: Spec | undefined;
     if (this.selectedSpecResource) {
-      await waitForProperty(this.selectedSpecResource, 'card', (c) => !!c);
+      let maybeSpec = await this.selectedSpecResource.detachFromStore();
+      if (maybeSpec && !isCardInstance(maybeSpec)) {
+        throw new Error(`Failed to load spec ${maybeSpec.id}`);
+      }
+      spec = maybeSpec;
     }
 
     let {
       ref: { name: exportName, module },
-    } = (this.definitionClass ?? this.selectedSpecResource?.card)!; // we just checked above to make sure one of these exists
+    } = (this.definitionClass ?? spec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    let absoluteModule = new URL(module, this.selectedSpecResource?.url);
+    let absoluteModule = new URL(module, spec?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
@@ -737,27 +739,25 @@ export class ${className} extends ${exportName} {
         `Cannot createCardInstance when there is no this.currentRequest`,
       );
     }
+    let spec: Spec | undefined;
     if (this.selectedSpecResource) {
-      await waitForProperty(this.selectedSpecResource, 'card', (c) => !!c);
+      let maybeSpec = await this.selectedSpecResource.detachFromStore();
+      if (maybeSpec && !isCardInstance(maybeSpec)) {
+        throw new Error(`Failed to load spec ${maybeSpec.id}`);
+      }
+      spec = maybeSpec;
     }
 
-    if (
-      (!this.selectedSpecResource?.card?.ref && !this.definitionClass) ||
-      !this.selectedRealmURL
-    ) {
+    if ((!spec?.ref && !this.definitionClass) || !this.selectedRealmURL) {
       throw new Error(
         `bug: cannot create card instance with out adoptsFrom ref and selected realm URL`,
       );
     }
 
-    let { ref } = (
-      this.definitionClass
-        ? this.definitionClass
-        : this.selectedSpecResource?.card
-    )!; // we just checked above to make sure one of these exist
+    let { ref } = (this.definitionClass ? this.definitionClass : spec)!; // we just checked above to make sure one of these exist
 
-    let relativeTo = this.selectedSpecResource
-      ? new URL(this.selectedSpecResource.url!) // only new cards are missing urls
+    let relativeTo = spec
+      ? new URL(spec.id!) // only new cards are missing urls
       : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card

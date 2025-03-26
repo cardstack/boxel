@@ -2,7 +2,6 @@ import GlimmerComponent from '@glimmer/component';
 import { on } from '@ember/modifier';
 import {
   restartableTask,
-  waitForProperty,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import {
@@ -165,7 +164,8 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       },
     );
     if (chosenCardResource) {
-      await waitForProperty(chosenCardResource, 'card', (c) => !!c);
+      // TODO need to talk to ed about how to deal with this
+      await chosenCardResource.loaded;
       this.args.model.value = chosenCardResource.card!; // the wait above asserts card exists
     }
   });

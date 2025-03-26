@@ -13,7 +13,6 @@ import {
   timeout,
   all,
   task,
-  waitForProperty,
 } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
@@ -847,12 +846,13 @@ export default class Room extends Component<Signature> {
         this.commandService.commandContext,
       );
 
-      await waitForProperty(cardResource, 'card', (c) => !!c);
-
-      await addSkillsToRoomCommand.execute({
-        roomId: this.args.roomId,
-        skills: [cardResource.card!],
-      });
+      let skillCard = await cardResource.detachFromStore();
+      if (skillCard && isCardInstance(skillCard)) {
+        await addSkillsToRoomCommand.execute({
+          roomId: this.args.roomId,
+          skills: [skillCard],
+        });
+      }
     },
   );
 }

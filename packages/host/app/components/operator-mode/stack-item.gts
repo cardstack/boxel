@@ -419,7 +419,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       // we dont want to have the user wait for the save to complete before
       // dismissing edit mode so intentionally not awaiting here
       await this.args.saveCard(this.card);
-      request?.fulfill();
+      request?.fulfill(this.card.id);
     }
     this.operatorModeStateService.replaceItemInStack(
       item,

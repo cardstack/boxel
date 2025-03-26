@@ -13,7 +13,7 @@ import type { Format } from 'https://cardstack.com/base/card-api';
 interface Args {
   format: Format;
   // owner: object;
-  request?: Deferred<void>;
+  request?: Deferred<string>;
   stackIndex: number;
   newCard?: { doc: LooseSingleCardDocument; relativeTo: URL | undefined };
   url?: string;
@@ -27,7 +27,7 @@ interface Args {
 // usage
 export class StackItem {
   format: Format;
-  request?: Deferred<void>;
+  request?: Deferred<string>;
   stackIndex: number;
   isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
   // private owner: object;

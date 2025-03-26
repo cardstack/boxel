@@ -2,7 +2,7 @@
 // named 'card.ts' the browser sourcemap conflates this module with the card
 // controller, also named 'card.ts'.
 
-import { registerDestructor } from '@ember/destroyable';
+import { registerDestructor, destroy } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
@@ -140,6 +140,15 @@ export class CardResource extends Resource<Args> {
     return this._loading?.promise;
   }
 
+  // if there was an error creating a card, then we won't have a URL
+  async getNewCardURL(): Promise<string | undefined> {
+    if (this.url) {
+      return this.url;
+    }
+    await this._loading?.promise;
+    return this.url;
+  }
+
   private load = restartableTask(
     async (
       urlOrDoc: string | LooseSingleCardDocument | undefined,
@@ -185,6 +194,20 @@ export class CardResource extends Resource<Args> {
       );
     }
     return this.#api;
+  }
+
+  // There are scenarios where we have a resource and we literally don't care
+  // about the life time because we need to grab a property off of it (like
+  // using a Spec when creating a new card). in that case we can throw away the
+  // resource and just get the underlying card. This means that the card will
+  // now be detached from the store.
+  async detachFromStore() {
+    await this._loading?.promise;
+    try {
+      return this.card ?? this.cardError;
+    } finally {
+      destroy(this);
+    }
   }
 }
 

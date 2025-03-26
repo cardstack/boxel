@@ -571,12 +571,13 @@ export default class CardCatalogModal extends Component<Signature> {
         }
 
         if (newCard) {
-          cardResource = this.createNew(
+          let cardId = await this.createNewTask.perform(
             this.state.request.owner,
             newCard.ref,
             newCard.relativeTo ? new URL(newCard.relativeTo) : undefined,
             new URL(newCard.realmURL),
           );
+          cardResource = this.getCard(this.state.request.owner, () => cardId);
         }
       }
 
@@ -658,32 +659,34 @@ export default class CardCatalogModal extends Component<Signature> {
     this.pickCard.perform(item, state);
   }
 
-  private createNew = (
-    owner: object,
-    ref: CodeRef,
-    relativeTo: URL | undefined /* this should be the spec ID */,
-    realmURL: URL | undefined,
-  ) => {
-    if (!this.state) {
-      return;
-    }
-    let newCardResource: ReturnType<getCard>;
-    this.state.dismissModal = true;
-    if (this.state.request.opts?.createNewCard) {
-      newCardResource = this.state.request.opts?.createNewCard(
-        owner,
-        ref,
-        relativeTo,
-        {
-          isLinkedCard: true,
-          realmURL,
-        },
-      );
-    } else {
-      newCardResource = createNewCard(owner, ref, relativeTo, { realmURL });
-    }
-    return newCardResource;
-  };
+  private createNewTask = task(
+    async (
+      owner: object,
+      ref: CodeRef,
+      relativeTo: URL | undefined /* this should be the spec ID */,
+      realmURL: URL | undefined,
+    ) => {
+      if (!this.state) {
+        return;
+      }
+      let newCardId: string | undefined;
+      this.state.dismissModal = true;
+      if (this.state.request.opts?.createNewCard) {
+        newCardId = await this.state.request.opts?.createNewCard(
+          owner,
+          ref,
+          relativeTo,
+          {
+            isLinkedCard: true,
+            realmURL,
+          },
+        );
+      } else {
+        newCardId = await createNewCard(owner, ref, relativeTo, { realmURL });
+      }
+      return newCardId;
+    },
+  );
 }
 
 async function chooseCardTitle(

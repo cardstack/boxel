@@ -20,7 +20,6 @@ import {
 import { AddButton, IconButton, Pill } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
-  waitForProperty,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import {
@@ -122,7 +121,8 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     );
     if (chosenCardResource) {
-      await waitForProperty(chosenCardResource, 'card', (c) => !!c);
+      // TODO need to talk to ed about how to deal with this
+      await chosenCardResource.loaded;
       selectedCards = [...selectedCards, chosenCardResource.card!]; // the wait above asserts card exists on resource
       (this.args.model.value as any)[this.args.field.name] = selectedCards;
     }
