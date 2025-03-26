@@ -21,7 +21,7 @@ import ContentContainer from './components/content-container';
 import CatalogLayout from './layouts/catalog-layout';
 
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
-import { TabbedHeader } from '@cardstack/boxel-ui/components';
+import { TabbedHeader, BoxelButton } from '@cardstack/boxel-ui/components';
 
 import { Listing } from './listing/listing';
 
@@ -134,8 +134,13 @@ class Isolated extends Component<typeof Catalog> {
       class='catalog-layout {{this.activeTabId}}'
     >
       <:sidebar>
-        {{! remove this gotoGrid button after testing }}
-        <button {{on 'click' this.goToGrid}}> Go to Grid </button>
+        <BoxelButton
+          class='go-to-grid'
+          @kind='primary'
+          {{on 'click' this.goToGrid}}
+        >
+          Go to Grid
+        </BoxelButton>
         <FilterSection />
       </:sidebar>
       <:content>
@@ -343,6 +348,9 @@ class Isolated extends Component<typeof Catalog> {
         .catalog-content {
           overflow-y: unset;
         }
+      }
+      .go-to-grid {
+        font-weight: 600;
       }
     </style>
   </template>
