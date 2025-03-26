@@ -100,7 +100,7 @@ class Isolated extends Component<typeof Catalog> {
       displayName: 'Fields',
     },
     {
-      tabId: 'skills',
+      tabId: 'skill',
       displayName: 'Skills',
     },
   ];
