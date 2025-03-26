@@ -1,10 +1,72 @@
 import GlimmerComponent from '@glimmer/component';
+import { CardDef } from 'https://cardstack.com/base/card-api';
+import type { Format, CardContext } from 'https://cardstack.com/base/card-api';
+import { CardContainer } from '@cardstack/boxel-ui/components';
+
+interface CardListArgs {
+  Args: {
+    cards?: CardDef[];
+    format: Format;
+    context?: CardContext;
+  };
+  Blocks: {};
+  Element: HTMLElement;
+}
+
+class CardList extends GlimmerComponent<CardListArgs> {
+  <template>
+    <ul class='card-list' ...attributes>
+      {{#each @cards as |card|}}
+        <li class='card'>
+          {{#let (this.getComponent card) as |Component|}}
+            <CardContainer
+              {{@context.cardComponentModifier
+                cardId=card.id
+                format='data'
+                fieldType=undefined
+                fieldName=undefined
+              }}
+            >
+              <Component @format={{@format}} />
+            </CardContainer>
+          {{/let}}
+        </li>
+      {{/each}}
+    </ul>
+    <style scoped>
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(var(--grid-card-min-width), var(--grid-card-max-width))
+        );
+        grid-auto-rows: var(--grid-card-height);
+        gap: var(--boxel-sp);
+        list-style-type: none;
+        padding: 0;
+        margin-top: var(--boxel-sp-lg);
+      }
+      .card {
+        height: auto;
+        max-width: 100%;
+        background-color: var(--boxel-300);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--boxel-border-radius);
+      }
+    </style>
+  </template>
+
+  getComponent = (card: CardDef) => card.constructor.getComponent(card);
+}
 
 interface CardSectionArgs {
   Args: {
     title?: string;
     description?: string;
-    cards?: Array<{ name: string }>;
+    cards?: CardDef[];
+    context?: CardContext;
   };
   Blocks: {
     intro?: []; // we can choose to use this to pass instead of using args.title if the title block HTML is complex
@@ -16,9 +78,6 @@ interface CardSectionArgs {
 // Priotize using block intro instead of using args.title / description if both are provided
 export default class CardsDisplaySection extends GlimmerComponent<CardSectionArgs> {
   <template>
-    {{! TODO: Modify this section once we got the real data or query }}
-    {{! TODO: Now we using grid layout for cards }}
-    {{! TODO: Remember all card display will be fitted format }}
     <section class='cards-display-section' ...attributes>
       {{#if (has-block 'intro')}}
         {{yield to='intro'}}
@@ -34,14 +93,7 @@ export default class CardsDisplaySection extends GlimmerComponent<CardSectionArg
       {{#if (has-block 'content')}}
         {{yield to='content'}}
       {{else}}
-        {{! Todo: We need to redo this after we got real data, maybe use prerendesearch todsiaply all fitted format card }}
-        <ul class='cards'>
-          {{#each @cards as |card|}}
-            <li class='card'>
-              {{card.name}}
-            </li>
-          {{/each}}
-        </ul>
+        <CardList @cards={{@cards}} @format='fitted' @context={{@context}} />
       {{/if}}
     </section>
     <style scoped>
@@ -55,27 +107,6 @@ export default class CardsDisplaySection extends GlimmerComponent<CardSectionArg
         p {
           margin-block: 0;
           margin-bottom: var(--boxel-sp);
-        }
-        .cards {
-          display: grid;
-          grid-template-columns: repeat(
-            auto-fill,
-            minmax(var(--grid-card-min-width), var(--grid-card-max-width))
-          );
-          grid-auto-rows: var(--grid-card-height);
-          gap: var(--boxel-sp);
-          list-style-type: none;
-          padding: 0;
-          margin-top: var(--boxel-sp-lg);
-        }
-        .card {
-          height: auto;
-          max-width: 100%;
-          background-color: var(--boxel-300);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: var(--boxel-border-radius);
         }
       }
     </style>

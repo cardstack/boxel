@@ -120,6 +120,20 @@ class Isolated extends Component<typeof Catalog> {
     this.args.context?.actions?.viewCard(gridUrl);
   }
 
+  get startHereListings() {
+    return this.args.model.startHere;
+  }
+
+  get newListings() {
+    return this.args.model.new;
+  }
+
+  get featuredListings() {
+    return this.args.model.featured;
+  }
+
+  getComponent = (card: CardDef) => card.constructor.getComponent(card);
+
   <template>
     <TabbedHeader
       @tabs={{this.tabFilterOptions}}
@@ -152,7 +166,8 @@ class Isolated extends Component<typeof Catalog> {
               <ContentContainer class='catalog-listing'>
                 {{#if (this.shouldShowTab 'showcase')}}
                   <CardsDisplaySection
-                    @cards={{this.mockShowcaseCards}}
+                    @cards={{this.startHereListings}}
+                    @context={{@context}}
                     class='showcase-cards-display'
                   >
                     <:intro>
@@ -167,7 +182,10 @@ class Isolated extends Component<typeof Catalog> {
                     </:intro>
                   </CardsDisplaySection>
 
-                  <CardsDisplaySection @cards={{this.mockNewToThisWeekCards}}>
+                  <CardsDisplaySection
+                    @cards={{this.newListings}}
+                    @context={{@context}}
+                  >
                     <:intro>
                       <div class='intro-title'>
                         <h2>New this Week</h2>
@@ -180,7 +198,8 @@ class Isolated extends Component<typeof Catalog> {
                   </CardsDisplaySection>
 
                   <CardsDisplaySection
-                    @cards={{this.mockFeaturedCards}}
+                    @cards={{this.featuredListings}}
+                    @context={{@context}}
                     class='featured-cards-display'
                   >
                     <:intro>
@@ -194,7 +213,7 @@ class Isolated extends Component<typeof Catalog> {
                   </CardsDisplaySection>
                 {{/if}}
 
-                {{#if (this.shouldShowTab 'apps')}}
+                {{!-- {{#if (this.shouldShowTab 'apps')}}
                   <CardsDisplaySection
                     @title='Apps'
                     @cards={{this.mockCards}}
@@ -220,7 +239,7 @@ class Isolated extends Component<typeof Catalog> {
                     @title='Skills'
                     @cards={{this.mockCards}}
                   />
-                {{/if}}
+                {{/if}} --}}
               </ContentContainer>
             </div>
           </div>
@@ -373,7 +392,7 @@ export class Catalog extends CardDef {
     },
   });
   @field startHere = linksToMany(() => Listing);
-  @field newToThisWeek = linksToMany(() => Listing);
+  @field new = linksToMany(() => Listing);
   @field featured = linksToMany(() => Listing);
 
   static getDisplayName(instance: BaseDef) {

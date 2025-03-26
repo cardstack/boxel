@@ -1,8 +1,32 @@
 {
   "data": {
     "type": "card",
-    "attributes": {},
-    "relationships": {},
+    "attributes": {
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "startHere.0": {
+        "links": {
+          "self": "./Listing/blog-listing"
+        }
+      },
+      "startHere.1": {
+        "links": {
+          "self": "./Listing/5721ca5d-f89a-42d6-aa60-421f4c1c1c30"
+        }
+      },
+      "newToThisWeek": {
+        "links": {
+          "self": null
+        }
+      },
+      "featured": {
+        "links": {
+          "self": null
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "./catalog-app/catalog",
