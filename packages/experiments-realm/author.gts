@@ -10,6 +10,7 @@ import {
   linksTo,
   StringField,
 } from 'https://cardstack.com/base/card-api';
+import { EmailField } from 'https://cardstack.com/base/email';
 
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
@@ -22,7 +23,6 @@ import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { setBackgroundImage } from './components/layout';
 import { ContactLinkField } from './fields/contact-link';
 import { BlogApp } from './blog-app';
-import { EmailField } from './fields/email';
 
 class AuthorContactLink extends ContactLinkField {
   static values = [

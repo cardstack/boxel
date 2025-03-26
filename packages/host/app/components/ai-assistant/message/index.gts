@@ -5,6 +5,7 @@ import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
@@ -14,9 +15,7 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
-import { isCardInstance } from '@cardstack/runtime-common';
-
-import { markdownToHtml } from '@cardstack/runtime-common';
+import { type getCard, markdownToHtml } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
@@ -25,7 +24,6 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import FormattedMessage from '../formatted-message';
@@ -41,11 +39,8 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     profileAvatar?: ComponentLike;
-    resources?: {
-      cards: CardDef[] | undefined;
-      files: FileDef[] | undefined;
-      errors: { id: string; error: Error }[] | undefined;
-    };
+    resources?: ReturnType<getCard>[];
+    files?: FileDef[] | undefined;
     index: number;
     eventId: string;
     monacoSDK: MonacoSDK;
@@ -272,8 +267,10 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{#if this.items.length}}
             <div class='items' data-test-message-items>
               {{#each this.items as |item|}}
-                {{#if (isCardInstance item)}}
-                  <CardPill @card={{item}} />
+                {{#if (isCardResource item)}}
+                  {{#if item.card}}
+                    <CardPill @card={{item.card}} />
+                  {{/if}}
                 {{else}}
                   <FilePill @file={{item}} />
                 {{/if}}
@@ -281,9 +278,9 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          {{#if @resources.errors.length}}
+          {{#if this.errors.length}}
             <div class='error-container error-footer'>
-              {{#each @resources.errors as |resourceError|}}
+              {{#each this.errors as |resourceError|}}
                 <FailureBordered class='error-icon' />
                 <div class='error-message' data-test-card-error>
                   <div>Cannot render {{resourceError.id}}</div>
@@ -485,11 +482,32 @@ export default class AiAssistantMessage extends Component<Signature> {
     return this.args.isStreaming && !this.args.errorMessage;
   }
 
+  @cached
+  private get errors() {
+    let resourcesWithErrors = (this.args.resources ?? []).filter(
+      (r) => r.cardError,
+    );
+    return resourcesWithErrors.flatMap(({ cardError }) => {
+      let {
+        id,
+        message,
+        title: name,
+        meta: { stack },
+      } = cardError!; // we just filtered only resources that have card errors above
+      if (id) {
+        return [
+          {
+            id,
+            error: { name, message, stack: stack ?? undefined },
+          },
+        ];
+      }
+      return [];
+    });
+  }
+
   private get items() {
-    return [
-      ...(this.args.resources?.cards ?? []),
-      ...(this.args.resources?.files ?? []),
-    ];
+    return [...(this.args.resources ?? []), ...(this.args.files ?? [])];
   }
 }
 
@@ -528,5 +546,9 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       }
     </style>
   </template>;
+
+function isCardResource(obj: any): obj is ReturnType<getCard> {
+  return 'value' in obj;
+}
 
 export { AiAssistantConversation };

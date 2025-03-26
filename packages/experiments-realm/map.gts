@@ -5,9 +5,9 @@ import {
   contains,
   StringField,
 } from 'https://cardstack.com/base/card-api';
+import { Address } from 'https://cardstack.com/base/address';
 import { Component } from 'https://cardstack.com/base/card-api';
 import MapIcon from '@cardstack/boxel-icons/map';
-import { Address } from './fields/address';
 
 function or(value: number | undefined, defaultValue: number) {
   return value || defaultValue;
