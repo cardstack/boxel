@@ -17,6 +17,8 @@ import FilterSection from './components/filter-section';
 import CardsDisplaySection from './components/cards-display-section';
 import ContentContainer from './components/content-container';
 
+import CatalogLayout from './layouts/catalog-layout';
+
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import { TabbedHeader } from '@cardstack/boxel-ui/components';
 
@@ -95,6 +97,10 @@ class Isolated extends Component<typeof Catalog> {
     };
   }
 
+  get shouldShowSidebar() {
+    return !this.shouldShowTab('showcase');
+  }
+
   get headerColor() {
     return (
       Object.getPrototypeOf(this.args.model).constructor.headerColor ??
@@ -120,18 +126,18 @@ class Isolated extends Component<typeof Catalog> {
       class='catalog-tab-header'
     />
 
-    {{! Todo: Create a standalone Catalog Layout if needed }}
-    <div class='catalog-layout'>
-      <button {{on 'click' this.goToGrid}}> Go to Grid </button>
-
-      <section class='main-content'>
-        <div class='sidebar'>
-          {{! TODO: Add FilterSection component here }}
-          {{! TODO: Give Args to FilterSection if needed - query, realms, selectedView, context, etc. }}
-          <FilterSection />
-        </div>
+    <CatalogLayout
+      @showSidebar={{this.shouldShowSidebar}}
+      class='catalog-layout {{this.activeTabId}}'
+    >
+      <:sidebar>
+        {{! remove this gotoGrid button after testing }}
+        <button {{on 'click' this.goToGrid}}> Go to Grid </button>
+        <FilterSection />
+      </:sidebar>
+      <:content>
         {{! Note: Content will be display 2 columns: Content Listing Display and Related Listing Cards in the same time }}
-        <div class='content-area-container'>
+        <div class='content-area-container {{this.activeTabId}}'>
           <div class='content-area'>
             {{! Column 1: Card Listing Section }}
             <div class='catalog-content'>
@@ -146,10 +152,10 @@ class Isolated extends Component<typeof Catalog> {
                         <h2>Start Here</h2>
                         <p>The starter stack — Install these first</p>
                       </div>
-                      <p>These are the foundational tools we think every builder
-                        should have. Whether you’re just exploring or setting up
-                        your workspace for serious work, start with these
-                        must-haves.</p>
+                      <p class='intro-description'>These are the foundational
+                        tools we think every builder should have. Whether you’re
+                        just exploring or setting up your workspace for serious
+                        work, start with these must-haves.</p>
                     </:intro>
                   </CardsDisplaySection>
 
@@ -159,9 +165,9 @@ class Isolated extends Component<typeof Catalog> {
                         <h2>New this Week</h2>
                         <p>Hand-picked by our editors — What’s buzzing right now</p>
                       </div>
-                      <p>These new entries have caught the community’s eye,
-                        whether for creative flair, clever utility, or just
-                        plain polish.</p>
+                      <p class='intro-description'>These new entries have caught
+                        the community’s eye, whether for creative flair, clever
+                        utility, or just plain polish.</p>
                     </:intro>
                   </CardsDisplaySection>
 
@@ -174,8 +180,8 @@ class Isolated extends Component<typeof Catalog> {
                         <h2>Feature Collection</h2>
                         <p>:Personal Organization</p>
                       </div>
-                      <p>A hand-picked duo of focused, flexible tools for
-                        personal</p>
+                      <p class='intro-description'>A hand-picked duo of focused,
+                        flexible tools for personal</p>
                     </:intro>
                   </CardsDisplaySection>
                 {{/if}}
@@ -209,22 +215,10 @@ class Isolated extends Component<typeof Catalog> {
                 {{/if}}
               </ContentContainer>
             </div>
-
-            {{! Column 2: Related Card Listing  }}
-            {{! TODO: Parent & Related Listing Cards will be display at here - can make this to component }}
-            <div class='related-card-listing'>
-              <ContentContainer>
-                <h3 class='listing-title'>Parent Listing card</h3>
-              </ContentContainer>
-
-              <ContentContainer>
-                <h3 class='listing-title'>Related Listings from Publisher</h3>
-              </ContentContainer>
-            </div>
           </div>
         </div>
-      </section>
-    </div>
+      </:content>
+    </CatalogLayout>
 
     <style scoped>
       :global(:root) {
@@ -233,58 +227,45 @@ class Isolated extends Component<typeof Catalog> {
       .catalog-tab-header :deep(.app-title-group) {
         display: none;
       }
-      .catalog-layout {
-        height: 100%;
-        background-color: var(--boxel-100);
-      }
       .title {
         font: bold var(--boxel-font-lg);
         line-height: 1.58;
         letter-spacing: 0.21px;
       }
-      .main-content {
-        padding: var(--boxel-sp-sm);
-        padding-top: var(--catalog-layout-padding-top);
-        display: flex;
-        gap: var(--boxel-sp-xl);
-        height: 100%;
-        max-height: 100vh;
-        overflow: hidden;
-      }
-      .sidebar {
-        position: relative;
+
+      /* Layout */
+      .catalog-layout {
+        --layout-container-background-color: var(--boxel-100);
+        --layout-sidebar-background-color: var(--boxel-100);
+        --layout-content-padding: var(--boxel-sp-xl);
       }
 
-      /* container */
+      /* Container */
       .content-area-container {
         flex: 1;
         height: auto;
         container-name: content-area-container;
         container-type: inline-size;
       }
+      .content-area-container.showcase {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+
       .content-area {
         height: 100%;
         display: grid;
-        grid-template-columns: 1fr 247px;
         gap: var(--boxel-sp-lg);
       }
       .catalog-content {
         display: block;
         overflow-y: auto;
       }
-      .catalog-filter-bar {
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        background-color: var(--boxel-100);
-        padding-bottom: var(--boxel-sp-sm);
-        border-bottom: 1px solid var(--boxel-200);
-      }
       .catalog-listing {
         --content-container-background-color: transparent;
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-xxl);
       }
 
       /* Mock data display */
@@ -298,14 +279,22 @@ class Isolated extends Component<typeof Catalog> {
         margin-block: 0;
         margin-bottom: var(--boxel-sp);
       }
+
       .intro-title {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
         gap: var(--boxel-sp-sm);
       }
+      .intro-title h2 {
+        font: 700 var(--boxel-font-xl);
+      }
       .intro-title p {
+        font: var(--boxel-font-lg);
         font-style: italic;
+      }
+      .intro-description {
+        font: var(--boxel-font);
       }
       /* End of Mock data display */
 
