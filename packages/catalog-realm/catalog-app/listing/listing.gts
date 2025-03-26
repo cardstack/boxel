@@ -18,6 +18,7 @@ import { task } from 'ember-concurrency';
 import {
   Accordion,
   Pill,
+  BasicFitted,
   BoxelDropdown,
   BoxelButton,
   Menu as BoxelMenu,
@@ -498,6 +499,68 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   </template>
 }
 
+class FittedTemplate extends Component<typeof Listing> {
+  <template>
+    <BasicFitted
+      @thumbnailURL={{@model.thumbnailURL}}
+      @iconComponent={{@model.constructor.icon}}
+      @primary={{@model.name}}
+      @secondary={{@model.publisher.name}}
+      class='app-listing-fitted'
+    />
+    <style scoped>
+      /* Vertical card (aspect-ratio <= 1.0) */
+      @container fitted-card (aspect-ratio <= 1.0) {
+        .app-listing-fitted {
+          padding: 0;
+        }
+        .app-listing-fitted :deep(.thumbnail-section) {
+          background-color: var(--boxel-300);
+          max-height: 60cqh;
+          height: 100%;
+        }
+        .app-listing-fitted :deep(.info-section) {
+          text-align: left;
+          padding: var(--boxel-sp-xs) var(--boxel-sp);
+        }
+        .app-listing-fitted :deep(.card-title) {
+          font: 600 var(--boxel-font-lg);
+        }
+        .app-listing-fitted :deep(.card-display-name) {
+          font: 400 var(--boxel-font-sm);
+        }
+
+        /* Height <= 275px */
+        @container fitted-card (height <= 275px) {
+          .app-listing-fitted :deep(.info-section) {
+            text-align: left;
+            padding: var(--boxel-sp-xs);
+          }
+          .app-listing-fitted :deep(.card-title) {
+            font: 600 var(--boxel-font);
+          }
+        }
+      }
+
+      /* Horizontal card (aspect-ratio > 1.0) */
+      @container fitted-card (1.0 < aspect-ratio) {
+        .app-listing-fitted {
+          padding: 0;
+        }
+        .app-listing-fitted :deep(.thumbnail-section) {
+          background-color: var(--boxel-300);
+          width: 40cqw;
+          height: 100%;
+        }
+        .app-listing-fitted :deep(.info-section) {
+          text-align: left;
+          padding: var(--boxel-sp) var(--boxel-sp-xs);
+        }
+      }
+    </style>
+  </template>
+}
+
 export class Listing extends CardDef {
   static displayName = 'Listing';
   static headerColor = '#00ebac';
@@ -519,4 +582,5 @@ export class Listing extends CardDef {
 
   static isolated = EmbeddedTemplate; //temporary
   static embedded = EmbeddedTemplate;
+  static fitted = FittedTemplate;
 }
