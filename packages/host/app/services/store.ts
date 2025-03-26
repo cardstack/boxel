@@ -1,3 +1,5 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { formatDistanceToNow } from 'date-fns';
@@ -90,6 +92,16 @@ export default class StoreService extends Service {
   private autoSaveStates: TrackedWeakMap<CardDef, AutoSaveState> =
     new TrackedWeakMap();
   private cardApiCache?: typeof CardAPI;
+  private garbageCollection: Map<string, number> = new Map();
+
+  constructor(owner: Owner) {
+    super(owner);
+    registerDestructor(this, () => {
+      for (let timeout of this.garbageCollection.values()) {
+        clearTimeout(timeout);
+      }
+    });
+  }
 
   unloadResource(resource: CardResource) {
     let id = resource.url;
@@ -108,7 +120,7 @@ export default class StoreService extends Service {
         if (onCardChange && resource.card) {
           let autoSaveState = this.getAutoSaveState(resource.card);
           if (autoSaveState?.hasUnsavedChanges) {
-            this.saveCard.perform(resource.card);
+            this.initiateAutoSaveTask.perform(id, { isImmediate: true });
           }
           let card = this.identityContext.get(id);
 
@@ -120,7 +132,12 @@ export default class StoreService extends Service {
       }
       if (resources.length === 0) {
         this.subscribers.delete(id);
-        this.identityContext.delete(id);
+        // intentionally not removing the instance immediately from the identity map. as of
+        // the StackItem refactor our resources lifetimes are very
+        // narrow/efficient, and it's not unlikely that a resource for a stack
+        // item will be unloaded when switching from edit to view modes as it
+        // will be dereferenced during the switch over.
+        this.markForGarbageCollection(id!);
       }
 
       // if there are no more subscribers to this realm then unsubscribe from realm
@@ -133,6 +150,17 @@ export default class StoreService extends Service {
         this.subscriptions.delete(realm);
       }
     }
+  }
+
+  private markForGarbageCollection(id: string) {
+    clearTimeout(this.garbageCollection.get(id));
+    this.garbageCollection.set(
+      id,
+      setTimeout(
+        () => this.identityContext.delete(id!),
+        5 * 6000,
+      ) as unknown as number,
+    );
   }
 
   async createSubscriber({
@@ -248,11 +276,14 @@ export default class StoreService extends Service {
           },
         };
       }
-      return await this.cardService.createFromSerialized(
+      let instance = await this.cardService.createFromSerialized(
         doc.data as LooseCardResource,
         doc,
         new URL(url),
       );
+      this.identityContext.set(url, instance);
+      this.markForGarbageCollection(url);
+      return instance;
     } catch (error: any) {
       let errorResponse = processCardError(url, error);
       return errorResponse.errors[0];
@@ -433,6 +464,7 @@ export default class StoreService extends Service {
         this.identityContext.set(newCard.id, newCard);
         return newCard;
       }
+      clearTimeout(this.garbageCollection.get(url));
 
       // createFromSerialized would also do this de-duplication, but we want to
       // also avoid the fetchJSON when we already have the stable card.
@@ -472,41 +504,43 @@ export default class StoreService extends Service {
     return this.autoSaveStates.get(card);
   }
 
-  async save(id: string) {
-    let card = this.identityContext.get(id);
-    if (!card) {
-      return;
-    }
-    await this.cardService.saveModel(card);
+  save(id: string) {
+    this.initiateAutoSaveTask.perform(id, { isImmediate: true });
   }
 
-  private initiateAutoSaveTask = restartableTask(async (id: string) => {
-    let card = this.identityContext.get(id);
-    if (!card) {
-      return;
-    }
-    let autoSaveState = this.initOrGetAutoSaveState(card);
-    autoSaveState.hasUnsavedChanges = true;
-    await timeout(this.environmentService.autoSaveDelayMs);
-    try {
-      autoSaveState.isSaving = true;
-      autoSaveState.lastSaveError = undefined;
+  private initiateAutoSaveTask = restartableTask(
+    async (id: string, opts?: { isImmediate?: true }) => {
+      let card = this.identityContext.get(id);
+      if (!card) {
+        return;
+      }
+      let autoSaveState = this.initOrGetAutoSaveState(card);
+      autoSaveState.hasUnsavedChanges = true;
+      if (!opts?.isImmediate) {
+        await timeout(this.environmentService.autoSaveDelayMs);
+      }
+      try {
+        autoSaveState.isSaving = true;
+        autoSaveState.lastSaveError = undefined;
 
-      await timeout(25);
-      await this.saveCard.perform(card);
+        if (!opts?.isImmediate) {
+          await timeout(25);
+        }
+        await this.saveCard.perform(card, opts);
 
-      autoSaveState.hasUnsavedChanges = false;
-      autoSaveState.lastSaved = Date.now();
-      autoSaveState.lastSaveError = undefined;
-      autoSaveState.lastSavedErrorMsg = undefined;
-    } catch (error) {
-      // error will already be logged in CardService
-      autoSaveState.lastSaveError = error as Error;
-    } finally {
-      autoSaveState.isSaving = false;
-      this.calculateLastSavedMsg(autoSaveState);
-    }
-  });
+        autoSaveState.hasUnsavedChanges = false;
+        autoSaveState.lastSaved = Date.now();
+        autoSaveState.lastSaveError = undefined;
+        autoSaveState.lastSavedErrorMsg = undefined;
+      } catch (error) {
+        // error will already be logged in CardService
+        autoSaveState.lastSaveError = error as Error;
+      } finally {
+        autoSaveState.isSaving = false;
+        this.calculateLastSavedMsg(autoSaveState);
+      }
+    },
+  );
 
   private initOrGetAutoSaveState(card: CardDef): AutoSaveState {
     let autoSaveState = this.autoSaveStates.get(card);
@@ -523,11 +557,17 @@ export default class StoreService extends Service {
     return autoSaveState!;
   }
 
-  private saveCard = restartableTask(async (card: CardDef) => {
-    // these saves can happen so fast that we'll make sure to wait at
-    // least 500ms for human consumption
-    await all([this.cardService.saveModel(card), timeout(500)]);
-  });
+  private saveCard = restartableTask(
+    async (card: CardDef, opts?: { isImmediate?: true }) => {
+      if (opts?.isImmediate) {
+        await this.cardService.saveModel(card);
+      } else {
+        // these saves can happen so fast that we'll make sure to wait at
+        // least 500ms for human consumption
+        await all([this.cardService.saveModel(card), timeout(500)]);
+      }
+    },
+  );
 
   private calculateLastSavedMsg(autoSaveState: AutoSaveState) {
     let savedMessage: string | undefined;

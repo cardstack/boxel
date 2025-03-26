@@ -214,18 +214,10 @@ export default class InteractSubmode extends Component<Signature> {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        // await newItem.ready();
-        // if (newItem.cardError) {
-        //   console.error(
-        //     `Encountered error creating card:\n${JSON.stringify(
-        //       doc,
-        //       null,
-        //       2,
-        //     )}\nError: ${JSON.stringify(newItem.cardError, null, 2)}`,
-        //   );
-        //   return undefined;
-        // }
-        let cardResource = here.getCard(owner, () => doc, { relativeTo });
+        let cardResource = here.getCard(owner, () => doc, {
+          relativeTo,
+          isAutoSaved: true,
+        });
         let url = await cardResource.getNewCardURL();
         let newItem = new StackItem({
           url,
@@ -250,7 +242,6 @@ export default class InteractSubmode extends Component<Signature> {
           format,
           stackIndex,
         });
-        // await newItem.ready();
         here.addToStack(newItem);
         here.operatorModeStateService.workspaceChooserOpened = false;
       },
@@ -394,20 +385,14 @@ export default class InteractSubmode extends Component<Signature> {
   private close = (item: StackItem) => {
     // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
-    // if (item.cardError) {
-    //   return;
-    // }
-
     let { request, url } = item;
 
     // only save when closing a stack item in edit mode. there should be no unsaved
     // changes in isolated mode because they were saved when user toggled between
     // edit and isolated formats
     if (url && item.format === 'edit') {
-      this.store.save(url); // intentionally ignoring promise so caller is not waiting for save to complete
+      this.store.save(url);
       request?.fulfill(url);
-      // let updatedCard = this.args.saveCard(card);
-      // request?.fulfill(updatedCard);
     }
   };
 
@@ -562,8 +547,7 @@ export default class InteractSubmode extends Component<Signature> {
           selectedCards.map((cardDefOrId: CardDefOrId) => {
             if (typeof cardDefOrId === 'string') {
               // WARNING This card is not part of the identity map!
-              // TODO refactor this to use CardResource (please make ticket)
-              return this.cardService.getCard(cardDefOrId);
+              return this.store.getInstanceDetachedFromStore(cardDefOrId);
             }
             return cardDefOrId;
           }),
@@ -576,7 +560,9 @@ export default class InteractSubmode extends Component<Signature> {
         }
         selected.clear();
         for (let card of loadedCards) {
-          selected.add(card!);
+          if (isCardInstance(card)) {
+            selected.add(card);
+          }
         }
       } finally {
         waiter.endAsync(waiterToken);
@@ -774,7 +760,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @commandContext={{this.commandService.commandContext}}
-                @close={{perform this.close}}
+                @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
                 @saveCard={{@saveCard}}

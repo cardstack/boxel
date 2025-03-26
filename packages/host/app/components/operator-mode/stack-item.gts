@@ -121,7 +121,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare realm: RealmService;
   @service private declare loaderService: LoaderService;
 
-  // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private animationType:
     | 'opening'
@@ -160,11 +159,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.item.url);
+    this.cardResource = this.getCard(this, () => this.args.item.url, {
+      isAutoSaved: true,
+    });
   };
 
   private get url() {
-    return this.card?.id;
+    return this.card?.id ?? this.cardError?.id;
   }
 
   private get renderedCardsForOverlayActions(): StackItemRenderedCardForOverlayActions[] {
@@ -369,10 +370,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
     return `Card Error: ${this.cardErrorSummary}`;
   }
-
-  // private loadCard = restartableTask(async () => {
-  //   await this.args.item.ready();
-  // });
 
   private get isWideFormat() {
     if (!this.card) {

@@ -173,18 +173,7 @@ export default class OperatorModeStateService extends Service {
       }
     }
     await this.cardService.patchCard(card, document, patch);
-    // TODO: if we introduce an identity map, we would not need this
-    // await this.reloadCardIfOpen(card.id);
   });
-
-  // async reloadCardIfOpen(id: string) {
-  //   let stackItems = this.state?.stacks.flat() ?? [];
-  //   for (let item of stackItems) {
-  //     if (item.url === url) {
-  //       this.cardService.reloadCard(item.card);
-  //     }
-  //   }
-  // }
 
   async deleteCard(cardId: string) {
     let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(
@@ -560,23 +549,13 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        // TODO this seems dubious. We are unable to use @consume getCard at
-        // this layer. moreover we are throwing away the resource anyways (via
-        // stackItem.ready), Aaaaand the lifetime of these resources is wrong
-        // since this is a service. Let's figure out why we are deserializing
-        // cards at this layer and see if we can get rid of resource usage here
-        // altogether. Please refactor as part of eliminating the
-        // CardService.loaded promise.
-        // let cardResource = getCard(this, () => item.id, {
-        //   isAutoSaved: true,
-        // });
-        let stackItem = new StackItem({
-          url: item.id,
-          format,
-          stackIndex,
-        });
-        // await stackItem.ready();
-        newStack.push(stackItem);
+        newStack.push(
+          new StackItem({
+            url: item.id,
+            format,
+            stackIndex,
+          }),
+        );
       }
       newState.stacks.push(newStack);
       stackIndex++;
