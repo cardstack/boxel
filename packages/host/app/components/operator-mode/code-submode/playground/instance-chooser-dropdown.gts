@@ -59,6 +59,7 @@ const BeforeOptions: TemplateOnlyComponent = <template>
       padding: var(--boxel-sp-xs) var(--boxel-sp);
       font: 500 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
+      text-align: left;
     }
   </style>
 </template>;
@@ -109,6 +110,7 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       padding: var(--boxel-sp-xs) var(--boxel-sp);
       font: 500 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
+      text-align: left;
     }
     .action {
       display: inline-block;

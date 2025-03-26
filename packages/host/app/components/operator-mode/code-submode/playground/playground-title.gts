@@ -87,7 +87,8 @@ export default class PlaygroundTitle extends Component<Signature> {
         border: none;
         cursor: auto;
         max-width: 271px;
-        min-width: 45px;
+        width: 271px;
+        min-width: 271px;
         padding: 0;
         margin-left: auto;
       }
