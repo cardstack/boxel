@@ -21,6 +21,7 @@ import {
   BoxelDropdown,
   BoxelButton,
   Menu as BoxelMenu,
+  CardContainer,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -113,6 +114,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   get specBreakdown() {
     return this.args.model.specs?.reduce(
       (groupedSpecs, spec) => {
+        if (!spec) {
+          return groupedSpecs;
+        }
         const specType = spec.specType as SpecType;
         if (!groupedSpecs[specType]) {
           groupedSpecs[specType] = [];
@@ -122,6 +126,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       },
       {} as Record<SpecType, Spec[]>,
     );
+  }
+
+  get hasNonEmptySpecBreakdown() {
+    if (!this.specBreakdown) {
+      return false;
+    }
+    return Object.values(this.specBreakdown).some((specs) => specs.length > 0);
   }
 
   selectAccordionItem = (item: string) => {
@@ -291,13 +302,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         </section>
 
         <hr class='divider' />
-
-        {{! Todo: Adjust this after fixing the bug related to displaying the spec breakdown. }}
-        {{! Todo: Small improvement: change <div> to <section>. }}
-        {{! Todo: Consider always showing the "Includes These Boxels" title, regardless of whether this.specBreakdown is present or not. }}
-        {{#if this.specBreakdown}}
-          <div>
-            <h2>Includes These Boxels</h2>
+        <section class='app-listing-spec-breakdown'>
+          <h2>Includes These Boxels</h2>
+          {{#if this.hasNonEmptySpecBreakdown}}
             <Accordion
               data-test-selected-accordion-item={{this.selectedAccordionItem}}
               as |A|
@@ -313,17 +320,29 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                     ({{specs.length}})
                   </:title>
                   <:content>
-                    {{#each specs as |spec|}}
-                      {{#let (this.getComponent spec) as |CardComponent|}}
-                        <CardComponent @format='fitted' />
+                    {{#each specs as |card|}}
+                      {{#let (this.getComponent card) as |CardComponent|}}
+                        <CardContainer
+                          {{@context.cardComponentModifier
+                            cardId=card.id
+                            format='data'
+                            fieldType=undefined
+                            fieldName=undefined
+                          }}
+                        >
+
+                          <CardComponent @format='fitted' />
+                        </CardContainer>
                       {{/let}}
                     {{/each}}
                   </:content>
                 </A.Item>
               {{/each-in}}
             </Accordion>
-          </div>
-        {{/if}}
+          {{else}}
+            No specs
+          {{/if}}
+        </section>
       {{/if}}
     </div>
 
