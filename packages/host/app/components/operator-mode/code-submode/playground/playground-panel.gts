@@ -301,13 +301,15 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private chooseCard = task(async () => {
-    let chosenCard: CardDef | undefined = await chooseCard({
+    let chosenCardResource = await chooseCard(this, {
       filter: { type: this.args.codeRef },
     });
 
-    if (chosenCard) {
-      this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
-      this.persistSelections(chosenCard.id);
+    if (chosenCardResource?.url) {
+      this.recentFilesService.addRecentFileUrl(
+        `${chosenCardResource.url}.json`,
+      );
+      this.persistSelections(chosenCardResource.url);
     }
   });
 
