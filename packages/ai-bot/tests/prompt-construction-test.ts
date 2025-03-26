@@ -1884,6 +1884,39 @@ test('No tools are available if skill is not enabled', async () => {
   assert.true(tools.length == 0, 'Should not have tools available');
 });
 
+test('Uses updated command definitions when skill card is updated', async () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(
+        __dirname,
+        'resources/chats/updated-skill-command-definitions.json',
+      ),
+    ),
+  );
+
+  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
+  assert.true(tools.length > 0, 'Should have tools available');
+
+  // Verify that the tools array contains the updated command definition
+  const updatedCommandTool = tools.find(
+    (tool) => tool.function?.name === 'switch-submode_dd88',
+  );
+  assert.ok(
+    updatedCommandTool,
+    'Should have updated command definition available',
+  );
+
+  // Verify updated properties are present (description indicates V2)
+  assert.true(
+    updatedCommandTool.function?.description.includes('COMMAND_DESCRIPTION_V2'),
+    'Should use updated command description',
+  );
+  assert.false(
+    updatedCommandTool.function?.description.includes('COMMAND_DESCRIPTION_V1'),
+    'Should not include old command description',
+  );
+});
+
 module('set model in prompt', () => {
   test('default active LLM must be equal to `DEFAULT_LLM`', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(

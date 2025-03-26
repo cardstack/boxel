@@ -9,14 +9,14 @@ import { type getCard } from '@cardstack/runtime-common';
 
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
+import type { RoomSkill } from '@cardstack/host/resources/room';
+
 import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import AiAssistantSkillMenu from './index';
 
-import type { Skill } from './index';
-
 export default class AiAssistantSkillMenuUsage extends Component {
-  @tracked skills: Skill[] = [];
+  @tracked skills: RoomSkill[] = [];
 
   @action attachSkill(cardResource: ReturnType<getCard<SkillCard>>) {
     this.skills = [

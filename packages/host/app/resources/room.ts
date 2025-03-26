@@ -45,13 +45,17 @@ import { Message } from '../lib/matrix-classes/message';
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
-import type { Skill } from '../components/ai-assistant/skill-menu';
-
 import type Room from '../lib/matrix-classes/room';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+
+export type RoomSkill = {
+  cardId: string;
+  skillEventId: string;
+  isActive: boolean;
+};
 
 interface Args {
   named: {
@@ -220,8 +224,8 @@ export class RoomResource extends Resource<Args> {
     ]);
   }
 
-  get skills(): Skill[] {
-    let result: Skill[] = [];
+  get skills(): RoomSkill[] {
+    let result: RoomSkill[] = [];
     for (let skillEventId of this.allSkillEventIds) {
       let cardId = this._skillEventIdToCardIdCache.get(skillEventId);
       if (!cardId) {
@@ -231,7 +235,9 @@ export class RoomResource extends Resource<Args> {
         cardId,
         skillEventId,
         isActive:
-          this.matrixRoom?.skillsConfig.enabledEventIds.includes(skillEventId),
+          this.matrixRoom?.skillsConfig.enabledEventIds.includes(
+            skillEventId,
+          ) ?? false,
       });
     }
     return result;

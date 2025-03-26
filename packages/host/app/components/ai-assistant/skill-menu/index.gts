@@ -6,18 +6,14 @@ import { skillCardRef, type getCard } from '@cardstack/runtime-common';
 
 import PillMenu, { PillMenuItem } from '@cardstack/host/components/pill-menu';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { RoomSkill } from '@cardstack/host/resources/room';
 
-export type Skill = {
-  cardId: string;
-  skillEventId: string;
-  isActive: boolean;
-};
+import type { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    skills: Skill[];
+    skills: RoomSkill[];
     cardChoosingOwner: object;
     onChooseCard?: (cardResource: ReturnType<getCard<SkillCard>>) => void;
     onUpdateSkillIsActive?: (skillEventId: string, isActive: boolean) => void;
@@ -94,7 +90,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
   private get query() {
     let selectedCardIds =
-      this.args.skills?.map((skill: Skill) => ({
+      this.args.skills?.map((skill: RoomSkill) => ({
         not: { eq: { id: skill.cardId } },
       })) ?? [];
     // query for only displaying skill cards that are not already selected
@@ -116,6 +112,9 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   };
 
   updateItemIsActive = (item: PillMenuItem, isActive: boolean) => {
-    this.args.onUpdateSkillIsActive?.((item as Skill).skillEventId, isActive);
+    this.args.onUpdateSkillIsActive?.(
+      (item as RoomSkill).skillEventId,
+      isActive,
+    );
   };
 }
