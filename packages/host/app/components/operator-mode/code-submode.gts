@@ -941,6 +941,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <Accordion as |A|>
                       <A.Item
                         class='accordion-item'
+                        @id='empty-file'
                         @contentClass='accordion-item-content'
                         @isOpen={{true}}
                       >
@@ -977,6 +978,7 @@ export default class CodeSubmode extends Component<Signature> {
                       >
                         <A.Item
                           class='accordion-item'
+                          @id='schema-editor'
                           @contentClass='accordion-item-content'
                           @onClick={{fn
                             this.toggleAccordionItem
@@ -1005,12 +1007,14 @@ export default class CodeSubmode extends Component<Signature> {
                       >
                         <A.Item
                           class='accordion-item playground-accordion-item'
+                          @id='playground'
                           @contentClass='accordion-item-content'
                           @onClick={{fn this.toggleAccordionItem 'playground'}}
                           @isOpen={{eq this.selectedAccordionItem 'playground'}}
                           data-test-accordion-item='playground'
                         >
-                          <:title><PlaygroundTitle /></:title>
+                          <:title>Playground</:title>
+                          <:header><PlaygroundTitle /></:header>
                           <:content>
                             {{#if (eq this.selectedAccordionItem 'playground')}}
                               <PlaygroundContent />
@@ -1030,6 +1034,7 @@ export default class CodeSubmode extends Component<Signature> {
                       >
                         <A.Item
                           class='accordion-item'
+                          @id='spec-preview'
                           @contentClass='accordion-item-content'
                           @onClick={{fn
                             this.toggleAccordionItem
@@ -1041,9 +1046,10 @@ export default class CodeSubmode extends Component<Signature> {
                           }}
                           data-test-accordion-item='spec-preview'
                         >
-                          <:title>
+                          <:title>Boxel Spec</:title>
+                          <:header>
                             <SpecPreviewTitle />
-                          </:title>
+                          </:header>
                           <:content>
                             {{#if this.showSpecPreview}}
                               <SpecPreviewContent class='accordion-content' />
@@ -1064,6 +1070,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <Accordion as |A|>
                       <A.Item
                         class='accordion-item'
+                        @id='module-error'
                         @contentClass='accordion-item-content'
                         @isOpen={{true}}
                         data-test-module-error-panel

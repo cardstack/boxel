@@ -37,7 +37,7 @@ import type { Spec } from 'https://cardstack.com/base/spec';
 import { FieldOption, SelectedInstance } from './playground-content';
 
 import PlaygroundContent from './playground-content';
-import PlaygroundTitle from './playground-title';
+import PlaygroundDropdown from './playground-dropdown';
 
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
@@ -53,7 +53,7 @@ interface Signature {
   Blocks: {
     default: [
       WithBoundArgs<
-        typeof PlaygroundTitle,
+        typeof PlaygroundDropdown,
         | 'makeCardResource'
         | 'query'
         | 'recentRealms'
@@ -391,7 +391,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   <template>
     {{yield
       (component
-        PlaygroundTitle
+        PlaygroundDropdown
         makeCardResource=this.makeCardResource
         query=this.query
         recentRealms=this.recentRealms

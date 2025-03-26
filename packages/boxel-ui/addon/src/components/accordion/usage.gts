@@ -1,4 +1,5 @@
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -7,6 +8,7 @@ import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 import cssVars from '../../helpers/css-var.ts';
 import { eq } from '../../helpers/truth-helpers.ts';
 import Accordion from './index.gts';
+import BoxelButton from '../button/index.gts';
 
 export default class AccordionUsage extends Component {
   <template>
@@ -15,6 +17,7 @@ export default class AccordionUsage extends Component {
         <Accordion as |A|>
           <A.Item
             class='item'
+            @id='schema'
             @onClick={{fn this.selectItem 'schema'}}
             @isOpen={{eq this.selectedItem 'schema'}}
           >
@@ -23,6 +26,7 @@ export default class AccordionUsage extends Component {
           </A.Item>
           <A.Item
             class='item'
+            @id='playground'
             @onClick={{fn this.selectItem 'playground'}}
             @isOpen={{eq this.selectedItem 'playground'}}
           >
@@ -31,12 +35,24 @@ export default class AccordionUsage extends Component {
           </A.Item>
           <A.Item
             class='item'
+            @id='other'
             style={{cssVars accordion-item-closed-height='65px'}}
             @onClick={{fn this.selectItem 'other'}}
             @isOpen={{eq this.selectedItem 'other'}}
           >
-            <:title>LLorem ipsum dolor sit amet, consectetur adipiscing elit sed
-              do eiusmod tempor incididunt ut labore</:title>
+            <:title>Massa tempor nec feugiat nisl pretium fusce. Vestibulum
+              mattis ullamcorper velit sed ullamcorper morbi tincidunt ornare
+              massa.
+            </:title>
+            <:header>
+              <BoxelButton
+                {{on 'click' this.onClick}}
+                @kind='secondary-light'
+                class='button'
+              >
+                Button
+              </BoxelButton>
+            </:header>
             <:content>
               <p>
                 Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do
@@ -76,6 +92,10 @@ export default class AccordionUsage extends Component {
       p {
         padding-left: var(--boxel-sp-sm);
       }
+      .button {
+        align-self: center;
+        margin-right: 10px;
+      }
     </style>
   </template>
 
@@ -87,5 +107,9 @@ export default class AccordionUsage extends Component {
       return;
     }
     this.selectedItem = item;
+  }
+
+  @action onClick() {
+    alert('Clicked!');
   }
 }

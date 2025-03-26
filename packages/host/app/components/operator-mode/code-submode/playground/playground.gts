@@ -1,4 +1,3 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import Component from '@glimmer/component';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -11,13 +10,10 @@ import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
 import PlaygroundContent from './playground-content';
+import PlaygroundDropdown from './playground-dropdown';
 import PlaygroundPanel from './playground-panel';
 
-import PlaygroundTitle from './playground-title';
-
 import type { WithBoundArgs } from '@glint/template';
-
-const DefaultTitle: TemplateOnlyComponent = <template>Playground</template>;
 
 interface UnsupportedMessageSignature {
   Args: {
@@ -79,7 +75,7 @@ interface Signature {
     default: [
       (
         | WithBoundArgs<
-            typeof PlaygroundTitle,
+            typeof PlaygroundDropdown,
             | 'makeCardResource'
             | 'query'
             | 'recentRealms'
@@ -96,7 +92,7 @@ interface Signature {
             | 'fieldChooserIsOpen'
             | 'chooseField'
           >
-        | typeof DefaultTitle
+        | undefined
       ),
       (
         | WithBoundArgs<
@@ -134,16 +130,16 @@ export default class Playground extends Component<Signature> {
         @codeRef={{this.playgroundPanelArgs.codeRef}}
         @isFieldDef={{this.playgroundPanelArgs.isFieldDef}}
         @isUpdating={{this.playgroundPanelArgs.isUpdating}}
-        as |PlaygroundTitle PlaygroundContent|
+        as |PlaygroundDropdown PlaygroundContent|
       >
         {{yield
-          (if @isOpen (component PlaygroundTitle) (component DefaultTitle))
+          (if @isOpen (component PlaygroundDropdown))
           (component PlaygroundContent)
         }}
       </PlaygroundPanel>
     {{else}}
       {{yield
-        (component DefaultTitle)
+        undefined
         (component UnsupportedMessage cardOrField=@cardOrField codeRef=@codeRef)
       }}
     {{/if}}

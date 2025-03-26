@@ -2,11 +2,13 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 
 import cn from '../../../helpers/cn.ts';
+import { not } from '../../../helpers/truth-helpers.ts';
 import optional from '../../../helpers/optional.ts';
 import DropdownArrowDown from '../../../icons/dropdown-arrow-down.gts';
 
 export interface AccordionItemSignature {
   Args: {
+    id: string;
     className?: string;
     contentClass?: string;
     isOpen: boolean;
@@ -14,6 +16,7 @@ export interface AccordionItemSignature {
   };
   Blocks: {
     content: [];
+    header: [];
     title: [];
   };
   Element: HTMLDivElement;
@@ -25,47 +28,55 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
       class='title'
       {{on 'click' (optional @onClick)}}
       disabled={{if @onClick false true}}
+      aria-expanded='{{@isOpen}}'
+      aria-controls='accordion-item-content-id-{{@id}}'
+      id='accordion-item-header-id-{{@id}}'
     >
-      <DropdownArrowDown class='caret' width='12' height='12' />
-      {{yield to='title'}}
+      <span class='accordion-title-content'>
+        <DropdownArrowDown
+          class={{cn 'caret' open=@isOpen}}
+          width='12'
+          height='12'
+        />
+        {{yield to='title'}}
+      </span>
     </button>
-    <div class={{cn 'content' @contentClass}}>
-      {{yield to='content'}}
-    </div>
+    {{yield to='header'}}
+  </div>
+  <div
+    class={{cn 'content' @contentClass open=@isOpen}}
+    id='accordion-item-content-id-{{@id}}'
+    role='region'
+    aria-labelledby='accordion-item-header-id-{{@id}}'
+    hidden={{not @isOpen}}
+  >
+    {{yield to='content'}}
   </div>
   <style scoped>
     .accordion-item {
       --accordion-item-closed-height: var(--boxel-form-control-height);
-      --accordion-item-open-height: 8rem;
-      --accordion-item-border: var(--accordion-border);
-      --accordion-item-title-font: 600 var(--boxel-font);
+      --accordion-item-title-font: 500 var(--boxel-font-sm);
       --accordion-item-title-letter-spacing: var(--boxel-lsp-xs);
-      --accordion-item-title-padding: var(--boxel-sp-xs);
+      --accordion-item-title-padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
 
-      height: var(--accordion-item-closed-height);
+      min-height: var(--accordion-item-closed-height);
       display: flex;
-      flex-direction: column;
-      transition: all var(--boxel-transition);
-    }
-    .accordion-item.open {
-      height: var(--accordion-item-open-height);
-      flex: 1;
     }
     .content {
       flex: 1;
       opacity: 0;
       display: none;
     }
-    .accordion-item.open > .content {
+    .content.open {
       display: block;
       opacity: 1;
-      border-top: var(--accordion-item-border);
-      transition: all var(--boxel-transition);
+      overflow-y: auto;
     }
     .title {
-      display: inline-flex;
-      align-items: center;
+      flex-grow: 1;
+      display: inline-block;
       gap: var(--boxel-sp-xxs);
+      height: inherit;
       padding: var(--accordion-item-title-padding);
       color: inherit;
       font: var(--accordion-item-title-font);
@@ -77,13 +88,20 @@ const AccordionItem: TemplateOnlyComponent<AccordionItemSignature> = <template>
     .title:hover:not(:disabled) {
       cursor: pointer;
     }
+    .accordion-title-content {
+      margin: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: var(--boxel-sp-xxs);
+    }
     .caret {
+      align-self: flex-start;
+      margin-top: var(--boxel-sp-4xs);
       flex-shrink: 0;
       transform: rotate(-90deg);
-      transition: transform var(--boxel-transition);
+      transition: transform;
     }
-
-    .accordion-item.open > .title > .caret {
+    .caret.open {
       transform: rotate(0deg);
     }
   </style>

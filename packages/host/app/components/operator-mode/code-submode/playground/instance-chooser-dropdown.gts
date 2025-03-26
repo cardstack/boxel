@@ -34,7 +34,7 @@ const getItemTitle = (selection: SelectedInstance | undefined) => {
 
 const SelectedItem: TemplateOnlyComponent<{ Args: { title?: string } }> =
   <template>
-    <div class='selected-item' data-test-selected-item>
+    <div class='selected-item' title={{@title}} data-test-selected-item>
       {{@title}}
     </div>
     <style scoped>
@@ -155,102 +155,99 @@ interface Signature {
 }
 
 const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
-  {{#if @prerenderedCardQuery.query}}
-    <PrerenderedCardSearch
-      @query={{@prerenderedCardQuery.query}}
-      @format='fitted'
-      @realms={{@prerenderedCardQuery.realms}}
-    >
-      <:loading>
-        <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
-      </:loading>
-      <:response as |cards|>
-        <BoxelSelect
-          class='instance-chooser'
-          @dropdownClass='instances-dropdown-content'
-          @options={{cards}}
-          @selected={{findSelected @selection cards}}
-          @selectedItemComponent={{component
-            SelectedItem
-            title=(getItemTitle @selection)
-          }}
-          @renderInPlace={{true}}
-          @onChange={{@onSelect}}
-          @placeholder='Please Select'
-          @beforeOptionsComponent={{component BeforeOptions}}
-          @afterOptionsComponent={{component
-            AfterOptions
-            chooseCard=@chooseCard
-            createNew=@createNew
-            createNewIsRunning=@createNewIsRunning
-          }}
-          data-playground-instance-chooser
-          data-test-instance-chooser
-          as |card|
-        >
-          <CardContainer class='card' @displayBoundaries={{true}}>
-            <card.component />
-          </CardContainer>
-        </BoxelSelect>
-      </:response>
-    </PrerenderedCardSearch>
-  {{else}}
-    <BoxelSelect
-      class='instance-chooser'
-      @dropdownClass='instances-dropdown-content'
-      @options={{@fieldOptions}}
-      @selected={{findSelected @selection undefined @fieldOptions}}
-      @selectedItemComponent={{component
-        SelectedItem
-        title=(getItemTitle @selection)
-      }}
-      @renderInPlace={{true}}
-      @onChange={{@onSelect}}
-      @placeholder='Please Select'
-      @beforeOptionsComponent={{component BeforeOptions}}
-      @afterOptionsComponent={{component
-        AfterOptions
-        chooseCard=@chooseCard
-        createNew=@createNew
-        createNewIsRunning=@createNewIsRunning
-      }}
-      data-playground-instance-chooser
-      data-test-instance-chooser
-      as |item|
-    >
-      <CardContainer class='field' @displayBoundaries={{true}}>
-        <Preview @card={{item.field}} @format='atom' />
-      </CardContainer>
-    </BoxelSelect>
-  {{/if}}
+  <div class='instance-select-dropdown'>
+    {{#if @prerenderedCardQuery.query}}
+      <PrerenderedCardSearch
+        @query={{@prerenderedCardQuery.query}}
+        @format='fitted'
+        @realms={{@prerenderedCardQuery.realms}}
+      >
+        <:loading>
+          <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
+        </:loading>
+        <:response as |cards|>
+          <BoxelSelect
+            class='instance-chooser'
+            @dropdownClass='instances-dropdown-content'
+            @options={{cards}}
+            @selected={{findSelected @selection cards}}
+            @selectedItemComponent={{component
+              SelectedItem
+              title=(getItemTitle @selection)
+            }}
+            @onChange={{@onSelect}}
+            @placeholder='Please Select'
+            @beforeOptionsComponent={{component BeforeOptions}}
+            @afterOptionsComponent={{component
+              AfterOptions
+              chooseCard=@chooseCard
+              createNew=@createNew
+              createNewIsRunning=@createNewIsRunning
+            }}
+            @matchTriggerWidth={{false}}
+            data-playground-instance-chooser
+            data-test-instance-chooser
+            as |card|
+          >
+            <CardContainer class='card' @displayBoundaries={{true}}>
+              <card.component />
+            </CardContainer>
+          </BoxelSelect>
+        </:response>
+      </PrerenderedCardSearch>
+    {{else}}
+      <BoxelSelect
+        class='instance-chooser'
+        @dropdownClass='instances-dropdown-content'
+        @options={{@fieldOptions}}
+        @selected={{findSelected @selection undefined @fieldOptions}}
+        @selectedItemComponent={{component
+          SelectedItem
+          title=(getItemTitle @selection)
+        }}
+        @onChange={{@onSelect}}
+        @placeholder='Please Select'
+        @beforeOptionsComponent={{component BeforeOptions}}
+        @afterOptionsComponent={{component
+          AfterOptions
+          chooseCard=@chooseCard
+          createNew=@createNew
+          createNewIsRunning=@createNewIsRunning
+        }}
+        @matchTriggerWidth={{false}}
+        data-playground-instance-chooser
+        data-test-instance-chooser
+        as |item|
+      >
+        <CardContainer class='field' @displayBoundaries={{true}}>
+          <Preview @card={{item.field}} @format='atom' />
+        </CardContainer>
+      </BoxelSelect>
+    {{/if}}
+  </div>
 
   <style scoped>
+    :global(.instances-dropdown-content) {
+      max-width: 275px;
+    }
+    .instance-select-dropdown {
+      margin-block: auto;
+      padding-inline-start: var(--boxel-sp-sm);
+      padding-inline-end: var(--boxel-sp-xs);
+      min-width: 80px;
+    }
     .loading-icon {
       height: var(--boxel-form-control-height);
     }
     .instance-chooser {
-      height: 26px;
+      min-height: 26px;
       border: 1px solid var(--boxel-dark);
-      outline: none;
     }
-    .instance-chooser :deep(.boxel-trigger-content) {
-      overflow: hidden;
+    .instance-chooser[aria-expanded='true'] {
+      border-radius: var(--boxel-border-radius-sm);
     }
-    :deep(
-      .boxel-select__dropdown .ember-power-select-option[aria-current='true']
-    ),
-    :deep(.instances-dropdown-content .ember-power-select-option) {
-      background-color: var(--boxel-light);
-      flex-wrap: nowrap;
-    }
-    :deep(.ember-power-select-option:hover .card) {
-      background-color: var(--boxel-100);
-    }
-    :deep(.boxel-trigger-content) {
-      font: var(--boxel-font-xs);
-    }
-    .instance-chooser :deep(.boxel-trigger-content) {
-      overflow: hidden;
+    .instance-chooser :deep(.boxel-trigger) {
+      padding-block: var(--boxel-sp-xxxs);
     }
     .card,
     .field {

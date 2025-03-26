@@ -2,7 +2,6 @@ import Component from '@glimmer/component';
 import type { Select } from 'ember-power-select/components/power-select';
 
 import { cn } from '../../helpers.ts';
-import { not } from '../../helpers/truth-helpers.ts';
 import CaretDown from '../../icons/caret-down.gts';
 
 export interface TriggerSignature {
@@ -32,7 +31,7 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
     <div class='boxel-trigger'>
       <div class='boxel-trigger-content'>
         {{#if this.showPlaceholder}}
-          <div class='boxel-trigger-placeholder'>
+          <div class='boxel-trigger-placeholder' title={{@placeholder}}>
             {{@placeholder}}
           </div>
         {{else}}
@@ -41,12 +40,9 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
           {{yield @select.selected @select}}
         {{/if}}
       </div>
-      {{#if (not @select.disabled)}}
-
-        {{#if (has-block 'icon')}}
-          {{yield to='icon'}}
-        {{/if}}
-      {{/if}}
+      {{#unless @select.disabled}}
+        {{yield to='icon'}}
+      {{/unless}}
     </div>
     <style scoped>
       .boxel-trigger {
@@ -54,24 +50,22 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
         align-items: center;
         justify-content: space-between;
         width: 100%;
-        gap: var(--boxel-sp-xxxs);
+        gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
       }
       .boxel-trigger-content {
         display: flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-xxs);
+        overflow: hidden;
       }
       .boxel-trigger-placeholder {
         color: var(--boxel-450);
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-sm);
-      }
-    </style>
-    <style scoped>
-      /*Ember power select has a right padding to the trigger element*/
-      .ember-power-select-trigger {
-        padding: 0px;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+        overflow: hidden;
       }
     </style>
   </template>
@@ -92,7 +86,7 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
       </:default>
       <:icon>
         <CaretDown
-          class={{cn 'icon' (if @select.isOpen 'is-open')}}
+          class={{cn 'icon' is-open=@select.isOpen}}
           data-test-caret-down
         />
       </:icon>
@@ -101,6 +95,8 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
       .icon {
         width: 10px;
         height: 10px;
+        min-width: 10px;
+        min-height: 10px;
         flex-shrink: 0;
       }
       .is-open {

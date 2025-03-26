@@ -137,8 +137,6 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
   }
 
   <template>
-    Boxel Spec
-
     <span class='has-spec' data-test-has-spec>
       {{#if @showCreateSpec}}
         <BoxelButton
