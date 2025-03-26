@@ -54,6 +54,9 @@ const PRIMITIVE_INCOMPATIBILITY_MESSAGE =
 
 class Isolated extends Component<typeof Spec> {
   get defaultIcon() {
+    if (!this.args.model) {
+      return;
+    }
     return this.args.model.constructor?.icon;
   }
 
@@ -111,7 +114,7 @@ class Isolated extends Component<typeof Spec> {
         <div class='box header-icon-container'>
           {{#if this.icon}}
             <this.icon width='35' height='35' role='presentation' />
-          {{else}}
+          {{else if this.defaultIcon}}
             <this.defaultIcon width='35' height='35' role='presentation' />
           {{/if}}
         </div>
@@ -304,6 +307,9 @@ class Isolated extends Component<typeof Spec> {
 
 class Fitted extends Component<typeof Spec> {
   get defaultIcon() {
+    if (!this.args.model) {
+      return;
+    }
     return this.args.model.constructor?.icon;
   }
 
@@ -336,7 +342,7 @@ class Fitted extends Component<typeof Spec> {
       <div class='thumbnail-section'>
         {{#if this.icon}}
           <this.icon width='35' height='35' role='presentation' />
-        {{else}}
+        {{else if this.defaultIcon}}
           <this.defaultIcon width='35' height='35' role='presentation' />
         {{/if}}
       </div>
@@ -563,6 +569,9 @@ class Fitted extends Component<typeof Spec> {
 
 class Edit extends Component<typeof Spec> {
   get defaultIcon() {
+    if (!this.args.model) {
+      return;
+    }
     return this.args.model.constructor?.icon;
   }
 
@@ -622,7 +631,7 @@ class Edit extends Component<typeof Spec> {
         <div class='box header-icon-container'>
           {{#if this.icon}}
             <this.icon width='35' height='35' role='presentation' />
-          {{else}}
+          {{else if this.defaultIcon}}
             <this.defaultIcon width='35' height='35' role='presentation' />
           {{/if}}
         </div>

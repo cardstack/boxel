@@ -9,9 +9,14 @@
       "thumbnailURL": null
     },
     "relationships": {
-      "specs": {
+      "specs.0": {
         "links": {
-          "self": null
+          "self": "../Spec/review-blog"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/blog"
         }
       },
       "publisher": {
