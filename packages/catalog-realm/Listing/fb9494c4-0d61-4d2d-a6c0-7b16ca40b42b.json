@@ -2,26 +2,34 @@
   "data": {
     "type": "card",
     "attributes": {
+      "name": "Contact Link",
+      "summary": null,
+      "listingType": "field",
       "description": null,
       "thumbnailURL": null
     },
     "relationships": {
-      "startHere.0": {
+      "specs.0": {
         "links": {
-          "self": "./Listing/blog-listing"
+          "self": "../Spec/contact-link"
         }
       },
-      "startHere.1": {
-        "links": {
-          "self": "./Listing/5721ca5d-f89a-42d6-aa60-421f4c1c1c30"
-        }
-      },
-      "new": {
+      "publisher": {
         "links": {
           "self": null
         }
       },
-      "featured": {
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
         "links": {
           "self": null
         }
@@ -29,8 +37,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "./catalog-app/catalog",
-        "name": "Catalog"
+        "module": "../catalog-app/listing/listing",
+        "name": "Listing"
       }
     }
   }

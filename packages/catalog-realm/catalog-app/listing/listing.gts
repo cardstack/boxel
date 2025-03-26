@@ -113,20 +113,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   get specBreakdown() {
-    return this.args.model.specs?.reduce(
-      (groupedSpecs, spec) => {
-        if (!spec) {
-          return groupedSpecs;
-        }
-        const specType = spec.specType as SpecType;
-        if (!groupedSpecs[specType]) {
-          groupedSpecs[specType] = [];
-        }
-        groupedSpecs[specType].push(spec);
-        return groupedSpecs;
-      },
-      {} as Record<SpecType, Spec[]>,
-    );
+    if (!this.args.model.specs) {
+      return {} as Record<SpecType, Spec[]>;
+    }
+    return specBreakdown(this.args.model.specs);
   }
 
   get hasNonEmptySpecBreakdown() {
@@ -194,7 +184,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             class='app-listing-summary'
           >
             <h2>Summary</h2>
-            {{@model.summary}}
+            <@fields.summary />
           </ContentContainer>
 
           <div class='license-statistic'>
@@ -260,7 +250,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
         <hr class='divider' />
 
-        <section class='app-listing-images-videos'>
+        {{!-- <section class='app-listing-images-videos'>
           <h2>Images & Videos</h2>
           {{! Todo: Add images and videos section while getting the real data }}
           <ul class='images-videos-list'>
@@ -284,7 +274,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           </ul>
         </section>
 
-        <hr class='divider' />
+        <hr class='divider' /> --}}
 
         <section class='app-listing-categories'>
           <h2>Categories</h2>
@@ -571,6 +561,7 @@ export class Listing extends CardDef {
   @field categories = linksToMany(() => Category);
   @field tags = linksToMany(() => Tag);
   @field license = linksTo(() => License);
+  @field listingType = contains(StringField);
   //   @field pricing = contains(PricingField)
   //   @field images = containsMany(StringField) // thumbnailURLs
 
@@ -583,4 +574,21 @@ export class Listing extends CardDef {
   static isolated = EmbeddedTemplate; //temporary
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
+}
+
+function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {
+  return specs.reduce(
+    (groupedSpecs, spec) => {
+      if (!spec) {
+        return groupedSpecs;
+      }
+      const specType = spec.specType as SpecType;
+      if (!groupedSpecs[specType]) {
+        groupedSpecs[specType] = [];
+      }
+      groupedSpecs[specType].push(spec);
+      return groupedSpecs;
+    },
+    {} as Record<SpecType, Spec[]>,
+  );
 }
