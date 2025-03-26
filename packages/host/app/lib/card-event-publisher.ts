@@ -103,7 +103,6 @@ export default class CardEventPublisher {
 
     if (cardEntries.length) {
       for (let entry of cardEntries) {
-        console.log(JSON.stringify(entry.serialization, null, 2));
         let hashKey = generateCardHashKey(roomId, entry.serialization);
         let eventId = this.cardHashes.get(hashKey);
         if (eventId) {
@@ -194,11 +193,6 @@ export default class CardEventPublisher {
     commandDefinitions: SkillCardModule.CommandField[],
     roomId: string,
   ) {
-    console.trace(
-      'addCommandDefinitionsToRoomHistory',
-      commandDefinitions,
-      roomId,
-    );
     // Create the command defs so getting the json schema
     // and send it to the matrix room.
     let commandDefinitionSchemas: CommandDefinitionSchema[] = [];
