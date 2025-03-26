@@ -1,9 +1,5 @@
-import { on } from '@ember/modifier';
-
 import GlimmerComponent from '@glimmer/component';
 import ImageIcon from '@cardstack/boxel-icons/image';
-
-import { BoxelButton } from '@cardstack/boxel-ui/components';
 
 interface AppListingHeaderArgs {
   Args: {
@@ -13,10 +9,10 @@ interface AppListingHeaderArgs {
     rating?: string; // TODO: add rating
     reviewCount?: string; // TODO: add review count
     buttonText: string;
-    onButtonClick: () => void;
   };
   Blocks: {
     default: [];
+    action: [];
   };
   Element: HTMLElement;
 }
@@ -47,9 +43,10 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
           </div>
         </div>
 
-        <BoxelButton class='action-button' {{on 'click' @onButtonClick}}>
-          {{@buttonText}}
-        </BoxelButton>
+        <div class='action-button'>
+          {{yield to='action'}}
+        </div>
+
       </div>
     </header>
 
