@@ -56,18 +56,6 @@ interface ShowcaseViewArgs {
 }
 
 class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
-  get startHereListings() {
-    return this.args.startHereListings;
-  }
-
-  get newListings() {
-    return this.args.newListings;
-  }
-
-  get featuredListings() {
-    return this.args.featuredListings;
-  }
-
   <template>
     <div class='showcase-display-container' ...attributes>
       <CardsDisplaySection class='showcase-cards-display'>
@@ -82,7 +70,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
         </:intro>
         <:content>
           <CardsIntancesGrid
-            @cards={{this.startHereListings}}
+            @cards={{@startHereListings}}
             @context={{@context}}
           />
         </:content>
@@ -99,10 +87,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
             plain polish.</p>
         </:intro>
         <:content>
-          <CardsIntancesGrid
-            @cards={{this.newListings}}
-            @context={{@context}}
-          />
+          <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} />
         </:content>
       </CardsDisplaySection>
 
@@ -117,7 +102,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
         </:intro>
         <:content>
           <CardsIntancesGrid
-            @cards={{this.featuredListings}}
+            @cards={{@featuredListings}}
             @context={{@context}}
           />
         </:content>
@@ -462,7 +447,6 @@ class Isolated extends Component<typeof Catalog> {
         box-shadow: 0 0 0 1px var(--boxel-dark);
       }
 
-      /* TODO: Remove this after testing */
       .go-to-grid {
         font-weight: 600;
       }
