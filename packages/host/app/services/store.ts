@@ -162,11 +162,11 @@ export default class StoreService extends Service {
       }
       if (resources.length === 0) {
         this.subscribers.delete(id);
-        // intentionally not removing the instance immediately from the identity map. as of
-        // the StackItem refactor our resources lifetimes are very
-        // narrow/efficient, and it's not unlikely that a resource for a stack
-        // item will be unloaded when switching from edit to view modes as it
-        // will be dereferenced during the switch over.
+        // intentionally not removing the instance immediately from the identity
+        // map. as of the StackItem refactor our resources lifetimes are very
+        // precise, and it's not unlikely that a resource for a stack item will
+        // be unloaded when switching from edit to view modes as it will be
+        // dereferenced during the switch over because of component teardown.
         this.markForGarbageCollection(id!);
       }
 

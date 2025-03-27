@@ -1,5 +1,4 @@
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
 import {
@@ -32,7 +31,6 @@ import {
   RealmURLContextName,
   getNarrowestType,
   Loader,
-  type getCard,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
@@ -63,9 +61,8 @@ interface Signature {
 }
 
 class LinksToManyEditor extends GlimmerComponent<Signature> {
-  @consume(CardContextName) private declare cardContext: CardContext;
-  @consume(RealmURLContextName) private declare realmURL: URL | undefined;
-  @tracked private declare chosenCardResource: ReturnType<getCard> | undefined;
+  @consume(CardContextName) declare cardContext: CardContext;
+  @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
     <div class='links-to-many-editor' data-test-links-to-many={{@field.name}}>
@@ -90,13 +87,10 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
           ...attributes
         />
       {{/if}}
-      {{#if this.chosenCardResource.card}}
-        {{this.setChosenCard}}
-      {{/if}}
     </div>
   </template>
 
-  private add = () => {
+  add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
@@ -112,7 +106,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let filter = {
       every: [{ type }, ...selectedCardsQuery],
     };
-    this.chosenCardResource = await chooseCard(
+    let chosenCardResource = await chooseCard(
       this,
       { filter },
       {
@@ -126,20 +120,22 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
+    if (chosenCardResource) {
+      // this resource is our own (tied to this component's lifetime),
+      // but we need to make sure the card is loaded before we can set
+      // the value of the BoxModel
+      await chosenCardResource.loaded;
+      if (chosenCardResource.card) {
+        selectedCards = [...selectedCards, chosenCardResource.card];
+        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+      }
+    }
   });
 
-  private remove = (index: number) => {
+  remove = (index: number) => {
     let cards = (this.args.model.value as any)[this.args.field.name];
     cards = cards.filter((_c: CardDef, i: number) => i !== index);
     (this.args.model.value as any)[this.args.field.name] = cards;
-  };
-
-  private setChosenCard = () => {
-    if (this.chosenCardResource?.card) {
-      let selectedCards = (this.args.model.value as any)[this.args.field.name];
-      selectedCards = [...selectedCards, this.chosenCardResource.card];
-      (this.args.model.value as any)[this.args.field.name] = selectedCards;
-    }
   };
 }
 
@@ -159,10 +155,10 @@ interface LinksToManyStandardEditorSignature {
 }
 
 class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEditorSignature> {
-  @consume(CardContextName) private declare cardContext: CardContext;
+  @consume(CardContextName) declare cardContext: CardContext;
 
   @action
-  private setItems(items: any) {
+  setItems(items: any) {
     this.args.arrayField.set(items);
   }
 
@@ -295,7 +291,7 @@ interface LinksToManyCompactEditorSignature {
   };
 }
 class LinksToManyCompactEditor extends GlimmerComponent<LinksToManyCompactEditorSignature> {
-  @consume(CardContextName) private declare cardContext: CardContext;
+  @consume(CardContextName) declare cardContext: CardContext;
 
   <template>
     <div class='boxel-pills' data-test-pills ...attributes>
