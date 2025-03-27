@@ -189,7 +189,7 @@ export default class StoreService extends Service {
       setTimeout(() => {
         console.warn(`garbage collecting instance ${url} from store`);
         this.identityContext.delete(url!);
-      }, 5 * 6000) as unknown as number,
+      }, 5 * 60_000) as unknown as number,
     );
   }
 
