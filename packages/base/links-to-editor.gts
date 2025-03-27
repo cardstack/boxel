@@ -1,5 +1,4 @@
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import {
   restartableTask,
@@ -25,7 +24,6 @@ import {
   RealmURLContextName,
   getNarrowestType,
   Loader,
-  type getCard,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -43,9 +41,8 @@ interface Signature {
 }
 
 export class LinksToEditor extends GlimmerComponent<Signature> {
-  @consume(CardContextName) private declare cardContext: CardContext;
-  @consume(RealmURLContextName) private declare realmURL: URL | undefined;
-  @tracked private declare chosenCardResource: ReturnType<getCard> | undefined;
+  @consume(CardContextName) declare cardContext: CardContext;
+  @consume(RealmURLContextName) declare realmURL: URL | undefined;
 
   <template>
     <PermissionsConsumer as |permissions|>
@@ -89,9 +86,6 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
             />
           {{/if}}
         {{/if}}
-        {{#if this.chosenCardResource.card}}
-          {{this.setChosenCard}}
-        {{/if}}
       </div>
     </PermissionsConsumer>
     <style scoped>
@@ -124,19 +118,19 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     </style>
   </template>
 
-  private add = () => {
+  add = () => {
     (this.chooseCard as unknown as Descriptor<any, any[]>).perform();
   };
 
-  private remove = () => {
+  remove = () => {
     this.args.model.value = null;
   };
 
-  private get isEmpty() {
+  get isEmpty() {
     return this.args.model.value == null;
   }
 
-  private get linkedCard() {
+  get linkedCard() {
     if (this.args.model.value == null) {
       throw new Error(
         `can't make field component with box value of null for field ${this.args.field.name}`,
@@ -156,7 +150,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
-    this.chosenCardResource = await chooseCard(
+    let chosenCardResource = await chooseCard(
       this,
       { filter: { type } },
       {
@@ -169,13 +163,16 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
-  });
-
-  private setChosenCard = () => {
-    if (this.chosenCardResource?.card) {
-      this.args.model.value = this.chosenCardResource.card;
+    if (chosenCardResource) {
+      // this resource is our own (tied to this component's lifetime),
+      // but we need to make sure the card is loaded before we can set
+      // the value of the BoxModel
+      await chosenCardResource.loaded;
+      if (chosenCardResource.card) {
+        this.args.model.value = chosenCardResource.card;
+      }
     }
-  };
+  });
 }
 
 function myLoader(): Loader {
