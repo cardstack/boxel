@@ -76,6 +76,9 @@ class ResettableIdentityContext implements IdentityContext {
   }
   delete(url: string): void {
     this.#cards.delete(url);
+    if (this.#onClear) {
+      this.#onClear(url);
+    }
   }
   reset() {
     for (let url of this.#cards.keys()) {
