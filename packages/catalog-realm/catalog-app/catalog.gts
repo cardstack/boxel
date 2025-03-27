@@ -13,11 +13,11 @@ import {
   linksToMany,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Query, isCardInstance } from '@cardstack/runtime-common';
+import { Query, isCardInstance, Filter } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 
-import FilterSection from './components/filter-section';
+import { FilterCategoryGroup } from './components/filter-section';
 import CardsDisplaySection, {
   CardsIntancesGrid,
 } from './components/cards-display-section';
@@ -174,7 +174,7 @@ const CATALOG_VIEW_OPTIONS: ViewItem[] = [
 
 interface CatalogListViewArgs {
   Args: {
-    tabTitle?: string;
+    pageTitle?: string;
     listingQuery: Query;
     realms: URL[];
     context?: CardContext;
@@ -189,15 +189,11 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
     this.selectedView = id;
   }
 
-  get tabTitle() {
-    return this.args.tabTitle;
-  }
-
   <template>
     <CardsDisplaySection>
       <:intro>
         <header class='catalog-list-header'>
-          <h2>{{this.tabTitle}}</h2>
+          <h2>{{@pageTitle}}</h2>
           <ViewSelector
             @selectedId={{this.selectedView}}
             @onChange={{this.onChangeView}}
@@ -263,6 +259,44 @@ class Isolated extends Component<typeof Catalog> {
     this.activeTabId = tabId;
   }
 
+  // listing query filter values
+  // TODO: Remove this after we get the real categories from query
+  mockCategories = [
+    { id: 'all', name: 'All' },
+    { id: 'business', name: 'Business' },
+    { id: 'accounting', name: 'Accounting' },
+    { id: 'collaboration', name: 'Collaboration' },
+  ];
+
+  @tracked activeCategoryId = this.mockCategories[0].id;
+
+  @action
+  handleCategorySelect(category: { id: string; name: string }) {
+    this.activeCategoryId = category.id;
+  }
+
+  get listingQuery(): Query {
+    const listingTypeRef = {
+      module: new URL('./listing/listing', import.meta.url).href,
+      name: 'Listing',
+    };
+
+    const baseFilter: Filter = {
+      on: listingTypeRef,
+      eq: {
+        listingType: this.activeTabId,
+      },
+    };
+
+    return {
+      filter: {
+        on: listingTypeRef,
+        every: [baseFilter],
+      },
+    };
+  }
+  // end of listing query filter values
+
   // TODO: Remove this after testing
   @action goToGrid() {
     if (!this.args.context?.actions?.viewCard) {
@@ -301,25 +335,6 @@ class Isolated extends Component<typeof Catalog> {
     return this.args.model.featured;
   }
 
-  get listingQuery() {
-    return {
-      filter: {
-        on: {
-          module: new URL('./listing/listing', import.meta.url).href,
-          name: 'Listing',
-        },
-        eq: {
-          listingType: this.activeTabId,
-        },
-      },
-    };
-  }
-
-  get tabTitle() {
-    return this.tabFilterOptions.find((tab) => tab.tabId === this.activeTabId)
-      ?.displayName;
-  }
-
   private get realms() {
     return [this.args.model[realmURL]!];
   }
@@ -347,7 +362,19 @@ class Isolated extends Component<typeof Catalog> {
         >
           Go to Grid
         </BoxelButton>
-        <FilterSection />
+
+        <ContentContainer
+          role='complementary'
+          aria-label='Filters'
+          class='filters-container'
+        >
+          <FilterCategoryGroup
+            @title='Categories'
+            @items={{this.mockCategories}}
+            @activeId={{this.activeCategoryId}}
+            @onItemSelect={{this.handleCategorySelect}}
+          />
+        </ContentContainer>
       </:sidebar>
       <:content>
         <div class='content-area-container {{this.activeTabId}}'>
@@ -363,7 +390,7 @@ class Isolated extends Component<typeof Catalog> {
                   />
                 {{else}}
                   <CatalogListView
-                    @tabTitle={{this.tabTitle}}
+                    @pageTitle='Product List'
                     @listingQuery={{this.listingQuery}}
                     @realms={{this.realms}}
                     @context={{@context}}
