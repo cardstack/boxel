@@ -20,6 +20,7 @@ import {
 import { AddButton, IconButton, Pill } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
+  waitForProperty,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import {
@@ -31,7 +32,6 @@ import {
   RealmURLContextName,
   getNarrowestType,
   Loader,
-  isCardInstance,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
@@ -122,9 +122,12 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     );
     if (chosenCardResource) {
-      let card = await chosenCardResource.dispose();
-      if (card && isCardInstance(card)) {
-        selectedCards = [...selectedCards, card];
+      // this resource is our own (tied to this component's lifetime),
+      // but we need to make sure the card is loaded before we can set
+      // the value of the BoxModel
+      await waitForProperty(chosenCardResource, 'isLoaded', true);
+      if (chosenCardResource.card) {
+        selectedCards = [...selectedCards, chosenCardResource.card];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;
       }
     }

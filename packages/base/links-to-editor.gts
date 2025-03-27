@@ -3,6 +3,7 @@ import { on } from '@ember/modifier';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
+  waitForProperty,
 } from 'ember-concurrency';
 import {
   DefaultFormatsProvider,
@@ -24,7 +25,6 @@ import {
   RealmURLContextName,
   getNarrowestType,
   Loader,
-  isCardInstance,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
@@ -165,9 +165,12 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       },
     );
     if (chosenCardResource) {
-      let card = await chosenCardResource.dispose();
-      if (card && isCardInstance(card)) {
-        this.args.model.value = card;
+      // this resource is our own (tied to this component's lifetime),
+      // but we need to make sure the card is loaded before we can set
+      // the value of the BoxModel
+      await waitForProperty(chosenCardResource, 'isLoaded', true);
+      if (chosenCardResource.card) {
+        this.args.model.value = chosenCardResource.card;
       }
     }
   });

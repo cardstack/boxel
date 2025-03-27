@@ -48,11 +48,30 @@ class ResettableIdentityContext implements IdentityContext {
       card: CardDef | undefined;
     }
   >();
+  #onAccess?: (url: string) => void;
+  #onClear?: (url: string) => void;
+
+  constructor(opts?: {
+    onAccess?: (url: string) => void;
+    onClear?: (url: string) => void;
+  }) {
+    this.#onAccess = opts?.onAccess;
+    this.#onClear = opts?.onClear;
+  }
 
   get(url: string): CardDef | undefined {
-    return this.#cards.get(url)?.card;
+    let instance = this.#cards.get(url)?.card;
+    if (instance && this.#onAccess) {
+      this.#onAccess(url);
+    }
+    return instance;
   }
   set(url: string, instance: CardDef | undefined): void {
+    if (instance && this.#onAccess) {
+      this.#onAccess(url);
+    } else if (!instance && this.#onClear) {
+      this.#onClear(url);
+    }
     this.#cards.set(url, { card: instance });
   }
   delete(url: string): void {
@@ -61,6 +80,9 @@ class ResettableIdentityContext implements IdentityContext {
   reset() {
     for (let url of this.#cards.keys()) {
       this.#cards.set(url, { card: undefined });
+      if (this.#onClear) {
+        this.#onClear(url);
+      }
     }
   }
 }
@@ -72,7 +94,12 @@ export default class StoreService extends Service {
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
-  private identityContext = new ResettableIdentityContext();
+  private identityContext = new ResettableIdentityContext({
+    onAccess: (url: string) => this.extendTimeToGarbageCollect(url),
+    onClear: (url: string) => {
+      clearTimeout(this.garbageCollection.get(url));
+    },
+  });
   private subscribers: Map<
     string,
     {
@@ -152,15 +179,21 @@ export default class StoreService extends Service {
     }
   }
 
-  private markForGarbageCollection(id: string) {
-    clearTimeout(this.garbageCollection.get(id));
+  private markForGarbageCollection(url: string) {
+    clearTimeout(this.garbageCollection.get(url));
     this.garbageCollection.set(
-      id,
-      setTimeout(
-        () => this.identityContext.delete(id!),
-        5 * 6000,
-      ) as unknown as number,
+      url,
+      setTimeout(() => {
+        console.warn(`garbage collecting instance ${url} from store`);
+        this.identityContext.delete(url!);
+      }, 5 * 6000) as unknown as number,
     );
+  }
+
+  private extendTimeToGarbageCollect(url: string) {
+    if (this.garbageCollection.get(url) != null) {
+      this.markForGarbageCollection(url);
+    }
   }
 
   async createSubscriber({
@@ -249,13 +282,13 @@ export default class StoreService extends Service {
   }
 
   // This method is used for specific scenarios where you just want an instance
-  // that is not auto saving and not receiving live updates. This may include
-  // things like tests, freestyle usage guide, instances that we immediately
-  // consume, etc.
+  // that is not auto saving and not receiving live updates and is eligible for
+  // garbage collection--meaning that it will be detached from the store. This
+  // means you MUST consume the instance IMMEDIATELY! it should not live in the
+  // state of the consumer.
   async peek(url: string): Promise<CardDef | CardError> {
     let cached = this.identityContext.get(url);
     if (cached) {
-      this.markForGarbageCollection(url);
       return cached;
     }
     try {
@@ -281,7 +314,6 @@ export default class StoreService extends Service {
         new URL(url),
       );
       this.identityContext.set(url, instance);
-      this.markForGarbageCollection(url);
       return instance;
     } catch (error: any) {
       let errorResponse = processCardError(url, error);
