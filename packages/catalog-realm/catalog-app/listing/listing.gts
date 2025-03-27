@@ -79,6 +79,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this.createdInstances = true;
   });
 
+  _copySource = task(async (/* fromUrl: string, */ toUrl: string) => {
+    // TODO: POC so hardcode first
+    const newToUrl = toUrl.concat('/blog-app/blog-app.gts');
+    let fromUrl = 'http://localhost:4201/catalog/blog-app/blog-app';
+    await this.args.context?.actions?.copySource?.(fromUrl, newToUrl);
+  });
+
   get hasOneOrMoreSpec() {
     return this.args.model.specs && this.args.model?.specs?.length > 0;
   }
@@ -93,6 +100,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   @action create(realmUrl: string) {
     this._create.perform(realmUrl);
+    this._copySource.perform(realmUrl);
   }
 
   mockCards = [

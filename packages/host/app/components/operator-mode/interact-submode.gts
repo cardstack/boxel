@@ -376,6 +376,9 @@ export default class InteractSubmode extends Component<Signature> {
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
       },
+      copySource: async (fromUrl: string, toUrl: string) => {
+        await here.operatorModeStateService.copySource(fromUrl, toUrl);
+      },
     };
     return { ...actions, ...catalogActions };
   }
