@@ -192,7 +192,7 @@ export default class MatrixService extends Service {
   set currentRoomId(value: string | undefined) {
     this._currentRoomId = value;
     if (value) {
-      this.loadAllTimelineEvents.perform(value);
+      this.loadAllTimelineEvents(value);
       window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
     } else {
       window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
@@ -1111,7 +1111,7 @@ export default class MatrixService extends Service {
     return await this.client.isUsernameAvailable(username);
   }
 
-  private loadAllTimelineEvents = dropTask(async (roomId: string) => {
+  private async loadAllTimelineEvents(roomId: string) {
     let roomData = this.ensureRoomData(roomId);
     let room = this.client.getRoom(roomId);
     let roomResource = this.roomResources.get(roomId);
@@ -1143,7 +1143,7 @@ export default class MatrixService extends Service {
     } finally {
       this.timelineLoadingState.set(roomId, false);
     }
-  });
+  }
 
   get isLoadingTimeline() {
     if (!this.currentRoomId) {

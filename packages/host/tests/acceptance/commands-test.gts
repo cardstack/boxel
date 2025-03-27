@@ -962,6 +962,7 @@ module('Acceptance | Commands tests', function (hooks) {
     });
     // open assistant
     await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
     // open skill menu
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
