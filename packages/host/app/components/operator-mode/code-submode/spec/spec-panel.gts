@@ -3,15 +3,10 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
 
-import AppsIcon from '@cardstack/boxel-icons/apps';
-import Brain from '@cardstack/boxel-icons/brain';
-import LayoutList from '@cardstack/boxel-icons/layout-list';
-import StackIcon from '@cardstack/boxel-icons/stack';
-
 import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 
-import { Pill, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import {
   type ResolvedCodeRef,
@@ -415,56 +410,4 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       }}
     {{/if}}
   </template>
-}
-
-interface SpecTagSignature {
-  Element: HTMLDivElement;
-  Args: {
-    specType: SpecType;
-  };
-}
-
-export class SpecTag extends GlimmerComponent<SpecTagSignature> {
-  get icon() {
-    return getIcon(this.args.specType);
-  }
-  <template>
-    {{#if this.icon}}
-      <Pill
-        data-test-spec-tag={{@specType}}
-        class='spec-tag-pill'
-        ...attributes
-      >
-        <:iconLeft>
-          {{this.icon}}
-        </:iconLeft>
-        <:default>
-          {{@specType}}
-        </:default>
-      </Pill>
-
-    {{/if}}
-    <style scoped>
-      .spec-tag-pill {
-        --pill-font: 500 var(--boxel-font-xs);
-        --pill-background-color: var(--boxel-200);
-        word-break: initial;
-      }
-    </style>
-  </template>
-}
-
-function getIcon(specType: SpecType) {
-  switch (specType) {
-    case 'card':
-      return StackIcon;
-    case 'app':
-      return AppsIcon;
-    case 'field':
-      return LayoutList;
-    case 'skill':
-      return Brain;
-    default:
-      return;
-  }
 }
