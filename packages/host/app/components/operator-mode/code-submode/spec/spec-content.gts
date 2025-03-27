@@ -15,6 +15,7 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCards,
+  type getCard,
   GetCardContextName,
   GetCardsContextName,
 } from '@cardstack/runtime-common';
