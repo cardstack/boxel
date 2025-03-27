@@ -84,13 +84,12 @@ import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
 import Playground from './code-submode/playground/playground';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
-import SpecPreview from './code-submode/spec-preview';
+import SpecPreview from './code-submode/spec/spec-panel';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
-
 interface Signature {
   Args: {
     saveSourceOnClose: (url: URL, content: string) => void;
