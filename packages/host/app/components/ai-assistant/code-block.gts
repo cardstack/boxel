@@ -218,31 +218,61 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       let { editor } = this.monacoState;
       let model = editor.getModel();
       let originalModel = model?.original;
-      let modifiedModel = model?.modified;
 
+      let newOriginalCode = originalCode;
+      let currentOriginalCode = originalModel?.getValue();
+
+      if (!newOriginalCode.startsWith(currentOriginalCode)) {
+        originalModel?.setValue(newOriginalCode);
+      } else {
+        let codeDelta = newOriginalCode.slice(currentOriginalCode.length);
+
+        let lineCount = originalModel.getLineCount();
+        let lastLineLength = originalModel.getLineLength(lineCount);
+
+        let range = {
+          startLineNumber: lineCount,
+          startColumn: lastLineLength + 1,
+          endLineNumber: lineCount,
+          endColumn: lastLineLength + 1,
+        };
+
+        let editOperation = {
+          range: range,
+          text: codeDelta,
+          forceMoveMarkers: true,
+        };
+
+        originalModel.applyEdits([editOperation]);
+      }
+
+      let modifiedModel = model?.modified;
       let newModifiedCode = modifiedCode;
       let currentModifiedCode = modifiedModel?.getValue();
-      let codeDelta = newModifiedCode.slice(currentModifiedCode.length);
 
-      let lineCount = modifiedModel.getLineCount();
-      let lastLineLength = modifiedModel.getLineLength(lineCount);
+      if (!newModifiedCode.startsWith(currentModifiedCode)) {
+        modifiedModel.setValue(newModifiedCode);
+      } else {
+        let codeDelta = newModifiedCode.slice(currentModifiedCode.length);
 
-      let range = {
-        startLineNumber: lineCount,
-        startColumn: lastLineLength + 1,
-        endLineNumber: lineCount,
-        endColumn: lastLineLength + 1,
-      };
+        let lineCount = modifiedModel.getLineCount();
+        let lastLineLength = modifiedModel.getLineLength(lineCount);
 
-      let editOperation = {
-        range: range,
-        text: codeDelta,
-        forceMoveMarkers: true,
-      };
+        let range = {
+          startLineNumber: lineCount,
+          startColumn: lastLineLength + 1,
+          endLineNumber: lineCount,
+          endColumn: lastLineLength + 1,
+        };
 
-      // originalModel.setValue(originalCode);
-      debugger;
-      modifiedModel.applyEdits([editOperation]);
+        let editOperation = {
+          range: range,
+          text: codeDelta,
+          forceMoveMarkers: true,
+        };
+
+        modifiedModel.applyEdits([editOperation]);
+      }
     } else {
       let editor = monacoSDK.editor.createDiffEditor(
         element,
@@ -311,12 +341,13 @@ class CodeBlockEditor extends Component<Signature> {
 class CodeBlockDiffEditor extends Component<Signature> {
   private editorDisplayOptions = {
     originalEditable: false,
-    compactMode: true,
+    // compactMode: true,
     renderSideBySide: false,
     diffAlgorithm: 'advanced',
+    folding: true,
     hideUnchangedRegions: {
       enabled: true,
-      revealLineCount: 20,
+      revealLineCount: 10,
       minimumLineCount: 1,
       contextLineCount: 1,
     },

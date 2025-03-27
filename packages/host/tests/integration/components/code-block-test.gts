@@ -12,29 +12,66 @@ import { tracked } from '@glimmer/tracking';
 import Component from '@glimmer/component';
 import { renderComponent } from '../../helpers/render-component';
 import { on } from '@ember/modifier';
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import { lookupService } from '../../helpers';
+import CommandService from '@cardstack/host/services/command-service';
+import {
+  parseCodeContent,
+  parseSearchReplace,
+} from '@cardstack/host/lib/search-replace-block-parsing';
 
 let monacoSDK = null;
 
 let abc = class DiffEditorTestComponent extends Component {
-  @tracked originalCode = 'let x = 1;\nlet y = 2;';
-  @tracked modifiedCode = 'let x = 2;';
+  @tracked originalCode = null;
+  @tracked modifiedCode = null;
+  @tracked diffIndex = 0;
 
-  toggleCode = () => {
-    this.modifiedCode = 'let x = 2;\nlet y = 3;';
+  applyCodePatch = async () => {
+    let searchReplaceBlock;
+    if (this.diffIndex === 0) {
+      searchReplaceBlock = srblock_0;
+    } else if (this.diffIndex === 1) {
+      searchReplaceBlock = srblock_final;
+    } else {
+      searchReplaceBlock = srblock_0;
+    }
+
+    let codeContent = parseSearchReplace(searchReplaceBlock);
+    let newSrBlock = `<<<<<<< SEARCH
+${codeContent.searchContent || ''}
+=======
+${codeContent.replaceContent || ''}
+>>>>>>> REPLACE`;
+
+    let commandService = lookupService<CommandService>('command-service');
+    let applyCommand = new ApplySearchReplaceBlockCommand(
+      commandService.commandContext,
+    );
+    let result = await applyCommand.execute({
+      fileContent: originalCode,
+      codeBlock: newSrBlock,
+    });
+    debugger;
+    this.originalCode = originalCode;
+    this.modifiedCode = result.resultContent;
+    this.diffIndex++;
   };
 
   <template>
-    <CodeBlock
-      @monacoSDK={{monacoSDK}}
-      @language={{'typescript'}}
-      @originalCode={{this.originalCode}}
-      @modifiedCode={{this.modifiedCode}}
-      as |codeBlock|
-    >
-      <codeBlock.diffEditor />
-    </CodeBlock>
+    {{#if this.originalCode}}
+      <CodeBlock
+        @monacoSDK={{monacoSDK}}
+        @language={{'typescript'}}
+        @originalCode={{this.originalCode}}
+        @modifiedCode={{this.modifiedCode}}
+        as |codeBlock|
+      >
+        <codeBlock.diffEditor />
+      </CodeBlock>
+    {{/if}}
 
-    <button {{on 'click' this.toggleCode}}>Change modified code</button>
+    <button {{on 'click' this.applyCodePatch}}>Change modified code</button>
   </template>
 };
 
@@ -82,154 +119,224 @@ module('Integration | Component | FormattedMessage', function (hooks) {
   });
 });
 
+let srblock_0 = `// File url: paste.txt
+<<<<<<< SEARCH
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+          </div>
+
+          <div class='rsvp-section'>
+=======
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>`;
+
+let srblock_final = `// File url: paste.txt
+<<<<<<< SEARCH
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+          </div>
+
+          <div class='rsvp-section'>
+=======
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+
+            <div class='detail-item'>
+              <span class='label'>Where:</span>
+              <span class='value'>123 Party Lane, Celebration City</span>
+            </div>
+          </div>
+
+          <div class='rsvp-section'>
+>>>>>>> REPLACE`;
+
 let originalCode = `import { CardDef } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
-import { on } from '@ember/modifier';
-
-export class Basketball extends CardDef {
-  static displayName = "basketball";
+export class BdEventInvite extends CardDef {
+  static displayName = "bd-event-invite";
 
   static isolated = class Isolated extends Component<typeof this> {
-    @tracked isAnimating = false;
-
-    @action
-    bounce() {
-      this.isAnimating = true;
-      setTimeout(() => {
-        this.isAnimating = false;
-      }, 2000);
-    }
-
     <template>
-<div class='basketball-container'>
-        <h1 class='basketball-title'>Synergistic Spherical Solution</h1>
-        <h2 class='basketball-subtitle'>Optimizing Athletic Performance Metrics</h2>
-        <div class='basketball {{if this.isAnimating "bounce"}}'>
-          <div class='lines'></div>
+      <div class='birthday-invite'>
+        <div class='invite-header'>
+          <h1 class='title'>Birthday Party Invitation!</h1>
+          <div class='balloon-decoration'>🎈</div>
         </div>
-        <button class='bounce-button' {{on 'click' this.bounce}}>
-          Bounce!
-        </button>
+
+        <div class='invite-content'>
+          <p class='greeting'>You're invited to celebrate with us!</p>
+
+          <div class='event-details'>
+            <div class='detail-item'>
+              <span class='label'>When:</span>
+              <span class='value'>Saturday, December 16th at 3:00 PM</span>
+            </div>
+
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+          </div>
+
+          <div class='rsvp-section'>
+            <p class='rsvp-text'>Please RSVP by December 10th</p>
+            <button class='rsvp-button'>RSVP Now</button>
+          </div>
+        </div>
       </div>
+
       <style scoped>
-        @keyframes iridescent {
-          0% {
-            background-position: 0% 50%;
-          }
-          50% {
-            background-position: 100% 50%;
-          }
-          100% {
-            background-position: 0% 50%;
-          }
+        @keyframes marquee {
+          0% { transform: translateX(100%); }
+          100% { transform: translateX(-100%); }
         }
 
-        @keyframes bounce {
-          0% { transform: translateY(-200px); }
-          20% { transform: translateY(0); }
-          40% { transform: translateY(-150px); }
-          60% { transform: translateY(0); }
-          80% { transform: translateY(-50px); }
-          90% { transform: translateY(0); }
-          95% { transform: translateY(-25px); }
-          100% { transform: translateY(0); }
+        @keyframes blink {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0; }
         }
 
-        .basketball-container {
-          display: flex;
-          flex-direction: column;
-          justify-content: center;
-          align-items: center;
-          height: 400px;
-          padding-bottom: 20px;
+        @keyframes rainbow {
+          0% { color: red; }
+          14% { color: orange; }
+          28% { color: yellow; }
+          42% { color: green; }
+          56% { color: blue; }
+          70% { color: indigo; }
+          84% { color: violet; }
+          100% { color: red; }
         }
 
-        .basketball-title {
-          margin-bottom: 20px;
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
 
-        .basketball {
-          width: 150px;
-          height: 150px;
-          background: #FFC83D;
-          background-image: url('https://i.imgur.com/cwXaWv6.png'), radial-gradient(
-            circle at center,
-            #FFED47 10%,
-            #FFC83D 60%,
-            #FF9B28 100%
-          );
-          background-size: 140%, 100%;
-          background-position: center;
-          background-blend-mode: multiply;
-          border-radius: 50%;
+        .birthday-invite {
+          background: linear-gradient(to right, #0a192f, #172a45);
+          border: 2px solid #64ffda;
+          padding: 2rem;
+          max-width: 800px;
+          margin: 2rem auto;
           position: relative;
-          box-shadow:
-            inset -10px -10px 15px rgba(0, 0, 0, 0.2),
-            0 0 20px rgba(255, 255, 255, 0.5);
-          filter: hue-rotate(0deg);
-          transform-origin: center bottom;
+          box-shadow: 0 0 20px rgba(100, 255, 218, 0.2);
         }
 
-        .bounce {
-          animation: bounce 2s cubic-bezier(0.36, 0, 0.66, 1) 1 forwards;
-        }
-
-        .basketball-subtitle {
+        .invite-header {
           text-align: center;
-          color: #666;
-          margin: 10px 0;
+          margin-bottom: 2rem;
+          position: relative;
+          border-bottom: 1px solid rgba(100, 255, 218, 0.3);
+          padding-bottom: 1rem;
         }
 
-        .bounce-button {
+        .title {
+          color: #64ffda;
+          font-size: 3rem;
+          margin: 0;
+          font-family: 'Space Mono', monospace;
+          text-transform: uppercase;
+          letter-spacing: 0.2em;
+          animation: glow 2s ease-in-out infinite alternate;
+        }
+
+        .balloon-decoration {
+          font-size: 4rem;
           position: absolute;
-          bottom: 20px;
-          padding: 10px 20px;
-          background: #4a4a4a;
-          color: white;
-          border: none;
-          border-radius: 5px;
+          top: -1rem;
+          right: 1rem;
+          animation: spin 4s linear infinite;
+        }
+
+        .invite-content {
+          background-color: #000;
+          color: #fff;
+          padding: 2rem;
+          border: 3px dashed #ff0;
+          background-image: url('https://web.archive.org/web/19961219003255im_/http://geocities.com/images/stardust.gif');
+        }
+
+        .greeting {
+          text-align: center;
+          font-size: 2rem;
+          color: #0f0;
+          margin-bottom: 2rem;
+          animation: blink 1s step-end infinite;
+        }
+
+        .event-details {
+          margin: 2rem 0;
+          background: rgba(0, 0, 0, 0.8);
+          padding: 1rem;
+          border: 2px solid #ff0;
+        }
+
+        .detail-item {
+          margin: 1rem 0;
+          display: flex;
+          gap: 1rem;
+          animation: marquee 20s linear infinite;
+        }
+
+        .label {
+          font-weight: bold;
+          color: #f0f;
+          min-width: 60px;
+          text-transform: uppercase;
+        }
+
+        .value {
+          color: #0ff;
+          text-shadow: 1px 1px #f0f;
+        }
+
+        .rsvp-section {
+          text-align: center;
+          margin-top: 2rem;
+        }
+
+        .rsvp-text {
+          color: #ff0;
+          margin-bottom: 1rem;
+          font-size: 1.5rem;
+          animation: blink 2s step-end infinite;
+        }
+
+        .rsvp-button {
+          background: linear-gradient(90deg, #f0f, #ff0);
+          color: #000;
+          border: 3px outset #f0f;
+          padding: 1rem 3rem;
+          font-size: 1.5rem;
           cursor: pointer;
-          transition: background 0.3s;
+          font-family: 'Comic Sans MS', cursive;
+          text-transform: uppercase;
+          animation: rainbow 3s linear infinite;
         }
 
-        .bounce-button:hover {
-          background: #666;
-        }
-
-        .lines {
-          position: absolute;
-          width: 100%;
-          height: 100%;
-          top: 0;
-          left: 0;
-        }
-
-        .lines::before, .lines::after {
-          content: '';
-          position: absolute;
-        }
-
-        /* Sun rays animation */
-        @keyframes sunRays {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-
-        .basketball::after {
-          content: '';
-          position: absolute;
-          top: -30px;
-          left: -30px;
-          right: -30px;
-          bottom: -30px;
-          background-image: radial-gradient(transparent 50%, transparent 55%, #FFED47 55%, #FFED47 60%, transparent 60%);
-          z-index: -1;
-          border-radius: 50%;
-          animation: sunRays 60s linear infinite;
+        .rsvp-button:hover {
+          background: linear-gradient(90deg, #ff0, #f0f);
+          border-style: inset;
         }
       </style>
     </template>
+  }
+
+  static embedded = class Embedded extends Component<typeof this> {
+    <template></template>
+  }
+
+
+
+  static fitted = class Fitted extends Component<typeof this> {
+    <template></template>
   }
 }`;
