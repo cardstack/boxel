@@ -7,17 +7,24 @@ import {
   field,
   Component,
   CardDef,
+  CardContext,
   realmInfo,
   type BaseDef,
   linksToMany,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { isCardInstance, Query } from '@cardstack/runtime-common';
+import { Query, isCardInstance } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
+import GlimmerComponent from '@glimmer/component';
 
 import FilterSection from './components/filter-section';
-import CardsDisplaySection from './components/cards-display-section';
+import CardsDisplaySection, {
+  CardsIntancesGrid,
+} from './components/cards-display-section';
+
 import ContentContainer from './components/content-container';
+
+import { CardsGrid } from '../components/grid';
 
 import CatalogLayout from './layouts/catalog-layout';
 
@@ -34,54 +41,198 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { Listing } from './listing/listing';
-import { CardsGrid } from '../components/grid';
 
-type ViewOption = 'card' | 'strip' | 'grid';
+type ViewOption = 'strip' | 'grid';
 
+// ShowcaseView
+interface ShowcaseViewArgs {
+  Args: {
+    startHereListings?: CardDef[];
+    newListings?: CardDef[];
+    featuredListings?: CardDef[];
+    context?: CardContext;
+  };
+  Element: HTMLElement;
+}
+
+class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
+  <template>
+    <div class='showcase-display-container' ...attributes>
+      <CardsDisplaySection class='showcase-cards-display'>
+        <:intro>
+          <div class='intro-title'>
+            <h2>Start Here</h2>
+            <p>The starter stack — Install these first</p>
+          </div>
+          <p class='intro-description'>These are the foundational tools we think
+            every builder should have. Whether you’re just exploring or setting
+            up your workspace for serious work, start with these must-haves.</p>
+        </:intro>
+        <:content>
+          <CardsIntancesGrid
+            @cards={{@startHereListings}}
+            @context={{@context}}
+          />
+        </:content>
+      </CardsDisplaySection>
+
+      <CardsDisplaySection class='new-this-week-cards-display'>
+        <:intro>
+          <div class='intro-title'>
+            <h2>New this Week</h2>
+            <p>Hand-picked by our editors — What’s buzzing right now</p>
+          </div>
+          <p class='intro-description'>These new entries have caught the
+            community’s eye, whether for creative flair, clever utility, or just
+            plain polish.</p>
+        </:intro>
+        <:content>
+          <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} />
+        </:content>
+      </CardsDisplaySection>
+
+      <CardsDisplaySection class='featured-cards-display'>
+        <:intro>
+          <div class='intro-title'>
+            <h2>Feature Collection</h2>
+            <p>:Personal Organization</p>
+          </div>
+          <p class='intro-description'>A hand-picked duo of focused, flexible
+            tools for personal</p>
+        </:intro>
+        <:content>
+          <CardsIntancesGrid
+            @cards={{@featuredListings}}
+            @context={{@context}}
+          />
+        </:content>
+      </CardsDisplaySection>
+    </div>
+
+    <style scoped>
+      h2,
+      p {
+        margin-block: 0;
+        margin-bottom: var(--boxel-sp);
+      }
+      .showcase-display-container {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxxl);
+        container-name: showcase-display-container;
+        container-type: inline-size;
+      }
+      .showcase-cards-display :deep(.cards),
+      .featured-cards-display :deep(.cards) {
+        --grid-view-height: 390px;
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .new-this-week-cards-display :deep(.cards) {
+        --grid-view-height: 270px;
+        grid-template-columns: repeat(4, 1fr);
+      }
+
+      .intro-title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+      .intro-title h2 {
+        font: 700 var(--boxel-font-xl);
+      }
+      .intro-title p {
+        font: var(--boxel-font-lg);
+        font-style: italic;
+      }
+      .intro-description {
+        font: var(--boxel-font);
+      }
+
+      @container showcase-display-container (inline-size <= 768px) {
+        .new-this-week-cards-display :deep(.cards) {
+          grid-template-columns: repeat(2, 1fr);
+        }
+
+        @container showcase-display-container (inline-size <= 500px) {
+          .showcase-cards-display :deep(.cards),
+          .new-this-week-cards-display :deep(.cards),
+          .featured-cards-display :deep(.cards) {
+            grid-template-columns: 1fr;
+          }
+        }
+      }
+    </style>
+  </template>
+}
+
+// CatalogListView
 const CATALOG_VIEW_OPTIONS: ViewItem[] = [
   { id: 'strip', icon: StripIcon },
   { id: 'grid', icon: GridIcon },
 ];
 
+interface CatalogListViewArgs {
+  Args: {
+    tabTitle?: string;
+    listingQuery: Query;
+    realms: URL[];
+    context?: CardContext;
+  };
+  Element: HTMLElement;
+}
+
+class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
+  @tracked private selectedView: ViewOption = 'grid';
+
+  @action private onChangeView(id: ViewOption) {
+    this.selectedView = id;
+  }
+
+  get tabTitle() {
+    return this.args.tabTitle;
+  }
+
+  <template>
+    <CardsDisplaySection>
+      <:intro>
+        <header class='catalog-list-header'>
+          <h2>{{this.tabTitle}}</h2>
+          <ViewSelector
+            @selectedId={{this.selectedView}}
+            @onChange={{this.onChangeView}}
+            @items={{CATALOG_VIEW_OPTIONS}}
+          />
+        </header>
+      </:intro>
+      <:content>
+        <CardsGrid
+          @query={{@listingQuery}}
+          @realms={{@realms}}
+          @selectedView={{this.selectedView}}
+          @context={{@context}}
+        />
+      </:content>
+    </CardsDisplaySection>
+
+    <style scoped>
+      h2 {
+        margin-block: 0;
+        margin-bottom: var(--boxel-sp);
+      }
+      .catalog-list-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--boxel-sp-sm);
+      }
+    </style>
+  </template>
+}
+
+// Catalog App
 class Isolated extends Component<typeof Catalog> {
-  mockShowcaseCards = [
-    {
-      name: 'Blog Post App',
-    },
-    {
-      name: 'Black Jack',
-    },
-  ];
-
-  mockNewToThisWeekCards = [
-    {
-      name: 'Basic CV',
-    },
-    {
-      name: 'Daily Feed',
-    },
-    { name: 'Card 3' },
-    { name: 'Card 4' },
-    { name: 'Card 5' },
-    { name: 'Card 6' },
-    { name: 'Card 7' },
-    { name: 'Card 8' },
-  ];
-  mockFeaturedCards = [
-    {
-      name: 'Sprint Tracker',
-    },
-    {
-      name: 'Todo List',
-    },
-  ];
-  mockCards = [
-    { name: 'Card 1' },
-    { name: 'Card 2' },
-    { name: 'Card 3' },
-    { name: 'Card 4' },
-  ];
-
   tabFilterOptions = [
     {
       tabId: 'showcase',
@@ -106,15 +257,19 @@ class Isolated extends Component<typeof Catalog> {
   ];
 
   @tracked activeTabId: string = this.tabFilterOptions[0].tabId;
-  @tracked private selectedView: ViewOption = 'grid';
 
   @action
   setActiveTab(tabId: string) {
     this.activeTabId = tabId;
   }
 
-  @action private onChangeView(id: ViewOption) {
-    this.selectedView = id;
+  // TODO: Remove this after testing
+  @action goToGrid() {
+    if (!this.args.context?.actions?.viewCard) {
+      throw new Error('viewCard action is not available');
+    }
+    let gridUrl = new URL('http://localhost:4201/catalog/grid.json');
+    this.args.context?.actions?.viewCard(gridUrl);
   }
 
   get shouldShowTab() {
@@ -132,15 +287,6 @@ class Isolated extends Component<typeof Catalog> {
       Object.getPrototypeOf(this.args.model).constructor.headerColor ??
       undefined
     );
-  }
-
-  // TODO: Remove this after testing
-  @action goToGrid() {
-    if (!this.args.context?.actions?.viewCard) {
-      throw new Error('viewCard action is not available');
-    }
-    let gridUrl = new URL('http://localhost:4201/catalog/grid.json');
-    this.args.context?.actions?.viewCard(gridUrl);
   }
 
   get startHereListings() {
@@ -204,76 +350,24 @@ class Isolated extends Component<typeof Catalog> {
         <FilterSection />
       </:sidebar>
       <:content>
-        {{! Note: Content will be display 2 columns: Content Listing Display and Related Listing Cards in the same time }}
         <div class='content-area-container {{this.activeTabId}}'>
           <div class='content-area'>
-            {{! Column 1: Card Listing Section }}
             <div class='catalog-content'>
               <ContentContainer class='catalog-listing'>
                 {{#if (this.shouldShowTab 'showcase')}}
-                  <CardsDisplaySection
-                    @cards={{this.startHereListings}}
+                  <ShowcaseView
+                    @startHereListings={{this.startHereListings}}
+                    @newListings={{this.newListings}}
+                    @featuredListings={{this.featuredListings}}
                     @context={{@context}}
-                    class='showcase-cards-display'
-                  >
-                    <:intro>
-                      <div class='intro-title'>
-                        <h2>Start Here</h2>
-                        <p>The starter stack — Install these first</p>
-                      </div>
-                      <p class='intro-description'>These are the foundational
-                        tools we think every builder should have. Whether you’re
-                        just exploring or setting up your workspace for serious
-                        work, start with these must-haves.</p>
-                    </:intro>
-                  </CardsDisplaySection>
-
-                  <CardsDisplaySection
-                    @cards={{this.newListings}}
-                    @context={{@context}}
-                  >
-                    <:intro>
-                      <div class='intro-title'>
-                        <h2>New this Week</h2>
-                        <p>Hand-picked by our editors — What’s buzzing right now</p>
-                      </div>
-                      <p class='intro-description'>These new entries have caught
-                        the community’s eye, whether for creative flair, clever
-                        utility, or just plain polish.</p>
-                    </:intro>
-                  </CardsDisplaySection>
-
-                  <CardsDisplaySection
-                    @cards={{this.featuredListings}}
-                    @context={{@context}}
-                    class='featured-cards-display'
-                  >
-                    <:intro>
-                      <div class='intro-title'>
-                        <h2>Feature Collection</h2>
-                        <p>:Personal Organization</p>
-                      </div>
-                      <p class='intro-description'>A hand-picked duo of focused,
-                        flexible tools for personal</p>
-                    </:intro>
-                  </CardsDisplaySection>
-                {{else}}
-                  <ViewSelector
-                    @selectedId={{this.selectedView}}
-                    @onChange={{this.onChangeView}}
-                    @items={{CATALOG_VIEW_OPTIONS}}
                   />
-
-                  <CardsDisplaySection @title={{this.tabTitle}}>
-                    <:content>
-                      <CardsGrid
-                        @query={{this.listingQuery}}
-                        @realms={{this.realms}}
-                        @selectedView={{this.selectedView}}
-                        @context={{@context}}
-                      />
-                    </:content>
-                  </CardsDisplaySection>
+                {{else}}
+                  <CatalogListView
+                    @tabTitle={{this.tabTitle}}
+                    @listingQuery={{this.listingQuery}}
+                    @realms={{this.realms}}
+                    @context={{@context}}
+                  />
                 {{/if}}
               </ContentContainer>
             </div>
@@ -330,48 +424,6 @@ class Isolated extends Component<typeof Catalog> {
         gap: var(--boxel-sp-xxl);
       }
 
-      /* Mock data display */
-      .showcase-cards-display :deep(.cards),
-      .featured-cards-display :deep(.cards) {
-        --grid-view-height: 390px;
-        grid-template-columns: 1fr 1fr;
-      }
-
-      h2,
-      p {
-        margin-block: 0;
-        margin-bottom: var(--boxel-sp);
-      }
-
-      .intro-title {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-      }
-      .intro-title h2 {
-        font: 700 var(--boxel-font-xl);
-      }
-      .intro-title p {
-        font: var(--boxel-font-lg);
-        font-style: italic;
-      }
-      .intro-description {
-        font: var(--boxel-font);
-      }
-      /* End of Mock data display */
-
-      .related-card-listing {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-lg);
-      }
-      .listing-title {
-        margin: 0;
-        padding: var(--boxel-sp-sm);
-        font-weight: 600;
-      }
-
       .operator-mode .buried .cards,
       .operator-mode .buried .add-button {
         display: none;
@@ -395,25 +447,15 @@ class Isolated extends Component<typeof Catalog> {
         box-shadow: 0 0 0 1px var(--boxel-dark);
       }
 
+      .go-to-grid {
+        font-weight: 600;
+      }
+
       @container content-area-container (inline-size <= 768px) {
         .content-area {
           grid-template-columns: 1fr;
           overflow-y: auto;
         }
-        .catalog-content {
-          overflow-y: unset;
-        }
-      }
-
-      @container content-area-container (inline-size <= 500px) {
-        .showcase-cards-display :deep(.cards),
-        .featured-cards-display :deep(.cards) {
-          grid-template-columns: 1fr;
-        }
-      }
-
-      .go-to-grid {
-        font-weight: 600;
       }
     </style>
   </template>

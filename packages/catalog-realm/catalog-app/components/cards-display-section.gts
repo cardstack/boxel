@@ -4,7 +4,7 @@ import type { CardContext } from 'https://cardstack.com/base/card-api';
 
 type SelectedView = 'grid' | 'strip' | undefined;
 
-interface CardsIntancesLayoutArgs {
+interface CardsIntancesGridArgs {
   Args: {
     cards?: CardDef[];
     context?: CardContext;
@@ -16,8 +16,7 @@ interface CardsIntancesLayoutArgs {
 
 // This is only make for common grid/strip view, means we not need to pass extra format args, it strictly use fitted-format
 // This is different from the CardsGrid component, which is just display links to Many Components without using prerendersearch
-class CardsIntancesLayout extends GlimmerComponent<CardsIntancesLayoutArgs> {
-  // Always use grid view as default
+export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
   get view() {
     return this.args.selectedView || 'grid';
   }
@@ -126,7 +125,7 @@ export default class CardsDisplaySection extends GlimmerComponent<CardSectionArg
       {{#if (has-block 'content')}}
         {{yield to='content'}}
       {{else}}
-        <CardsIntancesLayout
+        <CardsIntancesGrid
           @cards={{@cards}}
           @selectedView={{@selectedView}}
           @context={{@context}}
