@@ -266,12 +266,27 @@ module('Acceptance | code-submode | card playground', function (hooks) {
   });
 
   test('can render playground panel when an exported card def is selected', async function (assert) {
-    await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}blog-post.gts`,
+    });
+    assert
+      .dom('[data-test-selected-accordion-item="schema-editor"]')
+      .exists('schema editor is open by default');
+    assert
+      .dom('[data-test-playground-panel]')
+      .doesNotExist('do not load playground unless panel is open');
+
+    await selectDeclaration('Category');
+    await togglePlaygroundPanel();
     assert
       .dom('[data-test-playground-panel]')
       .exists('playground panel exists for Category (exported card def)');
 
+    await click('[data-test-accordion-item="schema-editor"] > button');
     await selectDeclaration('LocalCategoryCard');
+    assert.dom('[data-test-incompatible-nonexports]').doesNotExist();
+    await togglePlaygroundPanel();
     assert
       .dom('[data-test-playground-panel]')
       .doesNotExist(
@@ -877,5 +892,12 @@ module('Acceptance | code-submode | card playground', function (hooks) {
         ],
       },
     ]);
+  });
+
+  test<TestContextWithSave>('instance chooser only appears when panel is opened', async function (assert) {
+    await openFileInPlayground('author.gts', testRealmURL, 'Author');
+    assert.dom('[data-test-instance-chooser]').exists();
+    await click('[data-test-accordion-item="playground"] button');
+    assert.dom('[data-test-instance-chooser]').doesNotExist();
   });
 });

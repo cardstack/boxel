@@ -14,14 +14,12 @@ import {
 
 import { consumeContext } from '@cardstack/host/helpers/consume-context';
 
-import type { TaskForAsyncTaskFunction } from 'ember-concurrency';
-
 interface Signature {
   Args: {
     query: Query;
     realms: string[];
     canWriteRealm: boolean;
-    createNewCard: TaskForAsyncTaskFunction<unknown, () => Promise<void>>;
+    createNewCard: () => void;
   };
 }
 
@@ -59,12 +57,12 @@ export default class SpecSearch extends Component<Signature> {
 
 interface CreateCardSignature {
   Args: {
-    createNewCard: TaskForAsyncTaskFunction<unknown, () => Promise<void>>;
+    createNewCard: () => void;
   };
 }
 class CreateCard extends Component<CreateCardSignature> {
   constructor(owner: Owner, args: CreateCardSignature['Args']) {
     super(owner, args);
-    this.args.createNewCard.perform();
+    this.args.createNewCard();
   }
 }
