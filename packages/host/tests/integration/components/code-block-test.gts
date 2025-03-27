@@ -52,7 +52,7 @@ ${codeContent.replaceContent || ''}
       fileContent: originalCode,
       codeBlock: newSrBlock,
     });
-    debugger;
+
     this.originalCode = originalCode;
     this.modifiedCode = result.resultContent;
     this.diffIndex++;
@@ -71,7 +71,7 @@ ${codeContent.replaceContent || ''}
       </CodeBlock>
     {{/if}}
 
-    <button {{on 'click' this.applyCodePatch}}>Change modified code</button>
+    <button {{on 'click' this.applyCodePatch}}>Simulate stream step</button>
   </template>
 };
 
@@ -333,8 +333,6 @@ export class BdEventInvite extends CardDef {
   static embedded = class Embedded extends Component<typeof this> {
     <template></template>
   }
-
-
 
   static fitted = class Fitted extends Component<typeof this> {
     <template></template>
