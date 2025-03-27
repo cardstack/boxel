@@ -20,7 +20,6 @@ import {
 import { AddButton, IconButton, Pill } from '@cardstack/boxel-ui/components';
 import {
   restartableTask,
-  waitForProperty,
   type EncapsulatedTaskDescriptor as Descriptor,
 } from 'ember-concurrency';
 import {
@@ -125,7 +124,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       // this resource is our own (tied to this component's lifetime),
       // but we need to make sure the card is loaded before we can set
       // the value of the BoxModel
-      await waitForProperty(chosenCardResource, 'isLoaded', true);
+      await chosenCardResource.loaded;
       if (chosenCardResource.card) {
         selectedCards = [...selectedCards, chosenCardResource.card];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;

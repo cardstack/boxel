@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 import {
   restartableTask,
   type EncapsulatedTaskDescriptor as Descriptor,
-  waitForProperty,
 } from 'ember-concurrency';
 import {
   DefaultFormatsProvider,
@@ -168,7 +167,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       // this resource is our own (tied to this component's lifetime),
       // but we need to make sure the card is loaded before we can set
       // the value of the BoxModel
-      await waitForProperty(chosenCardResource, 'isLoaded', true);
+      await chosenCardResource.loaded;
       if (chosenCardResource.card) {
         this.args.model.value = chosenCardResource.card;
       }
