@@ -5,7 +5,7 @@ import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { task, restartableTask } from 'ember-concurrency';
+import { task, dropTask } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash';
 import {
@@ -189,7 +189,7 @@ export default class MatrixService extends Service {
   set currentRoomId(value: string | undefined) {
     this._currentRoomId = value;
     if (value) {
-      this.loadAllTimelineEvents.perform(value);
+      this.loadAllTimelineEvents(value);
       window.localStorage.setItem(CurrentRoomIdPersistenceKey, value);
     } else {
       window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
@@ -1108,7 +1108,7 @@ export default class MatrixService extends Service {
     return await this.client.isUsernameAvailable(username);
   }
 
-  private loadAllTimelineEvents = restartableTask(async (roomId: string) => {
+  private async loadAllTimelineEvents(roomId: string) {
     let roomData = this.ensureRoomData(roomId);
     let room = this.client.getRoom(roomId);
     let roomResource = this.roomResources.get(roomId);
@@ -1140,7 +1140,7 @@ export default class MatrixService extends Service {
     } finally {
       this.timelineLoadingState.set(roomId, false);
     }
-  });
+  }
 
   get isLoadingTimeline() {
     if (!this.currentRoomId) {
@@ -1540,7 +1540,7 @@ export default class MatrixService extends Service {
     this.loadMoreAIRoomsTask.perform();
   }
 
-  private loadMoreAIRoomsTask = restartableTask(async () => {
+  private loadMoreAIRoomsTask = dropTask(async () => {
     if (!this.slidingSync) {
       throw new Error(
         'To load more AI rooms, sliding sync must be initialized',
