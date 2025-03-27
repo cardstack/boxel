@@ -45,7 +45,7 @@ let createJWT = (
   );
 };
 
-module(basename(__filename), function () {
+module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | GET directory path', function (hooks) {
     let testRealm: Realm;
     let testRealmHttpServer: Server;

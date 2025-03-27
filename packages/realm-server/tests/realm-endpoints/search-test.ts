@@ -28,7 +28,7 @@ import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
-const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
+const distDir = resolve(join(__dirname, '..', '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
 let createJWT = (
@@ -47,7 +47,7 @@ let createJWT = (
   );
 };
 
-module(basename(__filename), function () {
+module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | _search', function (hooks) {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
