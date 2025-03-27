@@ -17,7 +17,7 @@ import { Query, isCardInstance, Filter } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 
-import FilterSection from './components/filter-section';
+import { FilterCategoryGroup } from './components/filter-section';
 import CardsDisplaySection, {
   CardsIntancesGrid,
 } from './components/cards-display-section';
@@ -260,7 +260,22 @@ class Isolated extends Component<typeof Catalog> {
   }
 
   // listing query filter values
-  // we would want dynamic filter values based on the onChange event
+  // TODO: Remove this after we get the real categories from query
+  mockCategories = [
+    { id: 'all', name: 'All' },
+    { id: 'business', name: 'Business' },
+    { id: 'accounting', name: 'Accounting' },
+    { id: 'collaboration', name: 'Collaboration' },
+  ];
+
+  @tracked activeCategoryId = this.mockCategories[0].id;
+
+  @action
+  handleCategorySelect(category: { id: string; name: string }) {
+    this.activeCategoryId = category.id;
+    this.updateFilter('categories', category.name);
+  }
+
   @action
   updateFilter(filterType: string, value: any) {
     // TODO: Update the query based on the filterType and value
@@ -355,7 +370,19 @@ class Isolated extends Component<typeof Catalog> {
         >
           Go to Grid
         </BoxelButton>
-        <FilterSection @onFilterChange={{this.updateFilter}} />
+
+        <ContentContainer
+          role='complementary'
+          aria-label='Filters'
+          class='filters-container'
+        >
+          <FilterCategoryGroup
+            @title='Categories'
+            @items={{this.mockCategories}}
+            @activeId={{this.activeCategoryId}}
+            @onItemSelect={{this.handleCategorySelect}}
+          />
+        </ContentContainer>
       </:sidebar>
       <:content>
         <div class='content-area-container {{this.activeTabId}}'>
