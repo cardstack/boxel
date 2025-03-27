@@ -5,7 +5,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
-interface FilterGroupArgs {
+interface FilterCategoryGroupArgs {
   Args: {
     title: string;
     items: Array<{ id: string; name: string }>;
@@ -14,7 +14,7 @@ interface FilterGroupArgs {
   };
 }
 
-export class FilterCategoryGroup extends GlimmerComponent<FilterGroupArgs> {
+export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArgs> {
   @action
   handleItemClick(item: { id: string; name: string }) {
     this.args.onItemSelect(item);
