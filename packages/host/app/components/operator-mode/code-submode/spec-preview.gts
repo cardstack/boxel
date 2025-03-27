@@ -143,7 +143,7 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
       {{#if @showCreateSpec}}
         <BoxelButton
           @kind='primary'
-          @size='small'
+          @class='create-spec-button'
           @loading={{@isCreateSpecInstanceRunning}}
           {{on 'click' @createSpec}}
           data-test-create-spec-button
@@ -169,8 +169,16 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
     </span>
 
     <style scoped>
+      /*extra small variant BUT with weighted font*/
+      .create-spec-button {
+        --boxel-button-padding: var(--boxel-sp-xxxs) var(--boxel-sp);
+        --boxel-button-font: 600 var(--boxel-font-xs);
+        --boxel-button-loading-icon-size: var(--boxel-font-size-xs);
+        --boxel-button-letter-spacing: var(--boxel-lsp-lg);
+        --boxel-button-min-height: 1.8125rem;
+      }
+
       .has-spec {
-        margin-left: auto;
         color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xl);
