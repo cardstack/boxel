@@ -273,14 +273,6 @@ class Isolated extends Component<typeof Catalog> {
   @action
   handleCategorySelect(category: { id: string; name: string }) {
     this.activeCategoryId = category.id;
-    this.updateFilter('categories', category.name);
-  }
-
-  @action
-  updateFilter(filterType: string, value: any) {
-    // TODO: Update the query based on the filterType and value
-    console.log('filterType', filterType);
-    console.log('value', value);
   }
 
   get listingQuery(): Query {
