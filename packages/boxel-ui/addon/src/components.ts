@@ -58,7 +58,9 @@ import SkeletonPlaceholder from './components/skeleton-placeholder/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
-import ViewSelector from './components/view-selector/index.gts';
+import ViewSelector, {
+  type ViewItem,
+} from './components/view-selector/index.gts';
 
 export {
   Accordion,
@@ -117,5 +119,6 @@ export {
   Switch,
   TabbedHeader,
   Tooltip,
+  ViewItem,
   ViewSelector,
 };
