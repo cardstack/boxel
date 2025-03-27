@@ -5,7 +5,7 @@ import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { cached, tracked } from '@glimmer/tracking';
 
-import { task, dropTask } from 'ember-concurrency';
+import { task, restartableTask } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { cloneDeep } from 'lodash';
 import {
@@ -1108,7 +1108,7 @@ export default class MatrixService extends Service {
     return await this.client.isUsernameAvailable(username);
   }
 
-  private loadAllTimelineEvents = dropTask(async (roomId: string) => {
+  private loadAllTimelineEvents = restartableTask(async (roomId: string) => {
     let roomData = this.ensureRoomData(roomId);
     let room = this.client.getRoom(roomId);
     let roomResource = this.roomResources.get(roomId);
@@ -1540,7 +1540,7 @@ export default class MatrixService extends Service {
     this.loadMoreAIRoomsTask.perform();
   }
 
-  private loadMoreAIRoomsTask = dropTask(async () => {
+  private loadMoreAIRoomsTask = restartableTask(async () => {
     if (!this.slidingSync) {
       throw new Error(
         'To load more AI rooms, sliding sync must be initialized',

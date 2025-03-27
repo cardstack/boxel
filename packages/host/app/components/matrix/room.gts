@@ -103,28 +103,28 @@ export default class Room extends Component<Signature> {
           @registerConversationScroller={{this.registerConversationScroller}}
           @setScrollPosition={{this.setScrollPosition}}
         >
-          {{#each this.messages key='eventId' as |message i|}}
-            <RoomMessage
-              @roomId={{@roomId}}
-              @roomResource={{@roomResource}}
-              @index={{i}}
-              @registerScroller={{this.registerMessageScroller}}
-              @isPending={{this.isPendingMessage message}}
-              @monacoSDK={{@monacoSDK}}
-              @isStreaming={{this.isMessageStreaming message}}
-              @retryAction={{this.maybeRetryAction i message}}
-              data-test-message-idx={{i}}
+          {{#if this.matrixService.isLoadingTimeline}}
+            <LoadingIndicator
+              @color='var(--boxel-light)'
+              class='loading-indicator'
             />
           {{else}}
-            {{#if this.matrixService.isLoadingTimeline}}
-              <LoadingIndicator
-                @color='var(--boxel-light)'
-                class='loading-indicator'
+            {{#each this.messages key='eventId' as |message i|}}
+              <RoomMessage
+                @roomId={{@roomId}}
+                @roomResource={{@roomResource}}
+                @index={{i}}
+                @registerScroller={{this.registerMessageScroller}}
+                @isPending={{this.isPendingMessage message}}
+                @monacoSDK={{@monacoSDK}}
+                @isStreaming={{this.isMessageStreaming message}}
+                @retryAction={{this.maybeRetryAction i message}}
+                data-test-message-idx={{i}}
               />
             {{else}}
               <NewSession @sendPrompt={{this.sendMessage}} />
-            {{/if}}
-          {{/each}}
+            {{/each}}
+          {{/if}}
           {{#if this.room}}
             {{#if this.showUnreadIndicator}}
               <div class='unread-indicator'>
