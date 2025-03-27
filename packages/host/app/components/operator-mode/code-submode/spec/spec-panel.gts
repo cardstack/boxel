@@ -2,8 +2,10 @@ import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
+import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
@@ -15,6 +17,8 @@ import {
   isCardDef,
   isFieldDef,
   internalKeyFor,
+  GetCardsContextName,
+  type getCards,
 } from '@cardstack/runtime-common';
 import {
   codeRefWithAbsoluteURL,
@@ -27,7 +31,7 @@ import {
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
-import { getSearch } from '@cardstack/host/resources/search';
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
@@ -129,6 +133,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare loaderService: LoaderService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
+  @tracked private specResults: ReturnType<getCards> | undefined;
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -275,12 +282,14 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private search = getSearch(
-    this,
-    () => this.specQuery,
-    () => this.realms,
-    { isLive: true, isAutoSaved: true },
-  );
+  private searchSpec = () => {
+    this.specResults = this.getCards(
+      this,
+      () => this.specQuery,
+      () => this.realms,
+      { isLive: true, isAutoSaved: true },
+    );
+  };
 
   get _selectedCard() {
     let selectedCardId = this.specPanelService.specSelection;
@@ -291,7 +300,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   get cards() {
-    return this.search.instances as unknown as Spec[];
+    if (!this.specResults) {
+      return [];
+    }
+    return this.specResults.instances as unknown as Spec[];
   }
 
   private get card() {
@@ -304,7 +316,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   get showCreateSpec() {
     return (
       Boolean(this.args.selectedDeclaration?.exportName) &&
-      !this.search.isLoading &&
+      !this.specResults?.isLoading &&
       this.cards.length === 0 &&
       this.canWrite
     );
@@ -375,6 +387,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
+    {{consumeContext this.searchSpec}}
     {{#if this.isLoading}}
       {{yield
         (component
