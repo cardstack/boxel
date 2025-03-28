@@ -530,7 +530,13 @@ module('getModifyPrompt', () => {
       return originalFetch(url);
     };
 
-    let prompt = await getModifyPrompt(history, '@aibot:localhost');
+    let prompt = await getModifyPrompt(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      { getAccessToken: () => 'fake-access-token' },
+    );
 
     assert.equal(
       fetchCount,
