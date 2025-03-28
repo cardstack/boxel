@@ -36,6 +36,11 @@ export class CopyCardResult extends CardDef {
   @field newCard = linksTo(CardDef);
 }
 
+export class CopySourceInput extends CardDef {
+  @field fromRealmUrl = contains(StringField);
+  @field toRealmUrl = contains(StringField);
+}
+
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field patch = contains(JsonField);
