@@ -169,12 +169,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     identityContext.sweep();
 
-    assert.deepEqual(
-      identityContext.gcCandidates,
-      [boris.id],
-      'the GC candidates are correct',
-    );
-
     germaine.friends = [boris];
     identityContext.sweep();
 
@@ -208,6 +202,101 @@ module('Unit | identity-context garbage collection', function (hooks) {
     assert.deepEqual(
       identityContext.gcCandidates,
       [jade.id, germaine.id, queenzy.id, hassan.id],
+      'the GC candidates are correct',
+    );
+  });
+
+  test('a GC candidate no longer becomes a GC candidate if it is accessed in the identity map', async function (assert) {
+    let {
+      subscribers,
+      identityContext,
+      instances: { boris, hassan },
+    } = await setupTest();
+
+    subscribers.set(hassan.id, { resources: [true] });
+
+    identityContext.sweep();
+
+    identityContext.get(boris.id);
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [],
+      'the GC candidates are correct',
+    );
+
+    identityContext.sweep();
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [boris.id],
+      'the GC candidates are correct',
+    );
+
+    identityContext.set(boris.id, boris);
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [],
+      'the GC candidates are correct',
+    );
+  });
+
+  test('a GC candidate remains a GC candidate if it is accessed via a set "undefined" in the identity map', async function (assert) {
+    let {
+      subscribers,
+      identityContext,
+      instances: { boris, hassan },
+    } = await setupTest();
+
+    subscribers.set(hassan.id, { resources: [true] });
+
+    identityContext.sweep();
+
+    identityContext.set(boris.id, undefined);
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [boris.id],
+      'the GC candidates are correct',
+    );
+  });
+
+  test('deleting an entry from the identity map removes the GC candidate', async function (assert) {
+    let {
+      subscribers,
+      identityContext,
+      instances: { boris, hassan },
+    } = await setupTest();
+
+    subscribers.set(hassan.id, { resources: [true] });
+
+    identityContext.sweep();
+
+    identityContext.delete(boris.id);
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [],
+      'the GC candidates are correct',
+    );
+  });
+
+  test('resetting the identity map clears all GC candidates', async function (assert) {
+    let {
+      subscribers,
+      identityContext,
+      instances: { hassan },
+    } = await setupTest();
+
+    subscribers.set(hassan.id, { resources: [true] });
+
+    identityContext.sweep();
+
+    identityContext.reset();
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [],
       'the GC candidates are correct',
     );
   });

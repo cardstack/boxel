@@ -39,12 +39,14 @@ export default class IdentityContextWithGarbageCollection
 
   delete(url: string): void {
     this.#cards.delete(url);
+    this.#gcCandidates.delete(url);
   }
 
   reset() {
     for (let url of this.#cards.keys()) {
       this.#cards.set(url, { card: undefined });
     }
+    this.#gcCandidates.clear();
   }
 
   get gcCandidates() {
@@ -65,7 +67,6 @@ export default class IdentityContextWithGarbageCollection
           // brand the instance to make it easier for debugging
           (instance as unknown as any).__instance_detached_from_store = true;
           removedInstances.push(instance.id);
-          this.#gcCandidates.delete(instance.id);
           this.delete(instance.id);
         } else {
           this.#gcCandidates.add(instance.id);
