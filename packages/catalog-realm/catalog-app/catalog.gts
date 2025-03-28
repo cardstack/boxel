@@ -27,8 +27,6 @@ import CardsDisplaySection, {
   CardsIntancesGrid,
 } from './components/cards-display-section';
 
-import ContentContainer from './components/content-container';
-
 import { CardsGrid } from '../components/grid';
 
 import CatalogLayout from './layouts/catalog-layout';
@@ -401,10 +399,10 @@ class Isolated extends Component<typeof Catalog> {
             Go to Grid
           </BoxelButton>
 
-          <ContentContainer
+          <div
             role='complementary'
             aria-label='Filters'
-            class='filters-container'
+            class='filters-container info-box'
           >
             <FilterCategoryGroup
               @title='Categories'
@@ -424,14 +422,14 @@ class Isolated extends Component<typeof Catalog> {
               @activeIds={{this.activeTagIds}}
               @onItemSelect={{this.handleTagSelect}}
             />
-          </ContentContainer>
+          </div>
         </div>
       </:sidebar>
       <:content>
         <div class='content-area-container {{this.activeTabId}}'>
           <div class='content-area'>
             <div class='catalog-content'>
-              <ContentContainer class='catalog-listing'>
+              <div class='catalog-listing info-box'>
                 {{#if (this.shouldShowTab 'showcase')}}
                   <ShowcaseView
                     @startHereListings={{this.startHereListings}}
@@ -447,7 +445,7 @@ class Isolated extends Component<typeof Catalog> {
                     @context={{@context}}
                   />
                 {{/if}}
-              </ContentContainer>
+              </div>
             </div>
           </div>
         </div>
@@ -461,10 +459,12 @@ class Isolated extends Component<typeof Catalog> {
       .catalog-tab-header :deep(.app-title-group) {
         display: none;
       }
-      .title {
-        font: bold var(--boxel-font-lg);
-        line-height: 1.58;
-        letter-spacing: 0.21px;
+
+      .info-box {
+        width: 100%;
+        height: auto;
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light);
       }
 
       /* Layout */
@@ -505,7 +505,7 @@ class Isolated extends Component<typeof Catalog> {
         overflow-y: auto;
       }
       .catalog-listing {
-        --content-container-background-color: transparent;
+        background-color: transparent;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xxl);
@@ -513,7 +513,7 @@ class Isolated extends Component<typeof Catalog> {
 
       /* Sidebar */
       .filters-container {
-        --content-container-background-color: transparent;
+        background-color: transparent;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-lg);
