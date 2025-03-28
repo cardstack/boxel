@@ -28,7 +28,6 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
-import ContentContainer from '../components/content-container';
 
 import { Publisher } from './publisher';
 import { Category, Tag } from './category';
@@ -179,13 +178,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         </AppListingHeader>
 
         <section class='app-listing-info'>
-          <ContentContainer
-            @displayBoundaries={{true}}
-            class='app-listing-summary'
-          >
+          <div class='app-listing-summary info-box'>
             <h2>Summary</h2>
             <@fields.summary />
-          </ContentContainer>
+          </div>
 
           <div class='license-statistic'>
             {{! Todo: Add license section while getting the real data }}
@@ -198,53 +194,44 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             <div class='statistics-section'>
               <h2>Statistics</h2>
               <div class='stats-container'>
-                <ContentContainer @displayBoundaries={{true}} class='stat-item'>
+                <div class='stat-item info-box'>
                   <span class='stat-label'>Downloads</span>
                   <span class='stat-value'>16,842</span>
-                </ContentContainer>
+                </div>
 
-                <ContentContainer @displayBoundaries={{true}} class='stat-item'>
+                <div class='stat-item info-box'>
                   <span class='stat-label'>Subscriptions</span>
                   <span class='stat-value'>5,439</span>
-                </ContentContainer>
+                </div>
               </div>
             </div>
           </div>
 
           <div class='pricing-plans'>
             {{! Todo: Add price plan section while getting the real data }}
-            <ContentContainer
-              @displayBoundaries={{true}}
-              class='price-plan-item'
-            >
+            <div class='price-plan-item info-box'>
               <span class='price-plan-label'>$250</span>
               <span class='price-plan-info'>= $250USD</span>
               <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
                 <:default>One-time purchase</:default>
               </Pill>
-            </ContentContainer>
+            </div>
 
-            <ContentContainer
-              @displayBoundaries={{true}}
-              class='price-plan-item'
-            >
+            <div class='price-plan-item info-box'>
               <span class='price-plan-label'>$ 0.50</span>
               <span class='price-plan-info'>per month</span>
               <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
                 <:default>Cancel anytime</:default>
               </Pill>
-            </ContentContainer>
+            </div>
 
-            <ContentContainer
-              @displayBoundaries={{true}}
-              class='price-plan-item premium-plan-item'
-            >
+            <div class='price-plan-item premium-plan-item info-box'>
               <span class='price-plan-label'>$ 250</span>
               <span class='price-plan-info'>with Boxel Creator</span>
               <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
                 <:default>Premium plan</:default>
               </Pill>
-            </ContentContainer>
+            </div>
           </div>
         </section>
 
@@ -343,6 +330,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         margin: 0;
         margin-bottom: var(--boxel-sp-sm);
       }
+      .info-box {
+        width: 100%;
+        height: auto;
+        border-radius: var(--boxel-border-radius);
+        background-color: var(--boxel-light);
+      }
+
       /* container */
       .app-listing-embedded {
         container-name: app-listing-embedded;
@@ -357,8 +351,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         margin-top: var(--boxel-sp-lg);
       }
       .app-listing-summary {
-        --content-container-padding: var(--boxel-sp);
-        --content-container-background-color: var(--boxel-100);
+        padding: var(--boxel-sp);
+        background-color: var(--boxel-100);
       }
       .license-statistic {
         display: grid;
@@ -371,7 +365,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         gap: var(--boxel-sp);
       }
       .stat-item {
-        --content-container-padding: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        border: 1px solid var(--boxel-border-color);
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
@@ -390,8 +385,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         margin-top: var(--boxel-sp-lg);
       }
       .price-plan-item {
-        --content-container-padding: var(--boxel-sp-lg) var(--boxel-sp);
-        --content-container-background-color: var(--boxel-dark);
+        padding: var(--boxel-sp-lg) var(--boxel-sp);
+        background-color: var(--boxel-dark);
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -399,7 +394,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         gap: var(--boxel-sp-xs);
       }
       .premium-plan-item {
-        --content-container-background-color: var(--boxel-purple);
+        background-color: var(--boxel-purple);
       }
       .price-plan-label {
         font: 600 var(--boxel-font-lg);
