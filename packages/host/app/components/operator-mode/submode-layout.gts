@@ -28,10 +28,10 @@ import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-ass
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 
+import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-box';
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
-import AskAiBox from '@cardstack/host/components/ai-assistant/ask-ai-box';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
@@ -356,7 +356,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
           />
           <div class='ask-ai-container'>
-            <AskAiBox
+            <AskAiTextBox
               @value={{this.aiPrompt}}
               @onInput={{this.onInput}}
               @onSend={{this.onSendPrompt}}
