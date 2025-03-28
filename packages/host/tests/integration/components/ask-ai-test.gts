@@ -24,7 +24,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-module('Integration | ask-ai-text-box', function (hooks) {
+module('Integration | ask-ai', function (hooks) {
   let loader: Loader;
   let operatorModeStateService: OperatorModeStateService;
 

@@ -2,7 +2,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
 
-import { BoxelInput } from '@cardstack/boxel-ui/components';
+import { BoxelInput, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { ChevronRight } from '@cardstack/boxel-ui/icons';
 
 interface Signature {
@@ -10,6 +10,7 @@ interface Signature {
     value: string;
     onInput: (val: string) => void;
     onSend: () => void;
+    isLoading?: boolean;
   };
 }
 
@@ -18,13 +19,18 @@ const AskAiTextBox: TemplateOnlyComponent<Signature> = <template>
     Message for new AI Assistant room
   </label>
   <div class='input-group'>
-    <ChevronRight class='caret' width='40' height='40' role='presentation' />
+    {{#if @isLoading}}
+      <LoadingIndicator class='icon' />
+    {{else}}
+      <ChevronRight class='icon' width='22' height='22' role='presentation' />
+    {{/if}}
     <BoxelInput
       class='ask-ai-input'
       @id='ask-ai-box'
       @value={{@value}}
       @onInput={{@onInput}}
       @placeholder='Ask AI'
+      @disabled={{@isLoading}}
       {{onKeyMod 'Enter' @onSend}}
       data-test-ask-ai-input
     />
@@ -33,11 +39,13 @@ const AskAiTextBox: TemplateOnlyComponent<Signature> = <template>
     .input-group {
       position: relative;
     }
-    .caret {
+    .icon {
       position: absolute;
-      left: 0;
-      padding: 8px;
       color: var(--boxel-highlight);
+      top: 0;
+      left: 0;
+      margin-top: var(--boxel-sp-xs);
+      margin-left: var(--boxel-sp-xs);
     }
     .ask-ai-input {
       padding-left: var(--boxel-sp-xxl);
@@ -56,6 +64,12 @@ const AskAiTextBox: TemplateOnlyComponent<Signature> = <template>
     }
     .ask-ai-input::placeholder {
       color: var(--boxel-form-control-dark-mode-placeholder-color);
+    }
+    .ask-ai-input:disabled {
+      background-color: var(--boxel-ai-purple);
+      color: var(--boxel-light);
+      border: var(--boxel-form-control-dark-mode-border);
+      opacity: 0.5;
     }
   </style>
 </template>;
