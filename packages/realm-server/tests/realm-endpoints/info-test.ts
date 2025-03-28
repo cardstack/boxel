@@ -47,7 +47,7 @@ let createJWT = (
 };
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
-  module('Realm-specific Endpoints | GET _info', function (hooks) {
+  module('file watcher realm events', function (hooks) {
     let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
