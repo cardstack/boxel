@@ -1,6 +1,4 @@
 import { test, expect, type Page } from '@playwright/test';
-import { writeJSONSync } from 'fs-extra';
-import { join } from 'path';
 import {
   synapseStart,
   synapseStop,
