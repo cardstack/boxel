@@ -21,13 +21,12 @@ import {
   type CardErrorsJSONAPI as CardErrors,
 } from '@cardstack/runtime-common';
 
-import {
-  type CardDef,
-  type IdentityContext,
-} from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
+import IdentityContext from '../lib/gc-identity-context';
 
 import EnvironmentService from './environment-service';
 
@@ -41,68 +40,14 @@ import type { SearchResource } from '../resources/search';
 
 export { CardError };
 
-class ResettableIdentityContext implements IdentityContext {
-  #cards = new Map<
-    string,
-    {
-      card: CardDef | undefined;
-    }
-  >();
-  #onAccess?: (url: string) => void;
-  #onClear?: (url: string) => void;
-
-  constructor(opts?: {
-    onAccess?: (url: string) => void;
-    onClear?: (url: string) => void;
-  }) {
-    this.#onAccess = opts?.onAccess;
-    this.#onClear = opts?.onClear;
-  }
-
-  get(url: string): CardDef | undefined {
-    let instance = this.#cards.get(url)?.card;
-    if (instance && this.#onAccess) {
-      this.#onAccess(url);
-    }
-    return instance;
-  }
-  set(url: string, instance: CardDef | undefined): void {
-    if (instance && this.#onAccess) {
-      this.#onAccess(url);
-    } else if (!instance && this.#onClear) {
-      this.#onClear(url);
-    }
-    this.#cards.set(url, { card: instance });
-  }
-  delete(url: string): void {
-    this.#cards.delete(url);
-    if (this.#onClear) {
-      this.#onClear(url);
-    }
-  }
-  reset() {
-    for (let url of this.#cards.keys()) {
-      this.#cards.set(url, { card: undefined });
-      if (this.#onClear) {
-        this.#onClear(url);
-      }
-    }
-  }
-}
-
 export default class StoreService extends Service {
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
+  declare private identityContext: IdentityContext;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
-  private identityContext = new ResettableIdentityContext({
-    onAccess: (url: string) => this.extendTimeToGarbageCollect(url),
-    onClear: (url: string) => {
-      clearTimeout(this.garbageCollection.get(url));
-    },
-  });
   private subscribers: Map<
     string,
     {
@@ -122,14 +67,14 @@ export default class StoreService extends Service {
   private autoSaveStates: TrackedWeakMap<CardDef, AutoSaveState> =
     new TrackedWeakMap();
   private cardApiCache?: typeof CardAPI;
-  private garbageCollection: Map<string, number> = new Map();
+  private gcInterval: number | undefined;
+  private ready: Promise<void>;
 
   constructor(owner: Owner) {
     super(owner);
+    this.ready = this.setup();
     registerDestructor(this, () => {
-      for (let timeout of this.garbageCollection.values()) {
-        clearTimeout(timeout);
-      }
+      clearInterval(this.gcInterval);
     });
   }
 
@@ -162,13 +107,6 @@ export default class StoreService extends Service {
       }
       if (resources.length === 0) {
         this.subscribers.delete(id);
-        // intentionally not removing the instance immediately from the identity
-        // map. as of the StackItem refactor our resources lifetimes are very
-        // precise, and it's not unlikely that a resource for a stack item will
-        // be unloaded when switching from edit to view modes as it will be
-        // dereferenced during the switch over because of component teardown.
-        this.markForGarbageCollection(id!);
-        // TODO need to walk the graph of the links to make sure they are garbage collected as well
       }
 
       // if there are no more subscribers to this realm then unsubscribe from realm
@@ -180,31 +118,6 @@ export default class StoreService extends Service {
         subscription.unsubscribe();
         this.subscriptions.delete(realm);
       }
-    }
-  }
-
-  // TODO: use a global timer for garbage collection, and then just crawl items to
-  // see if they are deletable
-
-  private markForGarbageCollection(url: string) {
-    clearTimeout(this.garbageCollection.get(url));
-    this.garbageCollection.set(
-      url,
-      setTimeout(() => {
-        console.warn(`garbage collecting instance ${url} from store`);
-        let instance = this.identityContext.get(url);
-        if (instance) {
-          // brand the instance to make it easier for debugging
-          (instance as unknown as any).__instance_detached_from_store = true;
-        }
-        this.identityContext.delete(url);
-      }, 5 * 60_000) as unknown as number,
-    );
-  }
-
-  private extendTimeToGarbageCollect(url: string) {
-    if (this.garbageCollection.get(url) != null) {
-      this.markForGarbageCollection(url);
     }
   }
 
@@ -228,6 +141,7 @@ export default class StoreService extends Service {
     card: CardDef | undefined;
     error: CardError | undefined;
   }> {
+    await this.ready;
     let url = asURL(urlOrDoc);
     if (!url) {
       throw new Error(`Cannot create subscriber with doc that has no ID`);
@@ -297,6 +211,7 @@ export default class StoreService extends Service {
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
   ): Promise<string | CardError> {
+    await this.ready;
     let cardOrError = await this.getCard(doc, relativeTo);
     if (isCardInstance(cardOrError)) {
       return cardOrError.id;
@@ -310,6 +225,7 @@ export default class StoreService extends Service {
   // means you MUST consume the instance IMMEDIATELY! it should not live in the
   // state of the consumer.
   async peek<T extends CardDef>(url: string): Promise<T | CardError> {
+    await this.ready;
     let cached = this.identityContext.get(url);
     if (cached) {
       return cached as T;
@@ -342,6 +258,15 @@ export default class StoreService extends Service {
       let errorResponse = processCardError(url, error);
       return errorResponse.errors[0];
     }
+  }
+
+  private async setup() {
+    let api = await this.cardService.getAPI();
+    this.identityContext = new IdentityContext(api, this.subscribers);
+    this.gcInterval = setInterval(
+      () => this.identityContext.sweep(),
+      2 * 60_000,
+    ) as unknown as number;
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
@@ -518,7 +443,6 @@ export default class StoreService extends Service {
         this.identityContext.set(newCard.id, newCard);
         return newCard;
       }
-      clearTimeout(this.garbageCollection.get(url));
 
       // createFromSerialized would also do this de-duplication, but we want to
       // also avoid the fetchJSON when we already have the stable card.
