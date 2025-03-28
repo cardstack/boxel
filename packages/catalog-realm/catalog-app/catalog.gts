@@ -20,6 +20,7 @@ import GlimmerComponent from '@glimmer/component';
 import {
   FilterCategoryGroup,
   FilterTagGroup,
+  FilterSearch,
   type FilterItem,
 } from './components/filter-section';
 import CardsDisplaySection, {
@@ -270,6 +271,9 @@ class Isolated extends Component<typeof Catalog> {
     { id: 'business', name: 'Business' },
     { id: 'accounting', name: 'Accounting' },
     { id: 'collaboration', name: 'Collaboration' },
+    { id: 'productivity', name: 'Productivity' },
+    { id: 'marketing', name: 'Marketing' },
+    { id: 'design', name: 'Design' },
   ];
 
   @tracked activeCategoryId = this.mockCategories[0].id;
@@ -297,6 +301,14 @@ class Isolated extends Component<typeof Catalog> {
     } else {
       this.activeTagIds = [...this.activeTagIds, item.id];
     }
+  }
+
+  // Filter Search
+  @tracked searchValue: string = '';
+
+  @action
+  handleSearch(value: string) {
+    this.searchValue = value;
   }
 
   //query
@@ -380,32 +392,40 @@ class Isolated extends Component<typeof Catalog> {
       class='catalog-layout {{this.activeTabId}}'
     >
       <:sidebar>
-        <BoxelButton
-          class='go-to-grid'
-          @kind='primary'
-          {{on 'click' this.goToGrid}}
-        >
-          Go to Grid
-        </BoxelButton>
+        <div class='sidebar-content'>
+          <BoxelButton
+            class='go-to-grid'
+            @kind='primary'
+            {{on 'click' this.goToGrid}}
+          >
+            Go to Grid
+          </BoxelButton>
 
-        <ContentContainer
-          role='complementary'
-          aria-label='Filters'
-          class='filters-container'
-        >
-          <FilterCategoryGroup
-            @title='Categories'
-            @items={{this.mockCategories}}
-            @activeId={{this.activeCategoryId}}
-            @onItemSelect={{this.handleCategorySelect}}
-          />
-          <FilterTagGroup
-            @title='Tags'
-            @items={{this.mockTags}}
-            @activeIds={{this.activeTagIds}}
-            @onItemSelect={{this.handleTagSelect}}
-          />
-        </ContentContainer>
+          <ContentContainer
+            role='complementary'
+            aria-label='Filters'
+            class='filters-container'
+          >
+            <FilterCategoryGroup
+              @title='Categories'
+              @items={{this.mockCategories}}
+              @activeId={{this.activeCategoryId}}
+              @onItemSelect={{this.handleCategorySelect}}
+            />
+            <FilterSearch
+              @title='Search'
+              @placeholder='Enter Keywords'
+              @searchValue={{this.searchValue}}
+              @onSearch={{this.handleSearch}}
+            />
+            <FilterTagGroup
+              @title='Tags'
+              @items={{this.mockTags}}
+              @activeIds={{this.activeTagIds}}
+              @onItemSelect={{this.handleTagSelect}}
+            />
+          </ContentContainer>
+        </div>
       </:sidebar>
       <:content>
         <div class='content-area-container {{this.activeTabId}}'>
@@ -452,6 +472,15 @@ class Isolated extends Component<typeof Catalog> {
         --layout-container-background-color: var(--boxel-100);
         --layout-sidebar-background-color: var(--boxel-100);
         --layout-content-padding: var(--boxel-sp-xl);
+      }
+
+      /* Sidebar */
+      .sidebar-content {
+        padding: var(--boxel-sp);
+        overflow-y: auto;
+      }
+      .sidebar-content > * + * {
+        margin-top: var(--boxel-sp);
       }
 
       /* Container */
@@ -515,6 +544,7 @@ class Isolated extends Component<typeof Catalog> {
 
       .go-to-grid {
         font-weight: 600;
+        width: 100%;
       }
 
       @container content-area-container (inline-size <= 768px) {
