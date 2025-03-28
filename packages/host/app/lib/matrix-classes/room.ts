@@ -62,13 +62,12 @@ export default class Room {
   }
 
   get skillsConfig() {
-    return (
-      this._roomState?.events.get(APP_BOXEL_ROOM_SKILLS_EVENT_TYPE)?.get('')
-        ?.event.content ?? {
-        enabledEventIds: [],
-        disabledEventIds: [],
-      }
-    );
+    return (this._roomState?.events
+      .get(APP_BOXEL_ROOM_SKILLS_EVENT_TYPE)
+      ?.get('')?.event.content ?? {
+      enabledEventIds: [],
+      disabledEventIds: [],
+    }) as { enabledEventIds: string[]; disabledEventIds: string[] };
   }
 
   get activeLLM() {

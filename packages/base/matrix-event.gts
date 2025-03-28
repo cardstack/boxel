@@ -181,7 +181,6 @@ export interface CardMessageContent {
     // limits us to 65KB per message
     attachedFiles?: SerializedFile[];
     attachedCardsEventIds?: string[];
-    attachedSkillEventIds?: string[];
     // we materialize this field on the server from the card
     // fragments that we receive
     attachedCards?: LooseSingleCardDocument[];
@@ -239,18 +238,19 @@ export interface CommandResultEvent extends BaseMatrixEvent {
     prev_sender?: string;
   };
 }
+export interface CommandDefinitionSchema {
+  codeRef: {
+    module: string;
+    name: string;
+  };
+  tool: Tool;
+}
 
 export interface CommandDefinitionsContent {
   msgtype: typeof APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
   body: string;
   data: {
-    commandDefinitions: {
-      codeRef: {
-        module: string;
-        name: string;
-      };
-      tool: Tool;
-    }[];
+    commandDefinitions: CommandDefinitionSchema[];
   };
 }
 export interface CommandResultWithOutputContent {

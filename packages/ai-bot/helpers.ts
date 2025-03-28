@@ -32,6 +32,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { MatrixClient } from './lib/matrix';
+
 let log = logger('ai-bot');
 
 const MODIFY_SYSTEM_MESSAGE =
@@ -91,6 +93,7 @@ export class HistoryConstructionError extends Error {
 export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
+  client: MatrixClient,
 ): Promise<PromptParts> {
   let cardFragments: Map<string, CardFragmentContent> =
     extractCardFragmentsFromEvents(eventList);
@@ -112,7 +115,13 @@ export async function getPromptParts(
   let skills = getEnabledSkills(eventList, cardFragments);
   let tools = getTools(history, skills, aiBotUserId);
   let toolChoice = getToolChoice(history, aiBotUserId);
-  let messages = await getModifyPrompt(history, aiBotUserId, tools, skills);
+  let messages = await getModifyPrompt(
+    history,
+    aiBotUserId,
+    tools,
+    skills,
+    client,
+  );
   let model = getModel(eventList);
   return {
     shouldRespond,
@@ -370,6 +379,7 @@ export function getRelevantCards(
 }
 
 export async function loadCurrentlyAttachedFiles(
+  client: MatrixClient,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): Promise<
@@ -426,7 +436,11 @@ export async function loadCurrentlyAttachedFiles(
           let content: string | undefined;
           let error: string | undefined;
           if (attachedFile.contentType?.startsWith('text/')) {
-            let response = await (globalThis as any).fetch(attachedFile.url);
+            let response = await (globalThis as any).fetch(attachedFile.url, {
+              headers: {
+                Authorization: `Bearer ${client.getAccessToken()}`,
+              },
+            });
             if (!response.ok) {
               throw new Error(`HTTP error. Status: ${response.status}`);
             }
@@ -648,6 +662,7 @@ export async function getModifyPrompt(
   aiBotUserId: string,
   tools: Tool[] = [],
   skillCards: LooseCardResource[] = [],
+  client: MatrixClient,
 ) {
   // Need to make sure the passed in username is a full id
   if (
@@ -712,7 +727,11 @@ export async function getModifyPrompt(
     aiBotUserId,
   );
 
-  let attachedFiles = await loadCurrentlyAttachedFiles(history, aiBotUserId);
+  let attachedFiles = await loadCurrentlyAttachedFiles(
+    client,
+    history,
+    aiBotUserId,
+  );
 
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:

@@ -530,7 +530,13 @@ module('getModifyPrompt', () => {
       return originalFetch(url);
     };
 
-    let prompt = await getModifyPrompt(history, '@aibot:localhost');
+    let prompt = await getModifyPrompt(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      { getAccessToken: () => 'fake-access-token' },
+    );
 
     assert.equal(
       fetchCount,
@@ -1357,7 +1363,6 @@ test('Return host result of tool call back to open ai', async () => {
         clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
-          attachedSkillEventIds: ['attached-skill-event-id-1'],
           context: {
             openCardIds: ['http://localhost:4201/drafts/Author/1'],
             tools: [
@@ -1497,7 +1502,6 @@ test('Return host result of tool call back to open ai', async () => {
         clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
-          attachedSkillEventIds: ['attached-skill-event-id-1'],
           context: {
             openCardIds: ['http://localhost:4201/drafts/Author/1'],
             tools: [
@@ -1884,6 +1888,39 @@ test('No tools are available if skill is not enabled', async () => {
   const { tools } = await getPromptParts(eventList, '@aibot:localhost');
   // we should not have any tools available
   assert.true(tools.length == 0, 'Should not have tools available');
+});
+
+test('Uses updated command definitions when skill card is updated', async () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(
+        __dirname,
+        'resources/chats/updated-skill-command-definitions.json',
+      ),
+    ),
+  );
+
+  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
+  assert.true(tools.length > 0, 'Should have tools available');
+
+  // Verify that the tools array contains the updated command definition
+  const updatedCommandTool = tools.find(
+    (tool) => tool.function?.name === 'switch-submode_dd88',
+  );
+  assert.ok(
+    updatedCommandTool,
+    'Should have updated command definition available',
+  );
+
+  // Verify updated properties are present (description indicates V2)
+  assert.true(
+    updatedCommandTool.function?.description.includes('COMMAND_DESCRIPTION_V2'),
+    'Should use updated command description',
+  );
+  assert.false(
+    updatedCommandTool.function?.description.includes('COMMAND_DESCRIPTION_V1'),
+    'Should not include old command description',
+  );
 });
 
 module('set model in prompt', () => {

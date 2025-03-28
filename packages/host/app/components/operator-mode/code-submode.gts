@@ -29,9 +29,7 @@ import { File } from '@cardstack/boxel-ui/icons';
 
 import {
   identifyCard,
-  isFieldDef,
   isCardDocumentString,
-  isPrimitive,
   hasExecutableExtension,
   RealmPaths,
   isResolvedCodeRef,
@@ -47,7 +45,7 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
-import consumeContext from '@cardstack/host/modifiers/consume-context';
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
@@ -84,7 +82,7 @@ import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import PlaygroundPanel from './code-submode/playground/playground-panel';
+import Playground from './code-submode/playground/playground';
 import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
 import SpecPreview from './code-submode/spec-preview';
 import CreateFileModal, { type FileType } from './create-file-modal';
@@ -790,10 +788,10 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   <template>
+    {{consumeContext this.makeCardResource}}
     <AttachFileModal />
     {{#let (this.realm.info this.realmURL.href) as |realmInfo|}}
       <div
-        {{consumeContext consume=this.makeCardResource}}
         class='code-mode-background'
         style={{this.backgroundURLStyle realmInfo.backgroundURL}}
       ></div>
@@ -998,47 +996,28 @@ export default class CodeSubmode extends Component<Signature> {
                           </:content>
                         </A.Item>
                       </SchemaEditor>
-                      <A.Item
-                        class='accordion-item'
-                        @contentClass='accordion-item-content'
-                        @onClick={{fn this.toggleAccordionItem 'playground'}}
+                      <Playground
                         @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                        data-test-accordion-item='playground'
+                        @codeRef={{this.selectedCodeRef}}
+                        @isUpdating={{this.moduleContentsResource.isLoading}}
+                        @cardOrField={{this.selectedCardOrField.cardOrField}}
+                        as |PlaygroundTitle PlaygroundContent|
                       >
-                        <:title>Playground</:title>
-                        <:content>
-                          {{#if (eq this.selectedAccordionItem 'playground')}}
-                            {{#if
-                              (isPrimitive this.selectedCardOrField.cardOrField)
-                            }}
-                              <p
-                                class='file-incompatible-message'
-                                data-test-incompatible-primitives
-                              >
-                                <span>Playground is not currently supported for
-                                  primitive fields.</span>
-                              </p>
-                            {{else if this.selectedCodeRef}}
-                              <PlaygroundPanel
-                                @codeRef={{this.selectedCodeRef}}
-                                @isUpdating={{this.moduleContentsResource.isLoading}}
-                                @isFieldDef={{isFieldDef
-                                  this.selectedCardOrField.cardOrField
-                                }}
-                              />
-                            {{else}}
-                              <p
-                                class='file-incompatible-message'
-                                data-test-incompatible-nonexports
-                              >
-                                <span>Playground is not currently supported for
-                                  card or field definitions that are not
-                                  exported.</span>
-                              </p>
+                        <A.Item
+                          class='accordion-item playground-accordion-item'
+                          @contentClass='accordion-item-content'
+                          @onClick={{fn this.toggleAccordionItem 'playground'}}
+                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                          data-test-accordion-item='playground'
+                        >
+                          <:title><PlaygroundTitle /></:title>
+                          <:content>
+                            {{#if (eq this.selectedAccordionItem 'playground')}}
+                              <PlaygroundContent />
                             {{/if}}
-                          {{/if}}
-                        </:content>
-                      </A.Item>
+                          </:content>
+                        </A.Item>
+                      </Playground>
                       <SpecPreview
                         @selectedDeclaration={{this.selectedDeclaration}}
                         @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
@@ -1254,6 +1233,9 @@ export default class CodeSubmode extends Component<Signature> {
       .accordion-item {
         --accordion-item-title-font: 600 var(--boxel-font-sm);
         box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
+      }
+      .playground-accordion-item > :deep(.title) {
+        padding-block: var(--boxel-sp-4xs);
       }
       .accordion-item > :deep(.title) {
         height: var(--accordion-item-closed-height);

@@ -461,7 +461,7 @@ export class RealmServer {
 
   private sendEvent = async (user: string, eventType: string) => {
     let dmRooms =
-      (await this.matrixClient.getAccountData<Record<string, string>>(
+      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
         'boxel.session-rooms',
       )) ?? {};
     let roomId = dmRooms[user];

@@ -59,6 +59,7 @@ const BeforeOptions: TemplateOnlyComponent = <template>
       padding: var(--boxel-sp-xs) var(--boxel-sp);
       font: 500 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
+      text-align: left;
     }
   </style>
 </template>;
@@ -109,6 +110,7 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
       padding: var(--boxel-sp-xs) var(--boxel-sp);
       font: 500 var(--boxel-font-sm);
       letter-spacing: var(--boxel-lsp-xs);
+      text-align: left;
     }
     .action {
       display: inline-block;
@@ -227,10 +229,25 @@ const InstanceSelectDropdown: TemplateOnlyComponent<Signature> = <template>
       height: var(--boxel-form-control-height);
     }
     .instance-chooser {
-      width: 405px;
-      max-width: 100%;
-      height: var(--boxel-form-control-height);
-      box-shadow: 0 5px 10px 0 rgba(0 0 0 / 40%);
+      height: 26px;
+      border: 1px solid var(--boxel-dark);
+      outline: none;
+    }
+    .instance-chooser :deep(.boxel-trigger-content) {
+      overflow: hidden;
+    }
+    :deep(
+      .boxel-select__dropdown .ember-power-select-option[aria-current='true']
+    ),
+    :deep(.instances-dropdown-content .ember-power-select-option) {
+      background-color: var(--boxel-light);
+      flex-wrap: nowrap;
+    }
+    :deep(.ember-power-select-option:hover .card) {
+      background-color: var(--boxel-100);
+    }
+    :deep(.boxel-trigger-content) {
+      font: var(--boxel-font-xs);
     }
     .instance-chooser :deep(.boxel-trigger-content) {
       overflow: hidden;

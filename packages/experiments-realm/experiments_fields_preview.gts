@@ -1,11 +1,12 @@
+import { EmailField } from 'https://cardstack.com/base/email';
+import { PhoneField } from 'https://cardstack.com/base/phone-number';
+import { UrlField } from 'https://cardstack.com/base/url';
+import { WebsiteField } from 'https://cardstack.com/base/website';
+import { Address as AddressField } from 'https://cardstack.com/base/address';
+import { PercentageField } from 'https://cardstack.com/base/percentage';
+
 import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
-import { EmailField } from './fields/email';
-import { PhoneField } from './fields/phone-number';
-import { UrlField } from './fields/url';
-import { WebsiteField } from './fields/website';
-import { Address as AddressField } from './fields/address';
-import { PercentageField } from './fields/percentage';
 import { CurrencyField } from './fields/currency';
 import { AmountWithCurrency as AmountWithCurrencyField } from './fields/amount-with-currency';
 import { StatusTagField } from './crm/contact-status-tag';

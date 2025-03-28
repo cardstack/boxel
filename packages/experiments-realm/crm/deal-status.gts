@@ -6,10 +6,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
-
-import EntityDisplayWithIcon from '../components/entity-icon-display';
-
-import { ColorField } from '../fields/color';
+import { ColorField } from 'https://cardstack.com/base/color';
 
 import FilterSearch from '@cardstack/boxel-icons/filter-search';
 import FilePen from '@cardstack/boxel-icons/file-pen';
@@ -17,7 +14,10 @@ import ArrowLeftRight from '@cardstack/boxel-icons/arrow-left-right';
 import Award from '@cardstack/boxel-icons/award';
 import AwardOff from '@cardstack/boxel-icons/award-off';
 
-import { BoxelSelect } from '@cardstack/boxel-ui/components';
+import {
+  BoxelSelect,
+  EntityDisplayWithIcon,
+} from '@cardstack/boxel-ui/components';
 
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';

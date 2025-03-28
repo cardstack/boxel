@@ -5,12 +5,11 @@ import {
   StringField,
   Component,
 } from 'https://cardstack.com/base/card-api';
+import { ColorField } from 'https://cardstack.com/base/color';
 
 import ContactIcon from '@cardstack/boxel-icons/contact';
 
 import { StatusPill } from '../components/status-pill';
-
-import { ColorField } from '../fields/color';
 
 export class StatusTagField extends FieldDef {
   static icon = ContactIcon;

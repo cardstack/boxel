@@ -9,19 +9,19 @@ import {
   realmURL,
   StringField,
 } from 'https://cardstack.com/base/card-api';
+import { WebsiteField } from 'https://cardstack.com/base/website';
+import { Address as AddressField } from 'https://cardstack.com/base/address';
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { Query } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 
-import { Address as AddressField } from '../fields/address';
 import { Company } from './company';
 import { Contact } from './contact';
 import { CrmApp } from '../crm-app';
 import { Deal } from './deal';
 import { StatusTagField } from './contact-status-tag';
 import { UrgencyTag } from './urgency-tag';
-import { WebsiteField } from '../fields/website';
 
 import AccountHeader from '../components/account-header';
 import PageLayout from '../components/page-layout';

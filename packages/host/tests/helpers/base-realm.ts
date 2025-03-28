@@ -15,6 +15,7 @@ import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
+import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
 
@@ -53,6 +54,9 @@ let TextAreaField: TextAreaField;
 
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
+
+type SkillCard = (typeof SkillCardModule)['SkillCard'];
+let SkillCard: SkillCard;
 
 let field: (typeof CardAPIModule)['field'];
 let CardDef: (typeof CardAPIModule)['CardDef'];
@@ -133,6 +137,10 @@ async function initialize() {
     await loader.import<typeof CardsGridModule>(`${baseRealm.url}cards-grid`)
   ).CardsGrid;
 
+  SkillCard = (
+    await loader.import<typeof SkillCardModule>(`${baseRealm.url}skill-card`)
+  ).SkillCard;
+
   let cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,
   );
@@ -202,4 +210,5 @@ export {
   queryableValue,
   getFieldDescription,
   ReadOnlyField,
+  SkillCard,
 };
