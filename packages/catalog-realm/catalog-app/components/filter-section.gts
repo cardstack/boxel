@@ -5,7 +5,7 @@ import { on } from '@ember/modifier';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { action } from '@ember/object';
 
-import { Pill } from '@cardstack/boxel-ui/components';
+import { Pill, BoxelInput } from '@cardstack/boxel-ui/components';
 
 export type FilterItem = { id: string; name: string };
 
@@ -129,6 +129,46 @@ export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
         .tag-filter-pill:not(.selected):hover {
           background: var(--boxel-300);
         }
+      }
+    </style>
+  </template>
+}
+
+interface FilterSearchArgs {
+  Args: {
+    title: string;
+    placeholder?: string;
+    searchValue?: string;
+    onSearch: (searchValue: string) => void;
+  };
+  Element: HTMLElement;
+}
+
+export class FilterSearch extends GlimmerComponent<FilterSearchArgs> {
+  @action
+  handleSearch(value: string) {
+    this.args.onSearch(value);
+  }
+
+  <template>
+    <FilterGroupWrapper @title={{@title}} ...attributes>
+      <div class='search-container'>
+        <BoxelInput
+          @type='search'
+          @value={{@searchValue}}
+          @placeholder={{@placeholder}}
+          @onInput={{this.handleSearch}}
+          data-test-filter-search-input
+        />
+      </div>
+    </FilterGroupWrapper>
+
+    <style scoped>
+      .search-container {
+        padding: var(--boxel-sp-sm);
+      }
+      :deep(.boxel-input.search) {
+        --boxel-form-control-border-radius: var(--boxel-border-radius-xxl);
       }
     </style>
   </template>
