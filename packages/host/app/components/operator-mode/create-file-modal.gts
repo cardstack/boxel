@@ -55,6 +55,7 @@ import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
+import type StoreService from '../../services/store';
 
 export type NewFileType =
   | 'duplicate-instance'
@@ -332,6 +333,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   @service private declare cardService: CardService;
   @service private declare network: NetworkService;
+  @service private declare store: StoreService;
 
   @tracked private defaultSpecResource: ReturnType<getCard<Spec>> | undefined;
   @tracked private chosenSpecResource: ReturnType<getCard<Spec>> | undefined;
@@ -618,8 +620,10 @@ export default class CreateFileModal extends Component<Signature> {
     }
 
     let spec: Spec | undefined;
-    if (this.selectedSpecResource) {
-      let maybeSpec = await this.selectedSpecResource.dispose();
+    if (this.selectedSpecResource?.url) {
+      let maybeSpec = await this.store.peek<Spec>(
+        this.selectedSpecResource.url,
+      );
       if (maybeSpec && !isCardInstance(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
@@ -741,8 +745,10 @@ export class ${className} extends ${exportName} {
       );
     }
     let spec: Spec | undefined;
-    if (this.selectedSpecResource) {
-      let maybeSpec = await this.selectedSpecResource.dispose();
+    if (this.selectedSpecResource?.url) {
+      let maybeSpec = await this.store.peek<Spec>(
+        this.selectedSpecResource.url,
+      );
       if (maybeSpec && !isCardInstance(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }

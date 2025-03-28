@@ -283,8 +283,6 @@ export type getCard<T extends CardDef = CardDef> = (
   cardError: CardErrorJSONAPI | undefined;
   // TODO remove this
   loaded: Promise<void>;
-  dispose(): Promise<T | CardErrorJSONAPI | undefined>;
-  getNewCardURL(): Promise<string>;
   api: typeof CardAPI;
 };
 

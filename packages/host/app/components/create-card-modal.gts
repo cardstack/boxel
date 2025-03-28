@@ -32,8 +32,6 @@ import ModalContainer from './modal-container';
 import type CardService from '../services/card-service';
 import type StoreService from '../services/store';
 
-// Is this actually still being used in our app?? or can we remove it?
-
 export default class CreateCardModal extends Component {
   <template>
     {{#let this.currentRequest.cardResource.card as |card|}}
