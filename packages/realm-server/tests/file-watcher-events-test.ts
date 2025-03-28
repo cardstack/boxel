@@ -7,7 +7,6 @@ import eventSource from 'eventsource';
 import { copySync, ensureDirSync, writeJSONSync } from 'fs-extra';
 import {
   baseRealm,
-  Realm,
   RealmPermissions,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -41,25 +40,8 @@ const testRealmHref = testRealmURL.href;
 const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
 console.log(`using host dist dir: ${distDir}`);
 
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
-
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
-    let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
@@ -237,32 +219,6 @@ module(basename(__filename), function () {
     });
   });
 });
-
-function assertScopedCssUrlsContain(
-  assert: Assert,
-  scopedCssUrls: string[],
-  moduleUrls: string[],
-) {
-  moduleUrls.forEach((url) => {
-    let pattern = new RegExp(`^${url}\\.[^.]+\\.glimmer-scoped\\.css$`);
-
-    assert.true(
-      scopedCssUrls.some((scopedCssUrl) => pattern.test(scopedCssUrl)),
-      `css url for ${url} is in the deps`,
-    );
-  });
-}
-
-// These modules have CSS that CardDef consumes, so we expect to see them in all relationships of a prerendered card
-let cardDefModuleDependencies = [
-  'https://cardstack.com/base/default-templates/embedded.gts',
-  'https://cardstack.com/base/default-templates/isolated-and-edit.gts',
-  'https://cardstack.com/base/default-templates/field-edit.gts',
-  'https://cardstack.com/base/field-component.gts',
-  'https://cardstack.com/base/contains-many-component.gts',
-  'https://cardstack.com/base/links-to-editor.gts',
-  'https://cardstack.com/base/links-to-many-component.gts',
-];
 
 async function waitForRealmEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
