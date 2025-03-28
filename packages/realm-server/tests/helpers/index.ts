@@ -224,6 +224,7 @@ export async function createRealm({
   dbAdapter,
   matrixConfig = testMatrix,
   withWorker,
+  enableFileWatcher = false,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -235,6 +236,7 @@ export async function createRealm({
   runner?: QueueRunner;
   dbAdapter: PgAdapter;
   deferStartUp?: true;
+  enableFileWatcher?: boolean;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -249,7 +251,7 @@ export async function createRealm({
     }
   }
 
-  let adapter = new NodeAdapter(dir);
+  let adapter = new NodeAdapter(dir, enableFileWatcher);
   let worker: Worker | undefined;
   if (withWorker) {
     if (!runner) {
@@ -374,6 +376,7 @@ export async function runTestRealmServer({
   matrixConfig,
   matrixURL,
   permissions = { '*': ['read'] },
+  enableFileWatcher = false,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -386,6 +389,7 @@ export async function runTestRealmServer({
   dbAdapter: PgAdapter;
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
+  enableFileWatcher?: boolean;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -407,6 +411,7 @@ export async function runTestRealmServer({
     matrixConfig,
     publisher,
     dbAdapter,
+    enableFileWatcher,
   });
 
   await testRealm.logInToMatrix();
@@ -426,6 +431,7 @@ export async function runTestRealmServer({
       matrixConfig,
       publisher,
       dbAdapter,
+      enableFileWatcher,
     });
     virtualNetwork.mount(seedRealm.handle);
     realms.push(seedRealm);
