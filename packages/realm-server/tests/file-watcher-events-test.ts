@@ -37,8 +37,6 @@ import type {
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
-const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
-console.log(`using host dist dir: ${distDir}`);
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
@@ -66,7 +64,7 @@ module(basename(__filename), function () {
 
           let virtualNetwork = createVirtualNetwork();
 
-          ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
+          ({ testRealmHttpServer } = await runTestRealmServer({
             virtualNetwork,
             testRealmDir,
             realmsRootPath: join(dir.name, 'realm_server_1'),
