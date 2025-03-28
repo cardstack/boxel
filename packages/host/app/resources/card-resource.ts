@@ -71,10 +71,6 @@ export class CardResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { url, isLive, isAutoSaved, storeService, cardService } = named;
-    if (!url) {
-      return;
-    }
-
     this.store = storeService;
     this.cardService = cardService;
     this.#url = url;
@@ -127,26 +123,27 @@ export class CardResource extends Resource<Args> {
     return this._loading?.promise;
   }
 
-  private load = restartableTask(async (url: string) => {
+  private load = restartableTask(async (url: string | undefined) => {
     let card: CardDef | undefined;
     let error: CardError | undefined;
 
     let token = waiter.beginAsync();
     try {
-      this.#api = await this.cardService.getAPI();
-      ({ card, error } = await this.store.createSubscriber({
-        resource: this,
-        urlOrDoc: url,
-        isAutoSaved: this.isAutoSaved,
-        isLive: this.isLive,
-        setCard: (card) => {
-          if (card !== this.card) {
-            this._card = card;
-          }
-        },
-        setCardError: (error) => (this._error = error),
-      }));
-      this._loading = undefined;
+      if (url) {
+        this.#api = await this.cardService.getAPI();
+        ({ card, error } = await this.store.createSubscriber({
+          resource: this,
+          urlOrDoc: url,
+          isAutoSaved: this.isAutoSaved,
+          isLive: this.isLive,
+          setCard: (card) => {
+            if (card !== this.card) {
+              this._card = card;
+            }
+          },
+          setCardError: (error) => (this._error = error),
+        }));
+      }
       this.#url = url;
       this._card = card;
       this._error = error;

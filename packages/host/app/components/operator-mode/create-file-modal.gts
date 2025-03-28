@@ -380,7 +380,7 @@ export default class CreateFileModal extends Component<Signature> {
     },
     sourceInstance?: CardDef,
   ) {
-    return await this.makeCreateFileRequst.perform(
+    return await this.makeCreateFileRequest.perform(
       fileType,
       realmURL,
       definitionClass,
@@ -402,7 +402,7 @@ export default class CreateFileModal extends Component<Signature> {
     return this.chosenSpecResource || this.defaultSpecResource;
   }
 
-  private makeCreateFileRequst = enqueueTask(
+  private makeCreateFileRequest = enqueueTask(
     async (
       fileType: FileType,
       realmURL?: URL,
