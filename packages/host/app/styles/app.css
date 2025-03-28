@@ -1,5 +1,5 @@
 :root {
-  --boxel-ai-purple: #272331;
+  --boxel-ai-purple: var(--boxel-700);
 
   --host-ai-panel-popover-z-index: 900;
   --host-ai-panel-button-z-index: 800;

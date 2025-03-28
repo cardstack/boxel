@@ -26,6 +26,7 @@ import { ResolvedCodeRef } from '@cardstack/runtime-common';
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
+import AskAiBox from '@cardstack/host/components/ai-assistant/ask-ai-box';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
@@ -88,6 +89,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
+  @tracked private aiPrompt = '';
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
@@ -239,6 +241,14 @@ export default class SubmodeLayout extends Component<Signature> {
     this.suppressSearchClose = false;
   });
 
+  @action private onInput(value: string) {
+    this.aiPrompt = value;
+  }
+
+  @action private onSendPrompt() {
+    this.aiPrompt = '';
+  }
+
   <template>
     <Disclaimer />
 
@@ -312,6 +322,13 @@ export default class SubmodeLayout extends Component<Signature> {
             @hide={{this.operatorModeStateService.aiAssistantOpen}}
             @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
           />
+          <div class='ask-ai-container'>
+            <AskAiBox
+              @value={{this.aiPrompt}}
+              @onInput={{this.onInput}}
+              @onSend={{this.onSendPrompt}}
+            />
+          </div>
           <AiAssistantButton
             class='chat-btn'
             @isActive={{this.operatorModeStateService.aiAssistantOpen}}
@@ -430,6 +447,18 @@ export default class SubmodeLayout extends Component<Signature> {
       .dark-icon {
         --icon-bg-opacity: 1;
         --icon-color: var(--boxel-dark);
+      }
+
+      .ask-ai-container {
+        width: 310px;
+        position: absolute;
+        bottom: var(--operator-mode-spacing);
+        right: calc(
+          2 * var(--operator-mode-spacing) + var(--container-button-size)
+        );
+        border-radius: var(--boxel-border-radius-xxl);
+        box-shadow: var(--boxel-deep-box-shadow);
+        z-index: var(--host-ai-panel-button-z-index);
       }
     </style>
   </template>
