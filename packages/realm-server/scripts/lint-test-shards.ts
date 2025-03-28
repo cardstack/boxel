@@ -1,6 +1,7 @@
-import { readFileSync, readdirSync } from 'fs-extra';
+import { readFileSync } from 'fs-extra';
+import { glob } from 'glob';
 import yaml from 'js-yaml';
-import { join, basename } from 'path';
+import { join } from 'path';
 
 const YAML_FILE = join(
   __dirname,
@@ -36,10 +37,8 @@ function getCiTestModules(yamlFilePath: string) {
 
 function getFilesystemTestModules(testDir: string) {
   try {
-    const files = readdirSync(testDir);
-    return files
-      .filter((file) => file.endsWith('-test.ts'))
-      .map((file) => basename(file));
+    const files = glob.sync(`${testDir}/**/*-test.ts`, { nodir: true });
+    return files.map((file: string) => file.replace(`${testDir}/`, ''));
   } catch (error: any) {
     console.error(
       `Error reading test files from dir ${testDir}: ${error.message}`,
