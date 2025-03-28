@@ -27,22 +27,20 @@ export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArg
 
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
-      <:filterList>
-        <div class='filter-list'>
-          {{#each @items as |item|}}
-            <button
-              class={{concat
-                'filter-button'
-                (if (eq @activeId item.id) ' selected')
-              }}
-              {{on 'click' (fn this.handleItemClick item)}}
-              data-test-filter-button={{item.id}}
-            >
-              {{item.name}}
-            </button>
-          {{/each}}
-        </div>
-      </:filterList>
+      <div class='filter-list'>
+        {{#each @items as |item|}}
+          <button
+            class={{concat
+              'filter-button'
+              (if (eq @activeId item.id) ' selected')
+            }}
+            {{on 'click' (fn this.handleItemClick item)}}
+            data-test-filter-button={{item.id}}
+          >
+            {{item.name}}
+          </button>
+        {{/each}}
+      </div>
     </FilterGroupWrapper>
 
     <style scoped>
@@ -96,26 +94,24 @@ export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
 
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
-      <:filterList>
-        <div class='filter-list'>
-          {{#each @items as |item|}}
-            {{! Take note: did not choose to use @pillBackgroundColor args because we want a custom background color toggled based on the selected state }}
-            <Pill
-              @kind='button'
-              class={{concat
-                'tag-filter-pill'
-                (if (this.isItemSelected item.id) ' selected')
-              }}
-              {{on 'click' (fn this.handleItemClick item)}}
-              data-test-filter-pill={{item.id}}
-            >
-              <:default>
-                <span>{{item.name}}</span>
-              </:default>
-            </Pill>
-          {{/each}}
-        </div>
-      </:filterList>
+      <div class='filter-list'>
+        {{#each @items as |item|}}
+          {{! Take note: did not choose to use @pillBackgroundColor args because we want a custom background color toggled based on the selected state }}
+          <Pill
+            @kind='button'
+            class={{concat
+              'tag-filter-pill'
+              (if (this.isItemSelected item.id) ' selected')
+            }}
+            {{on 'click' (fn this.handleItemClick item)}}
+            data-test-filter-pill={{item.id}}
+          >
+            <:default>
+              <span>{{item.name}}</span>
+            </:default>
+          </Pill>
+        {{/each}}
+      </div>
     </FilterGroupWrapper>
 
     <style scoped>
@@ -145,7 +141,7 @@ interface FilterGroupWrapperArgs {
   };
   Element: HTMLElement;
   Blocks: {
-    filterList: [];
+    default: [];
   };
 }
 
@@ -155,7 +151,7 @@ class FilterGroupWrapper extends GlimmerComponent<FilterGroupWrapperArgs> {
       <h2 class='filter-heading'>
         {{@title}}
       </h2>
-      {{yield to='filterList'}}
+      {{yield}}
     </section>
 
     <style scoped>
