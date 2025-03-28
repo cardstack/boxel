@@ -489,10 +489,8 @@ export class CurrentRun {
     let instanceURL = new URL(
       this.#realmPaths.fileURL(path).href.replace(/\.json$/, ''),
     );
-    let moduleURL = new URL(
-      moduleFrom(resource.meta.adoptsFrom),
-      new URL(path, this.#realmURL),
-    ).href;
+
+    let moduleDeps = getModuleDeps(resource, instanceURL);
     let typesMaybeError: TypesWithErrors | undefined;
     let uncaughtError: Error | undefined;
     let doc: SingleCardDocument | undefined;
@@ -631,7 +629,6 @@ export class CurrentRun {
         }
       }
     }
-
     if (searchData && doc && typesMaybeError?.type === 'types') {
       await this.updateEntry(instanceURL, {
         type: 'instance',
@@ -650,8 +647,14 @@ export class CurrentRun {
           ({ displayName }) => displayName,
         ),
         deps: new Set([
-          moduleURL,
-          ...(await this.loaderService.loader.getConsumedModules(moduleURL)),
+          ...moduleDeps,
+          ...(
+            await Promise.all(
+              moduleDeps.map((moduleDep) =>
+                this.loaderService.loader.getConsumedModules(moduleDep),
+              ),
+            )
+          ).flat(),
         ]),
       });
     } else if (uncaughtError || typesMaybeError?.type === 'error') {
@@ -671,7 +674,7 @@ export class CurrentRun {
               : { message: `${uncaughtError.message}` },
         };
         error.error.deps = [
-          moduleURL,
+          ...moduleDeps,
           ...(uncaughtError instanceof CardError
             ? (uncaughtError.deps ?? [])
             : []),
@@ -844,4 +847,34 @@ function getDisplayName(card: typeof CardDef) {
   } else {
     return card.displayName;
   }
+}
+
+function getModuleDeps(
+  resource: LooseCardResource,
+  instanceURL: URL,
+): string[] {
+  let result = [
+    // we always depend on our own adoptsFrom
+    new URL(moduleFrom(resource.meta.adoptsFrom), instanceURL).href,
+  ];
+
+  // we might also depend on any polymorphic types in meta.fields
+  if (resource.meta.fields) {
+    for (let fieldMeta of Object.values(resource.meta.fields)) {
+      if (Array.isArray(fieldMeta)) {
+        for (let meta of fieldMeta) {
+          if (meta.adoptsFrom) {
+            result.push(new URL(moduleFrom(meta.adoptsFrom), instanceURL).href);
+          }
+        }
+      } else {
+        if (fieldMeta.adoptsFrom) {
+          result.push(
+            new URL(moduleFrom(fieldMeta.adoptsFrom), instanceURL).href,
+          );
+        }
+      }
+    }
+  }
+  return result;
 }
