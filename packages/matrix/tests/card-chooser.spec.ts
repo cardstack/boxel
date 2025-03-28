@@ -17,6 +17,7 @@ import {
   registerRealmUsers,
   showAllCards,
   setupUserSubscribed,
+  postNewCard,
 } from '../helpers';
 
 test.describe('Card Chooser', () => {
@@ -43,70 +44,37 @@ test.describe('Card Chooser', () => {
     await page.goto(realm1URL);
     await showAllCards(page);
 
-    ({ consumingCardURL, linkedCardURL } = await page.evaluate(
-      async ({ realmURL }) => {
-        let token = JSON.parse(localStorage['boxel-session'])[realmURL];
-
-        let newConsumingCardResponse = await fetch(`${realmURL}`, {
-          headers: {
-            accept: 'application/vnd.card+json',
-            authorization: token,
+    consumingCardURL = await postNewCard(page, realm1URL, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Friend Consumer',
+          description: 'This is a test card instance.',
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4202/test/friend',
+            name: 'Friend',
           },
-          body: JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                firstName: 'Friend Consumer',
-                description: 'This is a test card instance.',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'http://localhost:4202/test/friend',
-                  name: 'Friend',
-                },
-              },
-            },
-          }),
-          method: 'POST',
-          mode: 'cors',
-          credentials: 'include',
-        });
-
-        let newLinkedCardResponse = await fetch(`${realmURL}`, {
-          headers: {
-            accept: 'application/vnd.card+json',
-            authorization: token,
-          },
-          body: JSON.stringify({
-            data: {
-              type: 'card',
-              attributes: {
-                firstName: 'Friend Link',
-                description: 'This is a test card instance.',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: 'http://localhost:4202/test/friend',
-                  name: 'Friend',
-                },
-              },
-            },
-          }),
-          method: 'POST',
-          mode: 'cors',
-          credentials: 'include',
-        });
-
-        let newConsumingCard = await newConsumingCardResponse.json();
-        let consumingCardURL = newConsumingCard?.data?.id;
-
-        let newLinkedCard = await newLinkedCardResponse.json();
-        let linkedCardURL = newLinkedCard?.data?.id;
-
-        return { consumingCardURL, linkedCardURL };
+        },
       },
-      { realmURL: realm1URL },
-    ));
+    });
+
+    linkedCardURL = await postNewCard(page, realm1URL, {
+      data: {
+        type: 'card',
+        attributes: {
+          firstName: 'Friend Link',
+          description: 'This is a test card instance.',
+        },
+        meta: {
+          adoptsFrom: {
+            module: 'http://localhost:4202/test/friend',
+            name: 'Friend',
+          },
+        },
+      },
+    });
 
     await expect(
       page.locator(`[data-test-cards-grid-item="${consumingCardURL}"]`),

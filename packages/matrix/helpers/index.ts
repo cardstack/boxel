@@ -805,3 +805,82 @@ export function decodeFromAlphanumeric(encodedString: string) {
   const base64 = encodedString.replace(/-/g, '+').replace(/_/g, '/');
   return Buffer.from(base64, 'base64').toString('utf8');
 }
+
+export async function postNewCard(
+  page: Page,
+  realmURL: string,
+  cardData: any,
+): Promise<string> {
+  const cardId = await page.evaluate(
+    async ({ realmURL, cardData }) => {
+      let token = JSON.parse(localStorage['boxel-session'])[realmURL];
+
+      let newCardResponse = await fetch(`${realmURL}`, {
+        headers: {
+          accept: 'application/vnd.card+json',
+          authorization: token,
+        },
+        body: JSON.stringify(cardData),
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'include',
+      });
+
+      let newCard = await newCardResponse.json();
+      return newCard?.data?.id;
+    },
+    { realmURL, cardData },
+  );
+
+  return cardId;
+}
+
+export async function postCardSource(
+  page: Page,
+  realmURL: string,
+  filePath: string,
+  source: string,
+): Promise<void> {
+  await page.evaluate(
+    async ({ realmURL, filePath, source }) => {
+      let token = JSON.parse(localStorage['boxel-session'])[realmURL];
+
+      await fetch(`${realmURL}${filePath}`, {
+        headers: {
+          accept: 'application/vnd.card+source',
+          authorization: token,
+        },
+        body: source,
+        method: 'POST',
+        mode: 'cors',
+        credentials: 'include',
+      });
+    },
+    { realmURL, filePath, source },
+  );
+}
+
+export async function patchCard(
+  page: Page,
+  realmURL: string,
+  cardURL: string,
+  cardData: any,
+): Promise<void> {
+  await page.evaluate(
+    async ({ realmURL, cardURL, cardData }) => {
+      let token = JSON.parse(localStorage['boxel-session'])[realmURL];
+
+      await fetch(cardURL, {
+        headers: {
+          accept: 'application/vnd.card+json',
+          authorization: token,
+        },
+        body: JSON.stringify(cardData),
+        method: 'PATCH',
+        mode: 'cors',
+        credentials: 'include',
+      });
+    },
+    { realmURL, cardURL, cardData },
+  );
+}
