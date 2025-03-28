@@ -23,12 +23,6 @@ import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
-import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
-import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-
-import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-box';
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
@@ -47,6 +41,7 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
 import Disclaimer from './disclaimer';
 
+import AskAiContainer from './ask-ai-container';
 import WorkspaceChooser from './workspace-chooser';
 
 import type CommandService from '../../services/command-service';
@@ -95,7 +90,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
-  @tracked private aiPrompt = '';
+
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
@@ -248,40 +243,6 @@ export default class SubmodeLayout extends Component<Signature> {
     this.suppressSearchClose = false;
   });
 
-  @action private onInput(value: string) {
-    this.aiPrompt = value;
-  }
-
-  @action private onSendPrompt() {
-    this.sendMessageToNewRoom.perform('New AI Assistant Chat');
-  }
-
-  private sendMessageToNewRoom = restartableTask(async (name: string) => {
-    let { commandContext } = this.commandService;
-
-    let createRoomCommand = new CreateAiAssistantRoomCommand(commandContext);
-    let { roomId } = await createRoomCommand.execute({ name });
-
-    let openRoomCommand = new OpenAiAssistantRoomCommand(commandContext);
-    await openRoomCommand.execute({ roomId });
-
-    let addSkillsCommand = new AddSkillsToRoomCommand(commandContext);
-    await addSkillsCommand.execute({
-      roomId,
-      skills: await this.matrixService.loadDefaultSkills(
-        this.operatorModeStateService.state.submode,
-      ),
-    });
-
-    let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
-    await sendMessageCommand.execute({
-      roomId,
-      prompt: this.aiPrompt,
-    });
-
-    this.aiPrompt = '';
-  });
-
   <template>
     <Disclaimer />
 
@@ -355,13 +316,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @hide={{this.operatorModeStateService.aiAssistantOpen}}
             @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
           />
-          <div class='ask-ai-container'>
-            <AskAiTextBox
-              @value={{this.aiPrompt}}
-              @onInput={{this.onInput}}
-              @onSend={{this.onSendPrompt}}
-            />
-          </div>
+          <AskAiContainer />
           <AiAssistantButton
             class='chat-btn'
             @isActive={{this.operatorModeStateService.aiAssistantOpen}}
@@ -480,18 +435,6 @@ export default class SubmodeLayout extends Component<Signature> {
       .dark-icon {
         --icon-bg-opacity: 1;
         --icon-color: var(--boxel-dark);
-      }
-
-      .ask-ai-container {
-        width: 310px;
-        position: absolute;
-        bottom: var(--operator-mode-spacing);
-        right: calc(
-          2 * var(--operator-mode-spacing) + var(--container-button-size)
-        );
-        border-radius: var(--boxel-border-radius-xxl);
-        box-shadow: var(--boxel-deep-box-shadow);
-        z-index: var(--host-ai-panel-button-z-index);
       }
     </style>
   </template>
