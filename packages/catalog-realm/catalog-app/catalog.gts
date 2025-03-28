@@ -178,7 +178,7 @@ const CATALOG_VIEW_OPTIONS: ViewItem[] = [
 interface CatalogListViewArgs {
   Args: {
     pageTitle?: string;
-    listingQuery: Query;
+    query: Query;
     realms: URL[];
     context?: CardContext;
   };
@@ -206,7 +206,7 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
       </:intro>
       <:content>
         <CardsGrid
-          @query={{@listingQuery}}
+          @query={{@query}}
           @realms={{@realms}}
           @selectedView={{this.selectedView}}
           @context={{@context}}
@@ -310,7 +310,7 @@ class Isolated extends Component<typeof Catalog> {
   }
 
   //query
-  get listingQuery(): Query {
+  get query(): Query {
     const listingTypeRef = {
       module: new URL('./listing/listing', import.meta.url).href,
       name: 'Listing',
@@ -440,7 +440,7 @@ class Isolated extends Component<typeof Catalog> {
                 {{else}}
                   <CatalogListView
                     @pageTitle='Product List'
-                    @listingQuery={{this.listingQuery}}
+                    @query={{this.query}}
                     @realms={{this.realms}}
                     @context={{@context}}
                   />
