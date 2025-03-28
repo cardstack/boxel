@@ -56,7 +56,6 @@ export default class IdentityContextWithGarbageCollection
   sweep() {
     let depGraph = this.makeDepGraph();
     let consumptionGraph = invertGraph(depGraph);
-    let removedInstances: string[] = [];
     for (let { card: instance } of this.#cards.values()) {
       if (!instance) {
         continue;
@@ -66,7 +65,6 @@ export default class IdentityContextWithGarbageCollection
           console.log(`garbage collecting instance ${instance.id} from store`);
           // brand the instance to make it easier for debugging
           (instance as unknown as any).__instance_detached_from_store = true;
-          removedInstances.push(instance.id);
           this.delete(instance.id);
         } else {
           this.#gcCandidates.add(instance.id);
@@ -75,7 +73,6 @@ export default class IdentityContextWithGarbageCollection
         this.#gcCandidates.delete(instance.id);
       }
     }
-    return removedInstances;
   }
 
   gcVisit(
