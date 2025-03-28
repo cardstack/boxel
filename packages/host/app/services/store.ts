@@ -192,7 +192,12 @@ export default class StoreService extends Service {
       url,
       setTimeout(() => {
         console.warn(`garbage collecting instance ${url} from store`);
-        this.identityContext.delete(url!);
+        let instance = this.identityContext.get(url);
+        if (instance) {
+          // brand the instance to make it easier for debugging
+          (instance as unknown as any).__instance_detached_from_store = true;
+        }
+        this.identityContext.delete(url);
       }, 5 * 60_000) as unknown as number,
     );
   }

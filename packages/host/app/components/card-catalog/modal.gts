@@ -564,7 +564,7 @@ export default class CardCatalogModal extends Component<Signature> {
 
       let request = state ? state.request : this.state.request;
       if (request) {
-        request.deferred.fulfill(cardId);
+        request.deferred.fulfill(cardId?.replace(/\.json$/, ''));
       }
 
       // TODO is this still necessary:
