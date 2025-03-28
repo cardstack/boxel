@@ -30,6 +30,9 @@ test.describe('Card Chooser', () => {
   const realm2Name = 'realm2';
   const realm2URL = new URL(`user1/${realm2Name}/`, serverIndexUrl).href;
 
+  let consumingCardURL: string;
+  let linkedCardURL: string;
+
   async function setupRealms(page: Page) {
     await clearLocalStorage(page, serverIndexUrl);
     await setupUserSubscribed('@user1:localhost', realmServer);
@@ -41,55 +44,77 @@ test.describe('Card Chooser', () => {
     await createRealm(page, realm2Name);
     await page.goto(realm1URL);
     await showAllCards(page);
-    let consumingCardPath = join(
-      realmServer.realmPath,
-      '..',
-      'user1',
-      realm1Name,
-      'consumer.json',
-    );
-    writeJSONSync(consumingCardPath, {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Friend Consumer',
-          description: 'This is a test card instance.',
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'http://localhost:4202/test/friend',
-            name: 'Friend',
+
+    ({ consumingCardURL, linkedCardURL } = await page.evaluate(
+      async ({ realmURL }) => {
+        let token = JSON.parse(localStorage['boxel-session'])[realmURL];
+
+        let newConsumingCardResponse = await fetch(`${realmURL}`, {
+          headers: {
+            accept: 'application/vnd.card+json',
+            authorization: token,
           },
-        },
-      },
-    });
-    let linkedCardPath = join(
-      realmServer.realmPath,
-      '..',
-      'user1',
-      realm2Name,
-      'link.json',
-    );
-    writeJSONSync(linkedCardPath, {
-      data: {
-        type: 'card',
-        attributes: {
-          title: 'Friend Link',
-          description: 'This is a test card instance.',
-        },
-        meta: {
-          adoptsFrom: {
-            module: 'http://localhost:4202/test/friend',
-            name: 'Friend',
+          body: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Friend Consumer',
+                description: 'This is a test card instance.',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/friend',
+                  name: 'Friend',
+                },
+              },
+            },
+          }),
+          method: 'POST',
+          mode: 'cors',
+          credentials: 'include',
+        });
+
+        let newLinkedCardResponse = await fetch(`${realmURL}`, {
+          headers: {
+            accept: 'application/vnd.card+json',
+            authorization: token,
           },
-        },
+          body: JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Friend Link',
+                description: 'This is a test card instance.',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'http://localhost:4202/test/friend',
+                  name: 'Friend',
+                },
+              },
+            },
+          }),
+          method: 'POST',
+          mode: 'cors',
+          credentials: 'include',
+        });
+
+        let newConsumingCard = await newConsumingCardResponse.json();
+        let consumingCardURL = newConsumingCard?.data?.id;
+
+        let newLinkedCard = await newLinkedCardResponse.json();
+        let linkedCardURL = newLinkedCard?.data?.id;
+
+        return { consumingCardURL, linkedCardURL };
       },
-    });
+      { realmURL: realm1URL },
+    ));
+
     await expect(
-      page.locator(`[data-test-cards-grid-item="${realm1URL}consumer"]`),
+      page.locator(`[data-test-cards-grid-item="${consumingCardURL}"]`),
     ).toHaveCount(1);
     await page
-      .locator(`[data-test-cards-grid-item="${realm1URL}consumer"]`)
+      .locator(`[data-test-cards-grid-item="${consumingCardURL}"]`)
       .click();
   }
 
@@ -119,7 +144,7 @@ test.describe('Card Chooser', () => {
 
     await page
       .locator(
-        `[data-test-stack-card="${realm1URL}consumer"] [data-test-edit-button]`,
+        `[data-test-stack-card="${consumingCardURL}"] [data-test-edit-button]`,
       )
       .click();
     await page.locator('[data-test-add-new]').click();
@@ -149,18 +174,18 @@ test.describe('Card Chooser', () => {
       .click();
     await expect(
       page.locator(
-        `[data-test-stack-card="${realm1URL}consumer"] [data-test-links-to-editor="friend"]`,
+        `[data-test-stack-card="${consumingCardURL}"] [data-test-links-to-editor="friend"]`,
       ),
     ).toContainText('Mango');
 
     // revisit the card again to make sure the linked card value loads from the index
-    await page.goto(`${realm1URL}consumer`);
+    await page.goto(`${consumingCardURL}`);
     await expect(
-      page.locator(`[data-test-stack-card="${realm1URL}consumer"]`),
+      page.locator(`[data-test-stack-card="${consumingCardURL}"]`),
     ).toHaveCount(1);
     await expect(
       page.locator(
-        `[data-test-stack-card="${realm1URL}consumer"] [data-test-field="friend"]`,
+        `[data-test-stack-card="${consumingCardURL}"] [data-test-field="friend"]`,
       ),
     ).toContainText('Mango');
   });
@@ -172,36 +197,36 @@ test.describe('Card Chooser', () => {
 
     await page
       .locator(
-        `[data-test-stack-card="${realm1URL}consumer"] [data-test-edit-button]`,
+        `[data-test-stack-card="${consumingCardURL}"] [data-test-edit-button]`,
       )
       .click();
     await page.locator('[data-test-add-new]').click();
     await expect(
-      page.locator(`[data-test-select="${realm2URL}link"]`),
+      page.locator(`[data-test-select="${linkedCardURL}"]`),
     ).toHaveCount(1);
-    await page.locator(`[data-test-select="${realm2URL}link"]`).click();
+    await page.locator(`[data-test-select="${linkedCardURL}"]`).click();
     await page.locator(`[data-test-card-catalog-go-button]`).click();
     await expect(page.locator('[data-test-card-catalog-modal]')).toHaveCount(0);
 
     await expect(
       page.locator(
-        `[data-test-stack-card="${realm1URL}consumer"] [data-test-last-saved]`,
+        `[data-test-stack-card="${consumingCardURL}"] [data-test-last-saved]`,
       ),
     ).toHaveCount(1);
     await expect(
       page.locator(
-        `[data-test-stack-card="${realm1URL}consumer"] [data-test-links-to-editor="friend"]`,
+        `[data-test-stack-card="${consumingCardURL}"] [data-test-links-to-editor="friend"]`,
       ),
     ).toContainText('Friend Link');
 
     // revisit the card again to make sure the linked card value loads from the index
-    await page.goto(`${realm1URL}consumer`);
+    await page.goto(`${consumingCardURL}`);
     await expect(
-      page.locator(`[data-test-stack-card="${realm1URL}consumer"]`),
+      page.locator(`[data-test-stack-card="${consumingCardURL}"]`),
     ).toHaveCount(1);
     await expect(
       page.locator(
-        `[data-test-stack-card="${realm1URL}consumer"] [data-test-field="friend"]`,
+        `[data-test-stack-card="${consumingCardURL}"] [data-test-field="friend"]`,
       ),
     ).toContainText('Friend Link');
   });
