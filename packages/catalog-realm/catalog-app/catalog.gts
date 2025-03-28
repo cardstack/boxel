@@ -17,7 +17,11 @@ import { Query, isCardInstance, Filter } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 
-import { FilterCategoryGroup } from './components/filter-section';
+import {
+  FilterCategoryGroup,
+  FilterTagGroup,
+  type FilterItem,
+} from './components/filter-section';
 import CardsDisplaySection, {
   CardsIntancesGrid,
 } from './components/cards-display-section';
@@ -275,6 +279,27 @@ class Isolated extends Component<typeof Catalog> {
     this.activeCategoryId = category.id;
   }
 
+  // TODO: Remove this after we get the real tags from query
+  mockTags = [
+    { id: 'ai', name: 'AI' },
+    { id: 'bundled', name: 'Bundled' },
+    { id: 'official', name: 'Official' },
+    { id: 'userContributed', name: 'User Contributed' },
+    { id: 'solo', name: 'Solo' },
+  ];
+
+  @tracked activeTagIds: string[] = [];
+
+  @action
+  handleTagSelect(item: FilterItem) {
+    if (this.activeTagIds.includes(item.id)) {
+      this.activeTagIds = this.activeTagIds.filter((id) => id !== item.id);
+    } else {
+      this.activeTagIds = [...this.activeTagIds, item.id];
+    }
+  }
+
+  //query
   get listingQuery(): Query {
     const listingTypeRef = {
       module: new URL('./listing/listing', import.meta.url).href,
@@ -374,6 +399,12 @@ class Isolated extends Component<typeof Catalog> {
             @activeId={{this.activeCategoryId}}
             @onItemSelect={{this.handleCategorySelect}}
           />
+          <FilterTagGroup
+            @title='Tags'
+            @items={{this.mockTags}}
+            @activeIds={{this.activeTagIds}}
+            @onItemSelect={{this.handleTagSelect}}
+          />
         </ContentContainer>
       </:sidebar>
       <:content>
@@ -449,6 +480,14 @@ class Isolated extends Component<typeof Catalog> {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xxl);
+      }
+
+      /* Sidebar */
+      .filters-container {
+        --content-container-background-color: transparent;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
       }
 
       .operator-mode .buried .cards,
