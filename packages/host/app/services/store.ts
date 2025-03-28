@@ -168,6 +168,7 @@ export default class StoreService extends Service {
         // be unloaded when switching from edit to view modes as it will be
         // dereferenced during the switch over because of component teardown.
         this.markForGarbageCollection(id!);
+        // TODO need to walk the graph of the links to make sure they are garbage collected as well
       }
 
       // if there are no more subscribers to this realm then unsubscribe from realm
@@ -181,6 +182,9 @@ export default class StoreService extends Service {
       }
     }
   }
+
+  // TODO: use a global timer for garbage collection, and then just crawl items to
+  // see if they are deletable
 
   private markForGarbageCollection(url: string) {
     clearTimeout(this.garbageCollection.get(url));
@@ -216,20 +220,20 @@ export default class StoreService extends Service {
     isLive?: boolean;
     isAutoSaved?: boolean;
   }): Promise<{
-    url: string | undefined;
     card: CardDef | undefined;
     error: CardError | undefined;
   }> {
+    let url = asURL(urlOrDoc);
+    if (!url) {
+      throw new Error(`Cannot create subscriber with doc that has no ID`);
+    }
     let cardOrError = await this.getCard(urlOrDoc, relativeTo);
     let card = isCardInstance(cardOrError) ? cardOrError : undefined;
     let error = !isCardInstance(cardOrError) ? cardOrError : undefined;
 
-    let url = cardOrError.id;
-    if (!url || !isLive) {
+    if (!isLive) {
       await this.handleUpdatedCard(undefined, cardOrError);
-      // when there is no 'url' it is likely a card error for a doc without an ID
       return {
-        url: url ?? ('url' in resource ? resource.url : undefined),
         card,
         error,
       };
@@ -281,7 +285,18 @@ export default class StoreService extends Service {
       }
     }
     await this.handleUpdatedCard(undefined, cardOrError);
-    return { url, card, error };
+    return { card, error };
+  }
+
+  async createInstance(
+    doc: LooseSingleCardDocument,
+    relativeTo: URL | undefined,
+  ): Promise<string | CardError> {
+    let cardOrError = await this.getCard(doc, relativeTo);
+    if (isCardInstance(cardOrError)) {
+      return cardOrError.id;
+    }
+    return cardOrError;
   }
 
   // This method is used for specific scenarios where you just want an instance
@@ -289,10 +304,10 @@ export default class StoreService extends Service {
   // garbage collection--meaning that it will be detached from the store. This
   // means you MUST consume the instance IMMEDIATELY! it should not live in the
   // state of the consumer.
-  async peek(url: string): Promise<CardDef | CardError> {
+  async peek<T extends CardDef>(url: string): Promise<T | CardError> {
     let cached = this.identityContext.get(url);
     if (cached) {
-      return cached;
+      return cached as T;
     }
     try {
       let doc = await this.cardService.fetchJSON(url);
@@ -311,7 +326,7 @@ export default class StoreService extends Service {
           },
         };
       }
-      let instance = await this.cardService.createFromSerialized(
+      let instance = await this.cardService.createFromSerialized<T>(
         doc.data as LooseCardResource,
         doc,
         new URL(url),

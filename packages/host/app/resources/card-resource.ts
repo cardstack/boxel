@@ -2,7 +2,7 @@
 // named 'card.ts' the browser sourcemap conflates this module with the card
 // controller, also named 'card.ts'.
 
-import { registerDestructor, destroy } from '@ember/destroyable';
+import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { buildWaiter } from '@ember/test-waiters';
 import { tracked } from '@glimmer/tracking';
@@ -11,14 +11,10 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
 
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
-
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import { type CardError } from '../services/store';
-
-import { asURL } from '../services/store';
 
 import type CardService from '../services/card-service';
 
@@ -30,7 +26,7 @@ interface Args {
   named: {
     // using string type here so that URL's that have the same href but are
     // different instances don't result in re-running the resource
-    urlOrDoc: string | LooseSingleCardDocument | undefined;
+    url: string | undefined;
     isLive: boolean;
 
     // TODO the fact this is not always constructed in a container is super
@@ -42,7 +38,6 @@ interface Args {
     // services
     storeService: StoreService;
     cardService: CardService;
-    relativeTo?: URL;
     isAutoSaved: boolean;
   };
 }
@@ -59,8 +54,7 @@ export class CardResource extends Resource<Args> {
   private _loading:
     | {
         promise: Promise<void>;
-        urlOrDoc: string | LooseSingleCardDocument | undefined;
-        relativeTo: URL | undefined;
+        url: string | undefined;
       }
     | undefined;
   declare private store: StoreService;
@@ -76,28 +70,21 @@ export class CardResource extends Resource<Args> {
   ) => void;
 
   modify(_positional: never[], named: Args['named']) {
-    let {
-      urlOrDoc,
-      isLive,
-      isAutoSaved,
-      storeService,
-      cardService,
-      relativeTo,
-    } = named;
+    let { url, isLive, isAutoSaved, storeService, cardService } = named;
+    if (!url) {
+      return;
+    }
+
     this.store = storeService;
     this.cardService = cardService;
-    this.#url = urlOrDoc ? asURL(urlOrDoc) : undefined;
+    this.#url = url;
     this.#isLive = isLive;
     this.#isAutoSaved = isAutoSaved;
 
-    if (
-      urlOrDoc !== this._loading?.urlOrDoc ||
-      relativeTo !== this._loading?.relativeTo
-    ) {
+    if (url !== this._loading?.url) {
       this._loading = {
-        promise: this.load.perform(urlOrDoc, relativeTo),
-        urlOrDoc,
-        relativeTo,
+        promise: this.load.perform(url),
+        url,
       };
     }
 
@@ -140,51 +127,34 @@ export class CardResource extends Resource<Args> {
     return this._loading?.promise;
   }
 
-  // if there was an error creating a card, then we won't have a URL
-  async getNewCardURL(): Promise<string | undefined> {
-    if (this.url) {
-      return this.url;
+  private load = restartableTask(async (url: string) => {
+    let card: CardDef | undefined;
+    let error: CardError | undefined;
+
+    let token = waiter.beginAsync();
+    try {
+      this.#api = await this.cardService.getAPI();
+      ({ card, error } = await this.store.createSubscriber({
+        resource: this,
+        urlOrDoc: url,
+        isAutoSaved: this.isAutoSaved,
+        isLive: this.isLive,
+        setCard: (card) => {
+          if (card !== this.card) {
+            this._card = card;
+          }
+        },
+        setCardError: (error) => (this._error = error),
+      }));
+      this._loading = undefined;
+      this.#url = url;
+      this._card = card;
+      this._error = error;
+      this._isLoaded = true;
+    } finally {
+      waiter.endAsync(token);
     }
-    await this._loading?.promise;
-    return this.url;
-  }
-
-  private load = restartableTask(
-    async (
-      urlOrDoc: string | LooseSingleCardDocument | undefined,
-      relativeTo?: URL,
-    ) => {
-      let url: string | undefined;
-      let card: CardDef | undefined;
-      let error: CardError | undefined;
-
-      let token = waiter.beginAsync();
-      try {
-        if (urlOrDoc) {
-          this.#api = await this.cardService.getAPI();
-          ({ url, card, error } = await this.store.createSubscriber({
-            resource: this,
-            urlOrDoc,
-            relativeTo,
-            isAutoSaved: this.isAutoSaved,
-            isLive: this.isLive,
-            setCard: (card) => {
-              if (card !== this.card) {
-                this._card = card;
-              }
-            },
-            setCardError: (error) => (this._error = error),
-          }));
-        }
-        this.#url = url;
-        this._card = card;
-        this._error = error;
-        this._isLoaded = true;
-      } finally {
-        waiter.endAsync(token);
-      }
-    },
-  );
+  });
 
   // TODO refactor this out
   get api() {
@@ -194,23 +164,6 @@ export class CardResource extends Resource<Args> {
       );
     }
     return this.#api;
-  }
-
-  // There are scenarios where we have a resource and we literally don't care
-  // about the life time because we need to grab a property off of it (like
-  // using a Spec when creating a new card). In that case we can throw away the
-  // resource and just get the underlying card. This means that the resulting
-  // instance is not auto saving and not receiving live updates and is eligible
-  // for garbage collection--meaning that it will be detached from the store.
-  // This means you MUST consume the instance IMMEDIATELY! it should not live in
-  // the state of the consumer.
-  async dispose() {
-    await this._loading?.promise;
-    try {
-      return this.card ?? this.cardError;
-    } finally {
-      destroy(this);
-    }
   }
 }
 
@@ -226,7 +179,7 @@ export class CardResource extends Resource<Args> {
 // let's talk.
 export function getCard(
   parent: object,
-  urlOrDoc: () => string | LooseSingleCardDocument | undefined,
+  url: () => string | undefined,
   opts?: {
     relativeTo?: URL; // used for new cards
     isLive?: boolean;
@@ -235,7 +188,7 @@ export function getCard(
 ) {
   return CardResource.from(parent, () => ({
     named: {
-      urlOrDoc: urlOrDoc(),
+      url: url(),
       isLive: opts?.isLive != null ? opts.isLive : true,
       relativeTo: opts?.relativeTo,
       isAutoSaved: opts?.isAutoSaved != null ? opts.isAutoSaved : false,

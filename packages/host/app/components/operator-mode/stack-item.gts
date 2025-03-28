@@ -71,6 +71,7 @@ import type EnvironmentService from '../../services/environment-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
+import type StoreService from '../../services/store';
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;
@@ -120,6 +121,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare loaderService: LoaderService;
+  @service private declare store: StoreService;
 
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private animationType:
@@ -249,6 +251,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       commandContext: this.args.commandContext,
       getCard: this.getCard,
       getCards: this.getCards,
+      store: this.store,
     };
   }
 

@@ -145,7 +145,6 @@ class SprintPlannerIsolated extends Component<typeof SprintPlanner> {
             };
 
             await this.args.context?.actions?.createCard?.(
-              this,
               this.config.taskSource,
               new URL(this.config.taskSource.module),
               {

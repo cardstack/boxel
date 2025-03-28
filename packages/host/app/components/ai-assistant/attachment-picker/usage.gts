@@ -8,8 +8,6 @@ import { TrackedArray } from 'tracked-built-ins';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { type getCard } from '@cardstack/runtime-common';
-
 import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -23,12 +21,9 @@ export default class AiAssistantCardPickerUsage extends Component {
   @tracked autoAttachedFile?: FileDef | undefined;
   @tracked filesToAttach: TrackedArray<FileDef> = new TrackedArray([]);
 
-  @action chooseCard(cardResource: ReturnType<getCard>) {
-    if (!cardResource.url) {
-      return;
-    }
-    if (!this.cardIds.includes(cardResource.url)) {
-      this.cardIds.push(cardResource.url);
+  @action chooseCard(cardId: string) {
+    if (!this.cardIds.includes(cardId)) {
+      this.cardIds.push(cardId);
     }
   }
 
@@ -61,7 +56,6 @@ export default class AiAssistantCardPickerUsage extends Component {
         <AiAssistantAttachmentPicker
           @autoAttachedCardIds={{this.autoAttachedCardIds}}
           @cardIdsToAttach={{this.cardIds}}
-          @cardChoosingOwner={{this}}
           @chooseCard={{this.chooseCard}}
           @removeCard={{this.removeCard}}
           @chooseFile={{this.chooseFile}}

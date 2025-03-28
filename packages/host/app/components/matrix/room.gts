@@ -140,7 +140,6 @@ export default class Room extends Component<Signature> {
               <AiAssistantSkillMenu
                 class='skills'
                 @skills={{this.sortedSkills}}
-                @cardChoosingOwner={{this}}
                 @onChooseCard={{perform this.attachSkillTask}}
                 @onUpdateSkillIsActive={{perform this.updateSkillIsActiveTask}}
                 data-test-skill-menu
@@ -162,7 +161,6 @@ export default class Room extends Component<Signature> {
               <AiAssistantAttachmentPicker
                 @autoAttachedCardIds={{this.autoAttachedCardIds}}
                 @cardIdsToAttach={{this.cardIdsToAttach}}
-                @cardChoosingOwner={{this}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
                 @chooseFile={{this.chooseFile}}
@@ -678,15 +676,12 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private chooseCard(cardResource: ReturnType<getCard>) {
-    if (!cardResource?.url) {
-      return;
-    }
+  private chooseCard(cardId: string) {
     let cardIds = this.cardIdsToAttach ?? [];
-    if (!cardIds.includes(cardResource.url)) {
+    if (!cardIds.includes(cardId)) {
       this.matrixService.cardsToSend.set(this.args.roomId, [
         ...cardIds,
-        cardResource.url,
+        cardId,
       ]);
     }
   }
@@ -861,21 +856,19 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  private attachSkillTask = task(
-    async (cardResource: ReturnType<getCard<SkillCard>>) => {
-      let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
-        this.commandService.commandContext,
-      );
+  private attachSkillTask = task(async (cardId: string) => {
+    let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      this.commandService.commandContext,
+    );
 
-      let skillCard = await cardResource.dispose();
-      if (skillCard && isCardInstance(skillCard)) {
-        await addSkillsToRoomCommand.execute({
-          roomId: this.args.roomId,
-          skills: [skillCard],
-        });
-      }
-    },
-  );
+    let skillCard = await this.store.peek<SkillCard>(cardId);
+    if (skillCard && isCardInstance(skillCard)) {
+      await addSkillsToRoomCommand.execute({
+        roomId: this.args.roomId,
+        skills: [skillCard],
+      });
+    }
+  });
 }
 
 declare module '@glint/environment-ember-loose/registry' {

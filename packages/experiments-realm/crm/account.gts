@@ -199,7 +199,6 @@ class IsolatedTemplate extends Component<typeof Account> {
     };
 
     await this.args.context?.actions?.createCard?.(
-      this,
       taskSource,
       new URL(taskSource.module),
       {

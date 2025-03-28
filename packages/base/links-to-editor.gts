@@ -25,6 +25,7 @@ import {
   getNarrowestType,
   Loader,
   type ResolvedCodeRef,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
@@ -150,8 +151,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
-    let chosenCardResource = await chooseCard(
-      this,
+    let cardId = await chooseCard(
       { filter: { type } },
       {
         offerToCreate: {
@@ -163,13 +163,10 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
-    if (chosenCardResource) {
-      // this resource is our own (tied to this component's lifetime),
-      // but we need to make sure the card is loaded before we can set
-      // the value of the BoxModel
-      await chosenCardResource.loaded;
-      if (chosenCardResource.card) {
-        this.args.model.value = chosenCardResource.card;
+    if (cardId) {
+      let card = await this.cardContext.store.peek(cardId);
+      if (isCardInstance(card)) {
+        this.args.model.value = card;
       }
     }
   });

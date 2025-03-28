@@ -176,7 +176,6 @@ export function isMatrixCardError(
 }
 
 export type CreateNewCard = (
-  owner: object,
   ref: CodeRef,
   relativeTo: URL | undefined,
   opts?: {
@@ -184,11 +183,10 @@ export type CreateNewCard = (
     doc?: LooseSingleCardDocument;
     realmURL?: URL;
   },
-) => Promise<string>;
+) => Promise<string | undefined>;
 
 export interface CardChooser {
-  chooseCard<T extends CardDef>(
-    owner: object,
+  chooseCard(
     query: CardCatalogQuery,
     opts?: {
       offerToCreate?: {
@@ -200,15 +198,14 @@ export interface CardChooser {
       createNewCard?: CreateNewCard;
       consumingRealm?: URL;
     },
-  ): Promise<undefined | ReturnType<getCard<T>>>;
+  ): Promise<undefined | string>;
 }
 
 export interface FileChooser {
   chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
 }
 
-export async function chooseCard<T extends CardDef>(
-  owner: object,
+export async function chooseCard(
   query: CardCatalogQuery,
   opts?: {
     offerToCreate?: {
@@ -221,7 +218,7 @@ export async function chooseCard<T extends CardDef>(
     preselectedCardTypeQuery?: Query;
     consumingRealm?: URL;
   },
-): Promise<undefined | ReturnType<getCard<T>>> {
+): Promise<undefined | string> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
     throw new Error(
@@ -230,7 +227,7 @@ export async function chooseCard<T extends CardDef>(
   }
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
-  return await chooser.chooseCard<T>(owner, query, opts);
+  return await chooser.chooseCard(query, opts);
 }
 
 export async function chooseFile<T extends FieldDef>(): Promise<
@@ -272,11 +269,10 @@ export type AutoSaveState = {
 };
 export type getCard<T extends CardDef = CardDef> = (
   parent: object,
-  url: () => string | LooseSingleCardDocument | undefined,
+  url: () => string | undefined,
   opts?: {
     isLive?: boolean;
     isAutoSaved?: boolean;
-    relativeTo?: URL; // used for new cards
   },
 ) => // This is a duck type of the CardResource
 {
@@ -307,13 +303,20 @@ export type getCards = (
   isLoading: boolean;
 };
 
+export interface Store {
+  createInstance(
+    doc: LooseSingleCardDocument,
+    relativeTo: URL | undefined,
+  ): Promise<string | CardErrorJSONAPI>;
+  peek<T extends CardDef>(url: string): Promise<T | CardErrorJSONAPI>;
+}
+
 export interface CardCatalogQuery extends Query {
   filter?: CardTypeFilter | EveryFilter;
 }
 
 export interface CardCreator {
   create(
-    owner: object,
     ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: {
@@ -324,7 +327,6 @@ export interface CardCreator {
 }
 
 export async function createNewCard(
-  owner: object,
   ref: CodeRef,
   relativeTo: URL | undefined,
   opts?: {
@@ -340,7 +342,7 @@ export async function createNewCard(
   }
   let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
 
-  return await cardCreator.create(owner, ref, relativeTo, opts);
+  return await cardCreator.create(ref, relativeTo, opts);
 }
 
 export interface RealmSubscribe {
@@ -371,7 +373,6 @@ export interface SearchQuery {
 
 export interface Actions {
   createCard: (
-    owner: object,
     ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: {
@@ -381,7 +382,7 @@ export interface Actions {
       doc?: LooseSingleCardDocument; // initial data for the card
       cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
     },
-  ) => Promise<string>;
+  ) => Promise<string | undefined>;
   viewCard: (
     cardOrURL: CardDef | URL,
     format?: Format,

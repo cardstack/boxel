@@ -394,8 +394,7 @@ class Isolated extends Component<typeof CardsGrid> {
         ],
       };
     }
-    let specResource = await chooseCard<Spec>(
-      this,
+    let specId = await chooseCard(
       {
         filter: {
           on: specRef,
@@ -404,17 +403,16 @@ class Isolated extends Component<typeof CardsGrid> {
       },
       { preselectedCardTypeQuery },
     );
-    if (!specResource?.url) {
+    if (!specId) {
       return;
     }
 
-    let spec = await specResource.dispose();
+    let spec = await this.args.context?.store.peek<Spec>(specId);
 
-    if (spec?.id && isCardInstance<Spec>(spec)) {
+    if (spec && isCardInstance<Spec>(spec)) {
       await this.args.context?.actions?.createCard?.(
-        this,
         spec.ref,
-        new URL(spec.id),
+        new URL(specId),
         {
           realmURL: this.args.model[realmURL],
         },

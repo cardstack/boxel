@@ -39,8 +39,7 @@ interface Signature {
     cardIdsToAttach: string[] | undefined;
     autoAttachedFile?: FileDef;
     filesToAttach: FileDef[] | undefined;
-    cardChoosingOwner: object;
-    chooseCard: (card: ReturnType<getCard>) => void;
+    chooseCard: (cardId: string) => void;
     removeCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void;
     removeFile: (file: FileDef) => void;
@@ -143,7 +142,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               @iconWidth='14'
               @iconHeight='14'
               {{on 'click' this.chooseCard}}
-              @disabled={{this.doChooseCard.isRunning}}
+              @disabled={{this.chooseCardTask.isRunning}}
               data-test-choose-card-btn
             >
               <span class={{if this.cards.length 'boxel-sr-only'}}>
@@ -272,18 +271,17 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   }
 
   @action
-  private async chooseCard() {
-    let card = await this.doChooseCard.perform();
-    if (card) {
-      this.args.chooseCard(card);
-    }
+  private chooseCard() {
+    this.chooseCardTask.perform();
   }
 
-  private doChooseCard = restartableTask(async () => {
-    let chosenCardResource = await chooseCard(this.args.cardChoosingOwner, {
+  private chooseCardTask = restartableTask(async () => {
+    let cardId = await chooseCard({
       filter: { type: baseCardRef },
     });
-    return chosenCardResource;
+    if (cardId) {
+      this.args.chooseCard(cardId);
+    }
   });
 
   @action

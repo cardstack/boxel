@@ -31,6 +31,7 @@ import {
   RealmURLContextName,
   getNarrowestType,
   Loader,
+  isCardInstance,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
@@ -106,8 +107,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let filter = {
       every: [{ type }, ...selectedCardsQuery],
     };
-    let chosenCardResource = await chooseCard(
-      this,
+    let cardId = await chooseCard(
       { filter },
       {
         offerToCreate: {
@@ -120,13 +120,10 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
-    if (chosenCardResource) {
-      // this resource is our own (tied to this component's lifetime),
-      // but we need to make sure the card is loaded before we can set
-      // the value of the BoxModel
-      await chosenCardResource.loaded;
-      if (chosenCardResource.card) {
-        selectedCards = [...selectedCards, chosenCardResource.card];
+    if (cardId) {
+      let card = await this.cardContext.store.peek(cardId);
+      if (isCardInstance(card)) {
+        selectedCards = [...selectedCards, card];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;
       }
     }

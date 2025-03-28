@@ -63,11 +63,8 @@ export default class PillMenuUsage extends Component {
     console.log('Header button clicked');
   }
 
-  @action private onChooseCard(cardResource: ReturnType<getCard>) {
-    this.items = [
-      ...this.items,
-      new TrackedObject({ cardId: cardResource.url!, isActive: true }),
-    ];
+  @action private onChooseCard(cardId: string) {
+    this.items = [...this.items, new TrackedObject({ cardId, isActive: true })];
   }
 
   @action private onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {
@@ -89,7 +86,6 @@ export default class PillMenuUsage extends Component {
           @headerAction={{this.headerAction}}
           @canAttachCard={{this.canAttachCard}}
           @onChooseCard={{this.onChooseCard}}
-          @cardChoosingOwner={{this}}
           @onChangeItemIsActive={{this.onChangeItemIsActive}}
         >
           <:headerIcon>

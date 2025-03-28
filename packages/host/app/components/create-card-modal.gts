@@ -30,6 +30,7 @@ import CardEditor from './card-editor';
 import ModalContainer from './modal-container';
 
 import type CardService from '../services/card-service';
+import type StoreService from '../services/store';
 
 // Is this actually still being used in our app?? or can we remove it?
 
@@ -51,8 +52,9 @@ export default class CreateCardModal extends Component {
   </template>
 
   @consume(GetCardContextName) private declare getCard: getCard;
-  @service declare cardService: CardService;
-  @tracked currentRequest:
+  @service private declare cardService: CardService;
+  @service private declare store: StoreService;
+  @tracked private currentRequest:
     | {
         cardResource: ReturnType<getCard>;
         deferred: Deferred<string | undefined>;
@@ -68,7 +70,6 @@ export default class CreateCardModal extends Component {
   }
 
   async create(
-    owner: object,
     ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: {
@@ -76,14 +77,13 @@ export default class CreateCardModal extends Component {
       doc?: LooseSingleCardDocument;
     },
   ): Promise<undefined | string> {
-    return (await this._create.perform(owner, ref, relativeTo, opts)) as
+    return (await this._create.perform(ref, relativeTo, opts)) as
       | string
       | undefined;
   }
 
   private _create = enqueueTask(
     async (
-      owner: object,
       ref: CodeRef,
       relativeTo: URL | undefined, // this relativeTo should be the spec ID that the CodeRef comes from
       opts?: {
@@ -109,12 +109,23 @@ export default class CreateCardModal extends Component {
           },
         },
       };
-      let cardResource = this.getCard(owner, () => doc, { isAutoSaved: true });
-      this.currentRequest = {
-        cardResource,
-        deferred: new Deferred(),
-      };
-      return await this.currentRequest.deferred.promise;
+
+      let maybeUrl = await this.store.createInstance(doc, relativeTo);
+      if (typeof maybeUrl === 'string') {
+        let url = maybeUrl;
+        let cardResource = this.getCard(this, () => url, {
+          isAutoSaved: true,
+        });
+        this.currentRequest = {
+          cardResource,
+          deferred: new Deferred(),
+        };
+        return await this.currentRequest.deferred.promise;
+      }
+      console.error(
+        `could not create card: ${JSON.stringify(maybeUrl, null, 2)}`,
+      );
+      return undefined;
     },
   );
 

@@ -474,7 +474,6 @@ class RequirementsTab extends GlimmerComponent<{
         }
 
         await this.args.context?.actions?.createCard?.(
-          this,
           this.cardRef,
           this.args.currentRealm,
           { doc },

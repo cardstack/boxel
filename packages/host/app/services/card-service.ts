@@ -174,14 +174,19 @@ export default class CardService extends Service {
   // instead for getting card instances. When you create card instances
   // directly from here it bypasses the store's identity map and instances
   // created directly from here will behave very problematically.
-  async createFromSerialized(
+  async createFromSerialized<T extends CardDef>(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: URL | undefined,
     opts?: { identityContext?: IdentityContext },
-  ): Promise<CardDef> {
+  ): Promise<T> {
     let api = await this.getAPI();
-    let card = await api.createFromSerialized(resource, doc, relativeTo, opts);
+    let card = (await api.createFromSerialized(
+      resource,
+      doc,
+      relativeTo,
+      opts,
+    )) as T;
     // it's important that we absorb the field async here so that glimmer won't
     // encounter NotLoaded errors, since we don't have the luxury of the indexer
     // being able to inform us of which fields are used or not at this point.
@@ -191,7 +196,7 @@ export default class CardService extends Service {
       recomputeAllFields: true,
       loadFields: true,
     });
-    return card as CardDef;
+    return card;
   }
 
   async serializeCard(

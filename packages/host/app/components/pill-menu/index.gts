@@ -13,7 +13,6 @@ import { cn, gt, not, or } from '@cardstack/boxel-ui/helpers';
 import {
   chooseCard,
   baseCardRef,
-  type getCard,
   type CardCatalogQuery,
 } from '@cardstack/runtime-common';
 
@@ -31,11 +30,10 @@ interface Signature {
     items: PillMenuItem[];
     itemDisplayName?: string;
     isExpandableHeader?: boolean;
-    cardChoosingOwner: object;
     headerAction?: () => void;
     canAttachCard?: boolean;
     query?: CardCatalogQuery;
-    onChooseCard?: (cardResource: ReturnType<getCard>) => void;
+    onChooseCard?: (cardId: string) => void;
     onChangeItemIsActive: (item: PillMenuItem, isActive: boolean) => void;
   };
   Blocks: {
@@ -243,9 +241,9 @@ export default class PillMenu extends Component<Signature> {
 
   private doAttachCard = restartableTask(async () => {
     let query = this.args.query ?? { filter: { type: baseCardRef } };
-    let cardResource = await chooseCard(this.args.cardChoosingOwner, query);
-    if (cardResource) {
-      this.args.onChooseCard?.(cardResource);
+    let cardId = await chooseCard(query);
+    if (cardId) {
+      this.args.onChooseCard?.(cardId);
     }
   });
 }

@@ -560,12 +560,13 @@ export default class CreateFileModal extends Component<Signature> {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
 
-    this.chosenSpecResource = await chooseCard(this, {
+    let specId = await chooseCard({
       filter: {
         on: specRef,
         every: [{ eq: { specType: isField ? 'field' : 'card' } }],
       },
     });
+    this.chosenSpecResource = this.getCard(this, () => specId);
   });
 
   // this can be used for CardDefs or FieldDefs

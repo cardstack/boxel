@@ -403,7 +403,7 @@ class BlogAppTemplate extends Component<typeof BlogApp> {
         },
       },
     };
-    await this.args.context?.actions?.createCard?.(this, ref, currentRealm, {
+    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
       doc,
     });

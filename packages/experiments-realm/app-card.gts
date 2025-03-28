@@ -360,7 +360,6 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
           realmURL: this.args.currentRealm,
         };
         await this.args.context?.actions?.createCard?.(
-          this,
           this.activeTabRef,
           this.args.currentRealm,
           opts,

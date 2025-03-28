@@ -373,7 +373,7 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
         },
       },
     };
-    await this.args.context?.actions?.createCard?.(this, ref, currentRealm, {
+    await this.args.context?.actions?.createCard?.(ref, currentRealm, {
       realmURL: currentRealm,
       doc,
     });

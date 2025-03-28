@@ -40,6 +40,7 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
@@ -69,6 +70,7 @@ export default class EditFieldModal extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare store: StoreService;
 
   cardinalityItems = [
     {
@@ -173,18 +175,18 @@ export default class EditFieldModal extends Component<Signature> {
   });
 
   private chooseCardTask = restartableTask(async () => {
-    let chosenSpecResource = await chooseCard<Spec>(this, {
+    let specId = await chooseCard({
       filter: {
         type: specRef,
       },
     });
 
-    if (chosenSpecResource) {
-      let spec = await chosenSpecResource.dispose();
+    if (specId) {
+      let spec = await this.store.peek<Spec>(specId);
       if (spec && isCardInstance<Spec>(spec)) {
         this.fieldCard = await loadCard(spec.ref, {
           loader: this.loaderService.loader,
-          relativeTo: new URL(chosenSpecResource.url!),
+          relativeTo: new URL(specId),
         });
 
         this.isFieldDef = spec.isField;

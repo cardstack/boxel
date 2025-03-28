@@ -75,9 +75,8 @@ interface Signature {
 }
 
 type Request = {
-  owner: object;
   search: ReturnType<getCards>;
-  deferred: Deferred<ReturnType<getCard> | undefined>;
+  deferred: Deferred<string | undefined>;
   opts?: {
     offerToCreate?: {
       ref: CodeRef;
@@ -312,8 +311,7 @@ export default class CardCatalogModal extends Component<Signature> {
   }
 
   // This is part of our public API for runtime-common to invoke the card chooser
-  async chooseCard<T extends CardDef>(
-    owner: object,
+  async chooseCard(
     query: CardCatalogQuery,
     opts?: {
       offerToCreate?: {
@@ -326,9 +324,8 @@ export default class CardCatalogModal extends Component<Signature> {
       preselectedCardTypeQuery?: Query;
       consumingRealm?: URL;
     },
-  ): Promise<undefined | ReturnType<getCard<T>>> {
-    return (await this._chooseCard.perform(
-      owner,
+  ): Promise<undefined | string> {
+    return await this._chooseCard.perform(
       {
         // default to title sort so that we can maintain stability in
         // the ordering of the search results (server sorts results
@@ -345,12 +342,11 @@ export default class CardCatalogModal extends Component<Signature> {
         ...query,
       },
       opts,
-    )) as undefined | ReturnType<getCard<T>>;
+    );
   }
 
   private _chooseCard = task(
-    async <T extends CardDef>(
-      owner: object,
+    async (
       query: CardCatalogQuery,
       opts: {
         offerToCreate?: {
@@ -370,7 +366,6 @@ export default class CardCatalogModal extends Component<Signature> {
         opts?.multiSelect,
       );
       let request = new TrackedObject<Request>({
-        owner,
         search: this.getCards(this, () => query),
         deferred: new Deferred(),
         opts,
@@ -408,13 +403,7 @@ export default class CardCatalogModal extends Component<Signature> {
         consumingRealm: opts.consumingRealm,
       });
       this.stateStack.push(cardCatalogState);
-
-      let cardResource = await request.deferred.promise;
-      if (cardResource) {
-        return cardResource as ReturnType<getCard<T>>;
-      } else {
-        return undefined;
-      }
+      return await request.deferred.promise;
     },
   );
 
@@ -546,46 +535,39 @@ export default class CardCatalogModal extends Component<Signature> {
       if (!this.state) {
         return;
       }
-      let cardResource: ReturnType<getCard> | undefined;
+      let cardId: string | undefined;
       if (selectedItem) {
         let newCard: NewCardArgs | undefined;
         if (isCardInstance(selectedItem)) {
-          cardResource = this.getCard(
-            this.state.request.owner,
-            () => selectedItem.id,
-          );
+          cardId = selectedItem.id;
         } else if (typeof selectedItem === 'string') {
-          cardResource = this.getCard(
-            this.state.request.owner,
-            () => selectedItem,
-          );
+          cardId = selectedItem;
         } else {
           newCard = selectedItem;
         }
 
-        if (this.state.consumingRealm && cardResource?.url) {
+        if (this.state.consumingRealm && cardId) {
           await this.ensureRealmReadPermissions.perform(
             this.state.consumingRealm.href,
-            cardResource.url,
+            cardId,
           );
         }
 
         if (newCard) {
-          let cardId = await this.createNewTask.perform(
-            this.state.request.owner,
+          cardId = await this.createNewTask.perform(
             newCard.ref,
             newCard.relativeTo ? new URL(newCard.relativeTo) : undefined,
             new URL(newCard.realmURL),
           );
-          cardResource = this.getCard(this.state.request.owner, () => cardId);
         }
       }
 
       let request = state ? state.request : this.state.request;
       if (request) {
-        request.deferred.fulfill(cardResource);
+        request.deferred.fulfill(cardId);
       }
 
+      // TODO is this still necessary:
       // In the 'createNewCard' case, auto-save doesn't follow any specific order,
       // so we cannot guarantee that the outer 'createNewCard' process (the top item in the stack) will be saved before the inner one.
       // That's why we use state ID to remove state from the stack.
@@ -661,7 +643,6 @@ export default class CardCatalogModal extends Component<Signature> {
 
   private createNewTask = task(
     async (
-      owner: object,
       ref: CodeRef,
       relativeTo: URL | undefined /* this should be the spec ID */,
       realmURL: URL | undefined,
@@ -673,7 +654,6 @@ export default class CardCatalogModal extends Component<Signature> {
       this.state.dismissModal = true;
       if (this.state.request.opts?.createNewCard) {
         newCardId = await this.state.request.opts?.createNewCard(
-          owner,
           ref,
           relativeTo,
           {
@@ -682,7 +662,7 @@ export default class CardCatalogModal extends Component<Signature> {
           },
         );
       } else {
-        newCardId = await createNewCard(owner, ref, relativeTo, { realmURL });
+        newCardId = await createNewCard(ref, relativeTo, { realmURL });
       }
       return newCardId;
     },

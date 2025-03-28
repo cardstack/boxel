@@ -181,7 +181,6 @@ export default class InteractSubmode extends Component<Signature> {
   private publicAPI(here: InteractSubmode, stackIndex: number): Actions {
     return {
       createCard: async (
-        owner: object,
         ref: CodeRef,
         relativeTo: URL | undefined,
         opts?: {
@@ -190,7 +189,7 @@ export default class InteractSubmode extends Component<Signature> {
           doc?: LooseSingleCardDocument; // fill in card data with values
           cardModeAfterCreation?: Format;
         },
-      ): Promise<string> => {
+      ): Promise<string | undefined> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
         // we make the code ref use an absolute URL for safety in
         // the case it's being created in a different realm than where the card
@@ -214,20 +213,24 @@ export default class InteractSubmode extends Component<Signature> {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        let cardResource = here.getCard(owner, () => doc, {
-          relativeTo,
-          isAutoSaved: true,
-        });
-        let url = await cardResource.getNewCardURL();
-        let newItem = new StackItem({
-          url,
-          format: opts?.cardModeAfterCreation ?? 'edit',
-          request: new Deferred(),
-          isLinkedCard: opts?.isLinkedCard,
-          stackIndex,
-        });
-        here.addToStack(newItem);
-        return url;
+        let maybeUrl = await this.store.createInstance(doc, relativeTo);
+        if (typeof maybeUrl === 'string') {
+          let url = maybeUrl;
+          let newItem = new StackItem({
+            url,
+            format: opts?.cardModeAfterCreation ?? 'edit',
+            request: new Deferred(),
+            isLinkedCard: opts?.isLinkedCard,
+            stackIndex,
+          });
+          here.addToStack(newItem);
+          return url;
+        } else {
+          console.error(
+            `Error creating card: ${JSON.stringify(maybeUrl, null, 2)}`,
+          );
+          return undefined;
+        }
       },
       viewCard: (
         cardOrURL: CardDef | URL,
@@ -697,6 +700,7 @@ export default class InteractSubmode extends Component<Signature> {
       actions: this.publicAPI(this, 0),
       getCard: this.getCard,
       getCards: this.getCards,
+      store: this.store,
       // TODO: should we include this here??
       commandContext: this.commandService.commandContext,
     };
