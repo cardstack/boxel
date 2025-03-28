@@ -23,6 +23,11 @@ import { BoxelIcon } from '@cardstack/boxel-ui/icons';
 
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
+import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
+import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+
 import AiAssistantButton from '@cardstack/host/components/ai-assistant/button';
 import AiAssistantPanel from '@cardstack/host/components/ai-assistant/panel';
 import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
@@ -44,6 +49,7 @@ import Disclaimer from './disclaimer';
 
 import WorkspaceChooser from './workspace-chooser';
 
+import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
@@ -94,6 +100,7 @@ export default class SubmodeLayout extends Component<Signature> {
     defaultWidth: 30,
     minWidth: 25,
   });
+  @service private declare commandService: CommandService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare router: RouterService;
@@ -246,8 +253,34 @@ export default class SubmodeLayout extends Component<Signature> {
   }
 
   @action private onSendPrompt() {
-    this.aiPrompt = '';
+    this.sendMessageToNewRoom.perform('New AI Assistant Chat');
   }
+
+  private sendMessageToNewRoom = restartableTask(async (name: string) => {
+    let { commandContext } = this.commandService;
+
+    let createRoomCommand = new CreateAiAssistantRoomCommand(commandContext);
+    let { roomId } = await createRoomCommand.execute({ name });
+
+    let openRoomCommand = new OpenAiAssistantRoomCommand(commandContext);
+    await openRoomCommand.execute({ roomId });
+
+    let addSkillsCommand = new AddSkillsToRoomCommand(commandContext);
+    await addSkillsCommand.execute({
+      roomId,
+      skills: await this.matrixService.loadDefaultSkills(
+        this.operatorModeStateService.state.submode,
+      ),
+    });
+
+    let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
+    await sendMessageCommand.execute({
+      roomId,
+      prompt: this.aiPrompt,
+    });
+
+    this.aiPrompt = '';
+  });
 
   <template>
     <Disclaimer />
