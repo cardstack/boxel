@@ -1975,10 +1975,12 @@ export class Realm {
     // To remove as part of CS-8104, a workaround for a file watcher irregularity in tests
     let subscribeOptions: { watcher?: string } = {};
 
-    if (new URL(request.url).searchParams.has('testFileWatcher')) {
-      subscribeOptions.watcher = new URL(request.url).searchParams.get(
-        'testFileWatcher',
-      )!;
+    let testFileWatcher = new URL(request.url).searchParams.get(
+      'testFileWatcher',
+    );
+
+    if (testFileWatcher) {
+      subscribeOptions.watcher = testFileWatcher;
     }
 
     if (this.listeningClients.length === 0) {
@@ -2001,6 +2003,12 @@ export class Realm {
     }
 
     this.listeningClients.push(writable);
+
+    if (testFileWatcher) {
+      this.sendServerEvent({
+        type: 'test-file-watcher-ready',
+      });
+    }
 
     // TODO: We may need to store something else here to do cleanup to keep
     // tests consistent
