@@ -18,20 +18,26 @@ let component: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .disclaimer {
       position: fixed;
-      bottom: 2px;
+      bottom: var(--boxel-sp-xs);
       left: 50%;
       transform: translateX(-50%);
-      width: 996px;
+      width: 700px;
       text-align: center;
-      color: white;
+      color: var(--boxel-light);
       z-index: var(--host-disclaimer-z-index);
-      font-size: 0.7rem;
+    }
+
+    .disclaimer > p {
+      margin-block: 0;
+      font: var(--boxel-font-xs);
+      letter-spacing: var(--boxel-lsp-xxs);
+      line-height: 1.25;
     }
 
     @media screen and (max-width: 1445px) {
       .disclaimer {
-        width: 658px;
-        bottom: -8px;
+        width: 450px;
+        bottom: var(--boxel-sp-xxxs);
       }
     }
 
