@@ -46,9 +46,9 @@
   --boxel-sp-sm: calc(var(--boxel-sp) / var(--boxel-ratio)); /* 12px */
   --boxel-sp: var(--boxel-spacing); /* 16px */
   --boxel-sp-lg: calc(var(--boxel-sp) * var(--boxel-ratio)); /* 21.28px */
-  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 37.44px */
-  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 50.1px */
-  --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 66.6px */
+  --boxel-sp-xl: calc(var(--boxel-sp-lg) * var(--boxel-ratio)); /* 28.43px */
+  --boxel-sp-xxl: calc(var(--boxel-sp-xl) * var(--boxel-ratio)); /* 37.89px */
+  --boxel-sp-xxxl: calc(var(--boxel-sp-xxl) * var(--boxel-ratio)); /* 50.51px */
 
   /* common icon sizes */
   --boxel-icon-xxs: 0.75rem; /* 12px */
@@ -79,7 +79,7 @@
   --boxel-outline-width: 2px;
   --boxel-outline-color: var(--boxel-blue);
   --boxel-outline: var(--boxel-outline-width) solid var(--boxel-outline-color);
-  --boxel-deep-box-shadow: 0 15px 30px 0 rgba(0, 0, 0, 0.35);
+  --boxel-deep-box-shadow: 0 5px 15px 0 rgba(0 0 0 / 50%);
 
   /* Container sizes */
   --boxel-xxs-container: 15.625rem; /* 250px */
@@ -173,4 +173,6 @@
   --boxel-form-control-placeholder-color: var(--boxel-400);
   --boxel-form-control-border-color: var(--boxel-border-color);
   --boxel-form-control-border-radius: var(--boxel-border-radius);
+  --boxel-form-control-dark-mode-placeholder-color: #acacac;
+  --boxel-form-control-dark-mode-border: var(--boxel-border-flexible);
 }
