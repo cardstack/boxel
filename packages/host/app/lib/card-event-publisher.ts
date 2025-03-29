@@ -126,7 +126,7 @@ export default class CardEventPublisher {
     const roomSkills = roomResource?.skills ?? [];
     for (const skillCardEntry of skillCardEntries) {
       skillCardEntry.matchingRoomSkill = roomSkills.find(
-        (roomSkill) => roomSkill.card.id === skillCardEntry.card.id,
+        (roomSkill) => roomSkill.cardId === skillCardEntry.card.id,
       );
       if (skillCardEntry.matchingRoomSkill) {
         let commandDefinitions = (

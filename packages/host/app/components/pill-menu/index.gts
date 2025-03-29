@@ -18,10 +18,8 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 export type PillMenuItem = {
-  card: CardDef;
+  cardId: string;
   isActive: boolean;
 };
 
@@ -35,7 +33,7 @@ interface Signature {
     headerAction?: () => void;
     canAttachCard?: boolean;
     query?: CardCatalogQuery;
-    onChooseCard?: (card: CardDef) => void;
+    onChooseCard?: (cardId: string) => void;
     onChangeItemIsActive: (item: PillMenuItem, isActive: boolean) => void;
   };
   Blocks: {
@@ -87,10 +85,10 @@ export default class PillMenu extends Component<Signature> {
                 {{#each @items as |item|}}
                   <li>
                     <CardPill
-                      @card={{item.card}}
+                      @cardId={{item.cardId}}
                       @onToggle={{fn this.toggleActive item}}
                       @isEnabled={{item.isActive}}
-                      data-test-pill-menu-item={{item.card.id}}
+                      data-test-pill-menu-item={{item.cardId}}
                     />
                   </li>
                 {{/each}}
@@ -243,9 +241,9 @@ export default class PillMenu extends Component<Signature> {
 
   private doAttachCard = restartableTask(async () => {
     let query = this.args.query ?? { filter: { type: baseCardRef } };
-    let card: CardDef | undefined = await chooseCard(query);
-    if (card) {
-      this.args.onChooseCard?.(card);
+    let cardId = await chooseCard(query);
+    if (cardId) {
+      this.args.onChooseCard?.(cardId);
     }
   });
 }

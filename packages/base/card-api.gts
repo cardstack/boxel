@@ -47,6 +47,7 @@ import {
   type ResolvedCodeRef,
   type getCard,
   type getCards,
+  type Store,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
 import { initSharedState } from './shared-state';
@@ -149,6 +150,7 @@ export interface CardContext<T extends CardDef = CardDef> {
   prerenderedCardSearchComponent: any;
   getCard: getCard<T>;
   getCards: getCards;
+  store: Store;
 }
 
 function isNotLoadedValue(val: any): val is NotLoadedValue {

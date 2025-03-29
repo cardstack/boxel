@@ -8,14 +8,11 @@ import PillMenu, { PillMenuItem } from '@cardstack/host/components/pill-menu';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
-
 interface Signature {
   Element: HTMLDivElement;
   Args: {
     skills: RoomSkill[];
-    onChooseCard?: (card: SkillCard) => void;
+    onChooseCard?: (cardId: string) => void;
     onUpdateSkillIsActive?: (skillEventId: string, isActive: boolean) => void;
   };
 }
@@ -90,7 +87,7 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
   private get query() {
     let selectedCardIds =
       this.args.skills?.map((skill: RoomSkill) => ({
-        not: { eq: { id: skill.card.id } },
+        not: { eq: { id: skill.cardId } },
       })) ?? [];
     // query for only displaying skill cards that are not already selected
     return {
@@ -104,8 +101,8 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
     return this.args.skills?.filter((skill) => skill.isActive) ?? [];
   }
 
-  attachSkill = (card: CardDef) => {
-    this.args.onChooseCard?.(card as SkillCard);
+  attachSkill = (skillCardId: string) => {
+    this.args.onChooseCard?.(skillCardId);
   };
 
   updateItemIsActive = (item: PillMenuItem, isActive: boolean) => {

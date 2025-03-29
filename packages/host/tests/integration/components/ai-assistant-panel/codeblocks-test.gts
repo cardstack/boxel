@@ -138,11 +138,11 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     });
   });
 
-  async function setCardInOperatorModeState(
+  function setCardInOperatorModeState(
     cardURL?: string,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
-    await operatorModeStateService.restore({
+    operatorModeStateService.restore({
       stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
     });
   }
@@ -161,7 +161,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
   }
 
   async function renderAiAssistantPanel(id?: string) {
-    await setCardInOperatorModeState(id);
+    setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

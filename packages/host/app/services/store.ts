@@ -1,3 +1,5 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { formatDistanceToNow } from 'date-fns';
@@ -19,13 +21,12 @@ import {
   type CardErrorsJSONAPI as CardErrors,
 } from '@cardstack/runtime-common';
 
-import {
-  type CardDef,
-  type IdentityContext,
-} from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
+
+import IdentityContext from '../lib/gc-identity-context';
 
 import EnvironmentService from './environment-service';
 
@@ -39,38 +40,14 @@ import type { SearchResource } from '../resources/search';
 
 export { CardError };
 
-class ResettableIdentityContext implements IdentityContext {
-  #cards = new Map<
-    string,
-    {
-      card: CardDef | undefined;
-    }
-  >();
-
-  get(url: string): CardDef | undefined {
-    return this.#cards.get(url)?.card;
-  }
-  set(url: string, instance: CardDef | undefined): void {
-    this.#cards.set(url, { card: instance });
-  }
-  delete(url: string): void {
-    this.#cards.delete(url);
-  }
-  reset() {
-    for (let url of this.#cards.keys()) {
-      this.#cards.set(url, { card: undefined });
-    }
-  }
-}
-
 export default class StoreService extends Service {
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
+  declare private identityContext: IdentityContext;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
-  private identityContext = new ResettableIdentityContext();
   private subscribers: Map<
     string,
     {
@@ -90,6 +67,16 @@ export default class StoreService extends Service {
   private autoSaveStates: TrackedWeakMap<CardDef, AutoSaveState> =
     new TrackedWeakMap();
   private cardApiCache?: typeof CardAPI;
+  private gcInterval: number | undefined;
+  private ready: Promise<void>;
+
+  constructor(owner: Owner) {
+    super(owner);
+    this.ready = this.setup();
+    registerDestructor(this, () => {
+      clearInterval(this.gcInterval);
+    });
+  }
 
   unloadResource(resource: CardResource) {
     let id = resource.url;
@@ -108,7 +95,7 @@ export default class StoreService extends Service {
         if (onCardChange && resource.card) {
           let autoSaveState = this.getAutoSaveState(resource.card);
           if (autoSaveState?.hasUnsavedChanges) {
-            this.saveCard.perform(resource.card);
+            this.initiateAutoSaveTask.perform(id, { isImmediate: true });
           }
           let card = this.identityContext.get(id);
 
@@ -120,7 +107,6 @@ export default class StoreService extends Service {
       }
       if (resources.length === 0) {
         this.subscribers.delete(id);
-        this.identityContext.delete(id);
       }
 
       // if there are no more subscribers to this realm then unsubscribe from realm
@@ -152,20 +138,21 @@ export default class StoreService extends Service {
     isLive?: boolean;
     isAutoSaved?: boolean;
   }): Promise<{
-    url: string | undefined;
     card: CardDef | undefined;
     error: CardError | undefined;
   }> {
+    await this.ready;
+    let url = asURL(urlOrDoc);
+    if (!url) {
+      throw new Error(`Cannot create subscriber with doc that has no ID`);
+    }
     let cardOrError = await this.getCard(urlOrDoc, relativeTo);
     let card = isCardInstance(cardOrError) ? cardOrError : undefined;
     let error = !isCardInstance(cardOrError) ? cardOrError : undefined;
 
-    let url = cardOrError.id;
-    if (!url || !isLive) {
+    if (!isLive) {
       await this.handleUpdatedCard(undefined, cardOrError);
-      // when there is no 'url' it is likely a card error for a doc without an ID
       return {
-        url: url ?? ('url' in resource ? resource.url : undefined),
         card,
         error,
       };
@@ -217,15 +204,32 @@ export default class StoreService extends Service {
       }
     }
     await this.handleUpdatedCard(undefined, cardOrError);
-    return { url, card, error };
+    return { card, error };
+  }
+
+  async createInstance(
+    doc: LooseSingleCardDocument,
+    relativeTo: URL | undefined,
+  ): Promise<string | CardError> {
+    await this.ready;
+    let cardOrError = await this.getCard(doc, relativeTo);
+    if (isCardInstance(cardOrError)) {
+      return cardOrError.id;
+    }
+    return cardOrError;
   }
 
   // This method is used for specific scenarios where you just want an instance
-  // that is _not_ part of the identity map and detached from the store. This
-  // may include things like tests, freestyle usage guide, etc.
-  async getInstanceDetachedFromStore(
-    url: string,
-  ): Promise<CardDef | CardError> {
+  // that is not auto saving and not receiving live updates and is eligible for
+  // garbage collection--meaning that it will be detached from the store. This
+  // means you MUST consume the instance IMMEDIATELY! it should not live in the
+  // state of the consumer.
+  async peek<T extends CardDef>(url: string): Promise<T | CardError> {
+    await this.ready;
+    let cached = this.identityContext.get(url);
+    if (cached) {
+      return cached as T;
+    }
     try {
       let doc = await this.cardService.fetchJSON(url);
       if (!doc) {
@@ -243,15 +247,26 @@ export default class StoreService extends Service {
           },
         };
       }
-      return await this.cardService.createFromSerialized(
+      let instance = await this.cardService.createFromSerialized<T>(
         doc.data as LooseCardResource,
         doc,
         new URL(url),
       );
+      this.identityContext.set(url, instance);
+      return instance;
     } catch (error: any) {
       let errorResponse = processCardError(url, error);
       return errorResponse.errors[0];
     }
+  }
+
+  private async setup() {
+    let api = await this.cardService.getAPI();
+    this.identityContext = new IdentityContext(api, this.subscribers);
+    this.gcInterval = setInterval(
+      () => this.identityContext.sweep(),
+      2 * 60_000,
+    ) as unknown as number;
   }
 
   private handleInvalidations = (event: RealmEventContent) => {
@@ -467,33 +482,43 @@ export default class StoreService extends Service {
     return this.autoSaveStates.get(card);
   }
 
-  private initiateAutoSaveTask = restartableTask(async (id: string) => {
-    let card = this.identityContext.get(id);
-    if (!card) {
-      return;
-    }
-    let autoSaveState = this.initOrGetAutoSaveState(card);
-    autoSaveState.hasUnsavedChanges = true;
-    await timeout(this.environmentService.autoSaveDelayMs);
-    try {
-      autoSaveState.isSaving = true;
-      autoSaveState.lastSaveError = undefined;
+  save(id: string) {
+    this.initiateAutoSaveTask.perform(id, { isImmediate: true });
+  }
 
-      await timeout(25);
-      await this.saveCard.perform(card);
+  private initiateAutoSaveTask = restartableTask(
+    async (id: string, opts?: { isImmediate?: true }) => {
+      let card = this.identityContext.get(id);
+      if (!card) {
+        return;
+      }
+      let autoSaveState = this.initOrGetAutoSaveState(card);
+      autoSaveState.hasUnsavedChanges = true;
+      if (!opts?.isImmediate) {
+        await timeout(this.environmentService.autoSaveDelayMs);
+      }
+      try {
+        autoSaveState.isSaving = true;
+        autoSaveState.lastSaveError = undefined;
 
-      autoSaveState.hasUnsavedChanges = false;
-      autoSaveState.lastSaved = Date.now();
-      autoSaveState.lastSaveError = undefined;
-      autoSaveState.lastSavedErrorMsg = undefined;
-    } catch (error) {
-      // error will already be logged in CardService
-      autoSaveState.lastSaveError = error as Error;
-    } finally {
-      autoSaveState.isSaving = false;
-      this.calculateLastSavedMsg(autoSaveState);
-    }
-  });
+        if (!opts?.isImmediate) {
+          await timeout(25);
+        }
+        await this.saveCard.perform(card, opts);
+
+        autoSaveState.hasUnsavedChanges = false;
+        autoSaveState.lastSaved = Date.now();
+        autoSaveState.lastSaveError = undefined;
+        autoSaveState.lastSavedErrorMsg = undefined;
+      } catch (error) {
+        // error will already be logged in CardService
+        autoSaveState.lastSaveError = error as Error;
+      } finally {
+        autoSaveState.isSaving = false;
+        this.calculateLastSavedMsg(autoSaveState);
+      }
+    },
+  );
 
   private initOrGetAutoSaveState(card: CardDef): AutoSaveState {
     let autoSaveState = this.autoSaveStates.get(card);
@@ -510,11 +535,17 @@ export default class StoreService extends Service {
     return autoSaveState!;
   }
 
-  private saveCard = restartableTask(async (card: CardDef) => {
-    // these saves can happen so fast that we'll make sure to wait at
-    // least 500ms for human consumption
-    await all([this.cardService.saveModel(card), timeout(500)]);
-  });
+  private saveCard = restartableTask(
+    async (card: CardDef, opts?: { isImmediate?: true }) => {
+      if (opts?.isImmediate) {
+        await this.cardService.saveModel(card);
+      } else {
+        // these saves can happen so fast that we'll make sure to wait at
+        // least 500ms for human consumption
+        await all([this.cardService.saveModel(card), timeout(500)]);
+      }
+    },
+  );
 
   private calculateLastSavedMsg(autoSaveState: AutoSaveState) {
     let savedMessage: string | undefined;

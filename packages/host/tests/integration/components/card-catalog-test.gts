@@ -185,7 +185,7 @@ module('Integration | card-catalog', function (hooks) {
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
 
-    await operatorModeStateService.restore({
+    operatorModeStateService.restore({
       stacks: [
         [
           {

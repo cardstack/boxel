@@ -189,11 +189,11 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     });
   });
 
-  async function setCardInOperatorModeState(
+  function setCardInOperatorModeState(
     cardURL?: string,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
-    await operatorModeStateService.restore({
+    operatorModeStateService.restore({
       stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
     });
   }
@@ -212,7 +212,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   }
 
   async function renderAiAssistantPanel(id?: string) {
-    await setCardInOperatorModeState(id);
+    setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -272,7 +272,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   });
 
   test('when a command is being prepared, apply button is shown in preparing state', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -357,7 +357,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   });
 
   test('when command is done streaming, apply button is shown in ready state', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -497,7 +497,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   });
 
   test('after command is issued, a reaction event will be dispatched', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -571,7 +571,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   });
 
   test('after search command is issued, a command result event is dispatched', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -912,7 +912,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
   });
 
   test('it maintains status of View Code panel as additional events stream in', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

@@ -29,9 +29,10 @@ import {
   getPlural,
   CardContextName,
   RealmURLContextName,
-  type ResolvedCodeRef,
   getNarrowestType,
   Loader,
+  isCardInstance,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { IconMinusCircle, IconX, FourLines } from '@cardstack/boxel-ui/icons';
 import { eq } from '@cardstack/boxel-ui/helpers';
@@ -106,7 +107,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
     let filter = {
       every: [{ type }, ...selectedCardsQuery],
     };
-    let chosenCard: CardDef | undefined = await chooseCard(
+    let cardId = await chooseCard(
       { filter },
       {
         offerToCreate: {
@@ -119,9 +120,12 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
-    if (chosenCard) {
-      selectedCards = [...selectedCards, chosenCard];
-      (this.args.model.value as any)[this.args.field.name] = selectedCards;
+    if (cardId) {
+      let card = await this.cardContext.store.peek(cardId);
+      if (isCardInstance(card)) {
+        selectedCards = [...selectedCards, card];
+        (this.args.model.value as any)[this.args.field.name] = selectedCards;
+      }
     }
   });
 

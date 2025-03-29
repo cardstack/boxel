@@ -27,6 +27,7 @@ import {
   identifyCard,
   specRef,
   CodeRef,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import type { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
@@ -39,6 +40,7 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type RealmService from '@cardstack/host/services/realm';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { BaseDef, FieldType } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
@@ -68,6 +70,7 @@ export default class EditFieldModal extends Component<Signature> {
   @service declare loaderService: LoaderService;
   @service declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare store: StoreService;
 
   cardinalityItems = [
     {
@@ -172,25 +175,28 @@ export default class EditFieldModal extends Component<Signature> {
   });
 
   private chooseCardTask = restartableTask(async () => {
-    let chosenSpec = await chooseCard<Spec>({
+    let specId = await chooseCard({
       filter: {
         type: specRef,
       },
     });
 
-    if (chosenSpec) {
-      this.fieldCard = await loadCard(chosenSpec.ref, {
-        loader: this.loaderService.loader,
-        relativeTo: new URL(chosenSpec.id),
-      });
+    if (specId) {
+      let spec = await this.store.peek<Spec>(specId);
+      if (spec && isCardInstance<Spec>(spec)) {
+        this.fieldCard = await loadCard(spec.ref, {
+          loader: this.loaderService.loader,
+          relativeTo: new URL(specId),
+        });
 
-      this.isFieldDef = chosenSpec.isField;
-      this.cardURL = new URL(chosenSpec.id);
-      this.fieldRef = chosenSpec.ref;
+        this.isFieldDef = spec.isField;
+        this.cardURL = new URL(spec.id);
+        this.fieldRef = spec.ref;
 
-      // This transforms relative module paths, such as "../person", to absolute ones -
-      // we need that absolute path to load realm info
-      this.fieldModuleURL = new URL(chosenSpec.ref.module, chosenSpec.id);
+        // This transforms relative module paths, such as "../person", to absolute ones -
+        // we need that absolute path to load realm info
+        this.fieldModuleURL = new URL(spec.ref.module, spec.id);
+      }
     }
   });
 

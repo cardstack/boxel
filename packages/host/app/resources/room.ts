@@ -52,7 +52,7 @@ import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
 
 export type RoomSkill = {
-  card: SkillCard;
+  cardId: string;
   skillEventId: string;
   isActive: boolean;
 };
@@ -231,12 +231,8 @@ export class RoomResource extends Resource<Args> {
       if (!cardId) {
         continue;
       }
-      let skillCard = this._skillCardsCache.get(cardId);
-      if (!skillCard) {
-        continue;
-      }
       result.push({
-        card: skillCard,
+        cardId,
         skillEventId,
         isActive:
           this.matrixRoom?.skillsConfig.enabledEventIds.includes(
@@ -251,8 +247,9 @@ export class RoomResource extends Resource<Args> {
     // Usable commands are all commands on *active* skills
     let commands = [];
     for (let skill of this.skills) {
-      if (skill.isActive) {
-        commands.push(...skill.card.commands);
+      let skillCard = this._skillCardsCache.get(skill.cardId);
+      if (skillCard && skill.isActive) {
+        commands.push(...skillCard.commands);
       }
     }
     return commands;
@@ -426,6 +423,7 @@ export class RoomResource extends Resource<Args> {
       serializedCardFromFragments: this.serializedCardFromFragments,
       events: this.events,
       skills: this.skills,
+      skillCardsCache: this._skillCardsCache,
     });
 
     if (!message) {
@@ -477,6 +475,7 @@ export class RoomResource extends Resource<Args> {
         events: this.events,
         skills: this.skills,
         commandResultEvent: event,
+        skillCardsCache: this._skillCardsCache,
       },
     );
     messageBuilder.updateMessageCommandResult(message);

@@ -1,6 +1,5 @@
 import { service } from '@ember/service';
 
-import { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import { Submodes } from '../components/submode-switcher';
@@ -27,12 +26,12 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
     return this.operatorModeStateService.state?.stacks.flat() ?? [];
   }
 
-  private get lastCardInRightMostStack(): CardDef | null {
+  private get lastCardInRightMostStack() {
     if (this.allStackItems.length <= 0) {
       return null;
     }
 
-    return this.allStackItems[this.allStackItems.length - 1].card;
+    return this.allStackItems[this.allStackItems.length - 1].url;
   }
 
   protected async run(
@@ -48,7 +47,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
         } else {
           this.operatorModeStateService.updateCodePath(
             this.lastCardInRightMostStack
-              ? new URL(this.lastCardInRightMostStack.id + '.json')
+              ? new URL(this.lastCardInRightMostStack + '.json')
               : null,
           );
         }

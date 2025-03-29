@@ -150,9 +150,12 @@ export default class MatrixService extends Service {
     () => this.cardAPI,
   );
 
+  // TODO This seems very bad. we should not be sharing Resources with anyone that
+  // wants one--resources are tied to the lifetime of their owner, who knows
+  // which owner made these and who is consuming these. we need to refactor this out..
   roomResourcesCache: TrackedMap<string, RoomResource> = new TrackedMap();
   messagesToSend: TrackedMap<string, string | undefined> = new TrackedMap();
-  cardsToSend: TrackedMap<string, CardDef[] | undefined> = new TrackedMap();
+  cardsToSend: TrackedMap<string, string[] | undefined> = new TrackedMap();
   filesToSend: TrackedMap<string, FileDef[] | undefined> = new TrackedMap();
   failedCommandState: TrackedMap<string, Error> = new TrackedMap();
   reasoningExpandedState: TrackedMap<string, boolean> = new TrackedMap();

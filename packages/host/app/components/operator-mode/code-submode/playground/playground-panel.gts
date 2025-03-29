@@ -26,6 +26,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type {
   CardDef,
@@ -95,8 +96,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   @service private declare realm: RealmService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service private declare store: StoreService;
 
-  @tracked private newCardJSON: LooseSingleCardDocument | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
 
@@ -111,7 +112,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   private makeCardResource = () => {
     this.cardResource = this.getCard(
       this,
-      () => this.newCardJSON ?? this.playgroundSelection?.cardId,
+      () => this.playgroundSelection?.cardId,
       { isAutoSaved: true },
     );
   };
@@ -259,9 +260,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     selectedFormat = this.format,
     index = this.fieldIndex,
   ) => {
-    if (this.newCardJSON) {
-      this.newCardJSON = undefined;
-    }
     let selection = this.playgroundPanelService.getSelection(this.moduleId);
     if (selection?.cardId) {
       let { cardId, format, fieldIndex } = selection;
@@ -301,13 +299,13 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private chooseCard = task(async () => {
-    let chosenCard: CardDef | undefined = await chooseCard({
+    let cardId = await chooseCard({
       filter: { type: this.args.codeRef },
     });
 
-    if (chosenCard) {
-      this.recentFilesService.addRecentFileUrl(`${chosenCard.id}.json`);
-      this.persistSelections(chosenCard.id);
+    if (cardId) {
+      this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
+      this.persistSelections(cardId);
     }
   });
 
@@ -322,12 +320,13 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private createNewCard = restartableTask(async () => {
+    let newCardJSON: LooseSingleCardDocument;
     if (this.args.isFieldDef) {
       let fieldCard = await loadCard(this.args.codeRef, {
         loader: this.loaderService.loader,
       });
       // for field def, create a new spec card instance
-      this.newCardJSON = {
+      newCardJSON = {
         data: {
           attributes: {
             specType: 'field',
@@ -349,7 +348,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         },
       };
     } else {
-      this.newCardJSON = {
+      newCardJSON = {
         data: {
           meta: {
             adoptsFrom: this.args.codeRef,
@@ -358,11 +357,11 @@ export default class PlaygroundPanel extends Component<Signature> {
         },
       };
     }
-    await this.cardResource?.loaded; // TODO: remove await when card-resource is refactored
-    if (this.card) {
-      this.recentFilesService.addRecentFileUrl(`${this.card.id}.json`);
+    let cardId = await this.store.createInstance(newCardJSON, undefined);
+    if (typeof cardId === 'string') {
+      this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
       this.persistSelections(
-        this.card.id,
+        cardId,
         'edit',
         this.args.isFieldDef ? 0 : undefined,
       ); // open new instance in playground in edit format

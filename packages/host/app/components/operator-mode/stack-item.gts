@@ -31,7 +31,7 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
-import { cssVar, optional } from '@cardstack/boxel-ui/helpers';
+import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
@@ -50,10 +50,11 @@ import {
   CommandContext,
 } from '@cardstack/runtime-common';
 
-import { type StackItem, isIndexCard } from '@cardstack/host/lib/stack-item';
+import { type StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
+import { consumeContext } from '../../helpers/consume-context';
 import { htmlComponent } from '../../lib/html-component';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
@@ -70,6 +71,7 @@ import type EnvironmentService from '../../services/environment-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type RealmService from '../../services/realm';
+import type StoreService from '../../services/store';
 
 export interface StackItemComponentAPI {
   clearSelections: () => void;
@@ -119,40 +121,53 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare loaderService: LoaderService;
+  @service private declare store: StoreService;
 
-  // @tracked private selectedCards = new TrackedArray<CardDef>([]);
   @tracked private selectedCards = new TrackedArray<CardDefOrId>([]);
   @tracked private animationType:
     | 'opening'
     | 'closing'
     | 'movingForward'
     | undefined = 'opening';
+  @tracked private cardResource: ReturnType<getCard> | undefined;
   private contentEl: HTMLElement | undefined;
   private containerEl: HTMLElement | undefined;
   private itemEl: HTMLElement | undefined;
 
   @provide(PermissionsContextName)
-  get permissions(): Permissions {
-    return this.realm.permissions(this.card.id);
+  get permissions(): Permissions | undefined {
+    if (this.url) {
+      return this.realm.permissions(this.url);
+    }
+    return undefined;
   }
 
   @provide(RealmURLContextName)
   get realmURL() {
-    let api = this.args.item.api;
-    return this.card[api.realmURL];
+    let api = this.cardResource?.api;
+    return api && this.card ? this.card[api.realmURL] : undefined;
   }
 
   cardTracker = new ElementTracker();
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    this.loadCard.perform();
     this.args.setupStackItem(this.args.item, {
       clearSelections: this.clearSelections,
       doWithStableScroll: this.doWithStableScroll.perform,
       scrollIntoView: this.scrollIntoView.perform,
       startAnimation: this.startAnimation.perform,
     });
+  }
+
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(this, () => this.args.item.url, {
+      isAutoSaved: true,
+    });
+  };
+
+  private get url() {
+    return this.card?.id ?? this.cardError?.id;
   }
 
   private get renderedCardsForOverlayActions(): StackItemRenderedCardForOverlayActions[] {
@@ -172,7 +187,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private get isItemFullWidth() {
-    return !this.isBuried && this.args.item.isWideFormat;
+    return !this.isBuried && this.isWideFormat;
   }
 
   private get styleForStackedCard(): SafeString {
@@ -222,6 +237,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried;
   }
 
+  private get isIndexCard() {
+    if (!this.realmURL) {
+      return false;
+    }
+    return this.url === `${this.realmURL.href}index`;
+  }
+
   private get cardContext(): StackItemCardContext {
     return {
       cardComponentModifier: this.cardTracker.trackElement,
@@ -229,6 +251,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       commandContext: this.args.commandContext,
       getCard: this.getCard,
       getCards: this.getCards,
+      store: this.store,
     };
   }
 
@@ -255,11 +278,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
   };
 
   private get cardIdentifier() {
-    return this.args.item.url?.href;
+    return this.url;
   }
 
   private get headerTitle() {
-    return cardTypeDisplayName(this.card);
+    return this.card ? cardTypeDisplayName(this.card) : undefined;
+  }
+
+  private get cardTitle() {
+    return this.card ? this.card.title : undefined;
   }
 
   private get moreOptionsMenuItemsForErrorCard() {
@@ -283,21 +310,26 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
     let menuItems: MenuItem[] = [
       new MenuItem('Copy Card URL', 'action', {
-        action: () => this.args.publicAPI.copyURLToClipboard(this.card),
+        action: () =>
+          this.card
+            ? this.args.publicAPI.copyURLToClipboard(this.card)
+            : undefined,
         icon: IconLink,
-        disabled: !this.card.id,
+        disabled: !this.url,
       }),
     ];
     if (
-      !isIndexCard(this.args.item) && // workspace index card cannot be deleted
-      this.realm.canWrite(this.card.id)
+      !this.isIndexCard && // workspace index card cannot be deleted
+      this.url &&
+      this.realm.canWrite(this.url)
     ) {
       menuItems.push(
         new MenuItem('Delete', 'action', {
-          action: () => this.args.publicAPI.delete(this.card),
+          action: () =>
+            this.card ? this.args.publicAPI.delete(this.card) : undefined,
           icon: IconTrash,
           dangerous: true,
-          disabled: !this.card.id,
+          disabled: !this.url,
         }),
       );
     }
@@ -305,17 +337,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   @cached
-  get card(): CardDef {
-    return this.args.item.card;
+  private get card() {
+    return this.cardResource?.card;
   }
 
   @cached
-  get cardError() {
-    return this.args.item.cardError;
+  private get cardError() {
+    return this.cardResource?.cardError;
   }
 
   @cached
-  get lastKnownGoodHtml() {
+  private get lastKnownGoodHtml() {
     if (this.cardError?.meta.lastKnownGoodHtml) {
       this.loadScopedCSS.perform();
       return htmlComponent(this.cardError.meta.lastKnownGoodHtml);
@@ -324,7 +356,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   @cached
-  get cardErrorSummary() {
+  private get cardErrorSummary() {
     if (!this.cardError) {
       return undefined;
     }
@@ -335,16 +367,38 @@ export default class OperatorModeStackItem extends Component<Signature> {
       : this.cardError.title;
   }
 
-  get cardErrorTitle() {
+  private get cardErrorTitle() {
     if (!this.cardError) {
       return undefined;
     }
     return `Card Error: ${this.cardErrorSummary}`;
   }
 
-  private loadCard = restartableTask(async () => {
-    await this.args.item.ready();
-  });
+  private get isWideFormat() {
+    if (!this.card) {
+      return false;
+    }
+    let { constructor } = this.card;
+    return Boolean(
+      constructor &&
+        'prefersWideFormat' in constructor &&
+        constructor.prefersWideFormat,
+    );
+  }
+
+  private get headerColor() {
+    if (!this.card) {
+      return undefined;
+    }
+    let cardDef = this.card.constructor;
+    if (!cardDef || !('headerColor' in cardDef)) {
+      return undefined;
+    }
+    if (cardDef.headerColor == null) {
+      return undefined;
+    }
+    return cardDef.headerColor as string;
+  }
 
   private loadScopedCSS = restartableTask(async () => {
     if (this.cardError?.meta.scopedCssUrls) {
@@ -361,14 +415,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
     let { request } = item;
     // if the card is actually different do the save and dismiss, otherwise
     // just change the stack item's format to isolated
-    if (item.autoSaveState?.hasUnsavedChanges) {
+    if (this.card && this.cardResource?.autoSaveState?.hasUnsavedChanges) {
       // we dont want to have the user wait for the save to complete before
       // dismissing edit mode so intentionally not awaiting here
-      let updatedCard = await this.args.saveCard(item.card);
-
-      if (updatedCard) {
-        request?.fulfill(updatedCard);
-      }
+      await this.args.saveCard(this.card);
+      request?.fulfill(this.card.id);
     }
     this.operatorModeStateService.replaceItemInStack(
       item,
@@ -473,7 +524,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get canEdit() {
     return (
-      !this.isBuried && !this.isEditing && this.realm.canWrite(this.card.id)
+      this.card &&
+      !this.isBuried &&
+      !this.isEditing &&
+      this.realm.canWrite(this.card.id)
     );
   }
 
@@ -506,7 +560,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return isTesting();
   }
 
+  private setWindowTitle = () => {
+    if (this.url && this.cardTitle) {
+      this.operatorModeStateService.setCardTitle(this.url, this.cardTitle);
+    }
+  };
+
   <template>
+    {{consumeContext this.makeCardResource}}
     <div
       class='item
         {{if this.isBuried "buried"}}
@@ -526,7 +587,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         class='stack-item-card'
         {{ContentElement onSetup=this.setupContainerEl}}
       >
-        {{#if this.loadCard.isRunning}}
+        {{#if (not this.cardResource.isLoaded)}}
           <div class='loading' data-test-stack-item-loading-card>
             <LoadingIndicator @color='var(--boxel-dark)' />
             <span class='loading__message'>Loading card...</span>
@@ -546,13 +607,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
               boxel-card-header-actions-min-width=(if
                 this.isBuried '50px' '95px'
               )
-              boxel-card-header-background-color=@item.headerColor
-              boxel-card-header-text-color=(getContrastColor @item.headerColor)
+              boxel-card-header-background-color=this.headerColor
+              boxel-card-header-text-color=(getContrastColor this.headerColor)
               realm-icon-background-color=(getContrastColor
-                @item.headerColor 'transparent'
+                this.headerColor 'transparent'
               )
               realm-icon-border-color=(getContrastColor
-                @item.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
+                this.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
               )
             }}
             role={{if this.isBuried 'button' 'banner'}}
@@ -576,14 +637,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
             @title={{this.cardErrorSummary}}
             @viewInCodeMode={{true}}
           />
-        {{else}}
+        {{else if this.card}}
+          {{this.setWindowTitle}}
           {{#let (this.realm.info this.card.id) as |realmInfo|}}
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
-              @cardTypeIcon={{cardTypeIcon @item.card}}
-              @isSaving={{@item.autoSaveState.isSaving}}
+              @cardTypeIcon={{cardTypeIcon this.card}}
+              @isSaving={{this.cardResource.autoSaveState.isSaving}}
               @isTopCard={{this.isTopCard}}
-              @lastSavedMessage={{@item.autoSaveState.lastSavedErrorMsg}}
+              @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{realmInfo}}
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
@@ -597,15 +659,13 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 boxel-card-header-actions-min-width=(if
                   this.isBuried '50px' '95px'
                 )
-                boxel-card-header-background-color=@item.headerColor
-                boxel-card-header-text-color=(getContrastColor
-                  @item.headerColor
-                )
+                boxel-card-header-background-color=this.headerColor
+                boxel-card-header-text-color=(getContrastColor this.headerColor)
                 realm-icon-background-color=(getContrastColor
-                  @item.headerColor 'transparent'
+                  this.headerColor 'transparent'
                 )
                 realm-icon-border-color=(getContrastColor
-                  @item.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
+                  this.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
                 )
               }}
               role={{if this.isBuried 'button' 'banner'}}

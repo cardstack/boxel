@@ -91,7 +91,7 @@ export function isCardDef(
   return isBaseDef(cardOrCodeRef) && 'isCardDef' in cardOrCodeRef;
 }
 
-export function isCardInstance(card: any): card is CardDef {
+export function isCardInstance<T extends CardDef>(card: any): card is T {
   return isCardDef(card?.constructor);
 }
 

@@ -116,11 +116,11 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     });
   });
 
-  async function setCardInOperatorModeState(
+  function setCardInOperatorModeState(
     cardURL?: string,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
-    await operatorModeStateService.restore({
+    operatorModeStateService.restore({
       stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
     });
   }
@@ -139,7 +139,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
   }
 
   test('displays message slightly muted when it is being sent', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -182,7 +182,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
   });
 
   test('displays retry button for message that failed to send', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -234,7 +234,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
   });
 
   test('it enlarges the input box when entering/pasting lots of text', async function (assert) {
-    await setCardInOperatorModeState();
+    setCardInOperatorModeState();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -264,7 +264,7 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
   });
 
   test('it should create a new line in the right position when user type `Shift+Enter`', async function (assert) {
-    await setCardInOperatorModeState();
+    setCardInOperatorModeState();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
