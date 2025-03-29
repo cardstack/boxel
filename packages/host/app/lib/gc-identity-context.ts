@@ -6,8 +6,6 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
-type InstanceGraph = Map<string, string[]>;
-
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
@@ -76,7 +74,7 @@ export default class IdentityContextWithGarbageCollection
 
   gcVisit(
     id: string,
-    consumptionGraph: InstanceGraph,
+    consumptionGraph: Map<string, string[]>,
     hasSubscribers = new Map<string, boolean>(),
   ): boolean {
     let cached = hasSubscribers.get(id);
@@ -102,7 +100,7 @@ export default class IdentityContextWithGarbageCollection
     return result;
   }
 
-  private makeConsumptionGraph(): InstanceGraph {
+  private makeConsumptionGraph(): Map<string, string[]> {
     let consumptionGraph = new Map<string, string[]>();
     for (let { card: instance } of this.#cards.values()) {
       if (!instance) {
