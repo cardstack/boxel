@@ -399,6 +399,7 @@ export interface CatalogActions {
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;
+  copySource: (fromUrl: string, toUrl: string) => void;
 }
 
 export type Actions = CardActions & CatalogActions;
