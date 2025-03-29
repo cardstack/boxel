@@ -331,11 +331,11 @@ class Isolated extends Component<typeof Catalog> {
   // end of listing query filter values
 
   // TODO: Remove this after testing
-  @action goToGrid() {
+  @action viewGrid() {
     if (!this.args.context?.actions?.viewCard) {
       throw new Error('viewCard action is not available');
     }
-    let gridUrl = new URL('http://localhost:4201/catalog/grid.json');
+    let gridUrl = new URL('grid.json', this.args.model[realmURL]!.href);
     this.args.context?.actions?.viewCard(gridUrl);
   }
 
@@ -392,9 +392,9 @@ class Isolated extends Component<typeof Catalog> {
           <BoxelButton
             class='go-to-grid'
             @kind='primary'
-            {{on 'click' this.goToGrid}}
+            {{on 'click' this.viewGrid}}
           >
-            Go to Grid
+            View Grid
           </BoxelButton>
 
           <div
