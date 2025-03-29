@@ -54,8 +54,7 @@ export default class IdentityContextWithGarbageCollection
   }
 
   sweep() {
-    let depGraph = this.makeDepGraph();
-    let consumptionGraph = invertGraph(depGraph);
+    let consumptionGraph = this.makeConsumptionGraph();
     for (let { card: instance } of this.#cards.values()) {
       if (!instance) {
         continue;
@@ -103,37 +102,24 @@ export default class IdentityContextWithGarbageCollection
     return result;
   }
 
-  private makeDepGraph(): InstanceGraph {
-    let depGraph = new Map<string, string[]>();
+  private makeConsumptionGraph(): InstanceGraph {
+    let consumptionGraph = new Map<string, string[]>();
     for (let { card: instance } of this.#cards.values()) {
       if (!instance) {
         continue;
       }
-      depGraph.set(
-        instance.id,
-        getDeps(this.api, instance).map((i) => i.id),
-      );
-    }
-    return depGraph;
-  }
-}
-
-function invertGraph(depGraph: InstanceGraph): InstanceGraph {
-  const invertedGraph: InstanceGraph = new Map();
-  for (const [id, dependencies] of depGraph.entries()) {
-    for (const dep of dependencies) {
-      let consumers = invertedGraph.get(dep);
-      if (!consumers) {
-        consumers = [];
-        invertedGraph.set(dep, consumers);
+      let deps = getDeps(this.api, instance);
+      for (let dep of deps) {
+        let consumers = consumptionGraph.get(dep.id);
+        if (!consumers) {
+          consumers = [];
+          consumptionGraph.set(dep.id, consumers);
+        }
+        consumers.push(instance.id);
       }
-      consumers.push(id);
     }
-    if (!invertedGraph.has(id)) {
-      invertedGraph.set(id, []);
-    }
+    return consumptionGraph;
   }
-  return invertedGraph;
 }
 
 function getDeps(api: typeof CardAPI, instance: CardDef): CardDef[] {
