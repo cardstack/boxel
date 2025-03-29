@@ -4,7 +4,6 @@
     "attributes": {
       "name": "Contact Link",
       "summary": null,
-      "listingType": "field",
       "description": null,
       "thumbnailURL": null
     },
@@ -38,7 +37,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../catalog-app/listing/listing",
-        "name": "Listing"
+        "name": "FieldListing"
       }
     }
   }

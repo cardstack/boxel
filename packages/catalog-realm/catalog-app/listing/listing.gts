@@ -556,7 +556,6 @@ export class Listing extends CardDef {
   @field categories = linksToMany(() => Category);
   @field tags = linksToMany(() => Tag);
   @field license = linksTo(() => License);
-  @field listingType = contains(StringField);
   //   @field pricing = contains(PricingField)
   //   @field images = containsMany(StringField) // thumbnailURLs
 
@@ -569,6 +568,22 @@ export class Listing extends CardDef {
   static isolated = EmbeddedTemplate; //temporary
   static embedded = EmbeddedTemplate;
   static fitted = FittedTemplate;
+}
+
+export class AppListing extends Listing {
+  static displayName = 'AppListing';
+}
+
+export class CardListing extends Listing {
+  static displayName = 'CardListing';
+}
+
+export class FieldListing extends Listing {
+  static displayName = 'FieldListing';
+}
+
+export class SkillListing extends Listing {
+  static displayName = 'SkillListing';
 }
 
 function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {

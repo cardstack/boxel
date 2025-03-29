@@ -4,7 +4,6 @@
     "attributes": {
       "name": "Blog App",
       "summary": "A modern, card-based blogging platform built with Cardstack framework.\n\n### Features\n\n- Create and manage blog posts, author profiles, and categories\n- Track publish dates, update history, word counts, and content status\n- Easy content creation with one-click \"New\" button",
-      "listingType": "app",
       "description": null,
       "thumbnailURL": null
     },
@@ -43,7 +42,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../catalog-app/listing/listing",
-        "name": "Listing"
+        "name": "AppListing"
       }
     }
   }

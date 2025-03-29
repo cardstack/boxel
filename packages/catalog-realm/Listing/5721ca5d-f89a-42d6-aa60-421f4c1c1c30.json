@@ -4,7 +4,6 @@
     "attributes": {
       "name": "Invoice Generator",
       "summary": "Create professional invoices with ease. This complete solution for small businesses and freelancers includes customizable templates, automated payment reminders, and multiple currency support. Generate recurring invoices and track payment status with comprehensive analytics.",
-      "listingType": "app",
       "description": null,
       "thumbnailURL": null
     },
@@ -48,7 +47,7 @@
     "meta": {
       "adoptsFrom": {
         "module": "../catalog-app/listing/listing",
-        "name": "Listing"
+        "name": "AppListing"
       }
     }
   }

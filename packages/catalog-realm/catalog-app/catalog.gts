@@ -13,7 +13,12 @@ import {
   linksToMany,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Query, isCardInstance, Filter } from '@cardstack/runtime-common';
+import {
+  Query,
+  isCardInstance,
+  Filter,
+  CardTypeFilter,
+} from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 
@@ -177,7 +182,6 @@ const CATALOG_VIEW_OPTIONS: ViewItem[] = [
 
 interface CatalogListViewArgs {
   Args: {
-    pageTitle?: string;
     query: Query;
     realms: URL[];
     context?: CardContext;
@@ -196,8 +200,8 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
     <CardsDisplaySection>
       <:intro>
         <header class='catalog-list-header'>
-          <h2>{{@pageTitle}}</h2>
           <ViewSelector
+            class='catalog-list-view-selector'
             @selectedId={{this.selectedView}}
             @onChange={{this.onChangeView}}
             @items={{CATALOG_VIEW_OPTIONS}}
@@ -225,6 +229,9 @@ class CatalogListView extends GlimmerComponent<CatalogListViewArgs> {
         align-items: center;
         justify-content: space-between;
         gap: var(--boxel-sp-sm);
+      }
+      .catalog-list-view-selector {
+        margin-left: auto;
       }
     </style>
   </template>
@@ -311,22 +318,13 @@ class Isolated extends Component<typeof Catalog> {
 
   //query
   get query(): Query {
-    const listingTypeRef = {
-      module: new URL('./listing/listing', import.meta.url).href,
-      name: 'Listing',
-    };
-
-    const baseFilter: Filter = {
-      on: listingTypeRef,
-      eq: {
-        listingType: this.activeTabId,
-      },
-    };
-
     return {
       filter: {
-        on: listingTypeRef,
-        every: [baseFilter],
+        on: {
+          module: new URL('./listing/listing', import.meta.url).href,
+          name: `${capitalize(this.activeTabId)}Listing`,
+        },
+        every: [],
       },
     };
   }
@@ -439,7 +437,6 @@ class Isolated extends Component<typeof Catalog> {
                   />
                 {{else}}
                   <CatalogListView
-                    @pageTitle='Product List'
                     @query={{this.query}}
                     @realms={{this.realms}}
                     @context={{@context}}
@@ -584,3 +581,5 @@ export class Catalog extends CardDef {
     return this.displayName;
   }
 }
+
+const capitalize = (str: string) => str[0].toUpperCase() + str.slice(1);
