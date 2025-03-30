@@ -1,4 +1,4 @@
-import { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import type {
   AttributesSchema,
@@ -20,7 +20,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-} from '@cardstack/runtime-common/matrix-constants';
+} from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
 interface BaseMatrixEvent {
