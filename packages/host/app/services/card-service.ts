@@ -315,6 +315,19 @@ export default class CardService extends Service {
     return response;
   }
 
+  async copySource(fromUrl: URL, toUrl: URL) {
+    let response = await this.network.authedFetch(fromUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+
+    const content = await response.text();
+    await this.saveSource(toUrl, content);
+    return response;
+  }
+
   async deleteSource(url: URL) {
     let response = await this.network.authedFetch(url, {
       method: 'DELETE',
