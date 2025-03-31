@@ -374,6 +374,7 @@ export default class CodeEditor extends Component<Signature> {
           class='monaco-container {{if @isReadOnly "readonly"}}'
           data-test-editor
           data-test-percy-hide
+          data-monaco-container-operator-mode
           {{monacoModifier
             content=this.readyFile.content
             contentChanged=(perform this.contentChangedTask)
