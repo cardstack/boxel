@@ -213,6 +213,10 @@ export default class OperatorModeStateService extends Service {
     this.recentCardsService.remove(cardId);
   }
 
+  async copySource(fromUrl: string, toUrl: string) {
+    await this.cardService.copySource(new URL(fromUrl), new URL(toUrl));
+  }
+
   trimItemsFromStack(item: StackItem) {
     let stackIndex = item.stackIndex;
     let itemIndex = this.state.stacks[stackIndex].indexOf(item);
