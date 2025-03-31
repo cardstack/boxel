@@ -19,11 +19,13 @@ const AskAiTextBox: TemplateOnlyComponent<Signature> = <template>
     Message for new AI Assistant room
   </label>
   <div class='input-group'>
-    {{#if @isLoading}}
-      <LoadingIndicator class='icon' />
-    {{else}}
-      <ChevronRight class='icon' width='22' height='22' role='presentation' />
-    {{/if}}
+    <span class='icon-container'>
+      {{#if @isLoading}}
+        <LoadingIndicator />
+      {{else}}
+        <ChevronRight width='22' height='22' role='presentation' />
+      {{/if}}
+    </span>
     <BoxelInput
       class='ask-ai-input'
       @id='ask-ai-box'
@@ -39,13 +41,15 @@ const AskAiTextBox: TemplateOnlyComponent<Signature> = <template>
     .input-group {
       position: relative;
     }
-    .icon {
+    .icon-container {
       position: absolute;
       color: var(--boxel-highlight);
       top: 0;
       left: 0;
-      margin-top: var(--boxel-sp-xs);
       margin-left: var(--boxel-sp-xs);
+      height: var(--boxel-form-control-height);
+      display: inline-flex;
+      align-items: center;
     }
     .ask-ai-input {
       padding-left: var(--boxel-sp-xxl);
