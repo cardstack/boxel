@@ -113,11 +113,11 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     });
   });
 
-  async function setCardInOperatorModeState(
+  function setCardInOperatorModeState(
     cardURL?: string,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
-    await operatorModeStateService.restore({
+    operatorModeStateService.restore({
       stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
     });
   }
@@ -136,7 +136,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
   }
 
   async function renderAiAssistantPanel(id?: string) {
-    await setCardInOperatorModeState(id);
+    setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -294,7 +294,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
   });
 
   test('it scrolls to first unread message when opening a room with unread messages', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -319,7 +319,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
   });
 
   test('it scrolls to last message when opening a room with no unread messages', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -344,7 +344,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
   });
 
   test('scrolling stays at the bottom if a message is streaming in', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

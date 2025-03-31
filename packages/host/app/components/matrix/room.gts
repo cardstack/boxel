@@ -24,7 +24,7 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject, TrackedSet } from 'tracked-built-ins';
+import { TrackedObject, TrackedSet, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
@@ -159,8 +159,8 @@ export default class Room extends Component<Signature> {
             />
             <div class='chat-input-area__bottom-section'>
               <AiAssistantAttachmentPicker
-                @autoAttachedCards={{this.autoAttachedCards}}
-                @cardsToAttach={{this.cardsToAttach}}
+                @autoAttachedCardIds={{this.autoAttachedCardIds}}
+                @cardIdsToAttach={{this.cardIdsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
                 @chooseFile={{this.chooseFile}}
@@ -251,12 +251,12 @@ export default class Room extends Component<Signature> {
   @service private declare loaderService: LoaderService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
 
-  private autoAttachmentResource = getAutoAttachment(
-    this,
-    () => this.topMostStackItems,
-    () => this.cardsToAttach,
-  );
-
+  private autoAttachmentResource = getAutoAttachment(this, {
+    topMostStackItems: () => this.topMostStackItems,
+    attachedCardIds: () => this.cardIdsToAttach,
+    removedCardIds: () => this.removedAttachedCardIds,
+  });
+  private removedAttachedCardIds = new TrackedArray<string>();
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
@@ -595,8 +595,8 @@ export default class Room extends Component<Signature> {
     return [...this.skills].sort((a, b) => {
       // Not all of the skills have a title, so we use the skillEventId as a fallback
       // which should be consistent.
-      let aTitle = a.card.title || a.skillEventId;
-      let bTitle = b.card.title || b.skillEventId;
+      let aTitle = a.cardId || a.skillEventId;
+      let bTitle = b.cardId || b.skillEventId;
       return aTitle.localeCompare(bTitle);
     });
   }
@@ -614,7 +614,7 @@ export default class Room extends Component<Signature> {
     return this.matrixService.messagesToSend.get(this.args.roomId) ?? '';
   }
 
-  private get cardsToAttach() {
+  private get cardIdsToAttach() {
     return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
@@ -652,11 +652,11 @@ export default class Room extends Component<Signature> {
   @action
   private sendMessage(prompt?: string) {
     let cards = [];
-    if (this.cardsToAttach) {
-      cards.push(...this.cardsToAttach);
+    if (this.cardIdsToAttach) {
+      cards.push(...this.cardIdsToAttach);
     }
-    if (this.autoAttachedCards.size > 0) {
-      this.autoAttachedCards.forEach((card) => {
+    if (this.autoAttachedCardIds.size > 0) {
+      this.autoAttachedCardIds.forEach((card) => {
         cards.push(card);
       });
     }
@@ -676,38 +676,33 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private chooseCard(card: CardDef) {
-    let cards = this.cardsToAttach ?? [];
-    if (!cards?.find((c) => c.id === card.id)) {
-      this.matrixService.cardsToSend.set(this.args.roomId, [...cards, card]);
+  private chooseCard(cardId: string) {
+    let cardIds = this.cardIdsToAttach ?? [];
+    if (!cardIds.includes(cardId)) {
+      this.matrixService.cardsToSend.set(this.args.roomId, [
+        ...cardIds,
+        cardId,
+      ]);
     }
   }
 
   @action
-  private isAutoAttachedCard(card: CardDef) {
-    return this.autoAttachedCards.has(card);
-  }
-
-  @action
-  private removeCard(card: CardDef) {
-    if (this.playgroundPanelCard?.id === card.id) {
+  private removeCard(id: string) {
+    if (this.playgroundPanelCard?.id === id) {
       this.removePlaygroundPanelCard();
-    } else if (this.isAutoAttachedCard(card)) {
-      this.autoAttachmentResource.onCardRemoval(card);
+    } else if (this.autoAttachmentResource.cardIds.has(id)) {
+      this.removedAttachedCardIds.push(id);
     } else {
-      const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
+      const cardIndex = this.cardIdsToAttach?.findIndex((url) => url === id);
       if (cardIndex != undefined && cardIndex !== -1) {
-        if (this.cardsToAttach !== undefined) {
-          this.autoAttachmentResource.onCardRemoval(
-            this.cardsToAttach[cardIndex],
-          );
-          this.cardsToAttach.splice(cardIndex, 1);
+        if (this.cardIdsToAttach !== undefined) {
+          this.cardIdsToAttach.splice(cardIndex, 1);
         }
       }
     }
     this.matrixService.cardsToSend.set(
       this.args.roomId,
-      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+      this.cardIdsToAttach?.length ? this.cardIdsToAttach : undefined,
     );
   }
 
@@ -742,7 +737,7 @@ export default class Room extends Component<Signature> {
 
     this.matrixService.cardsToSend.set(
       this.args.roomId,
-      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+      this.cardIdsToAttach?.length ? this.cardIdsToAttach : undefined,
     );
   }
 
@@ -766,7 +761,8 @@ export default class Room extends Component<Signature> {
         openCardIds: this.operatorModeStateService
           .topMostStackItems()
           .filter((stackItem) => stackItem)
-          .map((stackItem) => stackItem.card.id),
+          .map((stackItem) => stackItem.url)
+          .filter(Boolean) as string[],
       };
       try {
         if (files) {
@@ -779,9 +775,7 @@ export default class Room extends Component<Signature> {
           // elsewhere in our app.
           cards = (
             await Promise.all(
-              (cardsOrIds as string[]).map((id) =>
-                this.store.getInstanceDetachedFromStore(id),
-              ),
+              (cardsOrIds as string[]).map((id) => this.store.peek(id)),
             )
           )
             .filter(Boolean)
@@ -804,21 +798,30 @@ export default class Room extends Component<Signature> {
     },
   );
 
+  @cached
   private get topMostStackItems(): StackItem[] {
+    // side effect: whenever the stack changes we reset the
+    // auto-attached removed items state in a task to prevent rerender cycles
+    this.resetAutoAttachedRemovedStateTask.perform();
     return this.operatorModeStateService.topMostStackItems();
   }
 
-  private get autoAttachedCards() {
+  private resetAutoAttachedRemovedStateTask = task(async () => {
+    await Promise.resolve();
+    this.removedAttachedCardIds.splice(0);
+  });
+
+  private get autoAttachedCardIds() {
     if (this.operatorModeStateService.state.submode === Submodes.Code) {
       return this.playgroundPanelCard
-        ? new TrackedSet([this.playgroundPanelCard])
-        : new TrackedSet<CardDef>();
+        ? new TrackedSet([this.playgroundPanelCard.id])
+        : new TrackedSet<string>();
     }
 
-    return this.autoAttachmentResource.cards;
+    return this.autoAttachmentResource.cardIds;
   }
 
-  updateSkillIsActiveTask = task(
+  private updateSkillIsActiveTask = task(
     async (skillEventId: string, isActive: boolean) => {
       await new UpdateSkillActivationCommand(
         this.commandService.commandContext,
@@ -835,8 +838,8 @@ export default class Room extends Component<Signature> {
       !this.doSendMessage.isRunning &&
       Boolean(
         this.messageToSend?.trim() ||
-          this.cardsToAttach?.length ||
-          this.autoAttachedCards.size !== 0,
+          this.cardIdsToAttach?.length ||
+          this.autoAttachedCardIds.size !== 0,
       ) &&
       !!this.room &&
       !this.messages.some((m) => this.isPendingMessage(m)) &&
@@ -853,14 +856,18 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  private attachSkillTask = task(async (card: SkillCard) => {
+  private attachSkillTask = task(async (cardId: string) => {
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandService.commandContext,
     );
-    await addSkillsToRoomCommand.execute({
-      roomId: this.args.roomId,
-      skills: [card],
-    });
+
+    let skillCard = await this.store.peek<SkillCard>(cardId);
+    if (skillCard && isCardInstance(skillCard)) {
+      await addSkillsToRoomCommand.execute({
+        roomId: this.args.roomId,
+        skills: [skillCard],
+      });
+    }
   });
 }
 
