@@ -65,6 +65,7 @@ import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
 export * from './commands';
 export * from './constants';
+export * from './matrix-constants';
 export * from './queue';
 export * from './expression';
 export * from './index-query-engine';
