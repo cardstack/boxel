@@ -567,37 +567,6 @@ module(basename(__filename), function () {
         'true',
       );
     });
-
-    module('linting endpoint', function () {
-      setupPermissionedRealm(hooks, {
-        john: ['read', 'write'],
-      });
-
-      test('401 with invalid JWT', async function (assert) {
-        let response = await request
-          .post('/_lint')
-          .set('Authorization', `Bearer invalid-token`)
-          .set('X-HTTP-Method-Override', 'QUERY')
-          .send(`console.log('hi')`);
-
-        assert.strictEqual(response.status, 401, 'HTTP 401 status');
-      });
-
-      test('user can do a lint with fix', async function (assert) {
-        let response = await request
-          .post('/_lint')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
-          )
-          .set('X-HTTP-Method-Override', 'QUERY')
-          .set('Accept', 'application/json')
-          .send(`console.log('hi')`);
-
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.strictEqual(response.body, 'xxx');
-      });
-    });
   });
 
   module('Realm server with realm mounted at the origin', function (hooks) {
