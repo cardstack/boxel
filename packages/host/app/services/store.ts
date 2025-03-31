@@ -13,7 +13,7 @@ import {
   hasExecutableExtension,
   isCardInstance,
   isSingleCardDocument,
-  type LooseCardResource,
+  Deferred,
   type AutoSaveState,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -69,6 +69,7 @@ export default class StoreService extends Service {
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
+  private workingGetCard: Map<string, Promise<CardDef | CardError>> = new Map();
 
   constructor(owner: Owner) {
     super(owner);
@@ -230,34 +231,7 @@ export default class StoreService extends Service {
     if (cached) {
       return cached as T;
     }
-    try {
-      let doc = await this.cardService.fetchJSON(url);
-      if (!doc) {
-        return {
-          id: url,
-          status: 404,
-          title: 'Card Not Found',
-          message: `The card ${url} does not exist`,
-          realm: undefined,
-          meta: {
-            lastKnownGoodHtml: null,
-            scopedCssUrls: [],
-            stack: null,
-            cardTitle: null,
-          },
-        };
-      }
-      let instance = await this.cardService.createFromSerialized<T>(
-        doc.data as LooseCardResource,
-        doc,
-        new URL(url),
-      );
-      this.identityContext.set(url, instance);
-      return instance;
-    } catch (error: any) {
-      let errorResponse = processCardError(url, error);
-      return errorResponse.errors[0];
-    }
+    return await this.getCard<T>(url, undefined);
   }
 
   private async setup() {
@@ -422,11 +396,20 @@ export default class StoreService extends Service {
     }
   }
 
-  private async getCard(
+  private async getCard<T extends CardDef>(
     urlOrDoc: string | LooseSingleCardDocument,
     relativeTo?: URL,
   ) {
+    let deferred: Deferred<CardDef | CardError> | undefined;
     let url = asURL(urlOrDoc);
+    if (url) {
+      let working = this.workingGetCard.get(url);
+      if (working) {
+        return working as Promise<T>;
+      }
+      deferred = new Deferred<CardDef | CardError>();
+      this.workingGetCard.set(url, deferred.promise);
+    }
     try {
       if (!url) {
         // this is a new card so instantiate it and save it
@@ -441,14 +424,16 @@ export default class StoreService extends Service {
         );
         await this.cardService.saveModel(newCard);
         this.identityContext.set(newCard.id, newCard);
-        return newCard;
+        deferred?.fulfill(newCard);
+        return newCard as T;
       }
 
       // createFromSerialized would also do this de-duplication, but we want to
       // also avoid the fetchJSON when we already have the stable card.
       let existingCard = this.identityContext.get(url);
       if (existingCard) {
-        return existingCard;
+        deferred?.fulfill(existingCard);
+        return existingCard as T;
       }
       let doc = (typeof urlOrDoc !== 'string' ? urlOrDoc : undefined) as
         | SingleCardDocument
@@ -471,10 +456,17 @@ export default class StoreService extends Service {
           identityContext: this.identityContext,
         },
       );
-      return card;
+      deferred?.fulfill(card);
+      return card as T;
     } catch (error: any) {
       let errorResponse = processCardError(url, error);
-      return errorResponse.errors[0];
+      let cardError = errorResponse.errors[0];
+      deferred?.fulfill(cardError);
+      return cardError;
+    } finally {
+      if (url) {
+        this.workingGetCard.delete(url);
+      }
     }
   }
 

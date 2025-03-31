@@ -117,12 +117,6 @@ export class CardResource extends Resource<Args> {
     return this._card ? this.store.getAutoSaveState(this._card) : undefined;
   }
 
-  // This is deprecated. consumers of this resource need to be reactive such
-  // that they can deal with a resource that doesn't have a card yet.
-  get loaded() {
-    return this._loading?.promise;
-  }
-
   private load = restartableTask(async (url: string | undefined) => {
     let card: CardDef | undefined;
     let error: CardError | undefined;

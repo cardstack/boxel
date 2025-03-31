@@ -35,6 +35,8 @@ import { getCodeRefFromSearchKey } from './utils';
 
 import type LoaderService from '../../services/loader-service';
 
+import type StoreService from '../../services/store';
+
 export const SearchSheetModes = {
   Closed: 'closed',
   ChoosePrompt: 'choose-prompt',
@@ -77,6 +79,7 @@ export default class SearchSheet extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare loaderService: LoaderService;
   @service private declare realmServer: RealmServerService;
+  @service private declare store: StoreService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -172,22 +175,26 @@ export default class SearchSheet extends Component<Signature> {
     return (this.searchKey?.trim() || '') === '';
   }
 
-  private fetchCardByUrl = trackedFunction(this, async () => {
+  private get searchKeyAsURL() {
     if (!this.searchKeyIsURL) {
-      return;
+      return undefined;
     }
     let cardURL = this.searchKey;
 
     let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
       (u) => u === cardURL + '/',
     );
-    let cardResource = this.getCard(this, () => maybeIndexCardURL ?? cardURL, {
-      isLive: false,
-    });
+    return maybeIndexCardURL ?? cardURL;
+  }
 
-    await cardResource.loaded;
-    let { card } = cardResource;
-
+  // note that this is a card that is eligible for garbage collection
+  // and is meant for immediate consumption. it's not safe to pass this
+  // as state for another component.
+  private fetchCardByUrl = trackedFunction(this, async () => {
+    if (!this.searchKeyAsURL) {
+      return;
+    }
+    let card = await this.store.peek(this.searchKeyAsURL);
     return {
       card,
     };
@@ -246,7 +253,7 @@ export default class SearchSheet extends Component<Signature> {
             @url={{this.searchKey}}
             @handleCardSelect={{this.handleCardSelect}}
             @isCompact={{this.isCompact}}
-            @fetchCardByUrlResult={{this.fetchCardByUrlResult}}
+            @searchKeyAsURL={{this.searchKeyAsURL}}
           />
         {{else if this.isSearchKeyEmpty}}
           {{! nothing }}
