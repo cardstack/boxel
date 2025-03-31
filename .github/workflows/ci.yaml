@@ -246,13 +246,24 @@ jobs:
           [
             "auth-client-test.ts",
             "billing-test.ts",
+            "card-endpoints-test.ts",
+            "card-source-endpoints-test.ts",
             "index-query-engine-test.ts",
             "index-writer-test.ts",
             "indexing-test.ts",
             "loader-test.ts",
             "module-syntax-test.ts",
+            "permissions/permission-checker-test.ts",
             "queue-test.ts",
+            "realm-endpoints/directory-test.ts",
+            "realm-endpoints/info-test.ts",
+            "realm-endpoints/mtimes-test.ts",
+            "realm-endpoints/permissions-test.ts",
+            "realm-endpoints/search-test.ts",
+            "realm-endpoints/user-test.ts",
             "realm-endpoints-test.ts",
+            "search-prerendered-test.ts",
+            "types-endpoint-test.ts",
             "server-endpoints-test.ts",
             "virtual-network-test.ts",
           ]
@@ -291,11 +302,16 @@ jobs:
         working-directory: packages/realm-server
         env:
           TEST_MODULE: ${{matrix.testModule}}
+      - name: prepare_artifact_name
+        id: artifact_name
+        run: |
+          export SAFE_ARTIFACT_NAME=$(echo ${{ matrix.testModule }} |  sed 's/[/]/_/g')
+          echo "artifact_name=$SAFE_ARTIFACT_NAME" >> "$GITHUB_OUTPUT"
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: realm-server-test-realm-server-log-${{matrix.testModule}}
+          name: realm-server-test-realm-server-log-${{steps.artifact_name.outputs.artifact_name}}
           path: /tmp/server.log
           retention-days: 30
 
