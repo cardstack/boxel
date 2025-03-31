@@ -1,10 +1,10 @@
 import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
-import { join, resolve, basename } from 'path';
+import { join, basename } from 'path';
 import { Server } from 'http';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import eventSource from 'eventsource';
-import { copySync, ensureDirSync, writeJSONSync } from 'fs-extra';
+import { copySync, ensureDirSync, removeSync, writeJSONSync } from 'fs-extra';
 import {
   baseRealm,
   RealmPermissions,
@@ -174,13 +174,54 @@ module(basename(__filename), function () {
       resetCatalogRealms();
     });
 
-    setupPermissionedRealm(hooks, {
-      '*': ['read'],
-    });
+    setupPermissionedRealm(
+      hooks,
+      {
+        '*': ['read'],
+      },
+      {
+        'person.gts': `
+        import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
+        import StringCard from "https://cardstack.com/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringCard);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              <h1><@fields.firstName/></h1>
+            </template>
+          }
+          static embedded = class Embedded extends Component<typeof this> {
+            <template>
+              Embedded Card Person: <@fields.firstName/>
+            </template>
+          }
+          static fitted = class Fitted extends Component<typeof this> {
+            <template>
+              Fitted Card Person: <@fields.firstName/>
+            </template>
+          }
+        }
+      `,
+        'louis.json': {
+          data: {
+            attributes: {
+              firstName: 'Louis',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './person',
+                name: 'Person',
+              },
+            },
+          },
+        },
+      },
+    );
 
     let { getMessagesSince } = setupMatrixRoom(hooks);
 
-    test('file creation produces an update event', async function (assert) {
+    test('file creation produces an added event', async function (assert) {
       realmEventTimestampStart = Date.now();
 
       let newFilePath = join(
@@ -213,6 +254,62 @@ module(basename(__filename), function () {
       assert.deepEqual(updateEvent?.content, {
         eventName: 'update',
         added: basename(newFilePath),
+      });
+    });
+
+    test('file updating produces an updated event', async function (assert) {
+      realmEventTimestampStart = Date.now();
+
+      let updatedFilePath = join(
+        dir.name,
+        'realm_server_1',
+        'test',
+        'louis.json',
+      );
+
+      writeJSONSync(updatedFilePath, {
+        data: {
+          attributes: {
+            firstName: 'Louis.',
+          },
+          meta: {
+            adoptsFrom: {
+              module: './person',
+              name: 'Person',
+            },
+          },
+        },
+      });
+
+      await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
+      let messages = await getMessagesSince(realmEventTimestampStart);
+      let updateEvent = findRealmEvent(messages, 'update', 'incremental');
+
+      assert.deepEqual(updateEvent?.content, {
+        eventName: 'update',
+        updated: basename(updatedFilePath),
+      });
+    });
+
+    test('file deletion produces a removed event', async function (assert) {
+      realmEventTimestampStart = Date.now();
+
+      let deletedFilePath = join(
+        dir.name,
+        'realm_server_1',
+        'test',
+        'louis.json',
+      );
+
+      removeSync(deletedFilePath);
+
+      await waitForRealmEvent(getMessagesSince, realmEventTimestampStart);
+      let messages = await getMessagesSince(realmEventTimestampStart);
+      let updateEvent = findRealmEvent(messages, 'update', 'incremental');
+
+      assert.deepEqual(updateEvent?.content, {
+        eventName: 'update',
+        removed: basename(deletedFilePath),
       });
     });
   });
