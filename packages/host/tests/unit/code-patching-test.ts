@@ -1,181 +1,144 @@
 import { module, test } from 'qunit';
 
-import { parseCodeContent } from '@cardstack/host/lib/search-replace-blocks-parsing';
+import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 
 module(
   'Unit | code patching | parse search replace blocks',
   function (_assert) {
-    test('will parse a search replace block when block is present', async function (assert) {
-      let diff = `
-// File url: https://example.com/file.txt
+    test('will parse a search replace block when search block is incomplete', async function (assert) {
+      let block = `// File url: paste.txt
 <<<<<<< SEARCH
-      <div class='basketball-container'>
-        <div class='basketball {{if this.isAnimating "bounce"}}'>
-=======
-      <div class='basketball-container'>
-        <h1 class='basketball-title'>Basketball</h1>
-        <div class='basketball {{if this.isAnimating "bounce"}}'>
->>>>>>> REPLACE
-`;
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>`;
 
-      let result = parseCodeContent(diff);
-      assert.strictEqual(result.fileUrl, 'https://example.com/file.txt');
+      let result = parseSearchReplace(block);
       assert.strictEqual(
-        result.code,
-        `
-<div class='basketball-container'>
-  <div class='basketball {{if this.isAnimating "bounce"}}'>
-<div class='basketball-container'>
-  <h1 class='basketball-title'>Basketball</h1>
-  <div class='basketball {{if this.isAnimating "bounce"}}'>`.trimStart(),
-      ); // code without the search and replace markers
-      assert.strictEqual(result.searchStartLine, 1);
-      assert.strictEqual(result.searchEndLine, 2);
-      assert.strictEqual(result.replaceStartLine, 3);
-      assert.strictEqual(result.replaceEndLine, 5);
+        result.searchContent,
+        `            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>`,
+      );
+      assert.strictEqual(result.replaceContent, null);
     });
 
-    test('will not parse a search replace block when block is present', async function (assert) {
-      let code = `
-console.log('hello');
-for (let i = 0; i < 10; i++) {
-  console.log(i);
-}`.trimStart();
-
-      let result = parseCodeContent(code);
-      assert.strictEqual(result.code, code);
-      assert.strictEqual(result.searchStartLine, null);
-      assert.strictEqual(result.searchEndLine, null);
-      assert.strictEqual(result.replaceStartLine, null);
-      assert.strictEqual(result.replaceEndLine, null);
-      assert.strictEqual(result.fileUrl, null);
-    });
-
-    test('will parse a search replace block when search block is not finished (case 1)', async function (assert) {
-      let code = `
-// File url: https://example.com/file.txt
+    test('will parse a search replace block when replace block is complete', async function (assert) {
+      let block = `// File url: paste.txt
 <<<<<<< SEARCH
-      <div class='basketball-container'>
-        <div class='basketball {{if this.isAnimating "bounce"}}'>
-`.trimStart();
-
-      let expectedCode = `
-<div class='basketball-container'>
-  <div class='basketball {{if this.isAnimating "bounce"}}'>`.trimStart();
-
-      let result = parseCodeContent(code);
-      assert.strictEqual(result.code, expectedCode);
-      assert.strictEqual(result.searchStartLine, 1);
-      assert.strictEqual(result.searchEndLine, 2);
-      assert.strictEqual(result.replaceStartLine, null);
-      assert.strictEqual(result.replaceEndLine, null);
-      assert.strictEqual(result.fileUrl, 'https://example.com/file.txt');
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+=======`;
+      let result = parseSearchReplace(block);
+      assert.strictEqual(
+        result.searchContent,
+        `            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>`,
+      );
+      assert.strictEqual(result.replaceContent, null);
     });
 
-    test('will parse a search replace block when search block is not finished (case 2)', async function (assert) {
-      let code = `
-// File url: https://example.com/file.txt
-<<<<<<< SEARCH
-      <div class='basketball-container'>`.trimStart();
+    test('will parse an incomplete replace block', async function (assert) {
+      let block = `<<<<<<< SEARCH
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+          </div>
 
-      let expectedCode = `
-<div class='basketball-container'>`.trimStart();
-
-      let result = parseCodeContent(code);
-      assert.strictEqual(result.code, expectedCode);
-      assert.strictEqual(result.searchStartLine, 1);
-      assert.strictEqual(result.searchEndLine, 1);
-      assert.strictEqual(result.replaceStartLine, null);
-      assert.strictEqual(result.replaceEndLine, null);
-      assert.strictEqual(result.fileUrl, 'https://example.com/file.txt');
-    });
-
-    test('will parse a search replace block when search block is not finished (case 3)', async function (assert) {
-      let code = `
-// File url: https://example.com/file.txt
-<<<<<<< SEARCH`.trimStart();
-
-      let expectedCode = '';
-
-      let result = parseCodeContent(code);
-      assert.strictEqual(result.code, expectedCode);
-      assert.strictEqual(result.searchStartLine, null);
-      assert.strictEqual(result.searchEndLine, null);
-      assert.strictEqual(result.replaceStartLine, null);
-      assert.strictEqual(result.replaceEndLine, null);
-      assert.strictEqual(result.fileUrl, 'https://example.com/file.txt');
-    });
-
-    test('will parse a search replace block when replace block is not finished (case 1)', async function (assert) {
-      let diff = `
-// File url: https://example.com/file.txt
-<<<<<<< SEARCH
-      <div class='basketball-container'>
-        <div class='basketball {{if this.isAnimating "bounce"}}'>
+          <div class='rsvp-section'>
 =======
-      <div class='basketball-container'>
-        <h1 class='basketball-title'>Basketball</h1>
-`;
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
 
-      let expectedCode = `
-<div class='basketball-container'>
-  <div class='basketball {{if this.isAnimating "bounce"}}'>
-<div class='basketball-container'>
-  <h1 class='basketball-title'>Basketball</h1>`.trimStart();
+            <div class='detail-item'>
+              <span class='label'>Where:</span>
+              <span class='value'>123 Party Lane, Celebration City</span>`;
 
-      let result = parseCodeContent(diff);
-      assert.strictEqual(result.code, expectedCode);
-      assert.strictEqual(result.searchStartLine, 1);
-      assert.strictEqual(result.searchEndLine, 2);
-      assert.strictEqual(result.replaceStartLine, 3);
-      assert.strictEqual(result.replaceEndLine, 4);
-      assert.strictEqual(result.fileUrl, 'https://example.com/file.txt');
+      let result = parseSearchReplace(block);
+      assert.strictEqual(
+        result.searchContent,
+        `            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+          </div>
+
+          <div class='rsvp-section'>`,
+      );
+
+      assert.strictEqual(
+        result.replaceContent,
+        `            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+
+            <div class='detail-item'>
+              <span class='label'>Where:</span>
+              <span class='value'>123 Party Lane, Celebration City</span>`,
+      );
     });
 
-    test('will parse a search replace block when replace block is not finished (case 2)', async function (assert) {
-      let diff = `
-// File url: https://example.com/file.txt
+    test('will parse a complete search replace block', async function (assert) {
+      let block = `// File url: paste.txt
 <<<<<<< SEARCH
-      <div class='basketball-container'>
-        <div class='basketball {{if this.isAnimating "bounce"}}'>
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+          </div>
+
+          <div class='rsvp-section'>
 =======
-      <div class='basketball-container'>
-`;
+            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
 
-      let expectedCode = `
-<div class='basketball-container'>
-  <div class='basketball {{if this.isAnimating "bounce"}}'>
-<div class='basketball-container'>`.trimStart();
+            <div class='detail-item'>
+              <span class='label'>Where:</span>
+              <span class='value'>123 Party Lane, Celebration City</span>
+            </div>
+          </div>
 
-      let result = parseCodeContent(diff);
-      assert.strictEqual(result.code, expectedCode);
-      assert.strictEqual(result.searchStartLine, 1);
-      assert.strictEqual(result.searchEndLine, 2);
-      assert.strictEqual(result.replaceStartLine, 3);
-      assert.strictEqual(result.replaceEndLine, 3);
-      assert.strictEqual(result.fileUrl, 'https://example.com/file.txt');
-    });
+          <div class='rsvp-section'>
+>>>>>>> REPLACE`;
 
-    test('will parse a search replace block when replace block is not finished (case 3)', async function (assert) {
-      let diff = `
-// File url: https://example.com/file.txt
-<<<<<<< SEARCH
-      <div class='basketball-container'>
-        <div class='basketball {{if this.isAnimating "bounce"}}'>
-=======
-`;
+      let result = parseSearchReplace(block);
+      assert.strictEqual(
+        result.searchContent,
+        `            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+          </div>
 
-      let expectedCode = `
-<div class='basketball-container'>
-  <div class='basketball {{if this.isAnimating "bounce"}}'>`.trimStart();
+          <div class='rsvp-section'>`,
+      );
 
-      let result = parseCodeContent(diff);
-      assert.strictEqual(result.code, expectedCode);
-      assert.strictEqual(result.searchStartLine, 1);
-      assert.strictEqual(result.searchEndLine, 2);
-      assert.strictEqual(result.replaceStartLine, null);
-      assert.strictEqual(result.replaceEndLine, null);
-      assert.strictEqual(result.fileUrl, 'https://example.com/file.txt');
+      assert.strictEqual(
+        result.replaceContent,
+        `            <div class='detail-item'>
+              <span class='label'>What:</span>
+              <span class='value'>An afternoon of fun, games, and cake!</span>
+            </div>
+
+            <div class='detail-item'>
+              <span class='label'>Where:</span>
+              <span class='value'>123 Party Lane, Celebration City</span>
+            </div>
+          </div>
+
+          <div class='rsvp-section'>`,
+      );
     });
   },
 );

@@ -4,30 +4,31 @@ import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+
 import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
+import { Resource } from 'ember-resources';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { and, eq, not } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
-import { Resource } from 'ember-resources';
-import {
-  ParsedCodeContent,
-  parseCodeContent,
-} from '@cardstack/host/lib/search-replace-blocks-parsing';
-import { parseSearchReplace } from '@cardstack/host/lib/search-replace-blocks-parsing-v2';
+
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+
+import { parseSearchReplace } from '@cardstack/host/lib/search-replace-block-parsing';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import CodeBlock from './code-block';
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
-import { trackedFunction } from 'ember-resources/util/function';
 
-export interface CodeData extends ParsedCodeContent {
-  language: string;
+export interface CodeData {
+  fileUrl: string | null;
+  code: string | null;
+  language: string | null;
+  searchReplaceBlock?: string | null;
 }
 
 interface FormattedMessageSignature {
@@ -35,13 +36,6 @@ interface FormattedMessageSignature {
   monacoSDK: MonacoSDK;
   renderCodeBlocks: boolean;
   isStreaming: boolean;
-}
-
-interface CodeAction {
-  fileUrl: string;
-  code: string;
-  containerElement: HTMLDivElement;
-  state: 'ready' | 'applying' | 'applied' | 'failed';
 }
 
 interface HtmlTagGroup {
@@ -54,7 +48,6 @@ function sanitize(html: string): SafeString {
 }
 
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
-  @tracked codeActions: TrackedArray<CodeAction> = new TrackedArray([]);
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
@@ -112,131 +105,8 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   private isLastHtmlGroup = (index: number) => {
     return index === this.htmlGroups.length - 1;
   };
-  private extractCodeData = (
-    preElementString: string,
-    isStreaming: boolean,
-    index: number,
-  ): CodeData => {
-    if (!preElementString) {
-      return {
-        language: '',
-        fileUrl: null,
-        code: '',
-        searchStartLine: null,
-        searchEndLine: null,
-        replaceStartLine: null,
-        replaceEndLine: null,
-        contentWithoutFileUrl: null,
-      };
-    }
 
-    const languageMatch = preElementString.match(
-      /data-code-language="([^"]+)"/,
-    );
-    const language = languageMatch ? languageMatch[1] : null;
-    const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-    let content = contentMatch ? contentMatch[1] : null;
-    let parsedContent = parseCodeContent(content ?? '');
-    let parsedContent2 = parseSearchReplace(content ?? '');
-
-    let content2 = '';
-    if (parsedContent2.searchContent) {
-      // get count of leading spaces in the first line of searchContent
-      let firstLine = parsedContent2.searchContent.split('\n')[0];
-      let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
-      let emptyString = ' '.repeat(leadingSpaces);
-      content2 = `// existing code ... \n\n${parsedContent2.searchContent.replaceAll(
-        emptyString,
-        '',
-      )}`;
-
-      if (parsedContent2.replaceContent) {
-        content2 += `\n\n// new code ... \n\n${parsedContent2.replaceContent.replaceAll(
-          emptyString,
-          '',
-        )}`;
-      }
-    }
-    // content = parsedContent.code;
-
-    if (content2) {
-      parsedContent.code = content2;
-    }
-
-    let isCodePatchComplete = this.isCodePatchComplete(
-      parsedContent.contentWithoutFileUrl,
-    );
-
-    let a = new TrackedObject({
-      originalCode: null,
-      modifiedCode: null,
-      language: language ?? '',
-      ...parsedContent,
-    });
-
-    let loadOriginalAndModifiedCode = async (
-      fileUrl: string,
-      searchReplaceBlock: string,
-      codeData: CodeData,
-      isStreaming: boolean,
-      htmlGroupsWithLoadedData: number[],
-      index: number,
-    ) => {
-      // if (
-      //   codeData.originalCode ||
-      //   (this.isCodePatch(codeData) &&
-      //     !this.isCodePatchComplete(codeData.contentWithoutFileUrl))
-      // ) {
-      //   return;
-      // }
-      // if (codeData.originalCode) {
-      //   return;
-      // }
-
-      let source = await this.cardService.getSource(new URL(codeData.fileUrl));
-      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
-        this.commandService.commandContext,
-      );
-
-      let { resultContent: patchedCode } =
-        await applySearchReplaceBlockCommand.execute({
-          fileContent: source,
-          codeBlock: searchReplaceBlock,
-        });
-
-      codeData.originalCode = source;
-
-      codeData.modifiedCode = patchedCode;
-
-      // this.htmlGroupsWithLoadedData.push(index);
-
-      // codeData = {
-      //   ...codeData,
-      //   originalCode: source,
-      //   modifiedCode: patchedCode,
-      // };
-    };
-
-    // if (isCodePatchComplete && !this.htmlGroupsWithLoadedData.includes(index)) {
-    // loadOriginalAndModifiedCode(
-    //   parsedContent.fileUrl,
-    //   parsedContent.contentWithoutFileUrl,
-    //   a,
-    //   this.htmlGroupsWithLoadedData,
-    //   index,
-    // );
-    // }
-
-    return a;
-
-    // const languageMatch = preElementString.match(/data-code-language="([^"]+)"/);
-  };
-
-  private isCodePatch = (codeData: ParsedCodeContent): boolean => {
-    return !!codeData.fileUrl && !!codeData.searchStartLine;
-  };
-
-  private isCodePatchComplete = (code: string): boolean => {
+  private isSearchReplaceBlock = (code?: string | null): boolean => {
     if (!code) {
       return false;
     }
@@ -245,6 +115,75 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       code.includes('=======') &&
       code.includes('>>>>>>> REPLACE')
     );
+  };
+
+  private extractCodeData = (preElementString: string): CodeData => {
+    let emptyCodeData: CodeData = {
+      language: null,
+      fileUrl: null,
+      searchReplaceBlock: null,
+      code: null,
+    };
+
+    if (!preElementString) {
+      return emptyCodeData;
+    }
+
+    const languageMatch = preElementString.match(
+      new RegExp('data-code-language="([^"]+)"'),
+    );
+    const language = languageMatch ? languageMatch[1] : null;
+    const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
+    let content = contentMatch ? contentMatch[1] : null;
+
+    if (!content) {
+      return emptyCodeData;
+    }
+
+    let parsedContent = parseSearchReplace(content);
+
+    let adjustedContent = '';
+    if (parsedContent.searchContent) {
+      // get count of leading spaces in the first line of searchContent
+      let firstLine = parsedContent.searchContent.split('\n')[0];
+      let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
+      let emptyString = ' '.repeat(leadingSpaces);
+      adjustedContent = `// existing code ... \n\n${parsedContent.searchContent.replace(
+        new RegExp(emptyString, 'g'),
+        '',
+      )}`;
+
+      if (parsedContent.replaceContent) {
+        adjustedContent += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
+          new RegExp(emptyString, 'g'),
+          '',
+        )}`;
+      }
+    }
+
+    const lines = content.split('\n');
+
+    let fileUrl: string | null = null;
+    const fileUrlIndex = lines.findIndex((line) =>
+      line.startsWith('// File url: '),
+    );
+    if (fileUrlIndex !== -1) {
+      fileUrl = lines[fileUrlIndex].substring('// File url: '.length).trim();
+    }
+
+    let contentWithoutFileUrl;
+    if (fileUrl) {
+      contentWithoutFileUrl = lines.slice(fileUrlIndex + 1).join('\n');
+    }
+
+    return {
+      language: language ?? '',
+      code: adjustedContent || content,
+      fileUrl,
+      searchReplaceBlock: this.isSearchReplaceBlock(contentWithoutFileUrl)
+        ? contentWithoutFileUrl
+        : null,
+    };
   };
 
   <template>
@@ -278,17 +217,16 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
               >
                 <codeBlock.actions as |actions|>
                   <actions.copyCode />
-                  {{#if (and (this.isCodePatch codeData) (not @isStreaming))}}
+                  {{#if
+                    (and (bool codeData.searchReplaceBlock) (not @isStreaming))
+                  }}
                     <actions.applyCodePatch />
                   {{/if}}
                 </codeBlock.actions>
-                {{#if
-                  (this.isCodePatchComplete codeData.contentWithoutFileUrl)
-                }}
-
+                {{#if (bool codeData.searchReplaceBlock)}}
                   {{#let
                     (getCodeDiffResultResource
-                      this codeData.fileUrl codeData.contentWithoutFileUrl
+                      this codeData.fileUrl codeData.searchReplaceBlock
                     )
                     as |codeDiffResource|
                   }}
@@ -456,22 +394,24 @@ function wrapLastTextNodeInStreamingTextSpan(
   }
   return htmlSafe(doc.body.innerHTML);
 }
-interface Args {
+
+interface CodeDiffResourceArgs {
   named: {
     fileUrl?: string | null;
     searchReplaceBlock?: string | null;
   };
 }
-export class CodeDiffResource extends Resource<Args> {
+
+export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
+  @tracked fileUrl: string | undefined | null;
   @tracked originalCode: string | undefined | null;
   @tracked modifiedCode: string | undefined | null;
-  @tracked fileUrl: string | undefined | null;
   @tracked searchReplaceBlock: string | undefined | null;
   @tracked loaded: Promise<void> | undefined;
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
 
-  modify(_positional: never[], named: Args['named']) {
+  modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
     let { fileUrl, searchReplaceBlock } = named;
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
@@ -501,9 +441,12 @@ export class CodeDiffResource extends Resource<Args> {
 
 function getCodeDiffResultResource(
   parent: object,
-  fileUrl: string,
-  searchReplaceBlock: string,
+  fileUrl?: string | null,
+  searchReplaceBlock?: string | null,
 ) {
+  if (!fileUrl || !searchReplaceBlock) {
+    throw new Error('fileUrl and searchReplaceBlock are required');
+  }
   return CodeDiffResource.from(parent, () => ({
     named: {
       fileUrl,

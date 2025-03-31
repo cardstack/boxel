@@ -5,6 +5,8 @@ interface SearchReplaceResult {
 
 /**
  * Parses a string containing search and replace content in a specific format.
+ * It tries to detect the search and replace content even if the markers are missing or incomplete.
+ *
  * The format is:
  * <<<<<<< SEARCH
  * code to search
@@ -13,8 +15,9 @@ interface SearchReplaceResult {
  * >>>>>>> REPLACE
  *
  * @param input - The input string to parse
- * @returns An object containing searchContent and replaceContent
+ * @returns An object containing searchContent and replaceContent, even if  the search/replace markers are missing or incomplete
  */
+
 function parseSearchReplace(input: string): SearchReplaceResult {
   // Define constants for marker texts
   const SEARCH_MARKER: string = '<<<<<<< SEARCH';

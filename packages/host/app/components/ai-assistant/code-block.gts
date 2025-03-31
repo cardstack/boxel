@@ -28,7 +28,7 @@ import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
 interface CopyCodeButtonSignature {
   Args: {
-    code?: string;
+    code?: string | null;
   };
 }
 
@@ -59,16 +59,20 @@ interface CodeBlockEditorSignature {
 }
 
 interface CodeBlockDiffEditorSignature {
-  Args: {};
+  Args: {
+    originalCode?: string | null;
+    modifiedCode?: string | null;
+    language?: string | null;
+  };
 }
 
 interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
     codeData?: Partial<CodeData>;
-    originalCode?: string;
-    modifiedCode?: string;
-    language?: string;
+    originalCode?: string | null;
+    modifiedCode?: string | null;
+    language?: string | null;
   };
   Blocks: {
     default: [
@@ -114,9 +118,9 @@ interface MonacoDiffEditorSignature {
   Args: {
     Named: {
       monacoSDK: MonacoSDK;
-      originalCode?: string;
-      modifiedCode?: string;
-      language?: string;
+      originalCode?: string | null;
+      modifiedCode?: string | null;
+      language?: string | null;
       editorDisplayOptions: MonacoEditorOptions;
     };
   };
@@ -149,65 +153,13 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
 
       let newOriginalCode = originalCode ?? '';
       let newModifiedCode = modifiedCode ?? '';
-      debugger;
+
       if (newOriginalCode !== originalModel?.getValue()) {
         originalModel?.setValue(newOriginalCode);
       }
       if (newModifiedCode !== modifiedModel?.getValue()) {
         modifiedModel?.setValue(newModifiedCode);
       }
-
-      // if (!newOriginalCode.startsWith(currentOriginalCode)) {
-      //   originalModel?.setValue(newOriginalCode);
-      // } else {
-      //   let codeDelta = newOriginalCode.slice(currentOriginalCode.length);
-
-      //   let lineCount = originalModel.getLineCount();
-      //   let lastLineLength = originalModel.getLineLength(lineCount);
-
-      //   let range = {
-      //     startLineNumber: lineCount,
-      //     startColumn: lastLineLength + 1,
-      //     endLineNumber: lineCount,
-      //     endColumn: lastLineLength + 1,
-      //   };
-
-      //   let editOperation = {
-      //     range: range,
-      //     text: codeDelta,
-      //     forceMoveMarkers: true,
-      //   };
-
-      //   originalModel.applyEdits([editOperation]);
-      // }
-
-      // let modifiedModel = model?.modified;
-      // let newModifiedCode = modifiedCode;
-      // let currentModifiedCode = modifiedModel?.getValue();
-
-      // if (!newModifiedCode.startsWith(currentModifiedCode)) {
-      //   modifiedModel.setValue(newModifiedCode);
-      // } else {
-      //   let codeDelta = newModifiedCode.slice(currentModifiedCode.length);
-
-      //   let lineCount = modifiedModel.getLineCount();
-      //   let lastLineLength = modifiedModel.getLineLength(lineCount);
-
-      //   let range = {
-      //     startLineNumber: lineCount,
-      //     startColumn: lastLineLength + 1,
-      //     endLineNumber: lineCount,
-      //     endColumn: lastLineLength + 1,
-      //   };
-
-      //   let editOperation = {
-      //     range: range,
-      //     text: codeDelta,
-      //     forceMoveMarkers: true,
-      //   };
-
-      //   modifiedModel.applyEdits([editOperation]);
-      // }
     } else {
       let editor = monacoSDK.editor.createDiffEditor(
         element,
@@ -216,13 +168,13 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
 
       let originalModel = monacoSDK.editor.createModel(
         originalCode ?? '',
-        language,
+        language ?? '',
       );
       let modifiedModel = monacoSDK.editor.createModel(
         modifiedCode ?? '',
-        language,
+        language ?? '',
       );
-      debugger;
+
       editor.setModel({ original: originalModel, modified: modifiedModel });
 
       this.monacoState = {
@@ -466,7 +418,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
           copyCode=(component CopyCodeButton code=@codeData.code)
           applyCodePatch=(component
             ApplyCodePatchButton
-            codePatch=@codeData.contentWithoutFileUrl
+            codePatch=@codeData.searchReplaceBlock
             fileUrl=@codeData.fileUrl
           )
         )
