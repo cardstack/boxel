@@ -312,7 +312,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @hide={{this.operatorModeStateService.aiAssistantOpen}}
             @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
           />
-          <AskAiContainer />
+          <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
           <AiAssistantButton
             class='chat-btn'
             @isActive={{this.operatorModeStateService.aiAssistantOpen}}
