@@ -77,6 +77,7 @@ export class NodeAdapter implements RealmAdapter {
     }
 
     if (this.enableFileWatcher) {
+      realmEventsLog.debug(`Starting file watcher at ${this.realmDir}`);
       // TODO remove with CS-8014
       let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
 
@@ -115,6 +116,7 @@ export class NodeAdapter implements RealmAdapter {
         });
       });
     } else {
+      realmEventsLog.debug(`Not starting file watcher at ${this.realmDir}`);
       return Promise.resolve();
     }
   }
