@@ -58,15 +58,23 @@ interface CodeBlockEditorSignature {
   Args: {};
 }
 
+interface CodeBlockDiffEditorSignature {
+  Args: {};
+}
+
 interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
-    codeData: Partial<CodeData>;
+    codeData?: Partial<CodeData>;
+    originalCode?: string;
+    modifiedCode?: string;
+    language?: string;
   };
   Blocks: {
     default: [
       {
         editor: ComponentLike<CodeBlockEditorSignature>;
+        diffEditor: ComponentLike<CodeBlockDiffEditorSignature>;
         actions: ComponentLike<CodeBlockActionsSignature>;
       },
     ];
@@ -78,6 +86,13 @@ let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
   {{yield
     (hash
       editor=(component CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData)
+      diffEditor=(component
+        CodeBlockDiffEditor
+        monacoSDK=@monacoSDK
+        originalCode=@originalCode
+        modifiedCode=@modifiedCode
+        language=@language
+      )
       actions=(component CodeBlockActionsComponent codeData=@codeData)
     )
   }}
@@ -88,50 +103,140 @@ export default CodeBlockComponent;
 interface MonacoEditorSignature {
   Args: {
     Named: {
-      codeData: Partial<CodeData>;
+      codeData?: Partial<CodeData>;
       monacoSDK: MonacoSDK;
       editorDisplayOptions: MonacoEditorOptions;
     };
   };
 }
 
-function applyCodeDiffDecorations(
-  editor: _MonacoSDK.editor.IStandaloneCodeEditor,
-  monacoSDK: MonacoSDK,
-  codeData: Partial<CodeData>,
-) {
-  if (codeData.searchStartLine && codeData.searchEndLine) {
-    editor.deltaDecorations(
-      [],
-      [
-        {
-          range: new monacoSDK.Range(
-            codeData.searchStartLine,
-            0,
-            codeData.searchEndLine,
-            1000, // Arbitrary large number to ensure the decoration spans the entire line
-          ),
-          options: { inlineClassName: 'line-to-be-replaced' },
-        },
-      ],
-    );
-  }
+interface MonacoDiffEditorSignature {
+  Args: {
+    Named: {
+      monacoSDK: MonacoSDK;
+      originalCode?: string;
+      modifiedCode?: string;
+      language?: string;
+      editorDisplayOptions: MonacoEditorOptions;
+    };
+  };
+}
 
-  if (codeData.replaceStartLine && codeData.replaceEndLine) {
-    editor.deltaDecorations(
-      [],
-      [
-        {
-          range: new monacoSDK.Range(
-            codeData.replaceStartLine,
-            0,
-            codeData.replaceEndLine,
-            1000, // Arbitrary large number to ensure the decoration spans the entire line
-          ),
-          options: { inlineClassName: 'line-to-be-replaced-with' },
-        },
-      ],
-    );
+class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
+  private monacoState: {
+    editor: _MonacoSDK.editor.IStandaloneDiffEditor;
+  } | null = null;
+
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    {
+      monacoSDK,
+      editorDisplayOptions,
+      originalCode,
+      modifiedCode,
+      language,
+    }: MonacoDiffEditorSignature['Args']['Named'],
+  ) {
+    if (!originalCode || !modifiedCode) {
+      return;
+    }
+    if (this.monacoState) {
+      let { editor } = this.monacoState;
+      let model = editor.getModel();
+      let originalModel = model?.original;
+      let modifiedModel = model?.modified;
+
+      let newOriginalCode = originalCode ?? '';
+      let newModifiedCode = modifiedCode ?? '';
+      debugger;
+      if (newOriginalCode !== originalModel?.getValue()) {
+        originalModel?.setValue(newOriginalCode);
+      }
+      if (newModifiedCode !== modifiedModel?.getValue()) {
+        modifiedModel?.setValue(newModifiedCode);
+      }
+
+      // if (!newOriginalCode.startsWith(currentOriginalCode)) {
+      //   originalModel?.setValue(newOriginalCode);
+      // } else {
+      //   let codeDelta = newOriginalCode.slice(currentOriginalCode.length);
+
+      //   let lineCount = originalModel.getLineCount();
+      //   let lastLineLength = originalModel.getLineLength(lineCount);
+
+      //   let range = {
+      //     startLineNumber: lineCount,
+      //     startColumn: lastLineLength + 1,
+      //     endLineNumber: lineCount,
+      //     endColumn: lastLineLength + 1,
+      //   };
+
+      //   let editOperation = {
+      //     range: range,
+      //     text: codeDelta,
+      //     forceMoveMarkers: true,
+      //   };
+
+      //   originalModel.applyEdits([editOperation]);
+      // }
+
+      // let modifiedModel = model?.modified;
+      // let newModifiedCode = modifiedCode;
+      // let currentModifiedCode = modifiedModel?.getValue();
+
+      // if (!newModifiedCode.startsWith(currentModifiedCode)) {
+      //   modifiedModel.setValue(newModifiedCode);
+      // } else {
+      //   let codeDelta = newModifiedCode.slice(currentModifiedCode.length);
+
+      //   let lineCount = modifiedModel.getLineCount();
+      //   let lastLineLength = modifiedModel.getLineLength(lineCount);
+
+      //   let range = {
+      //     startLineNumber: lineCount,
+      //     startColumn: lastLineLength + 1,
+      //     endLineNumber: lineCount,
+      //     endColumn: lastLineLength + 1,
+      //   };
+
+      //   let editOperation = {
+      //     range: range,
+      //     text: codeDelta,
+      //     forceMoveMarkers: true,
+      //   };
+
+      //   modifiedModel.applyEdits([editOperation]);
+      // }
+    } else {
+      let editor = monacoSDK.editor.createDiffEditor(
+        element,
+        editorDisplayOptions,
+      );
+
+      let originalModel = monacoSDK.editor.createModel(
+        originalCode ?? '',
+        language,
+      );
+      let modifiedModel = monacoSDK.editor.createModel(
+        modifiedCode ?? '',
+        language,
+      );
+      debugger;
+      editor.setModel({ original: originalModel, modified: modifiedModel });
+
+      this.monacoState = {
+        editor,
+      };
+    }
+
+    registerDestructor(this, () => {
+      let editor = this.monacoState?.editor;
+      if (editor) {
+        editor.dispose();
+      }
+      console.log('monaco diff editor disposed');
+    });
   }
 }
 
@@ -148,6 +253,10 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
       editorDisplayOptions,
     }: MonacoEditorSignature['Args']['Named'],
   ) {
+    if (!codeData) {
+      return;
+    }
+
     let { code, language } = codeData;
     if (!code || !language) {
       return;
@@ -212,7 +321,7 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
 
         editor.revealLine(lineCount + 1); // Scroll to the end as the code streams
 
-        applyCodeDiffDecorations(editor, monacoSDK, codeData);
+        // applyCodeDiffDecorations(editor, monacoSDK, codeData);
       }
     } else {
       let monacoContainer = element;
@@ -226,7 +335,7 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
       monacoSDK.editor.setModelLanguage(model, language);
 
       model.setValue(code);
-      applyCodeDiffDecorations(editor, monacoSDK, codeData);
+      // applyCodeDiffDecorations(editor, monacoSDK, codeData);
 
       this.monacoState = {
         editor,
@@ -256,6 +365,10 @@ class CodeBlockEditor extends Component<Signature> {
     },
     readOnly: true,
     automaticLayout: true,
+    stickyScroll: {
+      enabled: false,
+    },
+    fontSize: 10,
   };
 
   <template>
@@ -280,6 +393,52 @@ class CodeBlockEditor extends Component<Signature> {
         editorDisplayOptions=this.editorDisplayOptions
       }}
       class='code-block'
+      data-test-editor
+    >
+      {{! Don't put anything here in this div as monaco modifier will override this element }}
+    </div>
+  </template>
+}
+
+class CodeBlockDiffEditor extends Component<Signature> {
+  private editorDisplayOptions = {
+    originalEditable: false,
+    renderSideBySide: false,
+    diffAlgorithm: 'advanced',
+    folding: true,
+    hideUnchangedRegions: {
+      enabled: true,
+      revealLineCount: 10,
+      minimumLineCount: 1,
+      contextLineCount: 1,
+    },
+    readOnly: true,
+    fontSize: 10,
+    renderOverviewRuler: false,
+  };
+
+  <template>
+    <style scoped>
+      .code-block {
+        margin-bottom: 15px;
+        width: calc(100% + 2 * var(--boxel-sp));
+        margin-left: calc(-1 * var(--boxel-sp));
+        height: 120px;
+      }
+
+      :deep(.line-insert) {
+        background-color: rgb(19 255 32 / 66%) !important;
+      }
+    </style>
+    <div
+      {{MonacoDiffEditor
+        monacoSDK=@monacoSDK
+        editorDisplayOptions=this.editorDisplayOptions
+        language=@language
+        originalCode=@originalCode
+        modifiedCode=@modifiedCode
+      }}
+      class='code-block code-block-diff'
       data-test-editor
     >
       {{! Don't put anything here in this div as monaco modifier will override this element }}

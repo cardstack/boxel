@@ -4,24 +4,27 @@ import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-
+import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
-
+import { Resource } from 'ember-resources';
 import {
   ParsedCodeContent,
   parseCodeContent,
 } from '@cardstack/host/lib/search-replace-blocks-parsing';
+import { parseSearchReplace } from '@cardstack/host/lib/search-replace-blocks-parsing-v2';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import CodeBlock from './code-block';
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import { trackedFunction } from 'ember-resources/util/function';
 
 export interface CodeData extends ParsedCodeContent {
   language: string;
@@ -109,9 +112,139 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   private isLastHtmlGroup = (index: number) => {
     return index === this.htmlGroups.length - 1;
   };
+  private extractCodeData = (
+    preElementString: string,
+    isStreaming: boolean,
+    index: number,
+  ): CodeData => {
+    if (!preElementString) {
+      return {
+        language: '',
+        fileUrl: null,
+        code: '',
+        searchStartLine: null,
+        searchEndLine: null,
+        replaceStartLine: null,
+        replaceEndLine: null,
+        contentWithoutFileUrl: null,
+      };
+    }
+
+    const languageMatch = preElementString.match(
+      /data-code-language="([^"]+)"/,
+    );
+    const language = languageMatch ? languageMatch[1] : null;
+    const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
+    let content = contentMatch ? contentMatch[1] : null;
+    let parsedContent = parseCodeContent(content ?? '');
+    let parsedContent2 = parseSearchReplace(content ?? '');
+
+    let content2 = '';
+    if (parsedContent2.searchContent) {
+      // get count of leading spaces in the first line of searchContent
+      let firstLine = parsedContent2.searchContent.split('\n')[0];
+      let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
+      let emptyString = ' '.repeat(leadingSpaces);
+      content2 = `// existing code ... \n\n${parsedContent2.searchContent.replaceAll(
+        emptyString,
+        '',
+      )}`;
+
+      if (parsedContent2.replaceContent) {
+        content2 += `\n\n// new code ... \n\n${parsedContent2.replaceContent.replaceAll(
+          emptyString,
+          '',
+        )}`;
+      }
+    }
+    // content = parsedContent.code;
+
+    if (content2) {
+      parsedContent.code = content2;
+    }
+
+    let isCodePatchComplete = this.isCodePatchComplete(
+      parsedContent.contentWithoutFileUrl,
+    );
+
+    let a = new TrackedObject({
+      originalCode: null,
+      modifiedCode: null,
+      language: language ?? '',
+      ...parsedContent,
+    });
+
+    let loadOriginalAndModifiedCode = async (
+      fileUrl: string,
+      searchReplaceBlock: string,
+      codeData: CodeData,
+      isStreaming: boolean,
+      htmlGroupsWithLoadedData: number[],
+      index: number,
+    ) => {
+      // if (
+      //   codeData.originalCode ||
+      //   (this.isCodePatch(codeData) &&
+      //     !this.isCodePatchComplete(codeData.contentWithoutFileUrl))
+      // ) {
+      //   return;
+      // }
+      // if (codeData.originalCode) {
+      //   return;
+      // }
+
+      let source = await this.cardService.getSource(new URL(codeData.fileUrl));
+      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+        this.commandService.commandContext,
+      );
+
+      let { resultContent: patchedCode } =
+        await applySearchReplaceBlockCommand.execute({
+          fileContent: source,
+          codeBlock: searchReplaceBlock,
+        });
+
+      codeData.originalCode = source;
+
+      codeData.modifiedCode = patchedCode;
+
+      // this.htmlGroupsWithLoadedData.push(index);
+
+      // codeData = {
+      //   ...codeData,
+      //   originalCode: source,
+      //   modifiedCode: patchedCode,
+      // };
+    };
+
+    // if (isCodePatchComplete && !this.htmlGroupsWithLoadedData.includes(index)) {
+    // loadOriginalAndModifiedCode(
+    //   parsedContent.fileUrl,
+    //   parsedContent.contentWithoutFileUrl,
+    //   a,
+    //   this.htmlGroupsWithLoadedData,
+    //   index,
+    // );
+    // }
+
+    return a;
+
+    // const languageMatch = preElementString.match(/data-code-language="([^"]+)"/);
+  };
 
   private isCodePatch = (codeData: ParsedCodeContent): boolean => {
     return !!codeData.fileUrl && !!codeData.searchStartLine;
+  };
+
+  private isCodePatchComplete = (code: string): boolean => {
+    if (!code) {
+      return false;
+    }
+    return (
+      code.includes('<<<<<<< SEARCH') &&
+      code.includes('=======') &&
+      code.includes('>>>>>>> REPLACE')
+    );
   };
 
   <template>
@@ -137,7 +270,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         }}
         {{#each this.htmlGroups as |htmlGroup index|}}
           {{#if (eq htmlGroup.type 'pre_tag')}}
-            {{#let (extractCodeData htmlGroup.content) as |codeData|}}
+            {{#let (this.extractCodeData htmlGroup.content) as |codeData|}}
               <CodeBlock
                 @monacoSDK={{@monacoSDK}}
                 @codeData={{codeData}}
@@ -149,7 +282,27 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                     <actions.applyCodePatch />
                   {{/if}}
                 </codeBlock.actions>
-                <codeBlock.editor />
+                {{#if
+                  (this.isCodePatchComplete codeData.contentWithoutFileUrl)
+                }}
+
+                  {{#let
+                    (getCodeDiffResultResource
+                      this codeData.fileUrl codeData.contentWithoutFileUrl
+                    )
+                    as |codeDiffResource|
+                  }}
+                    {{#if codeDiffResource.loaded}}
+                      <codeBlock.diffEditor
+                        @originalCode={{codeDiffResource.originalCode}}
+                        @modifiedCode={{codeDiffResource.modifiedCode}}
+                        @language={{codeData.language}}
+                      />
+                    {{/if}}
+                  {{/let}}
+                {{else}}
+                  <codeBlock.editor />
+                {{/if}}
               </CodeBlock>
             {{/let}}
           {{else}}
@@ -275,37 +428,6 @@ function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   return result;
 }
 
-function extractCodeData(preElementString: string): CodeData {
-  if (!preElementString) {
-    return {
-      language: '',
-      fileUrl: null,
-      code: '',
-      searchStartLine: null,
-      searchEndLine: null,
-      replaceStartLine: null,
-      replaceEndLine: null,
-      contentWithoutFileUrl: null,
-    };
-  }
-  // Extract language using regex - finds the value of data-codeblock attribute
-  const languageMatch = preElementString.match(/data-code-language="([^"]+)"/);
-  const language = languageMatch ? languageMatch[1] : null;
-
-  // Extract content using regex - finds everything between the opening and closing pre tags
-  const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-  let content = contentMatch ? contentMatch[1] : null;
-
-  let parsedContent = parseCodeContent(content ?? '');
-
-  content = parsedContent.code;
-
-  return {
-    language: language ?? '',
-    ...parsedContent,
-  };
-}
-
 function findLastTextNodeWithContent(parentNode: Node): Text | null {
   // iterate childNodes in reverse to find the last text node with non-whitespace text
   for (let i = parentNode.childNodes.length - 1; i >= 0; i--) {
@@ -333,4 +455,59 @@ function wrapLastTextNodeInStreamingTextSpan(
     lastTextNode.replaceWith(span);
   }
   return htmlSafe(doc.body.innerHTML);
+}
+interface Args {
+  named: {
+    fileUrl?: string | null;
+    searchReplaceBlock?: string | null;
+  };
+}
+export class CodeDiffResource extends Resource<Args> {
+  @tracked originalCode: string | undefined | null;
+  @tracked modifiedCode: string | undefined | null;
+  @tracked fileUrl: string | undefined | null;
+  @tracked searchReplaceBlock: string | undefined | null;
+  @tracked loaded: Promise<void> | undefined;
+  @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
+
+  modify(_positional: never[], named: Args['named']) {
+    let { fileUrl, searchReplaceBlock } = named;
+    this.fileUrl = fileUrl;
+    this.searchReplaceBlock = searchReplaceBlock;
+
+    this.loaded = this.load.perform();
+  }
+
+  load = restartableTask(async () => {
+    let { fileUrl, searchReplaceBlock } = this;
+    if (!fileUrl || !searchReplaceBlock) {
+      return;
+    }
+    let result = await this.cardService.getSource(new URL(fileUrl));
+    this.originalCode = result;
+    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+      this.commandService.commandContext,
+    );
+
+    let { resultContent: patchedCode } =
+      await applySearchReplaceBlockCommand.execute({
+        fileContent: this.originalCode,
+        codeBlock: searchReplaceBlock,
+      });
+    this.modifiedCode = patchedCode;
+  });
+}
+
+function getCodeDiffResultResource(
+  parent: object,
+  fileUrl: string,
+  searchReplaceBlock: string,
+) {
+  return CodeDiffResource.from(parent, () => ({
+    named: {
+      fileUrl,
+      searchReplaceBlock,
+    },
+  }));
 }
