@@ -160,7 +160,7 @@ test.describe('Live Cards', () => {
     await postCardSource(
       page,
       realmURL,
-      `${realmURL}sample-card.gts`,
+      `sample-card.gts`,
       `
           import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
           import { Component } from 'https://cardstack.com/base/card-api';
