@@ -56,6 +56,7 @@ export default class CardURLResults extends Component<Signature> {
       {{#if this.card}}
         <SearchResult
           @cardId={{this.card.id}}
+          @card={{this.card}}
           @isCompact={{@isCompact}}
           {{on 'click' (fn @handleCardSelect this.card.id)}}
           data-test-search-sheet-search-result='0'
