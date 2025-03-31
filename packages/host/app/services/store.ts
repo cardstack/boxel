@@ -13,6 +13,7 @@ import {
   hasExecutableExtension,
   isCardInstance,
   isSingleCardDocument,
+  Deferred,
   type AutoSaveState,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -68,6 +69,7 @@ export default class StoreService extends Service {
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
+  private workingGetCard: Map<string, Promise<CardDef | CardError>> = new Map();
 
   constructor(owner: Owner) {
     super(owner);
@@ -398,7 +400,16 @@ export default class StoreService extends Service {
     urlOrDoc: string | LooseSingleCardDocument,
     relativeTo?: URL,
   ) {
+    let deferred: Deferred<CardDef | CardError> | undefined;
     let url = asURL(urlOrDoc);
+    if (url) {
+      let working = this.workingGetCard.get(url);
+      if (working) {
+        return working as Promise<T>;
+      }
+      deferred = new Deferred<CardDef | CardError>();
+      this.workingGetCard.set(url, deferred.promise);
+    }
     try {
       if (!url) {
         // this is a new card so instantiate it and save it
@@ -413,6 +424,7 @@ export default class StoreService extends Service {
         );
         await this.cardService.saveModel(newCard);
         this.identityContext.set(newCard.id, newCard);
+        deferred?.fulfill(newCard);
         return newCard as T;
       }
 
@@ -420,6 +432,7 @@ export default class StoreService extends Service {
       // also avoid the fetchJSON when we already have the stable card.
       let existingCard = this.identityContext.get(url);
       if (existingCard) {
+        deferred?.fulfill(existingCard);
         return existingCard as T;
       }
       let doc = (typeof urlOrDoc !== 'string' ? urlOrDoc : undefined) as
@@ -443,11 +456,17 @@ export default class StoreService extends Service {
           identityContext: this.identityContext,
         },
       );
+      deferred?.fulfill(card);
       return card as T;
     } catch (error: any) {
       let errorResponse = processCardError(url, error);
       let cardError = errorResponse.errors[0];
+      deferred?.fulfill(cardError);
       return cardError;
+    } finally {
+      if (url) {
+        this.workingGetCard.delete(url);
+      }
     }
   }
 
