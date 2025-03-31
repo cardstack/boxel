@@ -33,7 +33,6 @@ import {
   waitUntil,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { shimExternals } from '../lib/externals';
 import { RealmServer } from '../server';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -199,10 +198,6 @@ module(basename(__filename), function () {
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
       resetCatalogRealms();
-    });
-
-    hooks.beforeEach(async function () {
-      shimExternals(virtualNetwork);
     });
 
     setupPermissionedRealm(hooks, {
