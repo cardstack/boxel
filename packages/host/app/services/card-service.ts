@@ -209,6 +209,7 @@ export default class CardService extends Service {
     return serialized;
   }
 
+  // TODO move into store
   async reloadCard(card: CardDef): Promise<void> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
@@ -229,17 +230,18 @@ export default class CardService extends Service {
     });
   }
 
-  // we return undefined if the card changed locally while the save was in-flight
-  async saveModel(
-    card: CardDef,
-    defaultRealmHref?: string,
-  ): Promise<CardDef | undefined> {
+  // TODO move into store
+  // This is a low-level API that only the store should be calling.
+  // we return undefined if the card changed locally while the save was in-flight.
+  async saveModel(card: CardDef, defaultRealmHref?: string): Promise<void> {
     let cardChanged = false;
     function onCardChange() {
       cardChanged = true;
     }
-    let api = await this.getAPI();
+    let token = waiter.beginAsync();
+    let api: typeof CardAPI | undefined;
     try {
+      api = await this.getAPI();
       api.subscribeToChanges(card, onCardChange);
       let doc = await this.serializeCard(card, {
         // for a brand new card that has no id yet, we don't know what we are
@@ -264,7 +266,6 @@ export default class CardService extends Service {
       let json = await this.saveCardDocument(doc, realmURL);
       let isNew = !card.id;
 
-      let result: CardDef | undefined;
       // if the card changed while the save was in flight then don't load the
       // server's version of the card--the next auto save will include these
       // unsaved changes.
@@ -273,7 +274,7 @@ export default class CardService extends Service {
         // should always use updateFromSerialized()--this way a newly created
         // instance that does not yet have an id is still the same instance after an
         // ID has been assigned by the server.
-        result = (await api.updateFromSerialized(card, json)) as CardDef;
+        await api.updateFromSerialized(card, json);
       } else if (isNew) {
         // in this case a new card was created, but there is an immediate change
         // that was made--so we save off the new ID for the card so in the next
@@ -283,12 +284,12 @@ export default class CardService extends Service {
       if (this.subscriber) {
         this.subscriber(new URL(json.data.id), json);
       }
-      return result;
     } catch (err) {
       console.error(`Failed to save ${card.id}: `, err);
       throw err;
     } finally {
-      api.unsubscribeFromChanges(card, onCardChange);
+      api?.unsubscribeFromChanges(card, onCardChange);
+      waiter.endAsync(token);
     }
   }
 
@@ -352,12 +353,11 @@ export default class CardService extends Service {
     return response;
   }
 
-  // we return undefined if the card changed locally while the save was in-flight
   async patchCard(
     card: CardDef,
     doc: LooseSingleCardDocument,
     patchData: PatchData,
-  ): Promise<CardDef | undefined> {
+  ): Promise<void> {
     let api = await this.getAPI();
     let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
     for (let [field, value] of Object.entries(linkedCards)) {
@@ -380,10 +380,8 @@ export default class CardService extends Service {
         (card as any)[field] = value;
       }
     }
-    let updatedCard = await api.updateFromSerialized<typeof CardDef>(card, doc);
-    // TODO setting `this` as an owner until we can have a better solution here...
-    // (currently only used by the AI bot to patch cards from chat)
-    return await this.saveModel(updatedCard);
+    await api.updateFromSerialized<typeof CardDef>(card, doc);
+    await this.saveModel(card);
   }
 
   private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
@@ -466,24 +464,6 @@ export default class CardService extends Service {
       );
     }
     return json;
-  }
-
-  async copyCard(source: CardDef, destinationRealm: URL): Promise<CardDef> {
-    let api = await this.getAPI();
-    let serialized = await this.serializeCard(source, {
-      useAbsoluteURL: true,
-    });
-    delete serialized.data.id;
-    let json = await this.saveCardDocument(serialized, destinationRealm);
-    let result = (await api.createFromSerialized(
-      json.data,
-      json,
-      new URL(json.data.id),
-    )) as CardDef;
-    if (this.subscriber) {
-      this.subscriber(new URL(json.data.id), json);
-    }
-    return result;
   }
 
   async deleteCard(cardId: string): Promise<void> {

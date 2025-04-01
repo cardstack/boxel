@@ -21,14 +21,18 @@ import {
   Deferred,
   LooseSingleCardDocument,
   Realm,
+  delay,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import NetworkService from '@cardstack/host/services/network';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type CardService from '@cardstack/host/services/card-service';
+import type NetworkService from '@cardstack/host/services/network';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   percySnapshot,
@@ -53,12 +57,14 @@ module('Integration | operator-mode', function (hooks) {
   let testRealm: Realm;
   let testRealmAdapter: TestRealmAdapter;
   let operatorModeStateService: OperatorModeStateService;
+  let cardService: CardService;
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
+    cardService = this.owner.lookup('service:card-service') as CardService;
   });
 
   setupLocalIndexing(hooks);
@@ -784,6 +790,52 @@ module('Integration | operator-mode', function (hooks) {
       assert.ok(false, 'does not save when file is not changed');
     });
     await click('[data-test-edit-button]');
+  });
+
+  test<TestContextWithSave>('it does not wait for save to complete before switching from edit to isolated mode', async function (assert) {
+    (cardService as any)._originalSaveModel = cardService.saveModel;
+    cardService.saveModel = async (
+      card: CardDef,
+      defaultRealmHref?: string,
+    ) => {
+      // slow down the save so we can make sure that the format switch is
+      // not tied to the save completion
+      await delay(1000);
+      await (cardService as any)._originalSaveModel(card, defaultRealmHref);
+    };
+    try {
+      setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      await waitFor('[data-test-person]');
+      await click('[data-test-edit-button]');
+      let operationOrder: string[] = [];
+      this.onSave(() => {
+        operationOrder.push('saved');
+      });
+      await fillIn('[data-test-field="firstName"] input', 'FadhlanX');
+      // intentionally not awaiting the click so we can ignore the test waiters
+      click('[data-test-edit-button]');
+      await waitFor(
+        `[data-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-format="isolated"]`,
+      );
+      operationOrder.push('isolated-model');
+      await waitUntil(() => operationOrder.length === 2, { timeout: 10000 });
+      assert.deepEqual(
+        operationOrder,
+        ['isolated-model', 'saved'],
+        'the isolated mode is displayed before save completes',
+      );
+    } finally {
+      cardService.saveModel = (cardService as any)._originalSaveModel;
+    }
   });
 
   test('an error in auto-save is handled gracefully', async function (assert) {
@@ -2622,7 +2674,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
   });
 
-  test<TestContextWithSave>('Choosing a new  card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
+  test<TestContextWithSave>('Choosing a new card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
     assert.expect(5);
     setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(

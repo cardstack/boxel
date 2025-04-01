@@ -28,14 +28,34 @@ export default class CopyCardCommand extends HostBaseCommand<
     return CopyCardInput;
   }
 
+  // Instances that are created via this method are eligible for garbage
+  // collection--meaning that it will be detached from the store. This means you
+  // MUST consume the instance IMMEDIATELY! it should not live in the state of
+  // the consumer.
   protected async run(
     input: BaseCommandModule.CopyCardInput,
   ): Promise<BaseCommandModule.CopyCardResult> {
     const realmUrl = await this.determineTargetRealmUrl(input);
-    const newCard = await this.cardService.copyCard(
-      input.sourceCard,
-      new URL(realmUrl),
-    );
+    let doc = await this.cardService.serializeCard(input.sourceCard, {
+      useAbsoluteURL: true,
+    });
+    delete doc.data.id;
+    let maybeId = await this.store.createInstance(doc, undefined, realmUrl);
+    if (typeof maybeId !== 'string') {
+      throw new Error(
+        `unable to save copied card instance: ${JSON.stringify(
+          maybeId,
+          null,
+          2,
+        )}`,
+      );
+    }
+    let newCard = await this.store.peek(maybeId);
+    if (!isCardInstance(newCard)) {
+      throw new Error(
+        `unable to get instance ${maybeId}: ${JSON.stringify(newCard, null, 2)}`,
+      );
+    }
     let commandModule = await this.loadCommandModule();
     const { CopyCardResult } = commandModule;
     return new CopyCardResult({ newCard });

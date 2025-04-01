@@ -4,12 +4,12 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import type CardService from '../services/card-service';
+import type StoreService from '../services/store';
 
 export default class SaveCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.SaveCardInput
 > {
-  @service declare private cardService: CardService;
+  @service declare private store: StoreService;
 
   async getInputType() {
     let commandModule = await this.loadCommandModule();
@@ -17,10 +17,13 @@ export default class SaveCardCommand extends HostBaseCommand<
     return SaveCardInput;
   }
 
+  // Instances that are saved via this method are eligible for garbage
+  // collection--meaning that it will be detached from the store. This means you
+  // MUST consume the instance IMMEDIATELY! it should not live in the state of
+  // the consumer.
   protected async run(
     input: BaseCommandModule.SaveCardInput,
   ): Promise<undefined> {
-    // TODO: handle case where card is already saved and a different input.realm is provided
-    await this.cardService.saveModel(input.card, input.realm);
+    await this.store.saveInstance(input.card, input.realm);
   }
 }

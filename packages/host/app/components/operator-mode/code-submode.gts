@@ -94,7 +94,6 @@ import SubmodeLayout from './submode-layout';
 interface Signature {
   Args: {
     saveSourceOnClose: (url: URL, content: string) => void;
-    saveCardOnClose: (card: CardDef) => void;
   };
 }
 

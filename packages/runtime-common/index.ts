@@ -391,8 +391,8 @@ export interface Actions {
   ) => void;
   copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
   editCard: (card: CardDef) => void;
-  copyCard?: (card: CardDef) => Promise<CardDef>;
-  saveCard(card: CardDef): Promise<void>;
+  copyCard?: (card: CardDef) => Promise<string>;
+  saveCard: (id: string) => void;
   delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
     card: CardDef,

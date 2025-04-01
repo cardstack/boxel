@@ -26,7 +26,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
-import IdentityContext from '../lib/gc-identity-context';
+import IdentityContext, { getDeps } from '../lib/gc-identity-context';
 
 import EnvironmentService from './environment-service';
 
@@ -127,7 +127,6 @@ export default class StoreService extends Service {
     urlOrDoc,
     setCard,
     setCardError,
-    relativeTo,
     isLive,
     isAutoSaved,
   }: {
@@ -135,7 +134,6 @@ export default class StoreService extends Service {
     urlOrDoc: string | LooseSingleCardDocument;
     setCard?: (card: CardDef | undefined) => void;
     setCardError?: (error: CardError | undefined) => void;
-    relativeTo?: URL;
     isLive?: boolean;
     isAutoSaved?: boolean;
   }): Promise<{
@@ -147,7 +145,7 @@ export default class StoreService extends Service {
     if (!url) {
       throw new Error(`Cannot create subscriber with doc that has no ID`);
     }
-    let cardOrError = await this.getCard(urlOrDoc, relativeTo);
+    let cardOrError = await this.getCard({ urlOrDoc });
     let card = isCardInstance(cardOrError) ? cardOrError : undefined;
     let error = !isCardInstance(cardOrError) ? cardOrError : undefined;
 
@@ -211,13 +209,32 @@ export default class StoreService extends Service {
   async createInstance(
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
+    realm?: string,
   ): Promise<string | CardError> {
     await this.ready;
-    let cardOrError = await this.getCard(doc, relativeTo);
+    let cardOrError = await this.getCard({ urlOrDoc: doc, relativeTo, realm });
     if (isCardInstance(cardOrError)) {
       return cardOrError.id;
     }
     return cardOrError;
+  }
+
+  save(id: string) {
+    this.initiateAutoSaveTask.perform(id, { isImmediate: true });
+  }
+
+  // Instances that are saved via this method are eligible for garbage
+  // collection--meaning that it will be detached from the store. This means you
+  // MUST consume the instance IMMEDIATELY! it should not live in the state of
+  // the consumer.
+  async saveInstance(instance: CardDef, realm?: string) {
+    this.guardAgainstUnknownInstances(instance);
+    if (instance.id) {
+      this.save(instance.id);
+      return;
+    }
+    await this.cardService.saveModel(instance, realm);
+    this.identityContext.set(instance.id, instance);
   }
 
   // This method is used for specific scenarios where you just want an instance
@@ -231,7 +248,32 @@ export default class StoreService extends Service {
     if (cached) {
       return cached as T;
     }
-    return await this.getCard<T>(url, undefined);
+    return await this.getCard<T>({ urlOrDoc: url });
+  }
+
+  getAutoSaveState(card: CardDef): AutoSaveState | undefined {
+    return this.autoSaveStates.get(card);
+  }
+
+  private async guardAgainstUnknownInstances(instance: CardDef) {
+    if (instance.id && this.identityContext.get(instance.id) !== instance) {
+      throw new Error(
+        `tried to add ${instance.id} to the store, but the store already has a different instance with this id. Please obtain the instances that already exists from the store`,
+      );
+    }
+    let api = await this.cardService.getAPI();
+    let deps = getDeps(api, instance);
+    for (let dep of deps) {
+      if (dep.id && this.identityContext.get(dep.id) !== dep) {
+        throw new Error(
+          `encountered a dependency, ${dep.id}, of ${instance.id} when adding ${instance.id} to the store, but the store ${
+            this.identityContext.get(dep.id)
+              ? "already has a different instance with this dependency's id"
+              : "has no entry for this dependency's id"
+          }. Please obtain the instances that already exists from the store`,
+        );
+      }
+    }
   }
 
   private async setup() {
@@ -300,7 +342,7 @@ export default class StoreService extends Service {
     async (urlOrDoc: string | LooseSingleCardDocument) => {
       let url = asURL(urlOrDoc);
       let oldCard = url ? this.identityContext.get(url) : undefined;
-      let cardOrError = await this.getCard(urlOrDoc);
+      let cardOrError = await this.getCard({ urlOrDoc });
       await this.handleUpdatedCard(oldCard, cardOrError);
       if (url) {
         this.notifyLiveResources(url, cardOrError);
@@ -396,10 +438,15 @@ export default class StoreService extends Service {
     }
   }
 
-  private async getCard<T extends CardDef>(
-    urlOrDoc: string | LooseSingleCardDocument,
-    relativeTo?: URL,
-  ) {
+  private async getCard<T extends CardDef>({
+    urlOrDoc,
+    relativeTo,
+    realm,
+  }: {
+    urlOrDoc: string | LooseSingleCardDocument;
+    relativeTo?: URL;
+    realm?: string; // used for new cards
+  }) {
     let deferred: Deferred<CardDef | CardError> | undefined;
     let url = asURL(urlOrDoc);
     if (url) {
@@ -422,7 +469,7 @@ export default class StoreService extends Service {
             identityContext: this.identityContext,
           },
         );
-        await this.cardService.saveModel(newCard);
+        await this.cardService.saveModel(newCard, realm);
         this.identityContext.set(newCard.id, newCard);
         deferred?.fulfill(newCard);
         return newCard as T;
@@ -468,14 +515,6 @@ export default class StoreService extends Service {
         this.workingGetCard.delete(url);
       }
     }
-  }
-
-  getAutoSaveState(card: CardDef): AutoSaveState | undefined {
-    return this.autoSaveStates.get(card);
-  }
-
-  save(id: string) {
-    this.initiateAutoSaveTask.perform(id, { isImmediate: true });
   }
 
   private initiateAutoSaveTask = restartableTask(

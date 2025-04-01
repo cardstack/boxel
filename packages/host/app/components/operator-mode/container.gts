@@ -30,8 +30,6 @@ import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import CardCatalogModal from '../card-catalog/modal';
 import { Submodes } from '../submode-switcher';
 
@@ -81,16 +79,6 @@ export default class OperatorModeContainer extends Component<Signature> {
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
       await this.cardService.saveSource(url, content);
-    });
-  });
-
-  // we debounce saves in the stack item--by the time they reach
-  // this level we need to handle every request (so not restartable). otherwise
-  // we might drop writes from different stack items that want to save
-  // at the same time
-  private saveCard = task(async (card: CardDef) => {
-    return await this.withTestWaiters(async () => {
-      return await this.cardService.saveModel(card);
     });
   });
 
@@ -156,12 +144,9 @@ export default class OperatorModeContainer extends Component<Signature> {
           @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
         />
       {{else if this.isCodeMode}}
-        <CodeSubmode
-          @saveSourceOnClose={{perform this.saveSource}}
-          @saveCardOnClose={{perform this.saveCard}}
-        />
+        <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
       {{else}}
-        <InteractSubmode @saveCard={{perform this.saveCard}} />
+        <InteractSubmode />
       {{/if}}
     </Modal>
 

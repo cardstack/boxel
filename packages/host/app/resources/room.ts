@@ -379,6 +379,9 @@ export class RoomResource extends Resource<Args> {
     return this.allSkillEventIds.has(eventId);
   }
 
+  // TODO we should think about why we are caching these running instances
+  // outside of the store. it would be a good idea to bring these into the fold
+  // so that we can make the `createFromSerialized()` more private.
   private async ensureSkillCardCached(eventId: string) {
     if (this._skillEventIdToCardIdCache.has(eventId)) {
       return;

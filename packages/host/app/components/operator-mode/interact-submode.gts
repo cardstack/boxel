@@ -141,19 +141,12 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
   </template>
 }
 
-interface Signature {
-  Element: HTMLDivElement;
-  Args: {
-    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
-  };
-}
-
 interface CardToDelete {
   id: string;
   title: string;
 }
 
-export default class InteractSubmode extends Component<Signature> {
+export default class InteractSubmode extends Component {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
 
@@ -277,13 +270,13 @@ export default class InteractSubmode extends Component<Signature> {
           }),
         );
       },
-      copyCard: async (card: CardDef): Promise<CardDef> => {
-        let deferred = new Deferred<CardDef>();
+      copyCard: async (card: CardDef): Promise<string> => {
+        let deferred = new Deferred<string>();
         here._copyCard.perform(card, stackIndex, deferred);
         return await deferred.promise;
       },
-      saveCard: async (card: CardDef): Promise<void> => {
-        await here.args.saveCard(card);
+      saveCard: (id: string): void => {
+        here.store.save(id);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
         if (here.cardToDelete) {
@@ -447,24 +440,20 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private _copyCard = dropTask(
-    async (
-      sourceCard: CardDef,
-      stackIndex: number,
-      done: Deferred<CardDef>,
-    ) => {
-      let newCard: CardDef | undefined;
+    async (sourceCard: CardDef, stackIndex: number, done: Deferred<string>) => {
+      let newCardId: string | undefined;
       try {
         let { commandContext } = this.commandService;
-        const result = await new CopyCardCommand(commandContext).execute({
+        const { newCard } = await new CopyCardCommand(commandContext).execute({
           sourceCard,
           targetStackIndex: stackIndex,
         });
-        newCard = result.newCard;
+        newCardId = newCard.id;
       } catch (e) {
         done.reject(e);
       } finally {
-        if (newCard) {
-          done.fulfill(newCard);
+        if (newCardId) {
+          done.fulfill(newCardId);
         }
       }
     },
@@ -502,7 +491,7 @@ export default class InteractSubmode extends Component<Signature> {
         }
         let realmURL = destinationRealmURL;
         sources.sort((a, b) => a.title.localeCompare(b.title));
-        let scrollToCard: CardDef | undefined;
+        let scrollToCardId: string | undefined;
         for (let [index, card] of sources.entries()) {
           let { newCard } = await new CopyCardCommand(
             this.commandService.commandContext,
@@ -511,7 +500,7 @@ export default class InteractSubmode extends Component<Signature> {
             targetRealmUrl: realmURL.href,
           });
           if (index === 0) {
-            scrollToCard = newCard; // we scroll to the first card lexically by title
+            scrollToCardId = newCard.id; // we scroll to the first card lexically by title
           }
         }
         let clearSelection =
@@ -522,11 +511,11 @@ export default class InteractSubmode extends Component<Signature> {
         cardSelections.delete(sourceItem);
         let scrollIntoView =
           stackItemComponentAPI.get(destinationItem)?.scrollIntoView;
-        if (scrollToCard) {
+        if (scrollToCardId) {
           // Currently the destination item is always a cards-grid, so we use that
           // fact to be able to scroll to the newly copied item
           scrollIntoView?.(
-            `[data-stack-card="${destinationIndexCardUrl}"] [data-cards-grid-item="${scrollToCard.id}"]`,
+            `[data-stack-card="${destinationIndexCardUrl}"] [data-cards-grid-item="${scrollToCardId}"]`,
           );
         }
       });
@@ -766,7 +755,6 @@ export default class InteractSubmode extends Component<Signature> {
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
-                @saveCard={{@saveCard}}
               />
             {{/let}}
           {{/each}}

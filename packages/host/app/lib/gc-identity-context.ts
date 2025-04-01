@@ -61,7 +61,9 @@ export default class IdentityContextWithGarbageCollection
         if (this.#gcCandidates.has(instance.id)) {
           console.log(`garbage collecting instance ${instance.id} from store`);
           // brand the instance to make it easier for debugging
-          (instance as unknown as any).__instance_detached_from_store = true;
+          (instance as unknown as any)[
+            Symbol.for('__instance_detached_from_store')
+          ] = true;
           this.delete(instance.id);
         } else {
           this.#gcCandidates.add(instance.id);
@@ -120,7 +122,7 @@ export default class IdentityContextWithGarbageCollection
   }
 }
 
-function getDeps(api: typeof CardAPI, instance: CardDef): CardDef[] {
+export function getDeps(api: typeof CardAPI, instance: CardDef): CardDef[] {
   let fields = api.getFields(
     Reflect.getPrototypeOf(instance)!.constructor as typeof CardDef,
     { includeComputeds: true },

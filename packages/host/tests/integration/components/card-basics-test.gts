@@ -733,13 +733,13 @@ module('Integration | card-basics', function (hooks) {
       await renderCard(loader, driver, 'edit');
       await fillIn(
         '[data-test-ref] input',
-        `@cardstack/boxel-host/commands/save-card/default`,
+        `@cardstack/boxel-host/commands/create-card/default`,
       );
       await waitFor('[data-test-hasValidated]');
       assert
         .dom('[data-test-ref] input')
         .hasValue(
-          `@cardstack/boxel-host/commands/save-card/default`,
+          `@cardstack/boxel-host/commands/create-card/default`,
           'input field is correct',
         );
       assert
@@ -749,7 +749,7 @@ module('Integration | card-basics', function (hooks) {
       assert.deepEqual(
         driver.ref,
         {
-          module: `@cardstack/boxel-host/commands/save-card`,
+          module: `@cardstack/boxel-host/commands/create-card`,
           name: `default`,
         },
         'code ref field value is correct',
@@ -772,13 +772,13 @@ module('Integration | card-basics', function (hooks) {
       await waitFor('[data-test-hasValidated]');
       await fillIn(
         '[data-test-ref] input',
-        `@cardstack/boxel-host/commands/save-card/doesNotExist`,
+        `@cardstack/boxel-host/commands/create-card/doesNotExist`,
       );
       await waitFor('[data-test-hasValidated]');
       assert
         .dom('[data-test-ref] input')
         .hasValue(
-          `@cardstack/boxel-host/commands/save-card/doesNotExist`,
+          `@cardstack/boxel-host/commands/create-card/doesNotExist`,
           'input field is correct',
         );
       assert

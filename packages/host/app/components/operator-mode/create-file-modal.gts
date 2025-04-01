@@ -40,6 +40,8 @@ import {
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
+import CopyCardCommand from '@cardstack/host/commands/copy-card';
+
 import type RealmService from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -54,6 +56,7 @@ import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
 import type CardService from '../../services/card-service';
+import type CommandService from '../../services/command-service';
 import type NetworkService from '../../services/network';
 import type StoreService from '../../services/store';
 
@@ -332,6 +335,7 @@ export default class CreateFileModal extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard<Spec>;
 
   @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
   @service private declare network: NetworkService;
   @service private declare store: StoreService;
 
@@ -727,15 +731,13 @@ export class ${className} extends ${exportName} {
         `Cannot duplicateCardInstance where where is no selected realm URL`,
       );
     }
-    let duplicate = await this.cardService.copyCard(
-      this.currentRequest.sourceInstance,
-      this.selectedRealmURL,
-    );
-    let saved = await this.cardService.saveModel(duplicate);
-    if (!saved) {
-      throw new Error(`unable to save duplicated card instance`);
-    }
-    this.currentRequest.newFileDeferred.fulfill(new URL(`${saved.id}.json`));
+    let { newCard } = await new CopyCardCommand(
+      this.commandService.commandContext,
+    ).execute({
+      sourceCard: this.currentRequest.sourceInstance,
+      targetRealmUrl: this.selectedRealmURL.href,
+    });
+    this.currentRequest.newFileDeferred.fulfill(new URL(`${newCard.id}.json`));
   });
 
   private createCardInstance = restartableTask(async () => {
@@ -784,15 +786,15 @@ export class ${className} extends ${exportName} {
     };
 
     try {
-      let card = await this.cardService.createFromSerialized(doc.data, doc);
-
-      if (!card) {
+      let maybeId = await this.store.createInstance(doc, relativeTo);
+      if (typeof maybeId !== 'string') {
         throw new Error(
-          `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
+          `Failed to create card from ref "${ref.name}" from "${
+            ref.module
+          }": ${JSON.stringify(maybeId, null, 2)}`,
         );
       }
-      await this.cardService.saveModel(card);
-      this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
+      this.currentRequest.newFileDeferred.fulfill(new URL(`${maybeId}.json`));
     } catch (e: any) {
       console.log('Error saving', e);
       this.saveError = `Error creating card instance: ${e.message}`;

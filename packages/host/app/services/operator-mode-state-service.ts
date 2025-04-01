@@ -87,7 +87,7 @@ interface OpenFileSubscriber {
 
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
-    stacks: new TrackedArray([]),
+    stacks: new TrackedArray<Stack>([]),
     submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),

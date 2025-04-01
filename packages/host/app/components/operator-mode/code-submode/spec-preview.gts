@@ -41,7 +41,6 @@ import {
 import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
-  loadCard,
 } from '@cardstack/runtime-common/code-ref';
 
 import Preview from '@cardstack/host/components/preview';
@@ -66,11 +65,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import {
-  CardContext,
-  type CardDef,
-  type Format,
-} from 'https://cardstack.com/base/card-api';
+import { CardContext, type Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -462,6 +457,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare loaderService: LoaderService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
+  @service private declare store: StoreService;
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -487,17 +483,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         ref = maybeAbsoluteRef;
       }
       try {
-        let SpecKlass = await loadCard(specRef, {
-          loader: this.loaderService.loader,
-        });
-        let card = new SpecKlass({
-          specType,
-          ref,
-          title: ref.name,
-        }) as CardDef;
-        await this.cardService.saveModel(card);
-        if (card.id) {
-          this.specPanelService.setSelection(card.id);
+        let cardId = await this.store.createInstance(
+          {
+            data: {
+              attributes: { ref, specType, title: ref.name },
+              meta: { adoptsFrom: specRef },
+            },
+          },
+          relativeTo,
+        );
+        if (typeof cardId === 'string') {
+          this.specPanelService.setSelection(cardId);
           if (!this.args.isPanelOpen) {
             this.args.toggleAccordionItem('spec-preview');
           }
