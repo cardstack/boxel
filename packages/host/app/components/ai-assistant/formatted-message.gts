@@ -145,7 +145,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                     )
                     as |codeDiffResource|
                   }}
-                    {{#if codeDiffResource.loaded}}
+                    {{#if codeDiffResource.isDataLoaded}}
                       <codeBlock.actions as |actions|>
                         <actions.copyCode
                           @code={{codeDiffResource.modifiedCode}}
@@ -286,7 +286,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   @tracked originalCode: string | undefined | null;
   @tracked modifiedCode: string | undefined | null;
   @tracked searchReplaceBlock: string | undefined | null;
-  @tracked loaded: Promise<void> | undefined;
+
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
 
@@ -295,7 +295,11 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
 
-    this.loaded = this.load.perform();
+    this.load.perform();
+  }
+
+  get isDataLoaded() {
+    return !!this.originalCode || !!this.modifiedCode;
   }
 
   load = restartableTask(async () => {
