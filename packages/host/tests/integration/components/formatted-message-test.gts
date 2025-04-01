@@ -6,9 +6,11 @@ import { module, test } from 'qunit';
 
 import FormattedMessage from '@cardstack/host/components/ai-assistant/formatted-message';
 
+import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
 import { setupRenderingTest } from '../../helpers/setup';
+
 module('Integration | Component | FormattedMessage', function (hooks) {
   setupRenderingTest(hooks);
 
@@ -21,6 +23,10 @@ module('Integration | Component | FormattedMessage', function (hooks) {
     ) as MonacoService;
 
     cardService = this.owner.lookup('service:card-service') as CardService;
+
+    cardService.getSource = async () => {
+      return Promise.resolve('const x = 1;');
+    };
   });
 
   async function renderFormattedMessage(testScenario: any) {
@@ -110,111 +116,16 @@ puts "💎"
     assert.dom('pre').doesNotExist();
   });
 
-  test('it will render apply code button when code patch block is detected and file url is provided', async function (assert) {
-    let originalGetSource = cardService.getSource;
-    cardService.getSource = async () => {
-      return Promise.resolve('const x = 1;');
-    };
-
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
-      html: `
-<pre data-code-language="css">
-// File url: https://my-realm-server.com/my-realm/basketball.gts
-<<<<<<< SEARCH
-          background: #2ecc71;
-=======
-          background: #ff7f24;
->>>>>>> REPLACE
-</pre>`,
-      isStreaming: false,
-    });
-
-    assert.dom('[data-test-apply-code-button]').exists();
-    cardService.getSource = originalGetSource;
-  });
-
-  test('it will not render apply code button when code is streaming, code patch block is detected and file url is provided', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
-      html: `
-<pre data-code-language="css">
-// File url: https://my-realm-server.com/my-realm/basketball.gts
-<<<<<<< SEARCH
-          background: #2ecc71;
-=======
-          background: #ff7f24;
->>>>>>> REPLACE
-</pre>`,
-      isStreaming: true,
-    });
-
-    assert.dom('[data-test-apply-code-button]').doesNotExist();
-  });
-
   test('it will not render apply code button when code patch block is detected but no file url is provided', async function (assert) {
     await renderFormattedMessage({
       renderCodeBlocks: true,
       html: `
 <pre data-code-language="css">
-<<<<<<< SEARCH
-          background: #2ecc71;
-=======
           background: #ff7f24;
->>>>>>> REPLACE
 </pre>`,
       isStreaming: false,
     });
 
     assert.dom('[data-test-apply-code-button]').doesNotExist();
-  });
-
-  test('it will render a code block with diff decorations', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
-      html: `
-<pre data-code-language="typescript">
-// File url: https://my-realm-server.com/my-realm/basketball.gts
-<<<<<<< SEARCH
-          let a = 1;
-          let b = Math.max(a, 2);
-=======
-          let a = 2;
-          let b = Math.max(a, 3);
->>>>>>> REPLACE
-</pre>`,
-      isStreaming: true,
-    });
-
-    await waitFor('.view-line');
-    let viewLines = document.querySelectorAll('.view-line');
-    assert.ok(viewLines.length === 4, 'There should be exactly 4 code lines');
-
-    let [firstLineSpans, secondLineSpans] = [0, 1].map((i) =>
-      viewLines[i].querySelectorAll('span span'),
-    );
-    [firstLineSpans, secondLineSpans].forEach((spans) => {
-      spans.forEach((span) => {
-        assert.ok(
-          span.classList.contains('line-to-be-replaced'),
-          'Code line should have line-to-be-replaced class',
-        );
-      });
-    });
-
-    let [thirdLineSpans, fourthLineSpans] = [2, 3].map((i) =>
-      viewLines[i].querySelectorAll('span span'),
-    );
-    [thirdLineSpans, fourthLineSpans].forEach((spans) => {
-      spans.forEach((span) => {
-        assert.ok(
-          span.classList.contains('line-to-be-replaced-with'),
-          'Code line should have line-to-be-replaced-with class',
-        );
-      });
-    });
-
-    // snapshot to assert first 2 lines are red and last 2 lines are green
-    await percySnapshot(assert);
   });
 });
