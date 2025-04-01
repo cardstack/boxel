@@ -29,7 +29,6 @@ jobs:
             echo "MATRIX_URL=https://matrix.boxel.ai" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=boxel.ai" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
-            echo "DISABLE_MATRIX_REALM_EVENTS=true" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV

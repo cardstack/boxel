@@ -9,18 +9,16 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 
 import type { RoomSkill } from '@cardstack/host/resources/room';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
-
 import AiAssistantSkillMenu from './index';
 
 export default class AiAssistantSkillMenuUsage extends Component {
   @tracked skills: RoomSkill[] = [];
 
-  @action attachSkill(card: SkillCard) {
+  @action attachSkill(cardId: string) {
     this.skills = [
       ...this.skills,
       new TrackedObject({
-        card,
+        cardId,
         skillEventId: 'abc123',
         isActive: true,
       }),

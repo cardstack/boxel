@@ -1,3 +1,5 @@
+import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 
 import { provide, consume } from 'ember-provide-consume-context';
@@ -12,6 +14,8 @@ import {
   type getCard,
   type getCards,
 } from '@cardstack/runtime-common';
+
+import type StoreService from '@cardstack/host/services/store';
 
 import type {
   BaseDef,
@@ -36,6 +40,7 @@ interface Signature {
 export default class Preview extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @service private declare store: StoreService;
 
   @provide(DefaultFormatsContextName)
   // @ts-ignore "defaultFormat is declared but not used"
@@ -52,6 +57,7 @@ export default class Preview extends Component<Signature> {
       prerenderedCardSearchComponent: PrerenderedCardSearch,
       getCard: this.getCard,
       getCards: this.getCards,
+      store: this.store,
       ...this.args.cardContext,
     };
   }
