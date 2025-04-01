@@ -11,6 +11,7 @@ import {
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
+  findRealmEvent,
   setupCardLogs,
   setupBaseRealmServer,
   runTestRealmServer,
@@ -20,17 +21,10 @@ import {
   createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
-  waitUntil,
+  waitForRealmEvent,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
-import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
-import type {
-  IncrementalIndexEventContent,
-  MatrixEvent,
-  RealmEvent,
-  RealmEventContent,
-} from 'https://cardstack.com/base/matrix-event';
 
 setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
@@ -261,32 +255,3 @@ module(basename(__filename), function () {
     });
   });
 });
-
-async function waitForRealmEvent(
-  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
-  since: number,
-) {
-  await waitUntil(async () => {
-    let matrixMessages = await getMessagesSince(since);
-    return matrixMessages.length > 0;
-  });
-}
-
-function findRealmEvent(
-  events: MatrixEvent[],
-  eventName: string,
-  indexType: string,
-): RealmEvent | undefined {
-  return events.find(
-    (m) =>
-      m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-      m.content.eventName === eventName &&
-      (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
-  ) as RealmEvent | undefined;
-}
-
-function realmEventIsIndex(
-  event: RealmEventContent,
-): event is IncrementalIndexEventContent {
-  return event.eventName === 'index';
-}

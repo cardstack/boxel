@@ -40,6 +40,13 @@ import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
 import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
 import { SuperTest, Test } from 'supertest';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type {
+  IncrementalIndexEventContent,
+  MatrixEvent,
+  RealmEvent,
+  RealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 export async function waitUntil<T>(
   condition: () => Promise<T>,
@@ -683,4 +690,33 @@ export function setupMatrixRoom(
       return messagesAfterSentinel;
     },
   };
+}
+
+export async function waitForRealmEvent(
+  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
+  since: number,
+) {
+  await waitUntil(async () => {
+    let matrixMessages = await getMessagesSince(since);
+    return matrixMessages.length > 0;
+  });
+}
+
+export function findRealmEvent(
+  events: MatrixEvent[],
+  eventName: string,
+  indexType: string,
+): RealmEvent | undefined {
+  return events.find(
+    (m) =>
+      m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+      m.content.eventName === eventName &&
+      (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
+  ) as RealmEvent | undefined;
+}
+
+function realmEventIsIndex(
+  event: RealmEventContent,
+): event is IncrementalIndexEventContent {
+  return event.eventName === 'index';
 }

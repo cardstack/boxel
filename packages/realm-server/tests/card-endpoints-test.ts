@@ -15,6 +15,7 @@ import {
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
 import {
+  findRealmEvent,
   setupCardLogs,
   setupBaseRealmServer,
   runTestRealmServer,
@@ -34,8 +35,6 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 import type {
   IncrementalIndexEventContent,
   MatrixEvent,
-  RealmEvent,
-  RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
 setGracefulCleanup();
@@ -966,23 +965,4 @@ async function waitForIncrementalIndexEvent(
         m.content.indexType === 'incremental',
     );
   });
-}
-
-function findRealmEvent(
-  events: MatrixEvent[],
-  eventName: string,
-  indexType: string,
-): RealmEvent | undefined {
-  return events.find(
-    (m) =>
-      m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-      m.content.eventName === eventName &&
-      (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
-  ) as RealmEvent | undefined;
-}
-
-function realmEventIsIndex(
-  event: RealmEventContent,
-): event is IncrementalIndexEventContent {
-  return event.eventName === 'index';
 }
