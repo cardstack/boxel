@@ -42,7 +42,7 @@ interface ApplyCodePatchButtonSignature {
 interface CodeBlockActionsSignature {
   Args: {
     code?: string | null;
-    codeData?: CodeData;
+    codeData?: Partial<CodeData>;
   };
   Blocks: {
     default: [
@@ -70,7 +70,7 @@ interface CodeBlockDiffEditorSignature {
 interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
-    codeData?: CodeData;
+    codeData?: Partial<CodeData>;
     originalCode?: string | null;
     modifiedCode?: string | null;
     language?: string | null;
@@ -108,7 +108,7 @@ export default CodeBlockComponent;
 interface MonacoEditorSignature {
   Args: {
     Named: {
-      codeData?: CodeData;
+      codeData?: Partial<CodeData>;
       monacoSDK: MonacoSDK;
       editorDisplayOptions: MonacoEditorOptions;
     };
