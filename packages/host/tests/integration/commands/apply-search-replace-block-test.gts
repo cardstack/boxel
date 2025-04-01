@@ -539,7 +539,7 @@ class CardTemplate extends Component<typeof ContactCard> {
     // Search pattern has spurious blank
     const codeBlock = `<<<<<<< SEARCH
   @field bio = contains(StringField);
-  
+
   @field avatar = linksTo(ImageAsset);
 =======
   @field bio = contains(StringField);
@@ -644,9 +644,9 @@ class CardTemplate extends Component<typeof ContactCard> {
 
     // Search pattern has trailing spaces on some lines
     const codeBlock = `<<<<<<< SEARCH
-      <div class="form-group">  
+      <div class="form-group">
         <label for="date">Date:</label>
-        <Input @value={{@model.date}} id="date" type="date" />  
+        <Input @value={{@model.date}} id="date" type="date" />
       </div>
 =======
       <div class="form-group">

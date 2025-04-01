@@ -34,6 +34,7 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import { createJWT, testRealmURL } from '.';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import { LintResult } from '@cardstack/runtime-common/lint';
 
 interface Dir {
   kind: 'directory';
@@ -428,5 +429,16 @@ export class TestRealmAdapter implements RealmAdapter {
 
   unsubscribe(): void {
     this.#subscriber = undefined;
+  }
+
+  async lintStub(
+    request: Request,
+    _requestContext: RequestContext,
+  ): Promise<LintResult> {
+    return {
+      output: await request.text(),
+      fixed: false,
+      messages: [],
+    };
   }
 }

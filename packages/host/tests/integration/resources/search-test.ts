@@ -32,8 +32,8 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 class StubRealmService extends RealmService {
-  realmOfURL(_url: URL) {
-    return new URL(testRealmURL);
+  url(_url: URL) {
+    return testRealmURL;
   }
 }
 

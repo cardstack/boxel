@@ -1,10 +1,10 @@
+import type { Linter } from 'eslint';
+
 export interface LintArgs {
   source: string;
 }
 
-export interface LintResult {
-  output: string;
-}
+export type LintResult = Linter.FixReport;
 
 export async function lintFix({ source }: LintArgs): Promise<LintResult> {
   if (typeof (globalThis as any).document !== 'undefined') {

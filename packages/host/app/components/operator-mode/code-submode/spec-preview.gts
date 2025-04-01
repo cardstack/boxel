@@ -248,14 +248,14 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   private getDropdownData = (id: string) => {
     let realmInfo = this.realm.info(id);
-    let realmURL = this.realm.realmOfURL(new URL(id));
+    let realmURL = this.realm.url(id);
     if (!realmURL) {
       throw new Error('bug: no realm URL');
     }
     return {
       id: id,
       realmInfo,
-      localPath: getRelativePath(realmURL.href, id),
+      localPath: getRelativePath(realmURL, id),
     };
   };
 

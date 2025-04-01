@@ -179,6 +179,11 @@ export interface RealmAdapter {
     event: RealmEventContent,
     matrixClient: MatrixClient,
   ): Promise<void>;
+
+  lintStub?(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<LintResult>;
 }
 
 interface Options {
@@ -1626,15 +1631,21 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let source = await request.text();
-    let job = await this.#queue.publish<LintResult>({
-      jobType: `lint-source`,
-      concurrencyGroup: `linting:${this.url}`,
-      timeout: 10,
-      priority: userInitiatedPriority,
-      args: { source } satisfies LintArgs,
-    });
-    let result = await job.done;
+    let result;
+    // eslint does not work well in a browser environment, so our TestRealmAdapter supplies a replaceable stub
+    if (this.#adapter.lintStub) {
+      result = await this.#adapter.lintStub(request, requestContext);
+    } else {
+      let source = await request.text();
+      let job = await this.#queue.publish<LintResult>({
+        jobType: `lint-source`,
+        concurrencyGroup: `linting:${this.url}`,
+        timeout: 10,
+        priority: userInitiatedPriority,
+        args: { source } satisfies LintArgs,
+      });
+      result = await job.done;
+    }
     return createResponse({
       body: JSON.stringify(result),
       init: {

@@ -163,18 +163,17 @@ export default class StoreService extends Service {
       console.warn(`cannot load card ${url}`, cardOrError);
     }
 
-    let realmURL = this.realm.realmOfURL(new URL(url));
+    let realmURL = this.realm.url(url);
     if (!realmURL) {
       console.warn(
         `could not determine realm for card ${url} when trying to subscribe to realm`,
       );
     } else {
-      let realm = realmURL.href;
       let subscriber = this.subscribers.get(url);
       if (!subscriber) {
         subscriber = {
           resources: [],
-          realm,
+          realm: realmURL,
         };
         this.subscribers.set(url, subscriber);
       }

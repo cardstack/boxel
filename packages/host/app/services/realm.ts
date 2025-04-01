@@ -498,16 +498,6 @@ export default class RealmService extends Service {
     return realmsMeta;
   }
 
-  realmOfURL(url: URL) {
-    for (const realm of this.realms.keys()) {
-      let realmURL = new URL(realm);
-      if (new RealmPaths(realmURL).inRealm(url)) {
-        return new URL(realmURL);
-      }
-    }
-    return undefined;
-  }
-
   realmForSessionRoomId(sessionRoomId: string) {
     return Array.from(this.realms.values()).find(
       (r) => r.claims?.sessionRoom === sessionRoomId,
