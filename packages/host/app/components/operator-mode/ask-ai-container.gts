@@ -45,19 +45,20 @@ export default class AskAiContainer extends Component<Signature> {
     let { roomId } = await createRoomCommand.execute({ name });
 
     let openRoomCommand = new OpenAiAssistantRoomCommand(commandContext);
-    await openRoomCommand.execute({ roomId });
-
     let addSkillsCommand = new AddSkillsToRoomCommand(commandContext);
-    await addSkillsCommand.execute({
-      roomId,
-      skills: await this.matrixService.loadDefaultSkills(
-        this.operatorModeStateService.state.submode,
-      ),
-    });
 
-    let openCards = await this.operatorModeStateService.getOpenCards.perform(
-      this.args.selectedCardRef,
-    );
+    let [openCards] = await Promise.all([
+      await this.operatorModeStateService.getOpenCards.perform(
+        this.args.selectedCardRef,
+      ),
+      openRoomCommand.execute({ roomId }),
+      addSkillsCommand.execute({
+        roomId,
+        skills: await this.matrixService.loadDefaultSkills(
+          this.operatorModeStateService.state.submode,
+        ),
+      }),
+    ]);
     let openFileURL = this.operatorModeStateService.openFileURL;
 
     let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
