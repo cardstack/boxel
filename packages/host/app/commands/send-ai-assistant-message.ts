@@ -9,13 +9,13 @@ import {
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 
 import HostBaseCommand from '../lib/host-base-command';
 

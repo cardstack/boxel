@@ -5,16 +5,15 @@ import {
   internalKeyFor,
 } from '@cardstack/runtime-common';
 
-import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
-import type StoreService from '@cardstack/host/services/store';
-
 import {
   type Submode,
   Submodes,
 } from '@cardstack/host/components/submode-switcher';
 import { type StackItem } from '@cardstack/host/lib/stack-item';
+import type MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type StoreService from '@cardstack/host/services/store';
 
 export default class RoomAttachmentsService extends Service {
   @service declare private matrixService: MatrixService;

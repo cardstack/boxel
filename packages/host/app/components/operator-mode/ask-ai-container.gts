@@ -4,31 +4,26 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
-import { consume } from 'ember-provide-consume-context';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
-  type getCard,
-  GetCardContextName,
   isCardInstance,
   type ResolvedCodeRef,
-  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-box';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type RoomAttachmentsService from '@cardstack/host/services/room-attachments-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-box';
+import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
-import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
-import type RoomAttachmentsService from '@cardstack/host/services/room-attachments-service';
 
 interface Signature {
   Args: {
@@ -37,8 +32,6 @@ interface Signature {
 }
 
 export default class AskAiContainer extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
-
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
