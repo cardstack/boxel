@@ -42,7 +42,7 @@ interface ApplyCodePatchButtonSignature {
 interface CodeBlockActionsSignature {
   Args: {
     code?: string | null;
-    codeData?: Partial<CodeData>;
+    codeData?: CodeData;
   };
   Blocks: {
     default: [
@@ -70,7 +70,7 @@ interface CodeBlockDiffEditorSignature {
 interface Signature {
   Args: {
     monacoSDK: MonacoSDK;
-    codeData?: Partial<CodeData>;
+    codeData?: CodeData;
     originalCode?: string | null;
     modifiedCode?: string | null;
     language?: string | null;
@@ -108,7 +108,7 @@ export default CodeBlockComponent;
 interface MonacoEditorSignature {
   Args: {
     Named: {
-      codeData?: Partial<CodeData>;
+      codeData?: CodeData;
       monacoSDK: MonacoSDK;
       editorDisplayOptions: MonacoEditorOptions;
     };
@@ -188,7 +188,6 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       if (editor) {
         editor.dispose();
       }
-      console.log('monaco diff editor disposed');
     });
   }
 }
@@ -323,12 +322,6 @@ class CodeBlockEditor extends Component<Signature> {
 
   <template>
     <style scoped>
-      :global(.line-to-be-replaced) {
-        background-color: rgb(255 0 0 / 37%);
-      }
-      :global(.line-to-be-replaced-with) {
-        background-color: rgb(6 144 29 / 56%);
-      }
       .code-block {
         margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
