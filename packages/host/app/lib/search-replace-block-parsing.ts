@@ -18,7 +18,7 @@ interface SearchReplaceResult {
  * @returns An object containing searchContent and replaceContent, even if  the search/replace markers are missing or incomplete
  */
 
-function parseSearchReplace(input: string): SearchReplaceResult {
+export function parseSearchReplace(input: string): SearchReplaceResult {
   // Define constants for marker texts
   const SEARCH_MARKER: string = '<<<<<<< SEARCH';
   const SEPARATOR_MARKER: string = '=======';
@@ -88,4 +88,13 @@ function parseSearchReplace(input: string): SearchReplaceResult {
   return result;
 }
 
-export { parseSearchReplace, SearchReplaceResult };
+export function isCompleteSearchReplaceBlock(code?: string | null): boolean {
+  if (!code) {
+    return false;
+  }
+  return (
+    code.includes('<<<<<<< SEARCH') &&
+    code.includes('=======') &&
+    code.includes('>>>>>>> REPLACE')
+  );
+}
