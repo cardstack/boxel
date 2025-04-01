@@ -13,12 +13,7 @@ import {
   linksToMany,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import {
-  Query,
-  isCardInstance,
-  Filter,
-  CardTypeFilter,
-} from '@cardstack/runtime-common';
+import { Query, isCardInstance, EqFilter } from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 
@@ -49,6 +44,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { Listing } from './listing/listing';
+import { Category } from './listing/category';
 
 type ViewOption = 'strip' | 'grid';
 
@@ -281,7 +277,7 @@ class Isolated extends Component<typeof Catalog> {
     { id: 'design', name: 'Design' },
   ];
 
-  @tracked activeCategoryId = this.mockCategories[0].id;
+  @tracked activeCategoryId = 'all';
 
   @action
   handleCategorySelect(category: { id: string; name: string }) {
@@ -318,13 +314,64 @@ class Isolated extends Component<typeof Catalog> {
 
   //query
   get query(): Query {
+    let everyArr = [];
+    if (this.categoryFilter) {
+      everyArr.push(this.categoryFilter);
+    }
+
     return {
       filter: {
         on: {
           module: new URL('./listing/listing', import.meta.url).href,
           name: `${capitalize(this.activeTabId)}Listing`,
         },
-        every: [],
+        every: everyArr,
+      },
+    };
+  }
+
+  // Category filter
+  categorySearch = this.args.context?.getCards(
+    this,
+    () => this.categoryQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
+
+  get categoryQuery(): Query {
+    return {
+      filter: {
+        type: {
+          module: new URL('./listing/category', import.meta.url).href,
+          name: 'Category',
+        },
+      },
+    };
+  }
+
+  get categoryItems() {
+    let instances = (this.categorySearch?.instances ?? []) as Category[];
+    if (!instances) {
+      return [];
+    }
+    return [
+      { id: 'all', name: 'All' },
+      ...instances.map((instance) => ({
+        id: instance.id,
+        name: instance.name,
+      })),
+    ];
+  }
+
+  get categoryFilter(): EqFilter | undefined {
+    if (this.activeCategoryId === 'all') {
+      return;
+    }
+    return {
+      eq: {
+        'categories.id': this.activeCategoryId,
       },
     };
   }
@@ -360,6 +407,10 @@ class Isolated extends Component<typeof Catalog> {
     return [this.args.model[realmURL]!];
   }
 
+  get realmHrefs() {
+    return this.realms.map((realm) => realm.href);
+  }
+
   getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   <template>
@@ -392,9 +443,10 @@ class Isolated extends Component<typeof Catalog> {
           >
             <FilterCategoryGroup
               @title='Categories'
-              @items={{this.mockCategories}}
+              @items={{this.categoryItems}}
               @activeId={{this.activeCategoryId}}
               @onItemSelect={{this.handleCategorySelect}}
+              @isLoading={{this.categorySearch.isLoading}}
             />
             <FilterSearch
               @title='Search'

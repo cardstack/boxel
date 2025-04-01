@@ -7,6 +7,15 @@ import { action } from '@ember/object';
 
 import { Pill, BoxelInput } from '@cardstack/boxel-ui/components';
 
+import {
+  Query,
+  isCardInstance,
+  Filter,
+  CardTypeFilter,
+} from '@cardstack/runtime-common';
+
+import { CardContext } from 'https://cardstack.com/base/card-api';
+
 export type FilterItem = { id: string; name: string };
 
 interface FilterCategoryGroupArgs {
@@ -15,6 +24,7 @@ interface FilterCategoryGroupArgs {
     items: FilterItem[];
     activeId: string;
     onItemSelect: (item: FilterItem) => void;
+    isLoading?: boolean;
   };
   Element: HTMLElement;
 }
@@ -27,20 +37,24 @@ export class FilterCategoryGroup extends GlimmerComponent<FilterCategoryGroupArg
 
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
-      <div class='filter-list'>
-        {{#each @items as |item|}}
-          <button
-            class={{concat
-              'filter-button'
-              (if (eq @activeId item.id) ' selected')
-            }}
-            {{on 'click' (fn this.handleItemClick item)}}
-            data-test-filter-button={{item.id}}
-          >
-            {{item.name}}
-          </button>
-        {{/each}}
-      </div>
+      {{#if @isLoading}}
+        Loading...
+      {{else}}
+        <div class='filter-list'>
+          {{#each @items as |item|}}
+            <button
+              class={{concat
+                'filter-button'
+                (if (eq @activeId item.id) ' selected')
+              }}
+              {{on 'click' (fn this.handleItemClick item)}}
+              data-test-filter-button={{item.id}}
+            >
+              {{item.name}}
+            </button>
+          {{/each}}
+        </div>
+      {{/if}}
     </FilterGroupWrapper>
 
     <style scoped>
