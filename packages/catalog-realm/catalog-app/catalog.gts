@@ -356,18 +356,6 @@ class Isolated extends Component<typeof Catalog> {
     );
   }
 
-  get startHereListings() {
-    return this.args.model.startHere;
-  }
-
-  get newListings() {
-    return this.args.model.new;
-  }
-
-  get featuredListings() {
-    return this.args.model.featured;
-  }
-
   private get realms() {
     return [this.args.model[realmURL]!];
   }
@@ -430,9 +418,9 @@ class Isolated extends Component<typeof Catalog> {
               <div class='catalog-listing info-box'>
                 {{#if (this.shouldShowTab 'showcase')}}
                   <ShowcaseView
-                    @startHereListings={{this.startHereListings}}
-                    @newListings={{this.newListings}}
-                    @featuredListings={{this.featuredListings}}
+                    @startHereListings={{@model.startHere}}
+                    @newListings={{@model.new}}
+                    @featuredListings={{@model.featured}}
                     @context={{@context}}
                   />
                 {{else}}
