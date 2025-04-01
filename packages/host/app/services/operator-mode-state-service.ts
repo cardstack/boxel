@@ -49,11 +49,11 @@ import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 import type CardService from './card-service';
+import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type StoreService from './store';
 
 import type IndexController from '../controllers';
-import type { RecentFile } from './recent-files-service';
 
 // Below types form a raw POJO representation of operator mode state.
 // This state differs from OperatorModeState in that it only contains cards that have been saved (i.e. have an ID).

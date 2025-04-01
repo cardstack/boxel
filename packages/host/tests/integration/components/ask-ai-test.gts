@@ -149,44 +149,6 @@ module('Integration | ask-ai', function (hooks) {
     assert.dom('[data-test-message-field]').hasNoValue();
   });
 
-  test('can send message to AI Assistant in code submode', async function (assert) {
-    const petCardId = `${testRealmURL}pet.gts`;
-    operatorModeStateService.restore({
-      stacks: [[{ id: `${testRealmURL}Pet/mango`, format: 'isolated' }]],
-      submode: 'code',
-      codePath: petCardId,
-    });
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-
-    assert.dom('[data-test-code-mode]').exists();
-    assert.dom('[data-test-ask-ai-input]').hasNoValue();
-    assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
-
-    await sendAskAiMessage('Change embedded template background to blue');
-    assert
-      .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
-      .hasText('New AI Assistant Chat');
-    assert
-      .dom('[data-test-pill-menu-header]')
-      .containsText('2 of 2 Skills Active');
-    await assertMessages(assert, [
-      {
-        from: 'testuser',
-        message: 'Change embedded template background to blue',
-        files: [{ sourceUrl: petCardId, name: 'pet.gts' }],
-      },
-    ]);
-    assert.dom('[data-test-ask-ai-input]').hasNoValue();
-    assert.dom('[data-test-message-field]').hasNoValue();
-  });
-
   test('can send message to AI Assistant from workspace chooser', async function (assert) {
     operatorModeStateService.restore({
       stacks: [[{ id: `${testRealmURL}Pet/marco`, format: 'isolated' }]],
@@ -222,7 +184,7 @@ module('Integration | ask-ai', function (hooks) {
     assert.dom('[data-test-message-field]').hasNoValue();
   });
 
-  test('can send multiple messages and include playground card in attachments', async function (assert) {
+  test('can send message to AI Assistant in code submode', async function (assert) {
     const marcoId = `${testRealmURL}Pet/marco`;
     const mangoId = `${testRealmURL}Pet/mango`;
     const petCardId = `${testRealmURL}pet.gts`;
@@ -249,7 +211,6 @@ module('Integration | ask-ai', function (hooks) {
     assert.dom('[data-test-code-mode]').exists();
     assert.dom('[data-test-ask-ai-input]').hasNoValue();
     assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
-
     await sendAskAiMessage('Change embedded template background to blue');
     assert
       .dom('[data-test-ai-assistant-panel] [data-test-chat-title]')
