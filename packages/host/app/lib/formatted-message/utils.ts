@@ -1,10 +1,11 @@
+import { SafeString, htmlSafe } from '@ember/template';
+
 import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
 
 import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
-import { SafeString, htmlSafe } from '@ember/template';
 
 export function extractCodeData(preElementString: string): CodeData {
   let emptyCodeData: CodeData = {
