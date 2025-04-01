@@ -206,7 +206,11 @@ export default class InteractSubmode extends Component {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        let maybeUrl = await here.store.createInstance(doc, relativeTo);
+        let maybeUrl = await here.store.createInstance(
+          doc,
+          relativeTo,
+          opts?.realmURL?.href,
+        );
         if (typeof maybeUrl === 'string') {
           let url = maybeUrl;
           let newItem = new StackItem({

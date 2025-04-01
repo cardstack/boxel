@@ -850,7 +850,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can duplicate an instance in same realm', async function (assert) {
-    assert.expect(10);
+    assert.expect(7);
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',
@@ -905,7 +905,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
   });
 
   test<TestContextWithSave>('can duplicate an instance in different realm', async function (assert) {
-    assert.expect(11);
+    assert.expect(8);
     let operatorModeStateParam = stringify({
       stacks: [[]],
       submode: 'code',

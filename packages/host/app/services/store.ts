@@ -1,6 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 
 import { formatDistanceToNow } from 'date-fns';
 import { all, restartableTask, task, timeout } from 'ember-concurrency';
@@ -39,6 +40,8 @@ import type { CardResource } from '../resources/card-resource';
 import type { SearchResource } from '../resources/search';
 
 export { CardError };
+
+let waiter = buildWaiter('store-service');
 
 export default class StoreService extends Service {
   @service declare private realm: RealmService;
@@ -211,12 +214,21 @@ export default class StoreService extends Service {
     relativeTo: URL | undefined,
     realm?: string,
   ): Promise<string | CardError> {
-    await this.ready;
-    let cardOrError = await this.getCard({ urlOrDoc: doc, relativeTo, realm });
-    if (isCardInstance(cardOrError)) {
-      return cardOrError.id;
+    let token = waiter.beginAsync();
+    try {
+      await this.ready;
+      let cardOrError = await this.getCard({
+        urlOrDoc: doc,
+        relativeTo,
+        realm,
+      });
+      if (isCardInstance(cardOrError)) {
+        return cardOrError.id;
+      }
+      return cardOrError;
+    } finally {
+      waiter.endAsync(token);
     }
-    return cardOrError;
   }
 
   save(id: string) {
@@ -264,13 +276,11 @@ export default class StoreService extends Service {
     let api = await this.cardService.getAPI();
     let deps = getDeps(api, instance);
     for (let dep of deps) {
-      if (dep.id && this.identityContext.get(dep.id) !== dep) {
+      if (dep.id && !this.identityContext.get(dep.id)) {
+        this.identityContext.set(dep.id, dep);
+      } else if (dep.id && this.identityContext.get(dep.id) !== dep) {
         throw new Error(
-          `encountered a dependency, ${dep.id}, of ${instance.id} when adding ${instance.id} to the store, but the store ${
-            this.identityContext.get(dep.id)
-              ? "already has a different instance with this dependency's id"
-              : "has no entry for this dependency's id"
-          }. Please obtain the instances that already exists from the store`,
+          `encountered a dependency, ${dep.id}, of ${instance.id} when adding ${instance.id} to the store, but the store already has a different instance with this dependency's id. Please obtain the instances that already exists from the store`,
         );
       }
     }

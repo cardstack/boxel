@@ -171,10 +171,14 @@ export default class BillingService extends Service {
     return this._fetchingSubscriptionData;
   }
 
-  async fetchSubscriptionData() {
+  async initializeSubscriptionData() {
     if (this.subscriptionData) {
       return;
     }
+    await this.fetchSubscriptionData();
+  }
+
+  async fetchSubscriptionData() {
     this._fetchingSubscriptionData = true;
     try {
       let response = await this.network.fetch(`${this.url.origin}/_user`, {

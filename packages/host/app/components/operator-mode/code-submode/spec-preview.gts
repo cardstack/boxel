@@ -37,6 +37,7 @@ import {
   isCardDef,
   isFieldDef,
   internalKeyFor,
+  loadCard,
 } from '@cardstack/runtime-common';
 import {
   codeRefWithAbsoluteURL,
@@ -64,6 +65,8 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import { CardContext, type Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
@@ -483,17 +486,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         ref = maybeAbsoluteRef;
       }
       try {
-        let cardId = await this.store.createInstance(
-          {
-            data: {
-              attributes: { ref, specType, title: ref.name },
-              meta: { adoptsFrom: specRef },
-            },
-          },
-          relativeTo,
-        );
-        if (typeof cardId === 'string') {
-          this.specPanelService.setSelection(cardId);
+        let SpecKlass = await loadCard(specRef, {
+          loader: this.loaderService.loader,
+        });
+        let card = new SpecKlass({
+          specType,
+          ref,
+          title: ref.name,
+        }) as CardDef;
+        await this.store.saveInstance(card);
+        if (card.id) {
+          this.specPanelService.setSelection(card.id);
           if (!this.args.isPanelOpen) {
             this.args.toggleAccordionItem('spec-preview');
           }

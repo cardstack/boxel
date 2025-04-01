@@ -786,13 +786,13 @@ export class ${className} extends ${exportName} {
     };
 
     try {
-      let maybeId = await this.store.createInstance(doc, relativeTo);
+      let maybeId = await this.store.createInstance(
+        doc,
+        relativeTo,
+        this.selectedRealmURL.href,
+      );
       if (typeof maybeId !== 'string') {
-        throw new Error(
-          `Failed to create card from ref "${ref.name}" from "${
-            ref.module
-          }": ${JSON.stringify(maybeId, null, 2)}`,
-        );
+        throw new Error(maybeId.message);
       }
       this.currentRequest.newFileDeferred.fulfill(new URL(`${maybeId}.json`));
     } catch (e: any) {

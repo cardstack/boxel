@@ -67,7 +67,7 @@ export default class Index extends Route<void> {
     if (!isTesting()) {
       // we don't want to fetch subscription data in integration tests
       // we need to fetch the subscription data right after login
-      await this.billingService.fetchSubscriptionData();
+      await this.billingService.initializeSubscriptionData();
     }
 
     let cardUrl: string | undefined;
