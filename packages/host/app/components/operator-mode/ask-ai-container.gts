@@ -3,10 +3,9 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, enqueueTask } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 
-import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
@@ -20,15 +19,13 @@ import {
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-// import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
 import type StoreService from '@cardstack/host/services/store';
 
 import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-box';
-import { Submodes } from '@cardstack/host/components/submode-switcher';
 
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
-import type { OperatorModeContext } from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RoomAttachmentsService from '@cardstack/host/services/room-attachments-service';
@@ -75,61 +72,36 @@ export default class AskAiContainer extends Component<Signature> {
       ),
     });
 
-    this.sendMessage.perform(roomId, this.aiPrompt);
+    let moduleId: string | undefined;
+    if (this.args.selectedCardRef) {
+      moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
+    }
+    let openCardIds = this.roomAttachmentsService.getOpenCardIds(moduleId);
+    let openCards: CardDef[] | undefined;
+    if (openCardIds) {
+      openCards = await this.getOpenCardsTask.perform(openCardIds);
+    }
 
-    // let autoAttachedFileURL = this.roomAttachmentsService.autoAttachedFileURL;
-    // let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
-    // await sendMessageCommand.execute({
-    //   roomId,
-    //   prompt: this.aiPrompt,
-    //   attachedCards: this.roomAttachmentsService.autoAttachedCards,
-    //   attachedFileURLs: autoAttachedFileURL ? [autoAttachedFileURL] : undefined,
-    //   openCardIds: this.roomAttachmentsService.openCardIds,
-    // });
+    let autoAttachedFileURL = this.roomAttachmentsService.autoAttachedFileURL;
+
+    let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
+    await sendMessageCommand.execute({
+      roomId,
+      prompt: this.aiPrompt,
+      attachedCards: openCards,
+      attachedFileURLs: autoAttachedFileURL ? [autoAttachedFileURL] : undefined,
+      openCardIds,
+    });
 
     this.aiPrompt = '';
   });
 
-  private sendMessage = enqueueTask(
-    async (roomId: string, message: string | undefined) => {
-      let submode = this.operatorModeStateService.state.submode;
-      let attachedCards: CardDef[] | undefined;
-      let attachedFiles: FileDef[] | undefined;
-      let context: OperatorModeContext | undefined;
-
-      if (submode === Submodes.Interact) {
-        attachedCards = this.roomAttachmentsService.autoAttachedCards;
-        context = attachedCards
-          ? {
-              submode,
-              openCardIds: attachedCards.map((c) => c.id),
-            }
-          : undefined;
-      } else if (submode === Submodes.Code) {
-        let autoAttachedFile = this.roomAttachmentsService.autoAttachedFile;
-        attachedFiles = autoAttachedFile ? [autoAttachedFile] : undefined;
-
-        if (this.args.selectedCardRef) {
-          let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
-          let cardId =
-            this.playgroundPanelService.getSelection(moduleId)?.cardId;
-          if (cardId) {
-            let card = await this.store.getInstanceDetachedFromStore(cardId);
-            attachedCards = isCardInstance(card) ? [card] : undefined;
-          }
-        }
-      }
-
-      await this.matrixService.sendMessage(
-        roomId,
-        message,
-        attachedCards,
-        attachedFiles,
-        undefined,
-        context,
-      );
-    },
-  );
+  private getOpenCardsTask = restartableTask(async (cardIds: string[]) => {
+    let cards = (await Promise.all(cardIds.map((id) => this.store.peek(id))))
+      .filter(Boolean)
+      .filter(isCardInstance);
+    return cards;
+  });
 
   <template>
     <div class='ask-ai-container'>
