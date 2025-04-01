@@ -6,6 +6,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import MessageService from '@cardstack/host/services/message-service';
 
 import { MockSDK } from './mock-matrix/_sdk';
+import { MockSlidingSync } from './mock-matrix/_sliding-sync';
 import { MockUtils } from './mock-matrix/_utils';
 
 export interface Config {
@@ -16,13 +17,18 @@ export interface Config {
   expiresInSec?: number;
   autostart?: boolean;
   now?: () => number;
+  directRooms?: string[];
 }
 
 export function setupMockMatrix(
   hooks: NestedHooks,
   opts: Config = {},
 ): MockUtils {
-  let testState: { owner?: Owner; sdk?: MockSDK; opts?: Config } = {
+  let testState: {
+    owner?: Owner;
+    sdk?: MockSDK;
+    opts?: Config;
+  } = {
     owner: undefined,
     sdk: undefined,
     opts: undefined,
@@ -76,6 +82,7 @@ export function setupMockMatrix(
         async load() {
           return sdk;
         },
+        SlidingSync: MockSlidingSync,
       },
       {
         instantiate: false,

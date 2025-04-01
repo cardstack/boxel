@@ -60,6 +60,7 @@ export default class FormatChooser extends Component<Signature> {
         display: block;
         gap: var(--boxel-sp-sm);
         width: 100% - calc(2 * var(--boxel-sp));
+        box-shadow: none;
       }
       .format-chooser__buttons.collapsed .format-chooser__button {
         padding: var(--boxel-sp-xxxs) var(--boxel-sp-xs);
@@ -68,6 +69,7 @@ export default class FormatChooser extends Component<Signature> {
         margin-right: var(--boxel-sp-xxs);
         border: 1px solid
           var(--boxel-format-chooser-border-color, var(--boxel-700));
+        box-shadow: var(--boxel-deep-box-shadow);
       }
       .format-chooser__button:first-of-type {
         border-radius: var(--boxel-border-radius) 0 0 var(--boxel-border-radius);
