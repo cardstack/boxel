@@ -20,6 +20,7 @@ import {
   setupBaseRealmServer,
   runTestRealmServer,
   setupDB,
+  setupMatrixRoom,
   realmServerTestMatrix,
   realmSecretSeed,
   createVirtualNetwork,
@@ -69,9 +70,18 @@ module(basename(__filename), function () {
     let request: SuperTest<Test>;
     let dir: DirResult;
 
+    function setTestRequest(newRequest: SuperTest<Test>) {
+      request = newRequest;
+    }
+
+    function getTestRequest() {
+      return request;
+    }
+
     function setupPermissionedRealm(
       hooks: NestedHooks,
       permissions: RealmPermissions,
+      setTestRequest: (newRequest: SuperTest<Test>) => void,
       fileSystem?: Record<string, string | LooseSingleCardDocument>,
     ) {
       setupDB(hooks, {
@@ -104,66 +114,6 @@ module(basename(__filename), function () {
       });
     }
 
-    function setupMatrixRoom(hooks: NestedHooks) {
-      let matrixClient = new MatrixClient({
-        matrixURL: realmServerTestMatrix.url,
-        // it's a little awkward that we are hijacking a realm user to pretend to
-        // act like a normal user, but that's what's happening here
-        username: 'node-test_realm',
-        seed: realmSecretSeed,
-      });
-
-      let testAuthRoomId: string | undefined;
-
-      hooks.beforeEach(async function () {
-        await matrixClient.login();
-        let userId = matrixClient.getUserId()!;
-
-        let response = await request
-          .post('/_server-session')
-          .send(JSON.stringify({ user: userId }))
-          .set('Accept', 'application/json')
-          .set('Content-Type', 'application/json');
-
-        let json = response.body;
-
-        let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
-
-        if (!rooms.includes(json.room)) {
-          await matrixClient.joinRoom(json.room);
-        }
-
-        await matrixClient.sendEvent(json.room, 'm.room.message', {
-          body: `auth-response: ${json.challenge}`,
-          msgtype: 'm.text',
-        });
-
-        response = await request
-          .post('/_server-session')
-          .send(JSON.stringify({ user: userId, challenge: json.challenge }))
-          .set('Accept', 'application/json')
-          .set('Content-Type', 'application/json');
-
-        testAuthRoomId = json.room;
-
-        await matrixClient.setAccountData('boxel.session-rooms', {
-          [userId]: json.room,
-        });
-      });
-
-      return {
-        matrixClient,
-        getMessagesSince: async function (since: number) {
-          let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-          let messagesAfterSentinel = allMessages.filter(
-            (m) => m.origin_server_ts > since,
-          );
-
-          return messagesAfterSentinel;
-        },
-      };
-    }
-
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
     setupCardLogs(
@@ -185,9 +135,13 @@ module(basename(__filename), function () {
 
     module('card source GET request', function (_hooks) {
       module('public readable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          '*': ['read'],
-        });
+        setupPermissionedRealm(
+          hooks,
+          {
+            '*': ['read'],
+          },
+          setTestRequest,
+        );
 
         test('serves the request', async function (assert) {
           let response = await request
@@ -301,9 +255,13 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          john: ['read'],
-        });
+        setupPermissionedRealm(
+          hooks,
+          {
+            john: ['read'],
+          },
+          setTestRequest,
+        );
 
         test('401 with invalid JWT', async function (assert) {
           let response = await request
@@ -347,11 +305,15 @@ module(basename(__filename), function () {
 
     module('card-source DELETE request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          '*': ['read', 'write'],
-        });
+        setupPermissionedRealm(
+          hooks,
+          {
+            '*': ['read', 'write'],
+          },
+          setTestRequest,
+        );
 
-        let { getMessagesSince } = setupMatrixRoom(hooks);
+        let { getMessagesSince } = setupMatrixRoom(hooks, getTestRequest);
 
         test('serves the request', async function (assert) {
           let entry = 'unused-card.gts';
@@ -436,9 +398,13 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          john: ['read', 'write'],
-        });
+        setupPermissionedRealm(
+          hooks,
+          {
+            john: ['read', 'write'],
+          },
+          setTestRequest,
+        );
 
         test('401 with invalid JWT', async function (assert) {
           let response = await request
@@ -474,11 +440,15 @@ module(basename(__filename), function () {
 
     module('card-source POST request', function (_hooks) {
       module('public writable realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          '*': ['read', 'write'],
-        });
+        setupPermissionedRealm(
+          hooks,
+          {
+            '*': ['read', 'write'],
+          },
+          setTestRequest,
+        );
 
-        let { getMessagesSince } = setupMatrixRoom(hooks);
+        let { getMessagesSince } = setupMatrixRoom(hooks, getTestRequest);
 
         test('serves a card-source POST request', async function (assert) {
           let entry = 'unused-card.gts';
@@ -826,9 +796,13 @@ module(basename(__filename), function () {
       });
 
       module('permissioned realm', function (hooks) {
-        setupPermissionedRealm(hooks, {
-          john: ['read', 'write'],
-        });
+        setupPermissionedRealm(
+          hooks,
+          {
+            john: ['read', 'write'],
+          },
+          setTestRequest,
+        );
 
         test('401 with invalid JWT', async function (assert) {
           let response = await request
