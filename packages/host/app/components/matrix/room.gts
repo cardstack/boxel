@@ -262,7 +262,7 @@ export default class Room extends Component<Signature> {
   private roomScrollState: WeakMap<
     RoomData,
     {
-      messageElemements: WeakMap<HTMLElement, number>;
+      messageElements: WeakMap<HTMLElement, number>;
       messageScrollers: Map<number, Element['scrollIntoView']>;
       messageVisibilityObserver: IntersectionObserver;
       isScrolledToBottom: boolean;
@@ -289,7 +289,7 @@ export default class Room extends Component<Signature> {
         isScrolledToBottom: false,
         userHasScrolled: false,
         isConversationScrollable: false,
-        messageElemements: new WeakMap(),
+        messageElements: new WeakMap(),
         messageScrollers: new Map(),
         messageVisibilityObserver: new IntersectionObserver((entries) => {
           entries.forEach((entry) => {
@@ -354,9 +354,9 @@ export default class Room extends Component<Signature> {
     return this.matrixService.filesToSend.get(this.args.roomId) ?? [];
   }
 
-  @use private playgroundPanelCardResource = resource(() => {
+  @use private playgroundPanelCardIdResource = resource(() => {
     let state = new TrackedObject<{
-      value: CardDef | undefined;
+      value: string | undefined;
       remove: () => void;
     }>({
       value: undefined,
@@ -366,26 +366,22 @@ export default class Room extends Component<Signature> {
     });
 
     (async () => {
-      let cardResource = this.getCard(this, () => {
-        if (!this.args.selectedCardRef) {
-          return;
-        }
-        let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
-        return this.playgroundPanelService.getSelection(moduleId)?.cardId;
-      });
-      await cardResource.loaded;
-      state.value = cardResource.card;
+      if (!this.args.selectedCardRef) {
+        return;
+      }
+      let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
+      state.value = this.playgroundPanelService.getSelection(moduleId)?.cardId;
     })();
 
     return state;
   });
 
-  private get playgroundPanelCard() {
-    return this.playgroundPanelCardResource.value;
+  private get playgroundPanelCardId() {
+    return this.playgroundPanelCardIdResource.value;
   }
 
   private get removePlaygroundPanelCard() {
-    return this.playgroundPanelCardResource.remove;
+    return this.playgroundPanelCardIdResource.remove;
   }
 
   private get isScrolledToBottom() {
@@ -401,7 +397,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get messageElements() {
-    return this.scrollState().messageElemements;
+    return this.scrollState().messageElements;
   }
 
   private get messageScrollers() {
@@ -688,7 +684,7 @@ export default class Room extends Component<Signature> {
 
   @action
   private removeCard(id: string) {
-    if (this.playgroundPanelCard?.id === id) {
+    if (this.playgroundPanelCardId === id) {
       this.removePlaygroundPanelCard();
     } else if (this.autoAttachmentResource.cardIds.has(id)) {
       this.removedAttachedCardIds.push(id);
@@ -813,8 +809,8 @@ export default class Room extends Component<Signature> {
 
   private get autoAttachedCardIds() {
     if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      return this.playgroundPanelCard
-        ? new TrackedSet([this.playgroundPanelCard.id])
+      return this.playgroundPanelCardId
+        ? new TrackedSet([this.playgroundPanelCardId])
         : new TrackedSet<string>();
     }
 
