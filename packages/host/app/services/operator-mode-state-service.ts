@@ -6,7 +6,7 @@ import Service, { service } from '@ember/service';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, task } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
@@ -18,12 +18,12 @@ import {
   type LocalPath,
   CodeRef,
   isResolvedCodeRef,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
 import { file, isReady, FileResource } from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -43,6 +43,7 @@ import NetworkService from './network';
 
 import type CardService from './card-service';
 import type ResetService from './reset';
+import type StoreService from './store';
 
 import type IndexController from '../controllers';
 
@@ -94,6 +95,7 @@ export default class OperatorModeStateService extends Service {
   @tracked private _aiAssistantOpen = false;
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
+  private cardTitles = new TrackedMap<string, string>();
 
   @service declare private cardService: CardService;
   @service declare private loaderService: LoaderService;
@@ -105,6 +107,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private reset: ResetService;
   @service declare private network: NetworkService;
   @service declare private matrixService: MatrixService;
+  @service declare private store: StoreService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -135,8 +138,8 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
-  async restore(rawState: SerializedState) {
-    this.state = await this.deserialize(rawState);
+  restore(rawState: SerializedState) {
+    this.state = this.deserialize(rawState);
   }
 
   addItemToStack(item: StackItem) {
@@ -144,47 +147,43 @@ export default class OperatorModeStateService extends Service {
     if (!this.state.stacks[stackIndex]) {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
+    if (
+      item.url &&
+      this.state.stacks[stackIndex].find((i) => i.url === item.url)
+    ) {
+      // this card is already in the stack, do nothing (maybe we could hoist
+      // this card to the top instead?)
+      return;
+    }
     this.state.stacks[stackIndex].push(item);
-    if (!item.cardError) {
-      this.recentCardsService.add(item.card.id);
+    if (item.url) {
+      this.recentCardsService.add(item.url);
     }
     this.schedulePersist();
   }
 
   patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
-    // WARNING This card is not part of the identity map! Unsure if that is
-    // necessary for the way this card is used. TODO consider refactor this to
-    // use CardResource (please make ticket for this investigation)
-    let card = await this.cardService.getCard(id);
-    let document = await this.cardService.serializeCard(card);
-    if (patch.attributes) {
-      document.data.attributes = mergeWith(
-        document.data.attributes,
-        patch.attributes,
-      );
-    }
-    if (patch.relationships) {
-      let mergedRel = mergeRelationships(
-        document.data.relationships,
-        patch.relationships,
-      );
-      if (mergedRel && Object.keys(mergedRel).length !== 0) {
-        document.data.relationships = mergedRel;
+    let card = await this.store.peek(id);
+    if (card && isCardInstance(card)) {
+      let document = await this.cardService.serializeCard(card);
+      if (patch.attributes) {
+        document.data.attributes = mergeWith(
+          document.data.attributes,
+          patch.attributes,
+        );
       }
+      if (patch.relationships) {
+        let mergedRel = mergeRelationships(
+          document.data.relationships,
+          patch.relationships,
+        );
+        if (mergedRel && Object.keys(mergedRel).length !== 0) {
+          document.data.relationships = mergedRel;
+        }
+      }
+      await this.cardService.patchCard(card, document, patch);
     }
-    await this.cardService.patchCard(card, document, patch);
-    // TODO: if we introduce an identity map, we would not need this
-    await this.reloadCardIfOpen(card.id);
   });
-
-  async reloadCardIfOpen(id: string) {
-    let stackItems = this.state?.stacks.flat() ?? [];
-    for (let item of stackItems) {
-      if ('card' in item && item.card.id == id) {
-        this.cardService.reloadCard(item.card);
-      }
-    }
-  }
 
   async deleteCard(cardId: string) {
     let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(
@@ -201,7 +200,7 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this.state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i) => i.url?.href && removeFileExtension(i.url.href) === cardId,
+          (i) => i.url && removeFileExtension(i.url) === cardId,
         ) as StackItem[]),
       );
     }
@@ -414,6 +413,17 @@ export default class OperatorModeStateService extends Service {
     });
   }
 
+  setCardTitle(url: string, title: string) {
+    this.setCardTitleTask.perform(url, title);
+  }
+
+  // we use a task to organize simultaneous updates, otherwise you may get error
+  // around updating a value previously used in a computation
+  private setCardTitleTask = task(async (url: string, title: string) => {
+    await Promise.resolve(); // wait 1 micro task
+    this.cardTitles.set(url, title);
+  });
+
   @cached
   get title() {
     if (this.state.submode === Submodes.Code) {
@@ -422,7 +432,10 @@ export default class OperatorModeStateService extends Service {
       }`;
     } else {
       let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
-      return itemForTitle?.title ?? 'Boxel';
+      return (
+        (itemForTitle?.url ? this.cardTitles.get(itemForTitle.url) : 'Boxel') ??
+        'Boxel'
+      );
     }
   }
 
@@ -503,7 +516,7 @@ export default class OperatorModeStateService extends Service {
         }
         if (item.url) {
           serializedStack.push({
-            id: item.url.href,
+            id: item.url,
             format: item.format,
           });
         }
@@ -519,24 +532,22 @@ export default class OperatorModeStateService extends Service {
     return stringify(this.rawStateWithSavedCardsOnly())!;
   }
 
-  async createStackItem(
-    url: URL,
+  createStackItem(
+    url: string,
     stackIndex: number,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
     let stackItem = new StackItem({
       url,
       stackIndex,
-      owner: this,
       format,
     });
-    await stackItem.ready();
     return stackItem;
   }
 
   // Deserialize a stringified JSON version of OperatorModeState into a Glimmer tracked object
   // so that templates can react to changes in stacks and their items
-  async deserialize(rawState: SerializedState): Promise<OperatorModeState> {
+  deserialize(rawState: SerializedState): OperatorModeState {
     let openDirs = new TrackedMap<string, string[]>(
       Object.entries(rawState.openDirs ?? {}).map(([realmURL, dirs]) => [
         realmURL,
@@ -559,24 +570,13 @@ export default class OperatorModeStateService extends Service {
       let newStack: Stack = new TrackedArray([]);
       for (let item of stack) {
         let { format } = item;
-        // TODO this seems dubious. We are unable to use @consume getCard at
-        // this layer. moreover we are throwing away the resource anyways (via
-        // stackItem.ready), Aaaaand the lifetime of these resources is wrong
-        // since this is a service. Let's figure out why we are deserializing
-        // cards at this layer and see if we can get rid of resource usage here
-        // altogether. Please refactor as part of eliminating the
-        // CardService.loaded promise.
-        let cardResource = getCard(this, () => item.id, {
-          isAutoSaved: true,
-        });
-        let stackItem = new StackItem({
-          owner: this, // ugh, not a great owner...
-          cardResource,
-          format,
-          stackIndex,
-        });
-        await stackItem.ready();
-        newStack.push(stackItem);
+        newStack.push(
+          new StackItem({
+            url: item.id,
+            format,
+            stackIndex,
+          }),
+        );
       }
       newState.stacks.push(newStack);
       stackIndex++;
@@ -687,28 +687,24 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  async openCardInInteractMode(url: URL, format: Format = 'isolated') {
+  openCardInInteractMode(url: string, format: Format = 'isolated') {
     this.clearStacks();
     let newItem = new StackItem({
       url,
       stackIndex: 0,
-      owner: this, // We need to think for better owner
       format,
     });
-    await newItem.ready();
     this.addItemToStack(newItem);
     this.updateSubmode(Submodes.Interact);
   }
 
-  openWorkspace = restartableTask(async (realmUrl: string) => {
-    let url = new URL(`${realmUrl}index`);
+  openWorkspace = (realmUrl: string) => {
+    let url = `${realmUrl}index`;
     let stackItem = new StackItem({
-      owner: this,
       url,
       format: 'isolated',
       stackIndex: 0,
     });
-    await stackItem.ready();
     this.clearStacks();
     this.addItemToStack(stackItem);
 
@@ -718,11 +714,11 @@ export default class OperatorModeStateService extends Service {
     this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : url,
+        : new URL(url),
     );
 
     this.operatorModeController.workspaceChooserOpened = false;
-  });
+  };
 
   get workspaceChooserOpened() {
     return this.operatorModeController.workspaceChooserOpened;

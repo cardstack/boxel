@@ -22,9 +22,10 @@ import {
   identifyCard,
   CardContextName,
   RealmURLContextName,
-  type ResolvedCodeRef,
   getNarrowestType,
   Loader,
+  type ResolvedCodeRef,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 import { AddButton, IconButton } from '@cardstack/boxel-ui/components';
 import { IconMinusCircle } from '@cardstack/boxel-ui/icons';
@@ -150,7 +151,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
     if (this.args.typeConstraint) {
       type = await getNarrowestType(this.args.typeConstraint, type, myLoader());
     }
-    let chosenCard: CardDef | undefined = await chooseCard(
+    let cardId = await chooseCard(
       { filter: { type } },
       {
         offerToCreate: {
@@ -162,8 +163,11 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
         consumingRealm: this.realmURL,
       },
     );
-    if (chosenCard) {
-      this.args.model.value = chosenCard;
+    if (cardId) {
+      let card = await this.cardContext.store.peek(cardId);
+      if (isCardInstance(card)) {
+        this.args.model.value = card;
+      }
     }
   });
 }

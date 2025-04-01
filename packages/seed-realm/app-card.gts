@@ -65,26 +65,28 @@ class TableView extends GlimmerComponent<{
   Args: { cards: PrerenderedCard[]; context?: CardContext };
 }> {
   <template>
-    <table class='styled-table'>
-      <thead>
-        <tr>
-          {{#each this.tableData.headers as |header|}}
-            <th class='table-header'>{{header}}</th>
-          {{/each}}
-        </tr>
-      </thead>
-      <tbody>
-        {{#each this.tableData.rows as |row|}}
+    {{#if this.isLoaded}}
+      <table class='styled-table'>
+        <thead>
           <tr>
-            {{#each row as |cell|}}
-              <td class='table-cell'>
-                <div class='cell-content'>{{cell}}</div>
-              </td>
+            {{#each this.tableData.headers as |header|}}
+              <th class='table-header'>{{header}}</th>
             {{/each}}
           </tr>
-        {{/each}}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {{#each this.tableData.rows as |row|}}
+            <tr>
+              {{#each row as |cell|}}
+                <td class='table-cell'>
+                  <div class='cell-content'>{{cell}}</div>
+                </td>
+              {{/each}}
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    {{/if}}
     <style scoped>
       .styled-table {
         width: 100%;
@@ -119,38 +121,23 @@ class TableView extends GlimmerComponent<{
     </style>
   </template>
 
-  @tracked instances?: CardDef[];
-
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    this._getCards.perform();
+  // explicitly setting this to @tracked since there is
+  // a possibility it might be initialized as undefined
+  @tracked private cardResources = !this.args.context
+    ? []
+    : this.args.cards.map((c) => this.args.context!.getCard(this, () => c.url));
+  private get isLoaded() {
+    return this.cardResources.map((r) => r.isLoaded).every((i) => i);
   }
 
-  private _getCards = restartableTask(async () => {
-    if (!this.args.context) {
-      this.instances = [];
-      return;
-    }
-    let context = this.args.context;
-    let instances: CardDef[] = [];
-    await Promise.all(
-      this.args.cards.map(async (c) => {
-        let result = context.getCard(this, () => c.url);
-        // TODO Make this reactive and don't throw away the resource
-        await result.loaded;
-        if (result.card) {
-          instances.push(result.card);
-        }
-      }),
-    );
-    this.instances = instances;
-  });
-
   get tableData() {
-    if (!this.instances) {
+    if (this.cardResources.length === 0) {
       return;
     }
-    let exampleCard = this.instances[0];
+    if (this.cardResources.find((r) => !r.card)) {
+      return;
+    }
+    let exampleCard = this.cardResources[0].card;
     let headers: string[] = [];
     for (let fieldName in exampleCard) {
       if (
@@ -164,10 +151,10 @@ class TableView extends GlimmerComponent<{
     }
     headers.sort();
 
-    let rows = this.instances.map((card) => {
+    let rows = this.cardResources.map((cardResource) => {
       let row: string[] = [];
       for (let header of headers) {
-        row.push((card as any)[header]);
+        row.push((cardResource.card as any)[header]);
       }
       return row;
     });
