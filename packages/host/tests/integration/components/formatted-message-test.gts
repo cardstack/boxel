@@ -1,4 +1,4 @@
-import { RenderingTestContext, render } from '@ember/test-helpers';
+import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -8,6 +8,7 @@ import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
 import { setupRenderingTest } from '../../helpers/setup';
+import percySnapshot from '@percy/ember';
 
 module('Integration | Component | FormattedMessage', function (hooks) {
   setupRenderingTest(hooks);
@@ -23,7 +24,7 @@ module('Integration | Component | FormattedMessage', function (hooks) {
     cardService = this.owner.lookup('service:card-service') as CardService;
 
     cardService.getSource = async () => {
-      return Promise.resolve('const x = 1;');
+      return Promise.resolve('let a = 1;\nlet b = 2;');
     };
   });
 
@@ -125,5 +126,114 @@ puts "💎"
     });
 
     assert.dom('[data-test-apply-code-button]').doesNotExist();
+  });
+
+  test('it will render an incomplete code patch block in human readable format when search part is not complete', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `
+<pre data-code-language="typescript">
+<<<<<<< SEARCH
+          let a = 1;
+          let b = 2;
+          let c = 3;
+</pre>`,
+      isStreaming: false,
+    });
+
+    await waitFor('.view-lines');
+
+    assert.equal(
+      (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+        .innerText,
+      '// existing code ... \nlet a = 1;\nlet b = 2;\nlet c = 3;',
+    );
+
+    assert.dom('[data-test-apply-code-button]').doesNotExist();
+  });
+
+  test('it will render an incomplete code patch block in human readable format when replace part is not complete', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `
+<pre data-code-language="typescript">
+<<<<<<< SEARCH
+          let a = 1;
+          let c = 3;
+=======
+          let a = 2;
+</pre>`,
+      isStreaming: false,
+    });
+
+    await waitFor('.view-lines');
+
+    assert.equal(
+      (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+        .innerText,
+      '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
+    );
+
+    assert.dom('[data-test-apply-code-button]').doesNotExist();
+  });
+
+  test('it will render a diff editor when search and replace block is complete', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+let b = 2;
+=======
+let a = 3;
+>>>>>>> REPLACE
+</pre>`,
+      isStreaming: false,
+    });
+
+    // monaco diff editor is rendered when the diff block is complete (i.e. code block streaming has finished)
+    // the diff editor will have .line-delete and .line-insert classes to show the changes
+
+    await waitFor('.code-block-diff .cdr.line-delete');
+
+    assert.dom('.cdr.line-delete').exists({ count: 2 });
+    assert.dom('.cdr.line-insert').exists({ count: 1 });
+    assert.dom('[data-test-apply-code-button]').exists();
+
+    await percySnapshot(assert);
+  });
+
+  test('it will render one diff editor and one standard code block if one search replace block is complete and another is not', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+let b = 2;
+=======
+let a = 3;
+>>>>>>> REPLACE
+</pre>
+<p>the above block is now complete, now I am sending you another one:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+let c = 3;
+</pre>
+`,
+      isStreaming: false,
+    });
+
+    // First editor is a diff editor, the second is a standard code block
+    assert.dom('[data-test-apply-code-button]').exists({ count: 1 });
+    assert.dom('.code-block').exists({ count: 2 });
+    assert.dom('.code-block-diff').exists({ count: 1 });
+
+    await percySnapshot(assert);
   });
 });
