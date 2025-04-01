@@ -1,5 +1,6 @@
 import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
 
+import percySnapshot from '@percy/ember';
 import { module, test } from 'qunit';
 
 import FormattedMessage from '@cardstack/host/components/ai-assistant/formatted-message';
@@ -8,7 +9,6 @@ import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
 import { setupRenderingTest } from '../../helpers/setup';
-import percySnapshot from '@percy/ember';
 
 module('Integration | Component | FormattedMessage', function (hooks) {
   setupRenderingTest(hooks);
