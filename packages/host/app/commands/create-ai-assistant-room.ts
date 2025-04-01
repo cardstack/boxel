@@ -35,7 +35,6 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
       preset: matrixService.privateChatPreset,
       invite: [aiBotFullId],
       name: input.name,
-      topic: undefined,
       room_alias_name: encodeURIComponent(
         `${input.name} - ${format(
           new Date(),
