@@ -180,7 +180,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     setupPermissionedRealm(hooks, {
-      '*': ['read', 'write'],
+      john: ['read', 'write'],
     });
 
     setupMatrixRoom(hooks);
@@ -229,35 +229,78 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       },
     });
 
-    module('linting endpoint', function () {
-      setupPermissionedRealm(hooks, {
-        john: ['read', 'write'],
-      });
+    test('401 with invalid JWT', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set('Authorization', `Bearer invalid-token`)
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .send(`console.log('hi')`);
 
-      test('401 with invalid JWT', async function (assert) {
-        let response = await request
-          .post('/_lint')
-          .set('Authorization', `Bearer invalid-token`)
-          .set('X-HTTP-Method-Override', 'QUERY')
-          .send(`console.log('hi')`);
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+    });
 
-        assert.strictEqual(response.status, 401, 'HTTP 401 status');
-      });
+    test('user can do a lint with fix', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import MyComponent from 'somewhere';
+<template>
+  <MyComponent @flag={{eq 1 1}} />
+</template>
+`);
 
-      test('user can do a lint with fix', async function (assert) {
-        let response = await request
-          .post('/_lint')
-          .set(
-            'Authorization',
-            `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
-          )
-          .set('X-HTTP-Method-Override', 'QUERY')
-          .set('Accept', 'application/json')
-          .send(`console.log('hi')`);
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import { eq } from '@cardstack/boxel-ui/helpers';
+import MyComponent from 'somewhere';
+<template>
+  <MyComponent @flag={{eq 1 1}} />
+</template>
+`,
+      );
+      assert.true(responseJson.fixed, 'fixed is true when there are fixes');
+      assert.deepEqual(responseJson.messages, [], 'no linting errors found');
+    });
 
-        assert.strictEqual(response.status, 200, 'HTTP 200 status');
-        assert.strictEqual(response.body, 'xxx');
-      });
+    test('user can do a lint with no fix needed', async function (assert) {
+      let response = await request
+        .post('/_lint')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'john', ['read', 'write'])}`,
+        )
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .send(`import { eq } from '@cardstack/boxel-ui/helpers';
+import MyComponent from 'somewhere';
+<template>
+  <MyComponent @flag={{eq 1 1}} />
+</template>
+`);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let responseJson = JSON.parse(response.text);
+      assert.strictEqual(
+        responseJson.output,
+        `import { eq } from '@cardstack/boxel-ui/helpers';
+import MyComponent from 'somewhere';
+<template>
+  <MyComponent @flag={{eq 1 1}} />
+</template>
+`,
+      );
+      assert.false(
+        responseJson.fixed,
+        'fixed is false when there are no fixes',
+      );
+      assert.deepEqual(responseJson.messages, [], 'no linting errors found');
     });
   });
 });
