@@ -72,35 +72,29 @@ export default class AskAiContainer extends Component<Signature> {
       ),
     });
 
-    let moduleId: string | undefined;
-    if (this.args.selectedCardRef) {
-      moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
-    }
-    let openCardIds = this.roomAttachmentsService.getOpenCardIds(moduleId);
+    let openCardIds = this.roomAttachmentsService.getOpenCardIds(
+      this.args.selectedCardRef,
+    );
     let openCards: CardDef[] | undefined;
     if (openCardIds) {
-      openCards = await this.getOpenCardsTask.perform(openCardIds);
+      openCards = (
+        await Promise.all(openCardIds.map((id) => this.store.peek(id)))
+      )
+        .filter(Boolean)
+        .filter(isCardInstance);
     }
-
-    let autoAttachedFileURL = this.roomAttachmentsService.autoAttachedFileURL;
+    let openFileURL = this.roomAttachmentsService.openFileURL;
 
     let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
     await sendMessageCommand.execute({
       roomId,
       prompt: this.aiPrompt,
       attachedCards: openCards,
-      attachedFileURLs: autoAttachedFileURL ? [autoAttachedFileURL] : undefined,
+      attachedFileURLs: openFileURL ? [openFileURL] : undefined,
       openCardIds,
     });
 
     this.aiPrompt = '';
-  });
-
-  private getOpenCardsTask = restartableTask(async (cardIds: string[]) => {
-    let cards = (await Promise.all(cardIds.map((id) => this.store.peek(id))))
-      .filter(Boolean)
-      .filter(isCardInstance);
-    return cards;
   });
 
   <template>

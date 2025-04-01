@@ -1,6 +1,9 @@
 import Service, { service } from '@ember/service';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import {
+  type ResolvedCodeRef,
+  internalKeyFor,
+} from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -23,31 +26,17 @@ export default class RoomAttachmentsService extends Service {
     return this.operatorModeStateService.state.submode;
   }
 
-  get autoAttachedFileURL(): string | undefined {
-    if (this.submode !== Submodes.Code) {
-      return undefined;
-    }
-    return this.operatorModeStateService.state.codePath?.href;
-  }
-
-  get autoAttachedFile() {
-    let fileURL = this.autoAttachedFileURL;
-    if (!fileURL) {
-      return undefined;
-    }
-
-    return this.matrixService.fileAPI.createFileDef({
-      sourceUrl: fileURL,
-      name: fileURL.split('/').pop(),
-    });
-  }
-
-  // moduleId is only needed for determining open playground card id in code submode
-  getOpenCardIds(moduleId?: string): string[] | undefined {
+  get openFileURL(): string | undefined {
     if (this.submode === Submodes.Code) {
-      if (!moduleId) {
-        return;
-      }
+      return this.operatorModeStateService.state.codePath?.href;
+    }
+    return undefined;
+  }
+
+  getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] | undefined {
+    // selectedCardRef is only needed for determining open playground card id in code submode
+    if (this.submode === Submodes.Code && selectedCardRef) {
+      let moduleId = internalKeyFor(selectedCardRef, undefined);
       return [this.playgroundPanelService.getSelection(moduleId)?.cardId];
     }
 
