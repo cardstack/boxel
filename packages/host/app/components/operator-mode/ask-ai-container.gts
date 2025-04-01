@@ -5,21 +5,14 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
-import {
-  isCardInstance,
-  type ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { type ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-box';
-import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
-import type RoomAttachmentsService from '@cardstack/host/services/room-attachments-service';
-import type StoreService from '@cardstack/host/services/store';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
+import AskAiTextBox from '@cardstack/host/components/ai-assistant/ask-ai-text-box';
 
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
@@ -35,9 +28,6 @@ export default class AskAiContainer extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-  @service private declare roomAttachmentsService: RoomAttachmentsService;
-  @service private declare store: StoreService;
   @tracked private aiPrompt = '';
 
   @action private onInput(value: string) {
@@ -65,18 +55,10 @@ export default class AskAiContainer extends Component<Signature> {
       ),
     });
 
-    let openCardIds = this.roomAttachmentsService.getOpenCardIds(
+    let openCards = await this.operatorModeStateService.getOpenCards.perform(
       this.args.selectedCardRef,
     );
-    let openCards: CardDef[] | undefined;
-    if (openCardIds) {
-      openCards = (
-        await Promise.all(openCardIds.map((id) => this.store.peek(id)))
-      )
-        .filter(Boolean)
-        .filter(isCardInstance);
-    }
-    let openFileURL = this.roomAttachmentsService.openFileURL;
+    let openFileURL = this.operatorModeStateService.openFileURL;
 
     let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
     await sendMessageCommand.execute({
@@ -84,7 +66,7 @@ export default class AskAiContainer extends Component<Signature> {
       prompt: this.aiPrompt,
       attachedCards: openCards,
       attachedFileURLs: openFileURL ? [openFileURL] : undefined,
-      openCardIds,
+      openCardIds: openCards?.map((c) => c.id),
     });
 
     this.aiPrompt = '';
