@@ -675,7 +675,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       let firstStack = operatorModeStateService.state.stacks[0];
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
       recentCardsService.ascendingRecentCardIds = firstStack.map(
-        (item) => item.card.id,
+        (item) => item.url,
       );
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
@@ -781,7 +781,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
       recentCardsService.ascendingRecentCardIds =
-        operatorModeStateService.state.stacks[0].map((item) => item.card.id);
+        operatorModeStateService.state.stacks[0].map((item) => item.url);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();
@@ -828,7 +828,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(7);
+      assert.expect(9);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });

@@ -62,6 +62,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
@@ -219,6 +220,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare specPanelService: SpecPanelService;
+  @service private declare store: StoreService;
 
   private cardTracker = new ElementTracker();
 
@@ -230,6 +232,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return {
       getCard: this.getCard,
       getCards: this.getCards,
+      store: this.store,
       cardComponentModifier: this.cardTracker.trackElement,
     };
   }

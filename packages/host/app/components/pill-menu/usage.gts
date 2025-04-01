@@ -1,12 +1,13 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
+
+import { consume } from 'ember-provide-consume-context';
+
 import { TrackedObject } from 'tracked-built-ins';
 
 import { IconX } from '@cardstack/boxel-ui/icons';
@@ -14,12 +15,12 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 import {
   baseRealm,
   getPlural,
-  isCardInstance,
+  GetCardContextName,
+  type getCard,
 } from '@cardstack/runtime-common';
 
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 import type StoreService from '@cardstack/host/services/store';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';
 
@@ -33,6 +34,8 @@ const sampleCardURLs = [
 ];
 
 export default class PillMenuUsage extends Component {
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @service private declare store: StoreService;
 
   @tracked private title = 'Pill Menu';
@@ -42,29 +45,15 @@ export default class PillMenuUsage extends Component {
   @tracked private canAttachCard = false;
   private headerIconURL = headerIcon;
 
-  constructor(owner: Owner, args: {}) {
-    super(owner, args);
-    this.attachSampleCards.perform();
-  }
-
-  private attachSampleCards = task(async () => {
-    let cards = (
-      await Promise.all(
-        sampleCardURLs.map((url) =>
-          this.store.getInstanceDetachedFromStore(url),
-        ),
-      )
-    )
-      .filter(Boolean)
-      .filter(isCardInstance) as CardDef[];
-    this.items = cards.map(
-      (card) =>
+  private makeCardResources = () => {
+    this.items = sampleCardURLs.map(
+      (cardId) =>
         new TrackedObject({
-          card,
+          cardId,
           isActive: true,
         }),
     );
-  });
+  };
 
   private get activeItems() {
     return this.items.filter((item) => item.isActive);
@@ -74,8 +63,8 @@ export default class PillMenuUsage extends Component {
     console.log('Header button clicked');
   }
 
-  @action private onChooseCard(card: CardDef) {
-    this.items = [...this.items, new TrackedObject({ card, isActive: true })];
+  @action private onChooseCard(cardId: string) {
+    this.items = [...this.items, new TrackedObject({ cardId, isActive: true })];
   }
 
   @action private onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {
@@ -83,6 +72,7 @@ export default class PillMenuUsage extends Component {
   }
 
   <template>
+    {{consumeContext this.makeCardResources}}
     <FreestyleUsage @name='PillMenu'>
       <:description>
         Component with a header and a list of card pills.

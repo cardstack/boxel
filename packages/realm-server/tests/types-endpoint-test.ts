@@ -25,7 +25,6 @@ import {
   closeServer,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { shimExternals } from '../lib/externals';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { type PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
@@ -162,10 +161,6 @@ module(basename(__filename), function () {
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
       resetCatalogRealms();
-    });
-
-    hooks.beforeEach(async function () {
-      shimExternals(virtualNetwork);
     });
 
     setupPermissionedRealm(hooks, {
