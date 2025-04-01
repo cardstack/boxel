@@ -138,7 +138,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-pill-menu-header]')
       .containsText('1 of 1 Skill Active');
-    assertMessages(assert, [
+    await assertMessages(assert, [
       {
         from: 'testuser',
         message: 'Hello world',
@@ -176,7 +176,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-pill-menu-header]')
       .containsText('2 of 2 Skills Active');
-    assertMessages(assert, [
+    await assertMessages(assert, [
       {
         from: 'testuser',
         message: 'Change embedded template background to blue',
@@ -212,7 +212,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-pill-menu-header]')
       .containsText('1 of 1 Skill Active');
-    assertMessages(assert, [
+    await assertMessages(assert, [
       {
         from: 'testuser',
         message: 'Hello world',
@@ -257,7 +257,7 @@ module('Integration | ask-ai', function (hooks) {
     assert
       .dom('[data-test-pill-menu-header]')
       .containsText('2 of 2 Skills Active');
-    assertMessages(assert, [
+    await assertMessages(assert, [
       {
         from: 'testuser',
         message: 'Change embedded template background to blue',
@@ -271,7 +271,7 @@ module('Integration | ask-ai', function (hooks) {
 
     // sending new message from AskAI box to open panel
     await sendAskAiMessage('Change title to Marquitos');
-    assertMessages(assert, [
+    await assertMessages(assert, [
       {
         from: 'testuser',
         message: 'Change title to Marquitos',
@@ -288,7 +288,7 @@ module('Integration | ask-ai', function (hooks) {
     // sending message to open room via panel's chatbox
     await fillIn('[data-test-message-field]', 'Goodbye');
     await click('[data-test-send-message-btn]');
-    assertMessages(assert, [
+    await assertMessages(assert, [
       {
         from: 'testuser',
         message: 'Change title to Marquitos',
