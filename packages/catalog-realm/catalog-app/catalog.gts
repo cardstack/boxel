@@ -315,7 +315,7 @@ class Isolated extends Component<typeof Catalog> {
           module: new URL('./listing/listing', import.meta.url).href,
           name: `${capitalize(this.activeTabId)}Listing`,
         },
-        every: [this.categoryFilter, this.tagFilter].filter(
+        every: [this.categoryFilter, this.tagFilter, this.searchFilter].filter(
           Boolean,
         ) as Filter[],
       },
@@ -409,6 +409,15 @@ class Isolated extends Component<typeof Catalog> {
           'tags.id': id,
         },
       })),
+    };
+  }
+
+  get searchFilter(): AnyFilter | undefined {
+    if (!this.searchValue) {
+      return;
+    }
+    return {
+      any: [{ contains: { title: this.searchValue } }],
     };
   }
 
