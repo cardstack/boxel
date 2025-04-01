@@ -10,7 +10,7 @@ import Modifier from 'ember-modifier';
 import { Resource } from 'ember-resources';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
@@ -52,7 +52,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
   @tracked htmlGroups: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
-  @tracked copyCodeButtonText: 'Copy' | 'Copied' = 'Copy';
 
   // When html is streamed, we need to update htmlParts accordingly,
   // but only the parts that have changed so that we don't needlesly re-render
@@ -142,6 +141,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
     let parsedContent = parseSearchReplace(content);
 
+    // Transform the incomplete search/replace block into a format for streaming,
+    // so that the user can see the search replace block in a human friendly format.
+    // // existing code ...
+    // SEARCH BLOCK
+    // // new code ...
+    // REPLACE BLOCK
     let adjustedContent = '';
     if (parsedContent.searchContent) {
       // get count of leading spaces in the first line of searchContent
@@ -215,14 +220,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                 @codeData={{codeData}}
                 as |codeBlock|
               >
-                <codeBlock.actions as |actions|>
-                  <actions.copyCode />
-                  {{#if
-                    (and (bool codeData.searchReplaceBlock) (not @isStreaming))
-                  }}
-                    <actions.applyCodePatch />
-                  {{/if}}
-                </codeBlock.actions>
                 {{#if (bool codeData.searchReplaceBlock)}}
                   {{#let
                     (getCodeDiffResultResource
@@ -231,6 +228,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                     as |codeDiffResource|
                   }}
                     {{#if codeDiffResource.loaded}}
+                      <codeBlock.actions as |actions|>
+                        <actions.copyCode
+                          @code={{codeDiffResource.modifiedCode}}
+                        />
+                        <actions.applyCodePatch />
+                      </codeBlock.actions>
                       <codeBlock.diffEditor
                         @originalCode={{codeDiffResource.originalCode}}
                         @modifiedCode={{codeDiffResource.modifiedCode}}
@@ -239,6 +242,9 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                     {{/if}}
                   {{/let}}
                 {{else}}
+                  <codeBlock.actions as |actions|>
+                    <actions.copyCode @code={{codeData.code}} />
+                  </codeBlock.actions>
                   <codeBlock.editor />
                 {{/if}}
               </CodeBlock>

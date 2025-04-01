@@ -41,6 +41,7 @@ interface ApplyCodePatchButtonSignature {
 
 interface CodeBlockActionsSignature {
   Args: {
+    code?: string | null;
     codeData?: Partial<CodeData>;
   };
   Blocks: {
@@ -272,8 +273,6 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
         });
 
         editor.revealLine(lineCount + 1); // Scroll to the end as the code streams
-
-        // applyCodeDiffDecorations(editor, monacoSDK, codeData);
       }
     } else {
       let monacoContainer = element;
@@ -287,7 +286,6 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
       monacoSDK.editor.setModelLanguage(model, language);
 
       model.setValue(code);
-      // applyCodeDiffDecorations(editor, monacoSDK, codeData);
 
       this.monacoState = {
         editor,
@@ -367,6 +365,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
     readOnly: true,
     fontSize: 10,
     renderOverviewRuler: false,
+    automaticLayout: true,
   };
 
   <template>
@@ -415,7 +414,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
     <div class='code-block-actions'>
       {{yield
         (hash
-          copyCode=(component CopyCodeButton code=@codeData.code)
+          copyCode=(component CopyCodeButton code=@code)
           applyCodePatch=(component
             ApplyCodePatchButton
             codePatch=@codeData.searchReplaceBlock

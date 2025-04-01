@@ -9,16 +9,18 @@ import FormattedMessage from '@cardstack/host/components/ai-assistant/formatted-
 import MonacoService from '@cardstack/host/services/monaco-service';
 
 import { setupRenderingTest } from '../../helpers/setup';
-
 module('Integration | Component | FormattedMessage', function (hooks) {
   setupRenderingTest(hooks);
 
   let monacoService: MonacoService;
+  let cardService: CardService;
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     monacoService = this.owner.lookup(
       'service:monaco-service',
     ) as MonacoService;
+
+    cardService = this.owner.lookup('service:card-service') as CardService;
   });
 
   async function renderFormattedMessage(testScenario: any) {
@@ -109,6 +111,11 @@ puts "💎"
   });
 
   test('it will render apply code button when code patch block is detected and file url is provided', async function (assert) {
+    let originalGetSource = cardService.getSource;
+    cardService.getSource = async () => {
+      return Promise.resolve('const x = 1;');
+    };
+
     await renderFormattedMessage({
       renderCodeBlocks: true,
       html: `
@@ -124,6 +131,7 @@ puts "💎"
     });
 
     assert.dom('[data-test-apply-code-button]').exists();
+    cardService.getSource = originalGetSource;
   });
 
   test('it will not render apply code button when code is streaming, code patch block is detected and file url is provided', async function (assert) {
