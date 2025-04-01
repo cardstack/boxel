@@ -39,6 +39,7 @@ import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
 import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
+import { SuperTest, Test } from 'supertest';
 
 export async function waitUntil<T>(
   condition: () => Promise<T>,
@@ -620,5 +621,66 @@ export async function insertJob(
     finished_at: result[0].finished_at,
     result: result[0].result,
     priority: result[0].priority,
+  };
+}
+
+export function setupMatrixRoom(
+  hooks: NestedHooks,
+  getTestRequest: () => SuperTest<Test>,
+) {
+  let matrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: 'node-test_realm',
+    seed: realmSecretSeed,
+  });
+
+  let testAuthRoomId: string | undefined;
+
+  hooks.beforeEach(async function () {
+    await matrixClient.login();
+    let userId = matrixClient.getUserId()!;
+
+    let response = await getTestRequest()
+      .post('/_server-session')
+      .send(JSON.stringify({ user: userId }))
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json');
+
+    let json = response.body;
+
+    let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+    if (!rooms.includes(json.room)) {
+      await matrixClient.joinRoom(json.room);
+    }
+
+    await matrixClient.sendEvent(json.room, 'm.room.message', {
+      body: `auth-response: ${json.challenge}`,
+      msgtype: 'm.text',
+    });
+
+    response = await getTestRequest()
+      .post('/_server-session')
+      .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json');
+
+    testAuthRoomId = json.room;
+
+    await matrixClient.setAccountData('boxel.session-rooms', {
+      [userId]: json.room,
+    });
+  });
+
+  return {
+    matrixClient,
+    getMessagesSince: async function (since: number) {
+      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+      let messagesAfterSentinel = allMessages.filter(
+        (m) => m.origin_server_ts > since,
+      );
+
+      return messagesAfterSentinel;
+    },
   };
 }

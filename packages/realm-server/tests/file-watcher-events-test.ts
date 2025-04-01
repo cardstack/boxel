@@ -15,8 +15,7 @@ import {
   setupBaseRealmServer,
   runTestRealmServer,
   setupDB,
-  realmServerTestMatrix,
-  realmSecretSeed,
+  setupMatrixRoom,
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
@@ -24,7 +23,6 @@ import {
   waitUntil,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
@@ -47,9 +45,18 @@ module(basename(__filename), function () {
     let testRealmEventSource: eventSource;
     let realmEventTimestampStart: number;
 
+    function setTestRequest(newRequest: SuperTest<Test>) {
+      request = newRequest;
+    }
+
+    function getTestRequest() {
+      return request;
+    }
+
     function setupPermissionedRealm(
       hooks: NestedHooks,
       permissions: RealmPermissions,
+      setTestRequest: (newRequest: SuperTest<Test>) => void,
       fileSystem?: Record<string, string | LooseSingleCardDocument>,
     ) {
       setupDB(hooks, {
@@ -88,70 +95,9 @@ module(basename(__filename), function () {
             };
           });
 
-          request = supertest(testRealmHttpServer);
+          setTestRequest(supertest(testRealmHttpServer));
         },
       });
-    }
-
-    // FIXME this and others copied from card-endpoints-test, extract
-    function setupMatrixRoom(hooks: NestedHooks) {
-      let matrixClient = new MatrixClient({
-        matrixURL: realmServerTestMatrix.url,
-        // it's a little awkward that we are hijacking a realm user to pretend to
-        // act like a normal user, but that's what's happening here
-        username: 'node-test_realm',
-        seed: realmSecretSeed,
-      });
-
-      let testAuthRoomId: string | undefined;
-
-      hooks.beforeEach(async function () {
-        await matrixClient.login();
-        let userId = matrixClient.getUserId()!;
-
-        let response = await request
-          .post('/_server-session')
-          .send(JSON.stringify({ user: userId }))
-          .set('Accept', 'application/json')
-          .set('Content-Type', 'application/json');
-
-        let json = response.body;
-
-        let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
-
-        if (!rooms.includes(json.room)) {
-          await matrixClient.joinRoom(json.room);
-        }
-
-        await matrixClient.sendEvent(json.room, 'm.room.message', {
-          body: `auth-response: ${json.challenge}`,
-          msgtype: 'm.text',
-        });
-
-        response = await request
-          .post('/_server-session')
-          .send(JSON.stringify({ user: userId, challenge: json.challenge }))
-          .set('Accept', 'application/json')
-          .set('Content-Type', 'application/json');
-
-        testAuthRoomId = json.room;
-
-        await matrixClient.setAccountData('boxel.session-rooms', {
-          [userId]: json.room,
-        });
-      });
-
-      return {
-        matrixClient,
-        getMessagesSince: async function (since: number) {
-          let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
-          let messagesAfterSentinel = allMessages.filter(
-            (m) => m.origin_server_ts > since,
-          );
-
-          return messagesAfterSentinel;
-        },
-      };
     }
 
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
@@ -179,6 +125,7 @@ module(basename(__filename), function () {
       {
         '*': ['read'],
       },
+      setTestRequest,
       {
         'person.gts': `
         import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
@@ -219,7 +166,7 @@ module(basename(__filename), function () {
       },
     );
 
-    let { getMessagesSince } = setupMatrixRoom(hooks);
+    let { getMessagesSince } = setupMatrixRoom(hooks, getTestRequest);
 
     test('file creation produces an added event', async function (assert) {
       realmEventTimestampStart = Date.now();
