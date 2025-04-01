@@ -17,6 +17,7 @@ import {
   setupBaseRealmServer,
   runTestRealmServer,
   setupDB,
+  setupMatrixRoom,
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
