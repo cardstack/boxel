@@ -21,8 +21,6 @@ import {
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
-  realmServerTestMatrix,
-  realmSecretSeed,
   createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
@@ -31,7 +29,6 @@ import {
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
-import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
@@ -109,7 +106,8 @@ module(basename(__filename), function () {
             fileSystem,
           }));
 
-          request = supertest(testRealmHttpServer);
+          let request = supertest(testRealmHttpServer);
+          setTestRequest(request);
         },
       });
     }
