@@ -23,9 +23,14 @@
           "self": null
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
         }
       },
       "license": {

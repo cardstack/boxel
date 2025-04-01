@@ -7,15 +7,6 @@ import { action } from '@ember/object';
 
 import { Pill, BoxelInput } from '@cardstack/boxel-ui/components';
 
-import {
-  Query,
-  isCardInstance,
-  Filter,
-  CardTypeFilter,
-} from '@cardstack/runtime-common';
-
-import { CardContext } from 'https://cardstack.com/base/card-api';
-
 export type FilterItem = { id: string; name: string };
 
 interface FilterCategoryGroupArgs {
@@ -92,6 +83,7 @@ interface FilterTagGroupArgs {
     items: FilterItem[];
     activeIds: string[]; // Array since it's multi-select
     onItemSelect: (item: FilterItem) => void;
+    isLoading?: boolean;
   };
   Element: HTMLElement;
 }
@@ -106,26 +98,38 @@ export class FilterTagGroup extends GlimmerComponent<FilterTagGroupArgs> {
     return (itemId: string) => this.args.activeIds.includes(itemId);
   }
 
+  get noItems() {
+    return this.args.items.length === 0;
+  }
+
   <template>
     <FilterGroupWrapper @title={{@title}} ...attributes>
-      <div class='filter-list'>
-        {{#each @items as |item|}}
-          {{! Take note: did not choose to use @pillBackgroundColor args because we want a custom background color toggled based on the selected state }}
-          <Pill
-            @kind='button'
-            class={{concat
-              'tag-filter-pill'
-              (if (this.isItemSelected item.id) ' selected')
-            }}
-            {{on 'click' (fn this.handleItemClick item)}}
-            data-test-filter-pill={{item.id}}
-          >
-            <:default>
-              <span>{{item.name}}</span>
-            </:default>
-          </Pill>
-        {{/each}}
-      </div>
+      {{#if @isLoading}}
+        Loading...
+      {{else}}
+        <div class='filter-list'>
+          {{#if this.noItems}}
+            <span>No {{@title}} found</span>
+          {{else}}
+            {{#each @items as |item|}}
+              {{! Take note: did not choose to use @pillBackgroundColor args because we want a custom background color toggled based on the selected state }}
+              <Pill
+                @kind='button'
+                class={{concat
+                  'tag-filter-pill'
+                  (if (this.isItemSelected item.id) ' selected')
+                }}
+                {{on 'click' (fn this.handleItemClick item)}}
+                data-test-filter-pill={{item.id}}
+              >
+                <:default>
+                  <span>{{item.name}}</span>
+                </:default>
+              </Pill>
+            {{/each}}
+          {{/if}}
+        </div>
+      {{/if}}
     </FilterGroupWrapper>
 
     <style scoped>

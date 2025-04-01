@@ -33,9 +33,9 @@
           "self": "../Category/2fc2c93e-658b-4ee1-8a6e-f90bc9a4c3b8"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
         }
       },
       "license": {

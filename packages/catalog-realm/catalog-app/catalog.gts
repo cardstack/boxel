@@ -13,7 +13,13 @@ import {
   linksToMany,
   realmURL,
 } from 'https://cardstack.com/base/card-api';
-import { Query, isCardInstance, EqFilter } from '@cardstack/runtime-common';
+import {
+  Query,
+  isCardInstance,
+  EqFilter,
+  AnyFilter,
+  Filter,
+} from '@cardstack/runtime-common';
 import StringField from 'https://cardstack.com/base/string';
 import GlimmerComponent from '@glimmer/component';
 
@@ -45,6 +51,7 @@ import {
 
 import { Listing } from './listing/listing';
 import { Category } from './listing/category';
+import { Tag } from './listing/tag';
 
 type ViewOption = 'strip' | 'grid';
 
@@ -69,7 +76,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
             <p>The starter stack — Install these first</p>
           </div>
           <p class='intro-description'>These are the foundational tools we think
-            every builder should have. Whether you’re just exploring or setting
+            every builder should have. Whether you're just exploring or setting
             up your workspace for serious work, start with these must-haves.</p>
         </:intro>
         <:content>
@@ -84,10 +91,10 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
         <:intro>
           <div class='intro-title'>
             <h2>New this Week</h2>
-            <p>Hand-picked by our editors — What’s buzzing right now</p>
+            <p>Hand-picked by our editors — What's buzzing right now</p>
           </div>
           <p class='intro-description'>These new entries have caught the
-            community’s eye, whether for creative flair, clever utility, or just
+            community's eye, whether for creative flair, clever utility, or just
             plain polish.</p>
         </:intro>
         <:content>
@@ -265,18 +272,6 @@ class Isolated extends Component<typeof Catalog> {
     this.activeTabId = tabId;
   }
 
-  // listing query filter values
-  // TODO: Remove this after we get the real categories from query
-  mockCategories = [
-    { id: 'all', name: 'All' },
-    { id: 'business', name: 'Business' },
-    { id: 'accounting', name: 'Accounting' },
-    { id: 'collaboration', name: 'Collaboration' },
-    { id: 'productivity', name: 'Productivity' },
-    { id: 'marketing', name: 'Marketing' },
-    { id: 'design', name: 'Design' },
-  ];
-
   @tracked activeCategoryId = 'all';
 
   @action
@@ -314,32 +309,20 @@ class Isolated extends Component<typeof Catalog> {
 
   //query
   get query(): Query {
-    let everyArr = [];
-    if (this.categoryFilter) {
-      everyArr.push(this.categoryFilter);
-    }
-
     return {
       filter: {
         on: {
           module: new URL('./listing/listing', import.meta.url).href,
           name: `${capitalize(this.activeTabId)}Listing`,
         },
-        every: everyArr,
+        every: [this.categoryFilter, this.tagFilter].filter(
+          Boolean,
+        ) as Filter[],
       },
     };
   }
 
   // Category filter
-  categorySearch = this.args.context?.getCards(
-    this,
-    () => this.categoryQuery,
-    () => this.realmHrefs,
-    {
-      isLive: true,
-    },
-  );
-
   get categoryQuery(): Query {
     return {
       filter: {
@@ -350,6 +333,15 @@ class Isolated extends Component<typeof Catalog> {
       },
     };
   }
+
+  categorySearch = this.args.context?.getCards(
+    this,
+    () => this.categoryQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
 
   get categoryItems() {
     let instances = (this.categorySearch?.instances ?? []) as Category[];
@@ -375,9 +367,53 @@ class Isolated extends Component<typeof Catalog> {
       },
     };
   }
+
+  get tagQuery(): Query {
+    return {
+      filter: {
+        type: {
+          module: new URL('./listing/tag', import.meta.url).href,
+          name: 'Tag',
+        },
+      },
+    };
+  }
+
+  tagSearch = this.args.context?.getCards(
+    this,
+    () => this.tagQuery,
+    () => this.realmHrefs,
+    {
+      isLive: true,
+    },
+  );
+
+  get tagItems() {
+    let instances = (this.tagSearch?.instances ?? []) as Tag[];
+    if (!instances) {
+      return [];
+    }
+    return instances.map((instance) => ({
+      id: instance.id,
+      name: instance.name,
+    }));
+  }
+
+  get tagFilter(): AnyFilter | undefined {
+    if (this.activeTagIds.length === 0) {
+      return;
+    }
+    return {
+      any: this.activeTagIds.map((id) => ({
+        eq: {
+          'tags.id': id,
+        },
+      })),
+    };
+  }
+
   // end of listing query filter values
 
-  // TODO: Remove this after testing
   @action viewGrid() {
     if (!this.args.context?.actions?.viewCard) {
       throw new Error('viewCard action is not available');
@@ -456,9 +492,10 @@ class Isolated extends Component<typeof Catalog> {
             />
             <FilterTagGroup
               @title='Tags'
-              @items={{this.mockTags}}
+              @items={{this.tagItems}}
               @activeIds={{this.activeTagIds}}
               @onItemSelect={{this.handleTagSelect}}
+              @isLoading={{this.tagSearch.isLoading}}
             />
           </div>
         </div>

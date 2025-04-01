@@ -15,13 +15,3 @@ export class Category extends CardDef {
     },
   });
 }
-
-export class Tag extends CardDef {
-  static displayName = 'Tag';
-  @field name = contains(StringField);
-  @field title = contains(StringField, {
-    computeVia: function (this: Tag) {
-      return this.name;
-    },
-  });
-}

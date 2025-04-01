@@ -30,8 +30,9 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 import AppListingHeader from '../components/app-listing-header';
 
 import { Publisher } from './publisher';
-import { Category, Tag } from './category';
+import { Category } from './category';
 import { License } from './license';
+import { Tag } from './tag';
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
