@@ -1,6 +1,4 @@
-import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
-
-import percySnapshot from '@percy/ember';
+import { RenderingTestContext, render } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
