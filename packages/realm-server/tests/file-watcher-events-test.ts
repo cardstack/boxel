@@ -39,7 +39,7 @@ const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealmHref = testRealmURL.href;
 
 module(basename(__filename), function () {
-  module('Realm-specific Endpoints | card URLs', function (hooks) {
+  module('file watcher realm events', function (hooks) {
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
