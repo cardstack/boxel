@@ -7,6 +7,7 @@ import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 import FittedFormatGallery from '@cardstack/host/components/operator-mode/card-preview-panel/fitted-format-gallery';
 import Preview from '@cardstack/host/components/preview';
+
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 import type {
@@ -14,6 +15,8 @@ import type {
   FieldDef,
   Format,
 } from 'https://cardstack.com/base/card-api';
+
+import AtomFormatGallery from './atom-format-gallery';
 
 interface Signature {
   Args: {
@@ -56,17 +59,11 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
       <Preview class='preview' @card={{@card}} @format={{@format}} />
     </CardContainer>
   {{else if (eq @format 'atom')}}
-    <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum dolor
-      sit amet, consectetur adipiscing elit, sed do
-      <Preview
-        class='atom-preview'
-        @card={{@card}}
-        @format={{@format}}
-        @displayContainer={{false}}
-      />
-      tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
-      veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
-      commodo consequat.</div>
+    <AtomFormatGallery
+      @card={{@card}}
+      @isDarkMode={{true}}
+      @isFieldDef={{@isFieldDef}}
+    />
   {{else if (eq @format 'fitted')}}
     <FittedFormatGallery
       @card={{@card}}
