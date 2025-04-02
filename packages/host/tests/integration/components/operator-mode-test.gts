@@ -793,12 +793,15 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('it does not wait for save to complete before switching from edit to isolated mode', async function (assert) {
-    (store as any)._originalSaveInstance = store.saveInstance;
-    store.saveInstance = async (card: CardDef, defaultRealmHref?: string) => {
+    (store as any)._originalPersist = (store as any).persistAndUpdate;
+    (store as any).persistAndUpdate = async (
+      card: CardDef,
+      defaultRealmHref?: string,
+    ) => {
       // slow down the save so we can make sure that the format switch is
       // not tied to the save completion
       await delay(1000);
-      await (store as any)._originalSaveInstance(card, defaultRealmHref);
+      await (store as any)._originalPersist(card, defaultRealmHref);
     };
     try {
       setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
@@ -831,7 +834,7 @@ module('Integration | operator-mode', function (hooks) {
         'the isolated mode is displayed before save completes',
       );
     } finally {
-      store.saveInstance = (store as any)._originalSaveInstance;
+      (store as any).persistAndUpdate = (store as any)._originalPersist;
     }
   });
 

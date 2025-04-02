@@ -74,10 +74,12 @@ export default class CardService extends Service {
     this.loaderToCardAPILoadingCache = new WeakMap();
   }
 
+  // used for tests only!
   _onSave(subscriber: CardSaveSubscriber) {
     this.subscriber = subscriber;
   }
 
+  // used for tests only!
   _unregisterSaveSubscriber() {
     this.subscriber = undefined;
   }

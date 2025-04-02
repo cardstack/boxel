@@ -186,12 +186,12 @@ export default class StoreService extends Service {
     if (!url) {
       throw new Error(`Cannot create subscriber with doc that has no ID`);
     }
-    let cardOrError = await this.getCard({ urlOrDoc });
+    let cardOrError = await this.getInstance({ urlOrDoc });
     let card = isCardInstance(cardOrError) ? cardOrError : undefined;
     let error = !isCardInstance(cardOrError) ? cardOrError : undefined;
 
     if (!isLive) {
-      await this.handleUpdatedCard(undefined, cardOrError);
+      await this.handleUpdatedInstance(undefined, cardOrError);
       return {
         card,
         error,
@@ -243,7 +243,7 @@ export default class StoreService extends Service {
         });
       }
     }
-    await this.handleUpdatedCard(undefined, cardOrError);
+    await this.handleUpdatedInstance(undefined, cardOrError);
     return { card, error };
   }
 
@@ -256,7 +256,7 @@ export default class StoreService extends Service {
     let token = waiter.beginAsync();
     try {
       await this.ready;
-      let cardOrError = await this.getCard({
+      let cardOrError = await this.getInstance({
         urlOrDoc: doc,
         relativeTo,
         realm,
@@ -285,7 +285,7 @@ export default class StoreService extends Service {
       this.save(instance.id);
       return;
     }
-    await this.saveModel(instance, realm);
+    await this.persistAndUpdate(instance, realm);
     this.identityContext.set(instance.id, instance);
   }
 
@@ -300,7 +300,7 @@ export default class StoreService extends Service {
     if (cached) {
       return cached as T;
     }
-    return await this.getCard<T>({ urlOrDoc: url });
+    return await this.getInstance<T>({ urlOrDoc: url });
   }
 
   async deleteCard(cardId: string): Promise<void> {
@@ -318,13 +318,16 @@ export default class StoreService extends Service {
   // means you MUST consume the instance IMMEDIATELY! it should not live in the
   // state of the consumer.
   async patchCard(
-    card: CardDef,
+    instance: CardDef,
     doc: LooseSingleCardDocument,
     patchData: PatchData,
   ): Promise<void> {
     await this.ready;
     let api = await this.cardService.getAPI();
-    let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
+    let linkedCards = await this.loadPatchedInstances(
+      patchData,
+      new URL(instance.id),
+    );
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
         let parts = field.split('.');
@@ -332,7 +335,7 @@ export default class StoreService extends Service {
         if (!leaf) {
           throw new Error(`bug: error in field name "${field}"`);
         }
-        let inner = card;
+        let inner = instance;
         for (let part of parts) {
           inner = (inner as any)[part];
         }
@@ -342,19 +345,19 @@ export default class StoreService extends Service {
         // introduce a new option to updateFromSerialized to accept a list of
         // fields to pre-load? which in this case would be any relationships that
         // were patched in
-        (card as any)[field] = value;
+        (instance as any)[field] = value;
       }
     }
     await api.updateFromSerialized<typeof CardDef>(
-      card,
+      instance,
       doc,
       this.identityContext,
     );
-    await this.saveModel(card);
+    await this.persistAndUpdate(instance);
   }
 
-  getAutoSaveState(card: CardDef): AutoSaveState | undefined {
-    return this.autoSaveStates.get(card);
+  getAutoSaveState(instance: CardDef): AutoSaveState | undefined {
+    return this.autoSaveStates.get(instance);
   }
 
   // This method is used for specific scenarios where you just want an instance
@@ -378,7 +381,7 @@ export default class StoreService extends Service {
       await Promise.all(
         collectionDoc.data.map(async (doc) => {
           try {
-            return await this.getCard({
+            return await this.getInstance({
               urlOrDoc: { data: doc },
               relativeTo: new URL(doc.id),
             });
@@ -455,8 +458,8 @@ export default class StoreService extends Service {
       }
       let subscriber = this.subscribers.get(invalidation);
       if (subscriber) {
-        let liveCard = this.identityContext.get(invalidation);
-        if (liveCard) {
+        let liveInstance = this.identityContext.get(invalidation);
+        if (liveInstance) {
           // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
           // the inputs with past values. This can happen if the user makes edits in the time between the auto
           // save request and the arrival SSE event.
@@ -464,7 +467,7 @@ export default class StoreService extends Service {
             !event.clientRequestId ||
             !this.cardService.clientRequestIds.has(event.clientRequestId)
           ) {
-            this.reload.perform(liveCard);
+            this.reloadTask.perform(liveInstance);
           } else {
             if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
               console.debug(
@@ -475,84 +478,84 @@ export default class StoreService extends Service {
           }
         } else if (!this.identityContext.get(invalidation)) {
           // load the card using just the ID because we don't have a running card on hand
-          this.loadModel.perform(invalidation);
+          this.loadInstanceTask.perform(invalidation);
         }
       }
     }
   };
 
-  private loadModel = restartableTask(
+  private loadInstanceTask = restartableTask(
     async (urlOrDoc: string | LooseSingleCardDocument) => {
       let url = asURL(urlOrDoc);
-      let oldCard = url ? this.identityContext.get(url) : undefined;
-      let cardOrError = await this.getCard({ urlOrDoc });
-      await this.handleUpdatedCard(oldCard, cardOrError);
+      let oldInstance = url ? this.identityContext.get(url) : undefined;
+      let instanceOrError = await this.getInstance({ urlOrDoc });
+      await this.handleUpdatedInstance(oldInstance, instanceOrError);
       if (url) {
-        this.notifyLiveResources(url, cardOrError);
+        this.notifyLiveResources(url, instanceOrError);
       }
     },
   );
 
-  private reload = task(async (card: CardDef) => {
-    let maybeReloadedCard: CardDef | CardError | undefined;
+  private reloadTask = task(async (instance: CardDef) => {
+    let maybeReloadedInstance: CardDef | CardError | undefined;
     let isDelete = false;
     try {
-      await this.reloadCard(card);
-      maybeReloadedCard = card;
+      await this.reloadInstance(instance);
+      maybeReloadedInstance = instance;
     } catch (err: any) {
       if (err.status === 404) {
         // in this case the document was invalidated in the index because the
         // file was deleted
         isDelete = true;
       } else {
-        let errorResponse = processCardError(card.id, err);
-        maybeReloadedCard = errorResponse.errors[0];
+        let errorResponse = processCardError(instance.id, err);
+        maybeReloadedInstance = errorResponse.errors[0];
       }
     }
-    await this.handleUpdatedCard(card, maybeReloadedCard);
+    await this.handleUpdatedInstance(instance, maybeReloadedInstance);
     if (isDelete) {
-      this.identityContext.delete(card.id);
+      this.identityContext.delete(instance.id);
     }
-    this.notifyLiveResources(card.id, maybeReloadedCard);
+    this.notifyLiveResources(instance.id, maybeReloadedInstance);
   });
 
-  private async handleUpdatedCard(
-    oldCard: CardDef | undefined,
-    maybeUpdatedCard: CardDef | CardError | undefined,
+  private async handleUpdatedInstance(
+    oldInstance: CardDef | undefined,
+    maybeUpdatedInstance: CardDef | CardError | undefined,
   ) {
     let instance: CardDef | undefined;
-    if (isCardInstance(maybeUpdatedCard)) {
-      instance = maybeUpdatedCard;
+    if (isCardInstance(maybeUpdatedInstance)) {
+      instance = maybeUpdatedInstance;
       this.identityContext.set(instance.id, instance);
-    } else if (maybeUpdatedCard?.id) {
-      this.identityContext.set(maybeUpdatedCard.id, undefined);
+    } else if (maybeUpdatedInstance?.id) {
+      this.identityContext.set(maybeUpdatedInstance.id, undefined);
     }
 
-    if (maybeUpdatedCard?.id) {
+    if (maybeUpdatedInstance?.id) {
       if (!this.cardApiCache) {
         this.cardApiCache = await this.cardService.getAPI();
       }
-      for (let subscriber of this.subscribers.get(maybeUpdatedCard.id)
+      for (let subscriber of this.subscribers.get(maybeUpdatedInstance.id)
         ?.resources ?? []) {
         if (!subscriber.resourceState.onCardChange) {
           continue;
         }
         let autoSaveState;
-        if (oldCard) {
+        if (oldInstance) {
           this.cardApiCache.unsubscribeFromChanges(
-            oldCard,
+            oldInstance,
             subscriber.resourceState.onCardChange,
           );
-          autoSaveState = this.autoSaveStates.get(oldCard);
-          this.autoSaveStates.delete(oldCard);
+          autoSaveState = this.autoSaveStates.get(oldInstance);
+          this.autoSaveStates.delete(oldInstance);
         }
-        if (isCardInstance(maybeUpdatedCard)) {
+        if (isCardInstance(maybeUpdatedInstance)) {
           this.cardApiCache.subscribeToChanges(
-            maybeUpdatedCard,
+            maybeUpdatedInstance,
             subscriber.resourceState.onCardChange,
           );
           if (autoSaveState) {
-            this.autoSaveStates.set(maybeUpdatedCard, autoSaveState);
+            this.autoSaveStates.set(maybeUpdatedInstance, autoSaveState);
           }
         }
       }
@@ -561,27 +564,27 @@ export default class StoreService extends Service {
 
   private notifyLiveResources(
     url: string,
-    maybeCard: CardDef | CardError | undefined,
+    maybeInstance: CardDef | CardError | undefined,
   ) {
     for (let { setCard, setCardError } of this.subscribers.get(url)
       ?.resources ?? []) {
       if (!setCard || !setCardError) {
         continue;
       }
-      if (!maybeCard) {
+      if (!maybeInstance) {
         setCard(undefined);
         setCardError(undefined);
-      } else if (isCardInstance(maybeCard)) {
-        setCard(maybeCard);
+      } else if (isCardInstance(maybeInstance)) {
+        setCard(maybeInstance);
         setCardError(undefined);
       } else {
         setCard(undefined);
-        setCardError(maybeCard);
+        setCardError(maybeInstance);
       }
     }
   }
 
-  private async getCard<T extends CardDef>({
+  private async getInstance<T extends CardDef>({
     urlOrDoc,
     relativeTo,
     realm,
@@ -604,7 +607,7 @@ export default class StoreService extends Service {
       if (!url) {
         // this is a new card so instantiate it and save it
         let doc = urlOrDoc as LooseSingleCardDocument;
-        let newCard = await this.cardService.createFromSerialized(
+        let newInstance = await this.cardService.createFromSerialized(
           doc.data,
           doc,
           relativeTo,
@@ -612,18 +615,18 @@ export default class StoreService extends Service {
             identityContext: this.identityContext,
           },
         );
-        await this.saveModel(newCard, realm);
-        this.identityContext.set(newCard.id, newCard);
-        deferred?.fulfill(newCard);
-        return newCard as T;
+        await this.persistAndUpdate(newInstance, realm);
+        this.identityContext.set(newInstance.id, newInstance);
+        deferred?.fulfill(newInstance);
+        return newInstance as T;
       }
 
       // createFromSerialized would also do this de-duplication, but we want to
       // also avoid the fetchJSON when we already have the stable card.
-      let existingCard = this.identityContext.get(url);
-      if (existingCard) {
-        deferred?.fulfill(existingCard);
-        return existingCard as T;
+      let existingInstance = this.identityContext.get(url);
+      if (existingInstance) {
+        deferred?.fulfill(existingInstance);
+        return existingInstance as T;
       }
       let doc = (typeof urlOrDoc !== 'string' ? urlOrDoc : undefined) as
         | SingleCardDocument
@@ -638,7 +641,7 @@ export default class StoreService extends Service {
         }
         doc = json;
       }
-      let card = await this.cardService.createFromSerialized(
+      let instance = await this.cardService.createFromSerialized(
         doc.data,
         doc,
         new URL(doc.data.id),
@@ -646,8 +649,8 @@ export default class StoreService extends Service {
           identityContext: this.identityContext,
         },
       );
-      deferred?.fulfill(card);
-      return card as T;
+      deferred?.fulfill(instance);
+      return instance as T;
     } catch (error: any) {
       let errorResponse = processCardError(url, error);
       let cardError = errorResponse.errors[0];
@@ -663,11 +666,11 @@ export default class StoreService extends Service {
   private initiateAutoSaveTask = restartableTask(
     async (id: string, opts?: { isImmediate?: true }) => {
       await this.ready;
-      let card = this.identityContext.get(id);
-      if (!card) {
+      let instance = this.identityContext.get(id);
+      if (!instance) {
         return;
       }
-      let autoSaveState = this.initOrGetAutoSaveState(card);
+      let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
       if (!opts?.isImmediate) {
         await timeout(this.environmentService.autoSaveDelayMs);
@@ -679,7 +682,7 @@ export default class StoreService extends Service {
         if (!opts?.isImmediate) {
           await timeout(25);
         }
-        await this.saveCard.perform(card, opts);
+        await this.saveInstanceTask.perform(instance, opts);
 
         autoSaveState.hasUnsavedChanges = false;
         autoSaveState.lastSaved = Date.now();
@@ -695,8 +698,8 @@ export default class StoreService extends Service {
     },
   );
 
-  private initOrGetAutoSaveState(card: CardDef): AutoSaveState {
-    let autoSaveState = this.autoSaveStates.get(card);
+  private initOrGetAutoSaveState(instance: CardDef): AutoSaveState {
+    let autoSaveState = this.autoSaveStates.get(instance);
     if (!autoSaveState) {
       autoSaveState = new TrackedObject({
         isSaving: false,
@@ -705,19 +708,19 @@ export default class StoreService extends Service {
         lastSavedErrorMsg: undefined,
         lastSaveError: undefined,
       });
-      this.autoSaveStates.set(card, autoSaveState!);
+      this.autoSaveStates.set(instance, autoSaveState!);
     }
     return autoSaveState!;
   }
 
-  private saveCard = restartableTask(
+  private saveInstanceTask = restartableTask(
     async (card: CardDef, opts?: { isImmediate?: true }) => {
       if (opts?.isImmediate) {
-        await this.saveModel(card);
+        await this.persistAndUpdate(card);
       } else {
         // these saves can happen so fast that we'll make sure to wait at
         // least 500ms for human consumption
-        await all([this.saveModel(card), timeout(500)]);
+        await all([this.persistAndUpdate(card), timeout(500)]);
       }
     },
   );
@@ -767,8 +770,8 @@ export default class StoreService extends Service {
   }
 
   // we return undefined if the card changed locally while the save was in-flight.
-  private async saveModel(
-    card: CardDef,
+  private async persistAndUpdate(
+    instance: CardDef,
     defaultRealmHref?: string,
   ): Promise<void> {
     let cardChanged = false;
@@ -779,8 +782,8 @@ export default class StoreService extends Service {
     let api: typeof CardAPI | undefined;
     try {
       api = await this.cardService.getAPI();
-      api.subscribeToChanges(card, onCardChange);
-      let doc = await this.cardService.serializeCard(card, {
+      api.subscribeToChanges(instance, onCardChange);
+      let doc = await this.cardService.serializeCard(instance, {
         // for a brand new card that has no id yet, we don't know what we are
         // relativeTo because its up to the realm server to assign us an ID, so
         // URL's should be absolute
@@ -789,7 +792,7 @@ export default class StoreService extends Service {
 
       // send doc over the wire with absolute URL's. The realm server will convert
       // to relative URL's as it serializes the cards
-      let realmURL = await this.cardService.getRealmURL(card);
+      let realmURL = await this.cardService.getRealmURL(instance);
       // in the case where we get no realm URL from the card, we are dealing with
       // a new card instance that does not have a realm URL yet.
       if (!realmURL) {
@@ -801,7 +804,7 @@ export default class StoreService extends Service {
         realmURL = new URL(defaultRealmHref);
       }
       let json = await this.saveCardDocument(doc, realmURL);
-      let isNew = !card.id;
+      let isNew = !instance.id;
 
       // if the card changed while the save was in flight then don't load the
       // server's version of the card--the next auto save will include these
@@ -811,50 +814,50 @@ export default class StoreService extends Service {
         // should always use updateFromSerialized()--this way a newly created
         // instance that does not yet have an id is still the same instance after an
         // ID has been assigned by the server.
-        await api.updateFromSerialized(card, json);
+        await api.updateFromSerialized(instance, json);
       } else if (isNew) {
         // in this case a new card was created, but there is an immediate change
         // that was made--so we save off the new ID for the card so in the next
         // save we'll correlate to the correct card ID
-        card.id = json.data.id;
+        instance.id = json.data.id;
       }
       if (this.onSaveSubscriber) {
         this.onSaveSubscriber(new URL(json.data.id), json);
       }
     } catch (err) {
-      console.error(`Failed to save ${card.id}: `, err);
+      console.error(`Failed to save ${instance.id}: `, err);
       throw err;
     } finally {
-      api?.unsubscribeFromChanges(card, onCardChange);
+      api?.unsubscribeFromChanges(instance, onCardChange);
       waiter.endAsync(token);
     }
   }
 
-  private async reloadCard(card: CardDef): Promise<void> {
+  private async reloadInstance(instance: CardDef): Promise<void> {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
     await this.withTestWaiters(async () => {
       let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
-        card.id,
+        instance.id,
         undefined,
       )) as SingleCardDocument;
 
       if (!isSingleCardDocument(incomingDoc)) {
         throw new Error(
-          `bug: server returned a non card document for ${card.id}:
+          `bug: server returned a non card document for ${instance.id}:
         ${JSON.stringify(incomingDoc, null, 2)}`,
         );
       }
       let api = await this.cardService.getAPI();
       await api.updateFromSerialized<typeof CardDef>(
-        card,
+        instance,
         incomingDoc,
         this.identityContext,
       );
     });
   }
 
-  private async loadPatchedCards(
+  private async loadPatchedInstances(
     patchData: PatchData,
     relativeTo: URL,
   ): Promise<{
@@ -867,20 +870,20 @@ export default class StoreService extends Service {
     await Promise.all(
       Object.entries(patchData.relationships).map(async ([fieldName, rel]) => {
         if (Array.isArray(rel)) {
-          let cards: CardDef[] = [];
+          let instances: CardDef[] = [];
           await Promise.all(
             rel.map(async (r) => {
-              let card = await this.loadRelationshipCard(r, relativeTo);
-              if (card) {
-                cards.push(card);
+              let instance = await this.loadRelationshipInstance(r, relativeTo);
+              if (instance) {
+                instances.push(instance);
               }
             }),
           );
-          result[fieldName] = cards;
+          result[fieldName] = instances;
         } else {
-          let card = await this.loadRelationshipCard(rel, relativeTo);
-          if (card) {
-            result[fieldName] = card;
+          let instance = await this.loadRelationshipInstance(rel, relativeTo);
+          if (instance) {
+            result[fieldName] = instance;
           }
         }
       }),
@@ -888,13 +891,15 @@ export default class StoreService extends Service {
     return result;
   }
 
-  private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
+  private async loadRelationshipInstance(rel: Relationship, relativeTo: URL) {
     if (!rel.links.self) {
       return;
     }
     let id = rel.links.self;
-    let card = await this.getCard({ urlOrDoc: new URL(id, relativeTo).href });
-    return isCardInstance(card) ? card : undefined;
+    let instance = await this.getInstance({
+      urlOrDoc: new URL(id, relativeTo).href,
+    });
+    return isCardInstance(instance) ? instance : undefined;
   }
 
   private async withTestWaiters<T>(cb: () => Promise<T>) {

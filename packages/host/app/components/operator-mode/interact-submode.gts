@@ -284,10 +284,6 @@ export default class InteractSubmode extends Component {
         here.store.save(id);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
-        if (here.cardToDelete) {
-          return here.delete.perform(here.cardToDelete.id);
-        }
-
         let cardToDelete: CardToDelete | undefined;
 
         if (typeof card === 'object' && 'id' in card) {
@@ -305,10 +301,8 @@ export default class InteractSubmode extends Component {
               title: loadedCard.title,
             };
           } else {
-            // If we get a 500 Internal Server Error, it is probable that the card is in error state.
-            // In this case a cardTitle should be present - we use this to display the card title in the delete modal.
             let error = loadedCard;
-            if (error.status === 500) {
+            if (error.meta != null) {
               let cardTitle = error.meta.cardTitle;
               if (!cardTitle) {
                 throw new Error(
@@ -396,11 +390,11 @@ export default class InteractSubmode extends Component {
   }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (cardId: string) => {
-    if (!cardId) {
-      // the card isn't actually saved yet, so do nothing
+  private delete = dropTask(async () => {
+    if (!this.cardToDelete) {
       return;
     }
+    let cardId = this.cardToDelete.id;
 
     for (let stack of this.stacks) {
       // remove all selections for the deleted card
@@ -786,10 +780,7 @@ export default class InteractSubmode extends Component {
         {{#if this.cardToDelete}}
           <DeleteModal
             @itemToDelete={{this.cardToDelete}}
-            @onConfirm={{fn
-              (get (this.publicAPI this 0) 'delete')
-              this.cardToDelete.id
-            }}
+            @onConfirm={{perform this.delete}}
             @onCancel={{this.onCancelDelete}}
             @isDeleteRunning={{this.delete.isRunning}}
           >
