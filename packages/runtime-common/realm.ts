@@ -411,7 +411,7 @@ export class Realm {
           url: tracked.url,
         });
         this.drainUpdates();
-      });
+      }, {});
     }
   }
 
