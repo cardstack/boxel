@@ -162,6 +162,8 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
+  fileWatcherEnabled: boolean;
+
   subscribe(
     cb: (message: UpdateRealmEventContent) => void,
     options?: {
@@ -392,6 +394,25 @@ export class Realm {
         return createResponse({ init: { status: 200 }, requestContext });
       });
     });
+
+    if (this.#adapter.fileWatcherEnabled) {
+      this.#adapter.subscribe((data) => {
+        let tracked = this.getTrackedWrite(data);
+        if (!tracked || tracked.isTracked) {
+          return;
+        }
+        this.broadcastRealmEvent(data);
+        this.#updateItems.push({
+          operation: ('added' in data
+            ? 'add'
+            : 'updated' in data
+              ? 'update'
+              : 'removed') as UpdateItem['operation'],
+          url: tracked.url,
+        });
+        this.drainUpdates();
+      });
+    }
   }
 
   async logInToMatrix() {

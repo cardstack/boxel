@@ -42,6 +42,10 @@ export class NodeAdapter implements RealmAdapter {
     private enableFileWatcher?: boolean,
   ) {}
 
+  get fileWatcherEnabled(): boolean {
+    return this.enableFileWatcher ?? false;
+  }
+
   async *readdir(
     path: string,
     opts?: { create?: true },
