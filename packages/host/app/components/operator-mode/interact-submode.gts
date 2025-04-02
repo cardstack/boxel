@@ -29,6 +29,7 @@ import {
   moduleFrom,
   RealmPaths,
   isCardInstance,
+  CardError,
   type getCard,
   type getCards,
   type Actions,
@@ -297,38 +298,32 @@ export default class InteractSubmode extends Component {
           };
         } else {
           let cardUrl = card instanceof URL ? card : new URL(card as string);
-          try {
-            // This usage of CardService.getCard() that bypasses the identity
-            // map is ok since we just pluck off some values from the card. we
-            //don't pass the instance around
-            let loadedCard = await here.cardService.getCard(cardUrl);
+          let loadedCard = await here.store.peek(cardUrl.href);
+          if (isCardInstance(loadedCard)) {
             cardToDelete = {
               id: loadedCard.id,
               title: loadedCard.title,
             };
-          } catch (error: any) {
+          } else {
             // If we get a 500 Internal Server Error, it is probable that the card is in error state.
             // In this case a cardTitle should be present - we use this to display the card title in the delete modal.
+            let error = loadedCard;
             if (error.status === 500) {
-              let cardTitle = JSON.parse(error.responseText)?.errors?.[0]?.meta
-                ?.cardTitle;
-
+              let cardTitle = error.meta.cardTitle;
               if (!cardTitle) {
                 throw new Error(
                   `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
                 );
               }
-
               cardToDelete = {
                 id: cardUrl.href,
                 title: cardTitle,
               };
             } else {
-              throw error;
+              throw new CardError(error.message, error);
             }
           }
         }
-
         here.cardToDelete = cardToDelete;
       },
       doWithStableScroll: async (

@@ -28,9 +28,9 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -57,14 +57,14 @@ module('Integration | operator-mode', function (hooks) {
   let testRealm: Realm;
   let testRealmAdapter: TestRealmAdapter;
   let operatorModeStateService: OperatorModeStateService;
-  let cardService: CardService;
+  let store: StoreService;
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
-    cardService = this.owner.lookup('service:card-service') as CardService;
+    store = this.owner.lookup('service:store') as StoreService;
   });
 
   setupLocalIndexing(hooks);
@@ -793,15 +793,12 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('it does not wait for save to complete before switching from edit to isolated mode', async function (assert) {
-    (cardService as any)._originalSaveModel = cardService.saveModel;
-    cardService.saveModel = async (
-      card: CardDef,
-      defaultRealmHref?: string,
-    ) => {
+    (store as any)._originalSaveInstance = store.saveInstance;
+    store.saveInstance = async (card: CardDef, defaultRealmHref?: string) => {
       // slow down the save so we can make sure that the format switch is
       // not tied to the save completion
       await delay(1000);
-      await (cardService as any)._originalSaveModel(card, defaultRealmHref);
+      await (store as any)._originalSaveInstance(card, defaultRealmHref);
     };
     try {
       setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
@@ -834,7 +831,7 @@ module('Integration | operator-mode', function (hooks) {
         'the isolated mode is displayed before save completes',
       );
     } finally {
-      cardService.saveModel = (cardService as any)._originalSaveModel;
+      store.saveInstance = (store as any)._originalSaveInstance;
     }
   });
 

@@ -3,8 +3,12 @@ import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 import { buildWaiter } from '@ember/test-waiters';
 
+import { isTesting } from '@embroider/macros';
+
 import { formatDistanceToNow } from 'date-fns';
 import { all, restartableTask, task, timeout } from 'ember-concurrency';
+
+import { stringify } from 'qs';
 
 import status from 'statuses';
 
@@ -14,7 +18,11 @@ import {
   hasExecutableExtension,
   isCardInstance,
   isSingleCardDocument,
+  isCardCollectionDocument,
   Deferred,
+  type Query,
+  type PatchData,
+  type Relationship,
   type AutoSaveState,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -29,17 +37,20 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import IdentityContext, { getDeps } from '../lib/gc-identity-context';
 
+import { type CardSaveSubscriber } from './card-service';
+
 import EnvironmentService from './environment-service';
 
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type RealmService from './realm';
+import type ResetService from './reset';
 
 import type { CardResource } from '../resources/card-resource';
 import type { SearchResource } from '../resources/search';
 
-export { CardError };
+export { CardError, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
 
@@ -49,6 +60,7 @@ export default class StoreService extends Service {
   @service declare private messageService: MessageService;
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
+  @service declare private reset: ResetService;
   declare private identityContext: IdentityContext;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private subscribers: Map<
@@ -72,14 +84,40 @@ export default class StoreService extends Service {
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
-  private workingGetCard: Map<string, Promise<CardDef | CardError>> = new Map();
+  private inflightCards: Map<string, Promise<CardDef | CardError>> = new Map();
+
+  // This is used for tests
+  private onSaveSubscriber: CardSaveSubscriber | undefined;
 
   constructor(owner: Owner) {
     super(owner);
+    this.reset.register(this);
     this.ready = this.setup();
     registerDestructor(this, () => {
       clearInterval(this.gcInterval);
     });
+  }
+
+  // used for tests only!
+  _onSave(subscriber: CardSaveSubscriber) {
+    this.onSaveSubscriber = subscriber;
+    this.cardService._onSave(subscriber);
+  }
+
+  // used for tests only!
+  _unregisterSaveSubscriber() {
+    this.onSaveSubscriber = undefined;
+    this.cardService._unregisterSaveSubscriber();
+  }
+
+  resetState() {
+    clearInterval(this.gcInterval);
+    this.subscriptions = new Map();
+    this.onSaveSubscriber = undefined;
+    this.subscribers = new Map();
+    this.autoSaveStates = new TrackedWeakMap();
+    this.inflightCards = new Map();
+    this.ready = this.setup();
   }
 
   unloadResource(resource: CardResource) {
@@ -214,6 +252,7 @@ export default class StoreService extends Service {
     relativeTo: URL | undefined,
     realm?: string,
   ): Promise<string | CardError> {
+    await this.ready;
     let token = waiter.beginAsync();
     try {
       await this.ready;
@@ -240,12 +279,13 @@ export default class StoreService extends Service {
   // MUST consume the instance IMMEDIATELY! it should not live in the state of
   // the consumer.
   async saveInstance(instance: CardDef, realm?: string) {
+    await this.ready;
     this.guardAgainstUnknownInstances(instance);
     if (instance.id) {
       this.save(instance.id);
       return;
     }
-    await this.cardService.saveModel(instance, realm);
+    await this.saveModel(instance, realm);
     this.identityContext.set(instance.id, instance);
   }
 
@@ -263,8 +303,101 @@ export default class StoreService extends Service {
     return await this.getCard<T>({ urlOrDoc: url });
   }
 
+  async deleteCard(cardId: string): Promise<void> {
+    if (!cardId) {
+      // the card isn't actually saved yet, so do nothing
+      return;
+    }
+    this.identityContext.delete(cardId);
+    await this.cardService.fetchJSON(cardId, { method: 'DELETE' });
+  }
+
+  // This method is used for specific scenarios where you just want an instance
+  // that is not auto saving and not receiving live updates and is eligible for
+  // garbage collection--meaning that it will be detached from the store. This
+  // means you MUST consume the instance IMMEDIATELY! it should not live in the
+  // state of the consumer.
+  async patchCard(
+    card: CardDef,
+    doc: LooseSingleCardDocument,
+    patchData: PatchData,
+  ): Promise<void> {
+    await this.ready;
+    let api = await this.cardService.getAPI();
+    let linkedCards = await this.loadPatchedCards(patchData, new URL(card.id));
+    for (let [field, value] of Object.entries(linkedCards)) {
+      if (field.includes('.')) {
+        let parts = field.split('.');
+        let leaf = parts.pop();
+        if (!leaf) {
+          throw new Error(`bug: error in field name "${field}"`);
+        }
+        let inner = card;
+        for (let part of parts) {
+          inner = (inner as any)[part];
+        }
+        (inner as any)[leaf.match(/^\d+$/) ? Number(leaf) : leaf] = value;
+      } else {
+        // TODO this could trigger a save. perhaps instead we could
+        // introduce a new option to updateFromSerialized to accept a list of
+        // fields to pre-load? which in this case would be any relationships that
+        // were patched in
+        (card as any)[field] = value;
+      }
+    }
+    await api.updateFromSerialized<typeof CardDef>(
+      card,
+      doc,
+      this.identityContext,
+    );
+    await this.saveModel(card);
+  }
+
   getAutoSaveState(card: CardDef): AutoSaveState | undefined {
     return this.autoSaveStates.get(card);
+  }
+
+  // This method is used for specific scenarios where you just want an instance
+  // that is not auto saving and not receiving live updates and is eligible for
+  // garbage collection--meaning that it will be detached from the store. This
+  // means you MUST consume the instance IMMEDIATELY! it should not live in the
+  // state of the consumer.
+  async search(query: Query, realmURL: URL): Promise<CardDef[]> {
+    await this.ready;
+    let json = await this.cardService.fetchJSON(
+      `${realmURL}_search?${stringify(query)}`,
+    );
+    if (!isCardCollectionDocument(json)) {
+      throw new Error(
+        `The realm search response was not a card collection document:
+        ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    let collectionDoc = json;
+    return (
+      await Promise.all(
+        collectionDoc.data.map(async (doc) => {
+          try {
+            return await this.getCard({
+              urlOrDoc: { data: doc },
+              relativeTo: new URL(doc.id),
+            });
+          } catch (e) {
+            console.warn(
+              `Skipping ${
+                doc.id
+              }. Encountered error deserializing from search result for query ${JSON.stringify(
+                query,
+                null,
+                2,
+              )} against realm ${realmURL}`,
+              e,
+            );
+            return undefined;
+          }
+        }),
+      )
+    ).filter(Boolean) as CardDef[];
   }
 
   private async guardAgainstUnknownInstances(instance: CardDef) {
@@ -364,7 +497,7 @@ export default class StoreService extends Service {
     let maybeReloadedCard: CardDef | CardError | undefined;
     let isDelete = false;
     try {
-      await this.cardService.reloadCard(card);
+      await this.reloadCard(card);
       maybeReloadedCard = card;
     } catch (err: any) {
       if (err.status === 404) {
@@ -460,12 +593,12 @@ export default class StoreService extends Service {
     let deferred: Deferred<CardDef | CardError> | undefined;
     let url = asURL(urlOrDoc);
     if (url) {
-      let working = this.workingGetCard.get(url);
+      let working = this.inflightCards.get(url);
       if (working) {
         return working as Promise<T>;
       }
       deferred = new Deferred<CardDef | CardError>();
-      this.workingGetCard.set(url, deferred.promise);
+      this.inflightCards.set(url, deferred.promise);
     }
     try {
       if (!url) {
@@ -479,7 +612,7 @@ export default class StoreService extends Service {
             identityContext: this.identityContext,
           },
         );
-        await this.cardService.saveModel(newCard, realm);
+        await this.saveModel(newCard, realm);
         this.identityContext.set(newCard.id, newCard);
         deferred?.fulfill(newCard);
         return newCard as T;
@@ -522,13 +655,14 @@ export default class StoreService extends Service {
       return cardError;
     } finally {
       if (url) {
-        this.workingGetCard.delete(url);
+        this.inflightCards.delete(url);
       }
     }
   }
 
   private initiateAutoSaveTask = restartableTask(
     async (id: string, opts?: { isImmediate?: true }) => {
+      await this.ready;
       let card = this.identityContext.get(id);
       if (!card) {
         return;
@@ -579,14 +713,32 @@ export default class StoreService extends Service {
   private saveCard = restartableTask(
     async (card: CardDef, opts?: { isImmediate?: true }) => {
       if (opts?.isImmediate) {
-        await this.cardService.saveModel(card);
+        await this.saveModel(card);
       } else {
         // these saves can happen so fast that we'll make sure to wait at
         // least 500ms for human consumption
-        await all([this.cardService.saveModel(card), timeout(500)]);
+        await all([this.saveModel(card), timeout(500)]);
       }
     },
   );
+
+  private async saveCardDocument(
+    doc: LooseSingleCardDocument,
+    realmUrl: URL,
+  ): Promise<SingleCardDocument> {
+    let isSaved = !!doc.data.id;
+    let json = await this.cardService.fetchJSON(doc.data.id ?? realmUrl, {
+      method: isSaved ? 'PATCH' : 'POST',
+      body: JSON.stringify(doc, null, 2),
+    });
+    if (!isSingleCardDocument(json)) {
+      throw new Error(
+        `bug: arg is not a card document:
+        ${JSON.stringify(json, null, 2)}`,
+      );
+    }
+    return json;
+  }
 
   private calculateLastSavedMsg(autoSaveState: AutoSaveState) {
     let savedMessage: string | undefined;
@@ -612,6 +764,152 @@ export default class StoreService extends Service {
       return error.message;
     }
     return 'Unknown error';
+  }
+
+  // we return undefined if the card changed locally while the save was in-flight.
+  private async saveModel(
+    card: CardDef,
+    defaultRealmHref?: string,
+  ): Promise<void> {
+    let cardChanged = false;
+    function onCardChange() {
+      cardChanged = true;
+    }
+    let token = waiter.beginAsync();
+    let api: typeof CardAPI | undefined;
+    try {
+      api = await this.cardService.getAPI();
+      api.subscribeToChanges(card, onCardChange);
+      let doc = await this.cardService.serializeCard(card, {
+        // for a brand new card that has no id yet, we don't know what we are
+        // relativeTo because its up to the realm server to assign us an ID, so
+        // URL's should be absolute
+        useAbsoluteURL: true,
+      });
+
+      // send doc over the wire with absolute URL's. The realm server will convert
+      // to relative URL's as it serializes the cards
+      let realmURL = await this.cardService.getRealmURL(card);
+      // in the case where we get no realm URL from the card, we are dealing with
+      // a new card instance that does not have a realm URL yet.
+      if (!realmURL) {
+        defaultRealmHref =
+          defaultRealmHref ?? this.realm.defaultWritableRealm?.path;
+        if (!defaultRealmHref) {
+          throw new Error('Could not find a writable realm');
+        }
+        realmURL = new URL(defaultRealmHref);
+      }
+      let json = await this.saveCardDocument(doc, realmURL);
+      let isNew = !card.id;
+
+      // if the card changed while the save was in flight then don't load the
+      // server's version of the card--the next auto save will include these
+      // unsaved changes.
+      if (!cardChanged) {
+        // in order to preserve object equality with the unsaved card instance we
+        // should always use updateFromSerialized()--this way a newly created
+        // instance that does not yet have an id is still the same instance after an
+        // ID has been assigned by the server.
+        await api.updateFromSerialized(card, json);
+      } else if (isNew) {
+        // in this case a new card was created, but there is an immediate change
+        // that was made--so we save off the new ID for the card so in the next
+        // save we'll correlate to the correct card ID
+        card.id = json.data.id;
+      }
+      if (this.onSaveSubscriber) {
+        this.onSaveSubscriber(new URL(json.data.id), json);
+      }
+    } catch (err) {
+      console.error(`Failed to save ${card.id}: `, err);
+      throw err;
+    } finally {
+      api?.unsubscribeFromChanges(card, onCardChange);
+      waiter.endAsync(token);
+    }
+  }
+
+  private async reloadCard(card: CardDef): Promise<void> {
+    // we don't await this in the realm subscription callback, so this test
+    // waiter should catch otherwise leaky async in the tests
+    await this.withTestWaiters(async () => {
+      let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
+        card.id,
+        undefined,
+      )) as SingleCardDocument;
+
+      if (!isSingleCardDocument(incomingDoc)) {
+        throw new Error(
+          `bug: server returned a non card document for ${card.id}:
+        ${JSON.stringify(incomingDoc, null, 2)}`,
+        );
+      }
+      let api = await this.cardService.getAPI();
+      await api.updateFromSerialized<typeof CardDef>(
+        card,
+        incomingDoc,
+        this.identityContext,
+      );
+    });
+  }
+
+  private async loadPatchedCards(
+    patchData: PatchData,
+    relativeTo: URL,
+  ): Promise<{
+    [fieldName: string]: CardDef | CardDef[];
+  }> {
+    if (!patchData?.relationships) {
+      return {};
+    }
+    let result: { [fieldName: string]: CardDef | CardDef[] } = {};
+    await Promise.all(
+      Object.entries(patchData.relationships).map(async ([fieldName, rel]) => {
+        if (Array.isArray(rel)) {
+          let cards: CardDef[] = [];
+          await Promise.all(
+            rel.map(async (r) => {
+              let card = await this.loadRelationshipCard(r, relativeTo);
+              if (card) {
+                cards.push(card);
+              }
+            }),
+          );
+          result[fieldName] = cards;
+        } else {
+          let card = await this.loadRelationshipCard(rel, relativeTo);
+          if (card) {
+            result[fieldName] = card;
+          }
+        }
+      }),
+    );
+    return result;
+  }
+
+  private async loadRelationshipCard(rel: Relationship, relativeTo: URL) {
+    if (!rel.links.self) {
+      return;
+    }
+    let id = rel.links.self;
+    let card = await this.getCard({ urlOrDoc: new URL(id, relativeTo).href });
+    return isCardInstance(card) ? card : undefined;
+  }
+
+  private async withTestWaiters<T>(cb: () => Promise<T>) {
+    let token = waiter.beginAsync();
+    try {
+      let result = await cb();
+      // only do this in test env--this makes sure that we also wait for any
+      // interior card instance async as part of our ember-test-waiters
+      if (isTesting()) {
+        await this.cardService.cardsSettled();
+      }
+      return result;
+    } finally {
+      waiter.endAsync(token);
+    }
   }
 }
 

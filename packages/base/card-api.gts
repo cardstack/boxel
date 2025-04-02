@@ -2472,8 +2472,11 @@ function buildIdentityContext(
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
+  identityContext?: IdentityContext,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = buildIdentityContext(instance);
+  if (!identityContext) {
+    identityContext = buildIdentityContext(instance);
+  }
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
