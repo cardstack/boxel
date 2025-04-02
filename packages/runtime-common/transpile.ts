@@ -22,6 +22,10 @@ import { generateScopedCSSPlugin } from 'glimmer-scoped-css/ast-transform';
 //@ts-ignore no upstream types
 import decoratorTransforms from 'decorator-transforms';
 
+const scopedCSSTransform = generateScopedCSSPlugin({
+  noGlobal: true,
+}) as ExtendedPluginBuilder;
+
 export function transpileJS(content: string, debugFilename: string): string {
   let contentIsAllWhitespace = content.match(/^\s*$/);
 
@@ -40,9 +44,7 @@ export function transpileJS(content: string, debugFilename: string): string {
 
   let templateOptions: EmberTemplatePluginOptions = {
     compiler: etc as unknown as EmberTemplateCompiler,
-    transforms: [
-      generateScopedCSSPlugin({ noGlobal: true }) as ExtendedPluginBuilder,
-    ],
+    transforms: [scopedCSSTransform],
   };
 
   let src = babel.transformSync(content, {
