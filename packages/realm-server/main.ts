@@ -67,6 +67,8 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 const DISABLE_MATRIX_REALM_EVENTS =
   process.env.DISABLE_MATRIX_REALM_EVENTS === 'true';
 
+const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
+
 let {
   port,
   matrixURL,
@@ -221,7 +223,11 @@ let autoMigrate = migrateDB || undefined;
       process.exit(-1);
     }
 
-    let realmAdapter = new NodeAdapter(resolve(String(path)));
+    let realmAdapter = new NodeAdapter(
+      resolve(String(path)),
+      ENABLE_FILE_WATCHER,
+    );
+
     let realm = new Realm(
       {
         url,
@@ -276,6 +282,7 @@ let autoMigrate = migrateDB || undefined;
     seedRealmURL: seedRealmURL ? new URL(seedRealmURL) : undefined,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
     disableMatrixRealmEvents: DISABLE_MATRIX_REALM_EVENTS,
+    enableFileWatcher: ENABLE_FILE_WATCHER,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,
