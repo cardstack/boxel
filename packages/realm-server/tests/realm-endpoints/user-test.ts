@@ -1,21 +1,14 @@
 import { module, test } from 'qunit';
-import supertest, { Test, SuperTest } from 'supertest';
-import { join, resolve, basename } from 'path';
+import { Test, SuperTest } from 'supertest';
+import { join, basename } from 'path';
 import { Server } from 'http';
-import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
-import { copySync, ensureDirSync } from 'fs-extra';
-import {
-  baseRealm,
-  Realm,
-  RealmPermissions,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { dirSync, type DirResult } from 'tmp';
+import { copySync } from 'fs-extra';
+import { baseRealm, Realm, RealmPermissions } from '@cardstack/runtime-common';
 import {
   setupCardLogs,
   setupBaseRealmServer,
-  runTestRealmServer,
-  setupDB,
-  createVirtualNetwork,
+  setupPermissionedRealm,
   createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
@@ -30,11 +23,6 @@ import {
   insertSubscription,
 } from '@cardstack/billing/billing-queries';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
-
-setGracefulCleanup();
-const testRealmURL = new URL('http://127.0.0.1:4444/');
-const distDir = resolve(join(__dirname, '..', '..', '..', 'host', 'dist'));
-console.log(`using host dist dir: ${distDir}`);
 
 let createJWT = (
   realm: Realm,
@@ -60,43 +48,21 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     let dir: DirResult;
     let dbAdapter: PgAdapter;
 
-    function setupPermissionedRealm(
-      hooks: NestedHooks,
-      permissions: RealmPermissions,
-      fileSystem?: Record<string, string | LooseSingleCardDocument>,
-    ) {
-      setupDB(hooks, {
-        beforeEach: async (_dbAdapter, publisher, runner) => {
-          dbAdapter = _dbAdapter;
-          dir = dirSync();
-          let testRealmDir = join(dir.name, '..', 'realm_server_1', 'test');
-          ensureDirSync(testRealmDir);
-          // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-          if (!fileSystem) {
-            copySync(join(__dirname, '..', 'cards'), testRealmDir);
-          }
-
-          let virtualNetwork = createVirtualNetwork();
-
-          ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, '..', 'realm_server_1'),
-            realmURL: testRealmURL,
-            permissions,
-            dbAdapter: _dbAdapter,
-            runner,
-            publisher,
-            matrixURL,
-            fileSystem,
-          }));
-
-          request = supertest(testRealmHttpServer);
-        },
-      });
-    }
-
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
+
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+      dbAdapter: PgAdapter;
+      dir: DirResult;
+    }) {
+      testRealm = args.testRealm;
+      testRealmHttpServer = args.testRealmHttpServer;
+      request = args.request;
+      dbAdapter = args.dbAdapter;
+      dir = args.dir;
+    }
 
     setupCardLogs(
       hooks,
@@ -116,7 +82,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
     });
 
     setupPermissionedRealm(hooks, {
-      john: ['read', 'write'],
+      permissions: {
+        john: ['read', 'write'],
+      },
+      onRealmSetup,
     });
 
     test('responds with 404 if user is not found', async function (assert) {

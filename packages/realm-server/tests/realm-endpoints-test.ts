@@ -2,7 +2,7 @@ import { module, skip, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
-import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
+import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync, removeSync, writeJSONSync } from 'fs-extra';
 import {
   baseRealm,
@@ -16,6 +16,7 @@ import {
 import {
   setupCardLogs,
   setupBaseRealmServer,
+  setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
@@ -32,13 +33,14 @@ import {
   seedPath,
   testRealmInfo,
   waitUntil,
+  testRealmHref,
+  testRealmURL,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { type PgAdapter } from '@cardstack/postgres';
-import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   IncrementalIndexEventContent,
@@ -47,13 +49,8 @@ import type {
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 
-setGracefulCleanup();
-const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
-const testRealmHref = testRealmURL.href;
 const testRealm2Href = testRealm2URL.href;
-const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
-console.log(`using host dist dir: ${distDir}`);
 
 let createJWT = (
   realm: Realm,
@@ -86,50 +83,27 @@ module(basename(__filename), function () {
     let testRealmDir: string;
     let seedRealm: Realm | undefined;
 
-    function setTestRequest(newRequest: SuperTest<Test>) {
-      request = newRequest;
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+      dir: DirResult;
+      dbAdapter: PgAdapter;
+    }) {
+      testRealm = args.testRealm;
+      testRealmHttpServer = args.testRealmHttpServer;
+      request = args.request;
+      dir = args.dir;
+      dbAdapter = args.dbAdapter;
     }
 
-    function getTestRequest() {
-      return request;
-    }
-
-    function setupPermissionedRealm(
-      hooks: NestedHooks,
-      permissions: RealmPermissions,
-      setTestRequest: (newRequest: SuperTest<Test>) => void,
-      fileSystem?: Record<string, string | LooseSingleCardDocument>,
-    ) {
-      setupDB(hooks, {
-        beforeEach: async (_dbAdapter, publisher, runner) => {
-          dbAdapter = _dbAdapter;
-          dir = dirSync();
-          let testRealmDir = join(dir.name, 'realm_server_1', 'test');
-          ensureDirSync(testRealmDir);
-          // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-          if (!fileSystem) {
-            copySync(join(__dirname, 'cards'), testRealmDir);
-          }
-
-          let virtualNetwork = createVirtualNetwork();
-
-          ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_1'),
-            realmURL: testRealmURL,
-            permissions,
-            dbAdapter: _dbAdapter,
-            runner,
-            publisher,
-            matrixURL,
-            fileSystem,
-          }));
-
-          request = supertest(testRealmHttpServer);
-          setTestRequest(request);
-        },
-      });
+    function getRealmSetup() {
+      return {
+        testRealm,
+        testRealmHttpServer,
+        request,
+        dir,
+      };
     }
 
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
@@ -141,25 +115,14 @@ module(basename(__filename), function () {
 
     setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-      copySync(join(__dirname, 'cards'), dir.name);
-    });
-
-    hooks.afterEach(async function () {
-      await closeServer(testRealmHttpServer);
-      resetCatalogRealms();
-    });
-
-    setupPermissionedRealm(
-      hooks,
-      {
+    setupPermissionedRealm(hooks, {
+      permissions: {
         '*': ['read', 'write'],
       },
-      setTestRequest,
-    );
+      onRealmSetup,
+    });
 
-    let { getMessagesSince } = setupMatrixRoom(hooks, getTestRequest);
+    let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
     async function startRealmServer(
       dbAdapter: PgAdapter,
@@ -329,13 +292,13 @@ module(basename(__filename), function () {
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
-        updatedFile: `${testRealmURL}new-card.json`,
+        updatedFile: `${testRealmHref}new-card.json`,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
         eventName: 'index',
         indexType: 'incremental',
-        invalidations: [`${testRealmURL}new-card`],
+        invalidations: [`${testRealmHref}new-card`],
       });
 
       {
@@ -349,7 +312,7 @@ module(basename(__filename), function () {
         delete json.data.meta.resourceCreatedAt;
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
-          testRealmURL.href,
+          testRealmHref,
           'realm url header is correct',
         );
         assert.strictEqual(
@@ -377,7 +340,7 @@ module(basename(__filename), function () {
                 ...testRealmInfo,
                 realmUserId: '@node-test_realm:localhost',
               },
-              realmURL: testRealmURL.href,
+              realmURL: testRealmHref,
             },
             links: {
               self: `${testRealmHref}new-card`,
@@ -436,13 +399,13 @@ module(basename(__filename), function () {
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
-        updatedFile: `${testRealmURL}person-1.json`,
+        updatedFile: `${testRealmHref}person-1.json`,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
         eventName: 'index',
         indexType: 'incremental',
-        invalidations: [`${testRealmURL}person-1`],
+        invalidations: [`${testRealmHref}person-1`],
       });
 
       {
@@ -490,13 +453,13 @@ module(basename(__filename), function () {
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
-        updatedFile: `${testRealmURL}person-1.json`,
+        updatedFile: `${testRealmHref}person-1.json`,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
         eventName: 'index',
         indexType: 'incremental',
-        invalidations: [`${testRealmURL}person-1`],
+        invalidations: [`${testRealmHref}person-1`],
       });
 
       {
@@ -513,10 +476,7 @@ module(basename(__filename), function () {
         .set('Accept', 'application/vnd.card+json');
 
       assert.strictEqual(response.status, 200, 'HTTP 200 status');
-      assert.strictEqual(
-        response.headers['x-boxel-realm-url'],
-        testRealmURL.href,
-      );
+      assert.strictEqual(response.headers['x-boxel-realm-url'], testRealmHref);
       assert.strictEqual(
         response.headers['x-boxel-realm-public-readable'],
         'true',

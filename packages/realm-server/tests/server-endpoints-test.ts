@@ -1,8 +1,8 @@
 import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
-import { join, resolve, basename } from 'path';
+import { join, basename } from 'path';
 import { Server } from 'http';
-import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
+import { dirSync, type DirResult } from 'tmp';
 import { copySync, existsSync, ensureDirSync, readJSONSync } from 'fs-extra';
 import {
   baseRealm,
@@ -11,7 +11,6 @@ import {
   RealmPermissions,
   fetchUserPermissions,
   baseCardRef,
-  type LooseSingleCardDocument,
   type SingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
@@ -23,6 +22,7 @@ import { Query } from '@cardstack/runtime-common/query';
 import {
   setupCardLogs,
   setupBaseRealmServer,
+  setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
   realmServerTestMatrix,
@@ -48,7 +48,6 @@ import {
   createJWT as createRealmServerJWT,
   RealmServerTokenClaim,
 } from '../utils/jwt';
-import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 import Stripe from 'stripe';
 import sinon from 'sinon';
 import { getStripe } from '@cardstack/billing/stripe-webhook-handlers/stripe';
@@ -59,12 +58,8 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { monitoringAuthToken } from '../utils/monitoring';
 
-setGracefulCleanup();
 const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
-const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
-console.log(`using host dist dir: ${distDir}`);
-
 let createJWT = (
   realm: Realm,
   user: string,
@@ -86,46 +81,23 @@ module(basename(__filename), function () {
     'Realm Server Endpoints (not specific to one realm)',
     function (hooks) {
       let testRealm: Realm;
-      let testRealmHttpServer: Server;
       let request: SuperTest<Test>;
       let dir: DirResult;
       let dbAdapter: PgAdapter;
 
-      function setupPermissionedRealm(
-        hooks: NestedHooks,
-        permissions: RealmPermissions,
-        fileSystem?: Record<string, string | LooseSingleCardDocument>,
-      ) {
-        setupDB(hooks, {
-          beforeEach: async (_dbAdapter, publisher, runner) => {
-            dbAdapter = _dbAdapter;
-            dir = dirSync();
-            let testRealmDir = join(dir.name, 'realm_server_1', 'test');
-            ensureDirSync(testRealmDir);
-            // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-            if (!fileSystem) {
-              copySync(join(__dirname, 'cards'), testRealmDir);
-            }
-            let virtualNetwork = createVirtualNetwork();
-            ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
-              virtualNetwork,
-              testRealmDir,
-              realmsRootPath: join(dir.name, 'realm_server_1'),
-              realmURL: testRealmURL,
-              permissions,
-              dbAdapter: _dbAdapter,
-              runner,
-              publisher,
-              matrixURL,
-              fileSystem,
-            }));
-
-            request = supertest(testRealmHttpServer);
-          },
-        });
-      }
-
       let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
+
+      function onRealmSetup(args: {
+        testRealm: Realm;
+        request: SuperTest<Test>;
+        dir: DirResult;
+        dbAdapter: PgAdapter;
+      }) {
+        testRealm = args.testRealm;
+        request = args.request;
+        dir = args.dir;
+        dbAdapter = args.dbAdapter;
+      }
 
       setupCardLogs(
         hooks,
@@ -137,11 +109,6 @@ module(basename(__filename), function () {
       hooks.beforeEach(async function () {
         dir = dirSync();
         copySync(join(__dirname, 'cards'), dir.name);
-      });
-
-      hooks.afterEach(async function () {
-        await closeServer(testRealmHttpServer);
-        resetCatalogRealms();
       });
 
       module('various other realm tests', function (hooks) {
@@ -156,7 +123,10 @@ module(basename(__filename), function () {
         let seedRealm: Realm | undefined;
 
         setupPermissionedRealm(hooks, {
-          '*': ['read', 'write'],
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          onRealmSetup,
         });
 
         async function startRealmServer(
@@ -1124,7 +1094,10 @@ module(basename(__filename), function () {
         };
 
         setupPermissionedRealm(hooks, {
-          '*': ['read', 'write'],
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          onRealmSetup,
         });
 
         hooks.beforeEach(async function () {
@@ -1678,7 +1651,10 @@ module(basename(__filename), function () {
 
       module('_queue-status', function (hooks) {
         setupPermissionedRealm(hooks, {
-          '*': ['read', 'write'],
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          onRealmSetup,
         });
 
         test('returns 200 with JSON-API doc', async function (assert) {
