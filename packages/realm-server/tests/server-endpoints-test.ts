@@ -36,6 +36,7 @@ import {
   insertPlan,
   fetchSubscriptionsByUserId,
   insertJob,
+  testRealmURL,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
@@ -58,7 +59,6 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 import { monitoringAuthToken } from '../utils/monitoring';
 
-const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 let createJWT = (
   realm: Realm,
