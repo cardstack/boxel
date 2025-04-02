@@ -17,7 +17,7 @@ import glimmerTemplatePlugin from '@cardstack/ember-template-imports/src/babel-p
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
 import emberConcurrencyAsyncPlugin from 'ember-concurrency-async-plugin';
-import scopedCSSTransform from 'glimmer-scoped-css/ast-transform';
+import { generateScopedCSSPlugin } from 'glimmer-scoped-css/ast-transform';
 
 //@ts-ignore no upstream types
 import decoratorTransforms from 'decorator-transforms';
@@ -40,7 +40,9 @@ export function transpileJS(content: string, debugFilename: string): string {
 
   let templateOptions: EmberTemplatePluginOptions = {
     compiler: etc as unknown as EmberTemplateCompiler,
-    transforms: [scopedCSSTransform as ExtendedPluginBuilder],
+    transforms: [
+      generateScopedCSSPlugin({ noGlobal: true }) as ExtendedPluginBuilder,
+    ],
   };
 
   let src = babel.transformSync(content, {
