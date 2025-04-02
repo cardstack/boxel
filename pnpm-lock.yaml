@@ -338,6 +338,9 @@ importers:
       concurrently:
         specifier: ^8.0.1
         version: 8.2.2
+      ember-eslint-parser:
+        specifier: 0.5.9
+        version: 0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)
       ember-source:
         specifier: ~5.4.0
         version: 5.4.1(patch_hash=oko46qetwhgpor6xgs7vahyney)(@babel/core@7.24.3)(@glimmer/component@1.1.2)(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.89.0)
@@ -357,8 +360,8 @@ importers:
         specifier: ^8.6.0
         version: 8.8.0(eslint@8.57.0)
       eslint-plugin-ember:
-        specifier: ^11.4.2
-        version: 11.12.0(eslint@8.57.0)
+        specifier: ^12.5.0
+        version: 12.5.0(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)
       eslint-plugin-n:
         specifier: ^15.6.0
         version: 15.7.0(eslint@8.57.0)
@@ -514,8 +517,8 @@ importers:
         specifier: ^8.6.0
         version: 8.8.0(eslint@8.57.0)
       eslint-plugin-ember:
-        specifier: ^11.4.2
-        version: 11.6.0(eslint@8.57.0)
+        specifier: ember-cli/eslint-plugin-ember#870ee2fa24ae826d431fca8e6109dbc389f368f6
+        version: github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)
       eslint-plugin-n:
         specifier: ^15.6.0
         version: 15.7.0(eslint@8.57.0)
@@ -724,8 +727,8 @@ importers:
         specifier: ^9.0.0
         version: 9.1.0(eslint@8.57.0)
       eslint-plugin-ember:
-        specifier: ^11.11.1
-        version: 11.12.0(eslint@8.57.0)
+        specifier: ember-cli/eslint-plugin-ember#870ee2fa24ae826d431fca8e6109dbc389f368f6
+        version: github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@8.57.0)
       eslint-plugin-n:
         specifier: ^16.2.0
         version: 16.6.2(eslint@8.57.0)
@@ -922,6 +925,9 @@ importers:
       concurrently:
         specifier: ^8.0.1
         version: 8.0.1
+      ember-eslint-parser:
+        specifier: 0.5.9
+        version: 0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)
       ember-template-imports:
         specifier: ^4.1.1
         version: 4.1.1
@@ -938,8 +944,8 @@ importers:
         specifier: ^8.6.0
         version: 8.8.0(eslint@8.57.0)
       eslint-plugin-ember:
-        specifier: ^11.4.2
-        version: 11.6.0(eslint@8.57.0)
+        specifier: ember-cli/eslint-plugin-ember#870ee2fa24ae826d431fca8e6109dbc389f368f6
+        version: github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)
       eslint-plugin-n:
         specifier: ^15.6.0
         version: 15.7.0(eslint@8.57.0)
@@ -1109,6 +1115,9 @@ importers:
       ember-css-url:
         specifier: ^1.0.0
         version: 1.0.0(patch_hash=aglq5wzlwgv75jfevvip6brqo4)
+      ember-eslint-parser:
+        specifier: 0.5.9
+        version: 0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@8.57.0)
       ember-freestyle:
         specifier: ^0.20.0
         version: 0.20.0(@babel/core@7.24.3)(@ember/string@3.1.1)(@glint/template@1.3.0)(ember-source@5.4.1)(webpack@5.89.0)
@@ -1152,8 +1161,8 @@ importers:
         specifier: ^9.0.0
         version: 9.1.0(eslint@8.57.0)
       eslint-plugin-ember:
-        specifier: ^11.11.1
-        version: 11.12.0(eslint@8.57.0)
+        specifier: ember-cli/eslint-plugin-ember#870ee2fa24ae826d431fca8e6109dbc389f368f6
+        version: github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@8.57.0)
       eslint-plugin-n:
         specifier: ^16.2.0
         version: 16.6.2(eslint@8.57.0)
@@ -1501,6 +1510,9 @@ importers:
       ember-elsewhere:
         specifier: ^2.0.0
         version: 2.0.0(@glint/environment-ember-loose@1.3.0)(@glint/template@1.3.0)(ember-source@5.4.1)
+      ember-eslint-parser:
+        specifier: 0.5.9
+        version: 0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@7.9.0)(eslint@8.57.0)
       ember-exam:
         specifier: ^9.0.0
         version: 9.0.0(@glint/template@1.3.0)(ember-qunit@8.0.2)(ember-source@5.4.1)(qunit@2.20.1)(webpack@5.89.0)
@@ -2412,8 +2424,8 @@ importers:
         specifier: ^7.2.0
         version: 7.2.0(eslint@7.32.0)
       eslint-plugin-ember:
-        specifier: ^10.2.0
-        version: 10.5.9(eslint@7.32.0)
+        specifier: ember-cli/eslint-plugin-ember#870ee2fa24ae826d431fca8e6109dbc389f368f6
+        version: github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@7.32.0)
       eslint-plugin-node:
         specifier: ^11.1.0
         version: 11.1.0(eslint@7.32.0)
@@ -2714,6 +2726,20 @@ packages:
       semver: 6.3.1
     transitivePeerDependencies:
       - supports-color
+
+  /@babel/eslint-parser@7.23.10(@babel/core@7.24.3)(eslint@7.32.0):
+    resolution: {integrity: sha512-3wSYDPZVnhseRnxRJH6ZVTNknBz76AEnyC+AYYhasjP3Yy23qz0ERR7Fcd2SHmYuSFJ2kY9gaaDd3vyqU09eSw==}
+    engines: {node: ^10.13.0 || ^12.13.0 || >=14.0.0}
+    peerDependencies:
+      '@babel/core': ^7.11.0
+      eslint: ^7.5.0 || ^8.0.0
+    dependencies:
+      '@babel/core': 7.24.3(supports-color@8.1.1)
+      '@nicolo-ribaudo/eslint-scope-5-internals': 5.1.1-v1
+      eslint: 7.32.0
+      eslint-visitor-keys: 2.1.0
+      semver: 6.3.1
+    dev: true
 
   /@babel/eslint-parser@7.23.10(@babel/core@7.24.3)(eslint@8.57.0):
     resolution: {integrity: sha512-3wSYDPZVnhseRnxRJH6ZVTNknBz76AEnyC+AYYhasjP3Yy23qz0ERR7Fcd2SHmYuSFJ2kY9gaaDd3vyqU09eSw==}
@@ -13957,6 +13983,29 @@ packages:
       - supports-color
     dev: true
 
+  /ember-eslint-parser@0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@7.32.0):
+    resolution: {integrity: sha512-IW4/3cEiFp49M2LiKyzi7VcT1egogOe8UxQ9eUKTooenC7Q4qNhzTD6rOZ8j51m8iJC+8hCzjbNCa3K4CN0Hhg==}
+    engines: {node: '>=16.0.0'}
+    peerDependencies:
+      '@babel/core': ^7.23.6
+      '@typescript-eslint/parser': '*'
+    peerDependenciesMeta:
+      '@typescript-eslint/parser':
+        optional: true
+    dependencies:
+      '@babel/core': 7.24.3(supports-color@8.1.1)
+      '@babel/eslint-parser': 7.23.10(@babel/core@7.24.3)(eslint@7.32.0)
+      '@glimmer/syntax': 0.92.0
+      '@typescript-eslint/parser': 5.48.1(eslint@7.32.0)(typescript@5.1.6)
+      content-tag: 2.0.1
+      eslint-scope: 7.2.2
+      html-tags: 3.3.1
+      mathml-tag-names: 2.1.3
+      svg-tags: 1.0.0
+    transitivePeerDependencies:
+      - eslint
+    dev: true
+
   /ember-eslint-parser@0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@8.57.0):
     resolution: {integrity: sha512-IW4/3cEiFp49M2LiKyzi7VcT1egogOe8UxQ9eUKTooenC7Q4qNhzTD6rOZ8j51m8iJC+8hCzjbNCa3K4CN0Hhg==}
     engines: {node: '>=16.0.0'}
@@ -13978,6 +14027,29 @@ packages:
       svg-tags: 1.0.0
     transitivePeerDependencies:
       - eslint
+
+  /ember-eslint-parser@0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0):
+    resolution: {integrity: sha512-IW4/3cEiFp49M2LiKyzi7VcT1egogOe8UxQ9eUKTooenC7Q4qNhzTD6rOZ8j51m8iJC+8hCzjbNCa3K4CN0Hhg==}
+    engines: {node: '>=16.0.0'}
+    peerDependencies:
+      '@babel/core': ^7.23.6
+      '@typescript-eslint/parser': '*'
+    peerDependenciesMeta:
+      '@typescript-eslint/parser':
+        optional: true
+    dependencies:
+      '@babel/core': 7.24.3(supports-color@8.1.1)
+      '@babel/eslint-parser': 7.23.10(@babel/core@7.24.3)(eslint@8.57.0)
+      '@glimmer/syntax': 0.92.0
+      '@typescript-eslint/parser': 7.16.1(eslint@8.57.0)(typescript@5.1.6)
+      content-tag: 2.0.1
+      eslint-scope: 7.2.2
+      html-tags: 3.3.1
+      mathml-tag-names: 2.1.3
+      svg-tags: 1.0.0
+    transitivePeerDependencies:
+      - eslint
+    dev: true
 
   /ember-eslint-parser@0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@7.9.0)(eslint@8.57.0):
     resolution: {integrity: sha512-IW4/3cEiFp49M2LiKyzi7VcT1egogOe8UxQ9eUKTooenC7Q4qNhzTD6rOZ8j51m8iJC+8hCzjbNCa3K4CN0Hhg==}
@@ -15271,68 +15343,30 @@ packages:
       - supports-color
     dev: true
 
-  /eslint-plugin-ember@10.5.9(eslint@7.32.0):
-    resolution: {integrity: sha512-kJsdAaKNcfRvZBZ+YZ67pxxUgl+aPLFAnoFJNwTo+BsaptiOCsHUEc4xUKXiInH2BJOC6mg0FQcZKn1a6gwKrA==}
-    engines: {node: 10.* || 12.* || >= 14}
+  /eslint-plugin-ember@12.5.0(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0):
+    resolution: {integrity: sha512-DBUzsaKWDVXsujAZPpRir0O7owdlCoVzZmtaJm7g7iQeSrNtcRWI7AItsTqKSsws1XeAySH0sPsQItMdDCb9Fg==}
+    engines: {node: 18.* || 20.* || >= 21}
     peerDependencies:
-      eslint: '>= 6'
+      '@typescript-eslint/parser': '*'
+      eslint: '>= 8'
+    peerDependenciesMeta:
+      '@typescript-eslint/parser':
+        optional: true
     dependencies:
       '@ember-data/rfc395-data': 0.0.4
-      css-tree: 2.3.1
+      '@typescript-eslint/parser': 7.16.1(eslint@8.57.0)(typescript@5.1.6)
+      css-tree: 3.1.0
+      ember-eslint-parser: 0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)
       ember-rfc176-data: 0.3.18
-      eslint: 7.32.0
-      eslint-utils: 3.0.0(eslint@7.32.0)
-      estraverse: 5.3.0
-      lodash.kebabcase: 4.1.1
-      requireindex: 1.2.0
-      snake-case: 3.0.4
-    dev: true
-
-  /eslint-plugin-ember@11.12.0(eslint@8.57.0):
-    resolution: {integrity: sha512-7Ow1ky5JnRR0k3cxuvgYi4AWTe9DzGjlLgOJbU5VABLgr7Q0iq3ioC+YwAP79nV48cpw2HOgMgkZ1MynuIg59g==}
-    engines: {node: 14.* || 16.* || >= 18}
-    peerDependencies:
-      eslint: '>= 7'
-    dependencies:
-      '@ember-data/rfc395-data': 0.0.4
-      '@glimmer/syntax': 0.84.3
-      css-tree: 2.3.1
-      ember-rfc176-data: 0.3.18
-      ember-template-imports: 3.4.2
-      ember-template-recast: 6.1.5
       eslint: 8.57.0
       eslint-utils: 3.0.0(eslint@8.57.0)
       estraverse: 5.3.0
       lodash.camelcase: 4.3.0
       lodash.kebabcase: 4.1.1
-      magic-string: 0.30.5
       requireindex: 1.2.0
       snake-case: 3.0.4
     transitivePeerDependencies:
-      - supports-color
-    dev: true
-
-  /eslint-plugin-ember@11.6.0(eslint@8.57.0):
-    resolution: {integrity: sha512-M/M63t/Y5yr/yuWUbtUZ/tE5B5A8/+6LOR6fJlXpLZR4XMtN3KueYsuEIDGP6AInmq5tjDPmBXX0wV+FkjQmvA==}
-    engines: {node: 14.* || 16.* || >= 18}
-    peerDependencies:
-      eslint: '>= 7'
-    dependencies:
-      '@ember-data/rfc395-data': 0.0.4
-      '@glimmer/syntax': 0.84.3
-      css-tree: 2.3.1
-      ember-rfc176-data: 0.3.18
-      ember-template-imports: 3.4.2
-      eslint: 8.57.0
-      eslint-utils: 3.0.0(eslint@8.57.0)
-      estraverse: 5.3.0
-      lodash.camelcase: 4.3.0
-      lodash.kebabcase: 4.1.1
-      magic-string: 0.30.5
-      requireindex: 1.2.0
-      snake-case: 3.0.4
-    transitivePeerDependencies:
-      - supports-color
+      - '@babel/core'
     dev: true
 
   /eslint-plugin-es-x@7.6.0(eslint@8.57.0):
@@ -19511,13 +19545,6 @@ packages:
     dependencies:
       sourcemap-codec: 1.4.8
     patched: true
-
-  /magic-string@0.30.5:
-    resolution: {integrity: sha512-7xlpfBaQaP/T6Vh8MO/EqXSW5En6INHEvEXQiuff7Gku0PWjU3uf6w/j9o7O+SpB5fOAkrI5HeoNgwjEO0pFsA==}
-    engines: {node: '>=12'}
-    dependencies:
-      '@jridgewell/sourcemap-codec': 1.4.15
-    dev: true
 
   /make-dir@2.1.0:
     resolution: {integrity: sha512-LS9X+dc8KLxXCb8dni79fLIIUA5VyZoyjSMCwTluaXA0o27cCK0bhXkpgw+sTXVpPy/lSO57ilRixqk0vDmtRA==}
@@ -25546,6 +25573,35 @@ packages:
       readable-stream: 2.3.8
     dev: true
 
+  github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@7.32.0):
+    resolution: {tarball: https://codeload.github.com/ember-cli/eslint-plugin-ember/tar.gz/870ee2fa24ae826d431fca8e6109dbc389f368f6}
+    id: github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6
+    name: eslint-plugin-ember
+    version: 12.5.0
+    engines: {node: 18.* || 20.* || >= 21}
+    peerDependencies:
+      '@typescript-eslint/parser': '*'
+      eslint: '>= 8'
+    peerDependenciesMeta:
+      '@typescript-eslint/parser':
+        optional: true
+    dependencies:
+      '@ember-data/rfc395-data': 0.0.4
+      '@typescript-eslint/parser': 5.48.1(eslint@7.32.0)(typescript@5.1.6)
+      css-tree: 3.1.0
+      ember-eslint-parser: 0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@7.32.0)
+      ember-rfc176-data: 0.3.18
+      eslint: 7.32.0
+      eslint-utils: 3.0.0(eslint@7.32.0)
+      estraverse: 5.3.0
+      lodash.camelcase: 4.3.0
+      lodash.kebabcase: 4.1.1
+      requireindex: 1.2.0
+      snake-case: 3.0.4
+    transitivePeerDependencies:
+      - '@babel/core'
+    dev: true
+
   github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@5.48.1)(eslint@8.57.0):
     resolution: {tarball: https://codeload.github.com/ember-cli/eslint-plugin-ember/tar.gz/870ee2fa24ae826d431fca8e6109dbc389f368f6}
     id: github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6
@@ -25573,6 +25629,35 @@ packages:
       snake-case: 3.0.4
     transitivePeerDependencies:
       - '@babel/core'
+
+  github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0):
+    resolution: {tarball: https://codeload.github.com/ember-cli/eslint-plugin-ember/tar.gz/870ee2fa24ae826d431fca8e6109dbc389f368f6}
+    id: github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6
+    name: eslint-plugin-ember
+    version: 12.5.0
+    engines: {node: 18.* || 20.* || >= 21}
+    peerDependencies:
+      '@typescript-eslint/parser': '*'
+      eslint: '>= 8'
+    peerDependenciesMeta:
+      '@typescript-eslint/parser':
+        optional: true
+    dependencies:
+      '@ember-data/rfc395-data': 0.0.4
+      '@typescript-eslint/parser': 7.16.1(eslint@8.57.0)(typescript@5.1.6)
+      css-tree: 3.1.0
+      ember-eslint-parser: 0.5.9(@babel/core@7.24.3)(@typescript-eslint/parser@7.16.1)(eslint@8.57.0)
+      ember-rfc176-data: 0.3.18
+      eslint: 8.57.0
+      eslint-utils: 3.0.0(eslint@8.57.0)
+      estraverse: 5.3.0
+      lodash.camelcase: 4.3.0
+      lodash.kebabcase: 4.1.1
+      requireindex: 1.2.0
+      snake-case: 3.0.4
+    transitivePeerDependencies:
+      - '@babel/core'
+    dev: true
 
   github.com/ember-cli/eslint-plugin-ember/870ee2fa24ae826d431fca8e6109dbc389f368f6(@babel/core@7.24.3)(@typescript-eslint/parser@7.9.0)(eslint@8.57.0):
     resolution: {tarball: https://codeload.github.com/ember-cli/eslint-plugin-ember/tar.gz/870ee2fa24ae826d431fca8e6109dbc389f368f6}

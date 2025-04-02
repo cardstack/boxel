@@ -12,6 +12,7 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { LintResult } from '@cardstack/runtime-common/lint';
 import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -34,7 +35,6 @@ import { WebMessageStream, messageCloseHandler } from './stream';
 import { createJWT, testRealmURL } from '.';
 
 import type { MockUtils } from './mock-matrix/_utils';
-import { LintResult } from '@cardstack/runtime-common/lint';
 
 interface Dir {
   kind: 'directory';

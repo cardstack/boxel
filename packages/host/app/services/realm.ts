@@ -26,7 +26,6 @@ import {
   SupportedMimeType,
   type RealmInfo,
   RealmPermissions,
-  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';

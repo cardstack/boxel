@@ -53,13 +53,14 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-let managePanelsChanged = modifier(
+const managePanelsChanged = modifier(
   (element, [panelGroup]: [ResizablePanelGroup]) => {
     if (!panelGroup.element) {
       waiter.endAsync(panelGroup.initializationWaiter);
     }
     panelGroup.element = element as HTMLDivElement;
 
+    // eslint-disable-next-line ember/no-runloop
     scheduleOnce(
       'afterRender',
       panelGroup,

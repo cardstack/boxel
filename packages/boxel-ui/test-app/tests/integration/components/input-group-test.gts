@@ -21,7 +21,7 @@ module('Integration | Component | InputGroup', function (hooks) {
       @tracked invalidIcon: TemplateOnlyComponent | undefined;
     }
 
-    let stateObject = new StateObject();
+    const stateObject = new StateObject();
 
     await render(<template>
       <BoxelInputGroup

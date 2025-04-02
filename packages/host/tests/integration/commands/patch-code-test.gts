@@ -1,5 +1,7 @@
 import { module, test } from 'qunit';
 
+import { LintResult } from '@cardstack/runtime-common/lint';
+
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type CommandService from '@cardstack/host/services/command-service';
 
@@ -13,7 +15,6 @@ import {
 import { setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-import { LintResult } from '@cardstack/runtime-common/lint';
 
 module('Integration | commands | patch-code', function (hooks) {
   setupRenderingTest(hooks);

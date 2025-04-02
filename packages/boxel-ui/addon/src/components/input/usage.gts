@@ -50,6 +50,7 @@ export default class InputUsage extends Component {
     this.validate(ev);
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   @action logValue(value: any): void {
     console.log(value);
   }

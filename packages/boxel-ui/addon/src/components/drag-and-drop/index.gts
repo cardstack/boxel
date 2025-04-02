@@ -7,8 +7,10 @@ import { tracked } from '@glimmer/tracking';
 
 import { and, eq } from '../../helpers/truth-helpers.ts';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type DndItem = Record<string, any>;
 
 export interface DndKanbanBoardArgs<DndColumn> {
@@ -48,12 +50,19 @@ export default class DndKanbanBoard extends Component<
   DndKanbanBoardSignature<DndColumn>
 > {
   @tracked areModifiersLoaded = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   @tracked DndDraggableItemModifier: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   @tracked DndDropTargetModifier: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   @tracked DndSortableItemModifier: any = null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   @tracked insertAfter: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   @tracked insertAt: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   @tracked insertBefore: any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   @tracked removeItem: any;
   @tracked draggedCard: DndItem | null = null;
 
@@ -96,16 +105,17 @@ export default class DndKanbanBoard extends Component<
 
     this.areModifiersLoaded = true;
   }
-
-  @action moveCard({
-    source: {
-      data: { item: draggedItem, parent: draggedItemParent },
-    },
-    target: {
-      data: { item: dropTarget, parent: dropTargetParent },
-      edge,
-    },
-  }: any) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  @action moveCard(moveCardArgs: any) {
+    let {
+      source: {
+        data: { item: draggedItem, parent: draggedItemParent },
+      },
+      target: {
+        data: { item: dropTarget, parent: dropTargetParent },
+        edge,
+      },
+    } = moveCardArgs;
     draggedItemParent.cards = this.removeItem(
       draggedItemParent.cards,
       draggedItem,

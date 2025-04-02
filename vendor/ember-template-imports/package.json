@@ -75,7 +75,7 @@
     "ember-try": "^1.4.0",
     "eslint": "^7.20.0",
     "eslint-config-prettier": "^7.2.0",
-    "eslint-plugin-ember": "^10.2.0",
+    "eslint-plugin-ember": "ember-cli/eslint-plugin-ember#870ee2fa24ae826d431fca8e6109dbc389f368f6",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^3.3.1",
     "loader.js": "^4.7.0",

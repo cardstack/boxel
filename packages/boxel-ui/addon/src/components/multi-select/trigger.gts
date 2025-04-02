@@ -27,6 +27,7 @@ export interface TriggerComponentSignature<ItemT> {
 
 type ExtendedSelect = Select & {
   actions: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     remove: (item: any, event?: MouseEvent) => void;
   } & Select['actions'];
 };
@@ -40,6 +41,7 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
 
   private maxVisibleItems = 3;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   get visibleContent(): any[] {
     return this.args.select.selected.slice(0, this.maxVisibleItems);
   }
@@ -64,9 +66,11 @@ export default class BoxelMultiSelectDefaultTrigger<ItemT> extends Component<
   }
 
   @action
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   removeItem(item: any, event?: MouseEvent) {
     event?.stopPropagation();
     const newSelected = this.args.select.selected.filter(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       (i: any) => i !== item,
     );
     this.args.select.selected = [...newSelected];

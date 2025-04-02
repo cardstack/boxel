@@ -29,7 +29,7 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-let managePanelRegistration = modifier((element, [panel]: [Panel]) => {
+const managePanelRegistration = modifier((element, [panel]: [Panel]) => {
   panel.element = element as HTMLDivElement;
   panel.registerPanel();
   return () => {

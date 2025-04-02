@@ -1,4 +1,5 @@
 import Component from '@glimmer/component';
+import type { ComponentLike } from '@glint/template';
 import type { Select } from 'ember-power-select/components/power-select';
 
 import { cn } from '../../helpers.ts';
@@ -9,7 +10,13 @@ export interface TriggerSignature {
   Args: {
     placeholder?: string;
     select: Select;
-    selectedItemComponent?: any;
+    selectedItemComponent?: ComponentLike<{
+      Args: {
+        option: unknown;
+        select: Select;
+      };
+      Element: Element;
+    }>;
   };
   Blocks: {
     default: [Select['selected'], Select];
@@ -77,6 +84,7 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
   </template>
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
   <template>
     <BoxelTriggerWrapper @placeholder={{@placeholder}} @select={{@select}}>

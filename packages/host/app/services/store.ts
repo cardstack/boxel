@@ -193,11 +193,11 @@ export default class StoreService extends Service {
         setCard,
         setCardError,
       });
-      let subscription = this.subscriptions.get(realm);
+      let subscription = this.subscriptions.get(realmURL);
       if (!subscription) {
-        this.subscriptions.set(realm, {
+        this.subscriptions.set(realmURL, {
           unsubscribe: this.messageService.subscribe(
-            realm,
+            realmURL,
             this.handleInvalidations,
           ),
         });

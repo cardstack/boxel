@@ -33,7 +33,7 @@ export default class DateRangePicker extends Component<Signature> {
   @tracked leftCenter: Date;
   @tracked rightCenter: Date;
 
-  constructor(owner: any, args: any) {
+  constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
 
     setupDateLibrary();
@@ -179,7 +179,7 @@ export default class DateRangePicker extends Component<Signature> {
         margin-top: auto;
       }
     </style>
-    {{! 
+    {{!
     Note: I don't think there is any reason why we can't implement scoped styles here unlike ember-power-select which uses wormholes
     but we do so for now to avoid the complexity of maintaining fidelity with the way the ember-power-calendar styles are implemented.
     We do so intentionally to
