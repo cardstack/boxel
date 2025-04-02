@@ -42,34 +42,34 @@ export default class AskAiContainer extends Component<Signature> {
     let { commandContext } = this.commandService;
 
     let createRoomCommand = new CreateAiAssistantRoomCommand(commandContext);
-    let { roomId } = await createRoomCommand.execute({ name });
-
     let openRoomCommand = new OpenAiAssistantRoomCommand(commandContext);
     let addSkillsCommand = new AddSkillsToRoomCommand(commandContext);
+    let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
 
-    let [openCards] = await Promise.all([
-      await this.operatorModeStateService.getOpenCards.perform(
+    let [{ roomId }, skills, openCards] = await Promise.all([
+      createRoomCommand.execute({ name }),
+      this.matrixService.loadDefaultSkills(
+        this.operatorModeStateService.state.submode,
+      ),
+      this.operatorModeStateService.getOpenCards.perform(
         this.args.selectedCardRef,
       ),
-      openRoomCommand.execute({ roomId }),
-      addSkillsCommand.execute({
+    ]);
+
+    await Promise.all([
+      addSkillsCommand.execute({ roomId, skills }),
+      sendMessageCommand.execute({
         roomId,
-        skills: await this.matrixService.loadDefaultSkills(
-          this.operatorModeStateService.state.submode,
-        ),
+        prompt: this.aiPrompt,
+        attachedCards: openCards,
+        attachedFileURLs: this.operatorModeStateService.openFileURL
+          ? [this.operatorModeStateService.openFileURL]
+          : undefined,
+        openCardIds: openCards?.map((c) => c.id),
       }),
     ]);
-    let openFileURL = this.operatorModeStateService.openFileURL;
 
-    let sendMessageCommand = new SendAiAssistantMessageCommand(commandContext);
-    await sendMessageCommand.execute({
-      roomId,
-      prompt: this.aiPrompt,
-      attachedCards: openCards,
-      attachedFileURLs: openFileURL ? [openFileURL] : undefined,
-      openCardIds: openCards?.map((c) => c.id),
-    });
-
+    await openRoomCommand.execute({ roomId });
     this.aiPrompt = '';
   });
 

@@ -42,14 +42,16 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
         )} - ${userId}`,
       ),
     });
-    await this.matrixService.setPowerLevel(
-      roomId,
-      aiBotFullId,
-      matrixService.aiBotPowerLevel,
-    );
-    await this.matrixService.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
-      model: DEFAULT_LLM,
-    });
+    await Promise.all([
+      this.matrixService.setPowerLevel(
+        roomId,
+        aiBotFullId,
+        matrixService.aiBotPowerLevel,
+      ),
+      this.matrixService.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
+        model: DEFAULT_LLM,
+      }),
+    ]);
     let commandModule = await this.loadCommandModule();
     const { CreateAIAssistantRoomResult } = commandModule;
     return new CreateAIAssistantRoomResult({ roomId });
