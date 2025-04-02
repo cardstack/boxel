@@ -181,11 +181,11 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     });
   });
 
-  async function setCardInOperatorModeState(
+  function setCardInOperatorModeState(
     cardURL?: string,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
-    await operatorModeStateService.restore({
+    operatorModeStateService.restore({
       stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
     });
   }
@@ -204,7 +204,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   }
 
   async function renderAiAssistantPanel(id?: string) {
-    await setCardInOperatorModeState(id);
+    setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -219,7 +219,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
   test('when opening ai panel it opens the most recent room', async function (assert) {
     try {
-      await setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
+      setCardInOperatorModeState(`${testRealmURL}Pet/mango`);
       await renderComponent(
         class TestDriver extends GlimmerComponent {
           <template>
@@ -667,7 +667,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     let { capturedExceptions } = suspendGlobalErrorHook(hooks);
 
     test('it can handle an error during room creation', async function (assert) {
-      await setCardInOperatorModeState();
+      setCardInOperatorModeState();
       await renderComponent(
         class TestDriver extends GlimmerComponent {
           <template>
@@ -910,7 +910,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
   });
 
   test('it displays a toast if there is an activity that was not seen by the user yet', async function (assert) {
-    await setCardInOperatorModeState();
+    setCardInOperatorModeState();
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

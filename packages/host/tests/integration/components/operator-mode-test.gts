@@ -516,17 +516,17 @@ module('Integration | operator-mode', function (hooks) {
       }));
   });
 
-  async function setCardInOperatorModeState(
+  function setCardInOperatorModeState(
     cardURL?: string,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
-    await operatorModeStateService.restore({
+    operatorModeStateService.restore({
       stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
     });
   }
 
   test('it loads a card and renders its isolated view', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -554,9 +554,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('it renders a card with an error that has does not have a last known good state', async function (assert) {
-    await setCardInOperatorModeState(
-      `${testRealmURL}FriendWithCSS/missing-link`,
-    );
+    setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/missing-link`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -628,9 +626,7 @@ module('Integration | operator-mode', function (hooks) {
       });
 
       test('it renders a card with an error that has a last known good state', async function (assert) {
-        await setCardInOperatorModeState(
-          `${testRealmURL}FriendWithCSS/friend-a`,
-        );
+        setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
         await renderComponent(
           class TestDriver extends GlimmerComponent {
             <template>
@@ -681,9 +677,7 @@ module('Integration | operator-mode', function (hooks) {
       });
 
       test('it has the ability to delete the card that has an error', async function (assert) {
-        await setCardInOperatorModeState(
-          `${testRealmURL}FriendWithCSS/friend-a`,
-        );
+        setCardInOperatorModeState(`${testRealmURL}FriendWithCSS/friend-a`);
         await renderComponent(
           class TestDriver extends GlimmerComponent {
             <template>
@@ -711,7 +705,7 @@ module('Integration | operator-mode', function (hooks) {
 
   test<TestContextWithSave>('it auto saves the field value', async function (assert) {
     assert.expect(7);
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -761,7 +755,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom('[data-test-auto-save-indicator]')
       .containsText('Saved less than a minute ago');
 
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await waitFor('[data-test-person="EditedName"]');
     assert.dom('[data-test-person]').hasText('EditedName');
@@ -774,7 +768,7 @@ module('Integration | operator-mode', function (hooks) {
     // autosave and an auto save as a result of clicking on the edit button since
     // the test waiters include the auto save async.
     assert.expect(0);
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -793,7 +787,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('an error in auto-save is handled gracefully', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
+    setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -819,7 +813,7 @@ module('Integration | operator-mode', function (hooks) {
           .querySelector('[data-test-auto-save-indicator]')
           ?.textContent?.trim() == 'Failed to save: Boom!',
     );
-    await setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
+    setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
 
     await waitFor('[data-test-pet]');
     // Card still runs (our error was designed to only fire during save)
@@ -847,7 +841,7 @@ module('Integration | operator-mode', function (hooks) {
       },
       { prepend: true },
     );
-    await setCardInOperatorModeState(`${testRealmURL}Pet/buzz`);
+    setCardInOperatorModeState(`${testRealmURL}Pet/buzz`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -881,7 +875,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('opens workspace chooser after closing the only remaining card on the stack', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -902,7 +896,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('displays cards on cards-grid and includes `spec` instances', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -935,7 +929,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a card using the cards-grid', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -977,14 +971,14 @@ module('Integration | operator-mode', function (hooks) {
     await fillIn(`[data-test-field="title"] input`, 'New Post');
     await saved.promise;
     let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
-    await setCardInOperatorModeState(packetId);
+    setCardInOperatorModeState(packetId);
 
     await waitFor(`[data-test-stack-card="${packetId}"]`);
     assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1015,7 +1009,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1129,7 +1123,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can choose a card for a linksTo field that has an existing value', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1172,7 +1166,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can choose a card for a linksTo field that has no existing value', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1203,7 +1197,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a new card to populate a linksTo field', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1248,7 +1242,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1272,7 +1266,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can add a card to a linksToMany field with existing values', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1307,7 +1301,7 @@ module('Integration | operator-mode', function (hooks) {
   test('can add a card to a linksTo field creating a loop', async function (assert) {
     // Friend A already links to friend B.
     // This test links B back to A
-    await setCardInOperatorModeState(`${testRealmURL}Friend/friend-b`);
+    setCardInOperatorModeState(`${testRealmURL}Friend/friend-b`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1352,7 +1346,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can add a card to linksToMany field that has no existing values', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1377,7 +1371,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can change the item selection in a linksToMany field', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1406,7 +1400,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('can create a new card to add to a linksToMany field from card chooser', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1448,7 +1442,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('does not create a new card to add to a linksToMany field from card chooser, if user cancel the edit view', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1497,7 +1491,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can remove all items of a linksToMany field', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1531,7 +1525,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1563,7 +1557,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`displays realm name as cards grid card title and card's display name as other card titles`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1591,7 +1585,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`displays recently accessed card`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1650,7 +1644,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`displays recently accessed card, maximum 10 cards`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1684,7 +1678,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`displays searching results`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1755,7 +1749,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`can specify a card by URL in the card chooser`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1803,7 +1797,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`can search by card title in card chooser`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1859,7 +1853,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`can search by card title when opening card chooser from a field editor`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1889,7 +1883,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`displays no cards available message if search result does not exist`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1910,7 +1904,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`can filter by realm after searching in card catalog`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -1998,7 +1992,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`can open new card editor in the stack after searching in card catalog`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2037,7 +2031,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`cancel button closes the spec card picker`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2078,7 +2072,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`cancel button closes the field picker`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2121,7 +2115,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`can add a card to the stack by URL from search sheet`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2191,7 +2185,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`can select one or more cards on cards-grid and unselect`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2241,7 +2235,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('displays realm name in tooltip when hovering realm icon', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2267,7 +2261,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`it has an option to copy the card url`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
+    setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2283,7 +2277,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`click on "links to" the embedded card will open it on the stack`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2304,7 +2298,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`toggles mode switcher`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2333,7 +2327,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`card url bar shows realm info of valid URL`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2387,7 +2381,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`card url bar shows error message when URL is invalid`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2442,7 +2436,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('user can dismiss url bar error message', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2503,7 +2497,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`card url bar URL reacts to external changes of code path when user is not editing`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2549,7 +2543,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`card url bar URL does not react to external changes when user is editing`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2598,7 +2592,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test(`can open and close search sheet`, async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2630,7 +2624,7 @@ module('Integration | operator-mode', function (hooks) {
 
   test<TestContextWithSave>('Choosing a new  card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
     assert.expect(5);
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2698,7 +2692,7 @@ module('Integration | operator-mode', function (hooks) {
 
   test<TestContextWithSave>('Creating a new card from a linksTo field automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
     assert.expect(5);
-    await setCardInOperatorModeState(`${testRealmURL}Person/1`, 'edit');
+    setCardInOperatorModeState(`${testRealmURL}Person/1`, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2757,7 +2751,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('Clicking on "Finish Editing" after creating a card from linksTo field will switch the card into isolated mode', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
+    setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -2783,7 +2777,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('displays card in interact mode when clicking `Open in Interact Mode` menu in preview panel', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2845,7 +2839,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('can reorder linksToMany cards in edit view', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2962,7 +2956,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('CardDef filter is not displayed in filter list', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2985,7 +2979,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('updates filter list when there is indexing event', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -3035,7 +3029,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('edit card and finish editing should not animate', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -3064,7 +3058,7 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test('close card should not trigger opening animation again', async function (assert) {
-    await setCardInOperatorModeState(`${testRealmURL}grid`);
+    setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -3092,7 +3086,7 @@ module('Integration | operator-mode', function (hooks) {
       backgroundColor: 'rgb(102, 56, 255)',
       color: 'rgb(255, 255, 255)',
     };
-    await setCardInOperatorModeState(cardId);
+    setCardInOperatorModeState(cardId);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

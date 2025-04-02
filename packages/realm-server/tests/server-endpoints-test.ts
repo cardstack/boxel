@@ -38,7 +38,6 @@ import {
   insertJob,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { shimExternals } from '../lib/externals';
 import { RealmServer } from '../server';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import jwt from 'jsonwebtoken';
@@ -155,10 +154,6 @@ module(basename(__filename), function () {
         let request2: SuperTest<Test>;
         let testRealmDir: string;
         let seedRealm: Realm | undefined;
-
-        hooks.beforeEach(async function () {
-          shimExternals(virtualNetwork);
-        });
 
         setupPermissionedRealm(hooks, {
           '*': ['read', 'write'],
@@ -1133,7 +1128,6 @@ module(basename(__filename), function () {
         });
 
         hooks.beforeEach(async function () {
-          shimExternals(virtualNetwork);
           let stripe = getStripe();
           createSubscriptionStub = sinon.stub(stripe.subscriptions, 'create');
           fetchPriceListStub = sinon.stub(stripe.prices, 'list');
@@ -1685,10 +1679,6 @@ module(basename(__filename), function () {
       module('_queue-status', function (hooks) {
         setupPermissionedRealm(hooks, {
           '*': ['read', 'write'],
-        });
-
-        hooks.beforeEach(async function () {
-          shimExternals(virtualNetwork);
         });
 
         test('returns 200 with JSON-API doc', async function (assert) {

@@ -8,11 +8,10 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, task, timeout } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { provide, consume } from 'ember-provide-consume-context';
 
-import { isEqual } from 'lodash';
 import get from 'lodash/get';
 
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
@@ -29,6 +28,7 @@ import {
   codeRefWithAbsoluteURL,
   moduleFrom,
   RealmPaths,
+  isCardInstance,
   type getCard,
   type getCards,
   type Actions,
@@ -69,6 +69,7 @@ import type CommandService from '../../services/command-service';
 import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
+import type StoreService from '../../services/store';
 
 import type { Submode } from '../submode-switcher';
 
@@ -167,6 +168,7 @@ export default class InteractSubmode extends Component<Signature> {
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare store: StoreService;
   @service private declare realm: Realm;
   @service private declare loaderService: LoaderService;
 
@@ -195,7 +197,7 @@ export default class InteractSubmode extends Component<Signature> {
           doc?: LooseSingleCardDocument; // fill in card data with values
           cardModeAfterCreation?: Format;
         },
-      ): Promise<CardDef | undefined> => {
+      ): Promise<string | undefined> => {
         let cardModule = new URL(moduleFrom(ref), relativeTo);
         // we make the code ref use an absolute URL for safety in
         // the case it's being created in a different realm than where the card
@@ -219,44 +221,38 @@ export default class InteractSubmode extends Component<Signature> {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        let newItem = new StackItem({
-          owner: here,
-          newCard: { doc, relativeTo },
-          format: opts?.cardModeAfterCreation ?? 'edit',
-          request: new Deferred(),
-          isLinkedCard: opts?.isLinkedCard,
-          stackIndex,
-        });
-
-        await newItem.ready();
-        if (newItem.cardError) {
+        let maybeUrl = await here.store.createInstance(doc, relativeTo);
+        if (typeof maybeUrl === 'string') {
+          let url = maybeUrl;
+          let newItem = new StackItem({
+            url,
+            format: opts?.cardModeAfterCreation ?? 'edit',
+            request: new Deferred(),
+            isLinkedCard: opts?.isLinkedCard,
+            stackIndex,
+          });
+          here.addToStack(newItem);
+          return url;
+        } else {
           console.error(
-            `Encountered error creating card:\n${JSON.stringify(
-              doc,
-              null,
-              2,
-            )}\nError: ${JSON.stringify(newItem.cardError, null, 2)}`,
+            `Error creating card: ${JSON.stringify(maybeUrl, null, 2)}`,
           );
           return undefined;
         }
-        here.addToStack(newItem);
-        return newItem.card;
       },
-      viewCard: async (
+      viewCard: (
         cardOrURL: CardDef | URL,
         format: Format = 'isolated',
         opts?: { openCardInRightMostStack?: boolean },
-      ): Promise<void> => {
+      ): void => {
         if (opts?.openCardInRightMostStack) {
           stackIndex = this.stacks.length;
         }
         let newItem = new StackItem({
-          owner: here,
-          url: cardOrURL instanceof URL ? cardOrURL : new URL(cardOrURL.id),
+          url: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
           format,
           stackIndex,
         });
-        await newItem.ready();
         here.addToStack(newItem);
         here.operatorModeStateService.workspaceChooserOpened = false;
       },
@@ -352,7 +348,7 @@ export default class InteractSubmode extends Component<Signature> {
       ): Promise<void> => {
         let stackItem: StackItem | undefined;
         for (let stack of here.stacks) {
-          stackItem = stack.find((item: StackItem) => item.card === card);
+          stackItem = stack.find((item: StackItem) => item.url === card.id);
           if (stackItem) {
             let doWithStableScroll =
               stackItemComponentAPI.get(stackItem)?.doWithStableScroll;
@@ -397,8 +393,8 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private findCardInStack(card: CardDef, stackIndex: number): StackItem {
-    let item = this.stacks[stackIndex].find((item: StackItem) =>
-      card.id ? item.card.id === card.id : isEqual(item.card, card),
+    let item = this.stacks[stackIndex].find(
+      (item: StackItem) => item.url === card.id,
     );
     if (!item) {
       throw new Error(`Could not find card ${card.id} in stack ${stackIndex}`);
@@ -406,23 +402,19 @@ export default class InteractSubmode extends Component<Signature> {
     return item;
   }
 
-  private close = task(async (item: StackItem) => {
+  private close = (item: StackItem) => {
     // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
-    if (item.cardError) {
-      return;
-    }
-
-    let { card, request } = item;
+    let { request, url } = item;
 
     // only save when closing a stack item in edit mode. there should be no unsaved
     // changes in isolated mode because they were saved when user toggled between
     // edit and isolated formats
-    if (item.format === 'edit') {
-      let updatedCard = this.args.saveCard(card);
-      request?.fulfill(updatedCard);
+    if (url && item.format === 'edit') {
+      this.store.save(url);
+      request?.fulfill(url);
     }
-  });
+  };
 
   @action private onCancelDelete() {
     this.cardToDelete = undefined;
@@ -524,9 +516,20 @@ export default class InteractSubmode extends Component<Signature> {
       }
 
       await this.withTestWaiters(async () => {
-        let destinationRealmURL = await this.cardService.getRealmURL(
-          destinationItem.card,
+        let destinationIndexCardUrl = destinationItem.url;
+        if (!destinationIndexCardUrl) {
+          throw new Error(`destination index card has no URL`);
+        }
+        let destinationIndexCard = await this.store.peek(
+          destinationIndexCardUrl,
         );
+        if (!isCardInstance(destinationIndexCard)) {
+          throw new Error(
+            `destination index card ${destinationIndexCardUrl} is not a card`,
+          );
+        }
+        let destinationRealmURL =
+          await this.cardService.getRealmURL(destinationIndexCard);
         if (!destinationRealmURL) {
           throw new Error('Could not determine the copy destination realm');
         }
@@ -556,7 +559,7 @@ export default class InteractSubmode extends Component<Signature> {
           // Currently the destination item is always a cards-grid, so we use that
           // fact to be able to scroll to the newly copied item
           scrollIntoView?.(
-            `[data-stack-card="${destinationItem.card.id}"] [data-cards-grid-item="${scrollToCard.id}"]`,
+            `[data-stack-card="${destinationIndexCardUrl}"] [data-cards-grid-item="${scrollToCard.id}"]`,
           );
         }
       });
@@ -579,8 +582,7 @@ export default class InteractSubmode extends Component<Signature> {
           selectedCards.map((cardDefOrId: CardDefOrId) => {
             if (typeof cardDefOrId === 'string') {
               // WARNING This card is not part of the identity map!
-              // TODO refactor this to use CardResource (please make ticket)
-              return this.cardService.getCard(cardDefOrId);
+              return this.store.peek(cardDefOrId);
             }
             return cardDefOrId;
           }),
@@ -593,7 +595,9 @@ export default class InteractSubmode extends Component<Signature> {
         }
         selected.clear();
         for (let card of loadedCards) {
-          selected.add(card!);
+          if (isCardInstance(card)) {
+            selected.add(card);
+          }
         }
       } finally {
         waiter.endAsync(waiterToken);
@@ -634,14 +638,13 @@ export default class InteractSubmode extends Component<Signature> {
           SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
           let newItem = new StackItem({
-            owner: this,
-            url,
+            url: url.href,
             format: 'isolated',
             stackIndex: 0,
           });
           // it's important that we await the stack item readiness _before_
           // we mutate the stack, otherwise there are very odd visual artifacts
-          await newItem.ready();
+          // await newItem.ready();
           for (
             let stackIndex = this.stacks.length - 1;
             stackIndex >= 0;
@@ -680,12 +683,11 @@ export default class InteractSubmode extends Component<Signature> {
               let bottomMostItem = stack[0];
               if (bottomMostItem) {
                 let stackItem = new StackItem({
-                  owner: this,
-                  url,
+                  url: url.href,
                   format: 'isolated',
                   stackIndex,
                 });
-                await stackItem.ready();
+                // await stackItem.ready();
                 this.operatorModeStateService.clearStackAndAdd(
                   stackIndex,
                   stackItem,
@@ -731,6 +733,7 @@ export default class InteractSubmode extends Component<Signature> {
       actions: this.publicAPI(this, 0),
       getCard: this.getCard,
       getCards: this.getCards,
+      store: this.store,
       // TODO: should we include this here??
       commandContext: this.commandService.commandContext,
     };
@@ -793,7 +796,7 @@ export default class InteractSubmode extends Component<Signature> {
                 @stackIndex={{stackIndex}}
                 @publicAPI={{this.publicAPI this stackIndex}}
                 @commandContext={{this.commandService.commandContext}}
-                @close={{perform this.close}}
+                @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
                 @saveCard={{@saveCard}}

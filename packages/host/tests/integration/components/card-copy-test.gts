@@ -94,7 +94,7 @@ module('Integration | card-copy', function (hooks) {
           format: 'isolated' as const,
         })),
       ].filter((a) => a.length > 0);
-      await operatorModeStateService.restore({ stacks });
+      operatorModeStateService.restore({ stacks });
     };
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');

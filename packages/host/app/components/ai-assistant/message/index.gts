@@ -269,7 +269,7 @@ export default class AiAssistantMessage extends Component<Signature> {
               {{#each this.items as |item|}}
                 {{#if (isCardResource item)}}
                   {{#if item.card}}
-                    <CardPill @card={{item.card}} />
+                    <CardPill @cardId={{item.card.id}} />
                   {{/if}}
                 {{else}}
                   <FilePill @file={{item}} />

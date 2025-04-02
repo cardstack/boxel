@@ -170,17 +170,23 @@ export default class CardService extends Service {
   }
 
   // WARNING! please do not use this to create card instances. Use
-  // `CardResource.getCard()` instead for creating card instances. When you
-  // create card instances directly from here it bypasses the store's identity
-  // map and instances created directly from here will behave very problematically.
-  async createFromSerialized(
+  // `CardResource.getCard()` or `StoreService.getInstanceDetachedFromStore()`
+  // instead for getting card instances. When you create card instances
+  // directly from here it bypasses the store's identity map and instances
+  // created directly from here will behave very problematically.
+  async createFromSerialized<T extends CardDef>(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: URL | undefined,
     opts?: { identityContext?: IdentityContext },
-  ): Promise<CardDef> {
+  ): Promise<T> {
     let api = await this.getAPI();
-    let card = await api.createFromSerialized(resource, doc, relativeTo, opts);
+    let card = (await api.createFromSerialized(
+      resource,
+      doc,
+      relativeTo,
+      opts,
+    )) as T;
     // it's important that we absorb the field async here so that glimmer won't
     // encounter NotLoaded errors, since we don't have the luxury of the indexer
     // being able to inform us of which fields are used or not at this point.
@@ -190,7 +196,7 @@ export default class CardService extends Service {
       recomputeAllFields: true,
       loadFields: true,
     });
-    return card as CardDef;
+    return card;
   }
 
   async serializeCard(
@@ -312,6 +318,19 @@ export default class CardService extends Service {
       throw new Error(errorMessage);
     }
     this.subscriber?.(url, content);
+    return response;
+  }
+
+  async copySource(fromUrl: URL, toUrl: URL) {
+    let response = await this.network.authedFetch(fromUrl, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/vnd.card+source',
+      },
+    });
+
+    const content = await response.text();
+    await this.saveSource(toUrl, content);
     return response;
   }
 

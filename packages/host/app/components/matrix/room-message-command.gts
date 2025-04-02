@@ -1,3 +1,4 @@
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
@@ -197,8 +198,7 @@ export default class RoomMessageCommand extends Component<Signature> {
           <CodeBlock
             {{this.scrollBottomIntoView}}
             @monacoSDK={{@monacoSDK}}
-            @code={{this.previewCommandCode}}
-            @language='json'
+            @codeData={{hash code=this.previewCommandCode language='json'}}
             as |codeBlock|
           >
             <codeBlock.actions as |actions|>

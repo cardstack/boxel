@@ -77,11 +77,9 @@ export default class CardPreviewPanel extends Component<Signature> {
     return this.args.realmURL;
   }
 
-  openInInteractMode = task(async () => {
-    await this.operatorModeStateService.openCardInInteractMode(
-      new URL(this.args.card.id),
-    );
-  });
+  openInInteractMode = () => {
+    this.operatorModeStateService.openCardInInteractMode(this.args.card.id);
+  };
 
   <template>
     <div
@@ -126,9 +124,7 @@ export default class CardPreviewPanel extends Component<Signature> {
               @closeMenu={{dd.close}}
               @items={{array
                 (menuItem
-                  'Open in Interact Mode'
-                  (perform this.openInInteractMode)
-                  icon=Eye
+                  'Open in Interact Mode' this.openInInteractMode icon=Eye
                 )
               }}
             />

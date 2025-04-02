@@ -5,6 +5,10 @@ import { tracked } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 
+import { consume } from 'ember-provide-consume-context';
+
+import { trackedFunction } from 'ember-resources/util/function';
+
 import { TrackedSet } from 'tracked-built-ins';
 
 import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
@@ -15,10 +19,13 @@ import {
   baseCardRef,
   isCardInstance,
   chooseFile,
+  GetCardContextName,
+  type getCard,
 } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -28,12 +35,12 @@ import { Submode } from '../../submode-switcher';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    autoAttachedCards?: TrackedSet<CardDef>;
-    cardsToAttach: CardDef[] | undefined;
+    autoAttachedCardIds?: TrackedSet<string>;
+    cardIdsToAttach: string[] | undefined;
     autoAttachedFile?: FileDef;
     filesToAttach: FileDef[] | undefined;
-    chooseCard: (card: CardDef) => void;
-    removeCard: (card: CardDef) => void;
+    chooseCard: (cardId: string) => void;
+    removeCard: (cardId: string) => void;
     chooseFile: (file: FileDef) => void;
     removeFile: (file: FileDef) => void;
     submode: Submode;
@@ -46,100 +53,103 @@ const MAX_ITEMS_TO_DISPLAY = 4;
 
 export default class AiAssistantAttachmentPicker extends Component<Signature> {
   <template>
+    {{consumeContext this.makeCardResources}}
     <div class='item-picker'>
-      {{#each this.itemsToDisplay as |item|}}
-        {{#if (this.isCard item)}}
-          {{#if (this.isAutoAttachedCard item)}}
-            <Tooltip @placement='top'>
-              <:trigger>
-                <CardPill
-                  @card={{item}}
-                  @isAutoAttachedCard={{true}}
-                  @removeCard={{@removeCard}}
-                />
-              </:trigger>
+      {{#if this.isLoaded}}
+        {{#each this.itemsToDisplay as |item|}}
+          {{#if (this.isCard item)}}
+            {{#if (this.isAutoAttachedCard item)}}
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <CardPill
+                    @cardId={{item.id}}
+                    @isAutoAttachedCard={{true}}
+                    @removeCard={{@removeCard}}
+                  />
+                </:trigger>
 
-              <:content>
-                {{#if @autoAttachedCardTooltipMessage}}
-                  {{@autoAttachedCardTooltipMessage}}
-                {{else if (this.isAutoAttachedCard item)}}
-                  Topmost card is shared automatically
-                {{/if}}
-              </:content>
-            </Tooltip>
+                <:content>
+                  {{#if @autoAttachedCardTooltipMessage}}
+                    {{@autoAttachedCardTooltipMessage}}
+                  {{else if (this.isAutoAttachedCard item)}}
+                    Topmost card is shared automatically
+                  {{/if}}
+                </:content>
+              </Tooltip>
+            {{else}}
+              <CardPill
+                @cardId={{item.id}}
+                @isAutoAttachedCard={{false}}
+                @removeCard={{@removeCard}}
+              />
+            {{/if}}
           {{else}}
-            <CardPill
-              @card={{item}}
-              @isAutoAttachedCard={{false}}
-              @removeCard={{@removeCard}}
-            />
+            {{#if (this.isAutoAttachedFile item)}}
+              <Tooltip @placement='top'>
+                <:trigger>
+                  <FilePill
+                    @file={{item}}
+                    @isAutoAttachedFile={{true}}
+                    @removeFile={{@removeFile}}
+                  />
+                </:trigger>
+                <:content>
+                  Currently opened file is shared automatically
+                </:content>
+              </Tooltip>
+            {{else}}
+              <FilePill
+                @file={{item}}
+                @isAutoAttachedFile={{false}}
+                @removeFile={{@removeFile}}
+              />
+            {{/if}}
           {{/if}}
-        {{else}}
-          {{#if (this.isAutoAttachedFile item)}}
-            <Tooltip @placement='top'>
-              <:trigger>
-                <FilePill
-                  @file={{item}}
-                  @isAutoAttachedFile={{true}}
-                  @removeFile={{@removeFile}}
-                />
-              </:trigger>
-              <:content>
-                Currently opened file is shared automatically
-              </:content>
-            </Tooltip>
-          {{else}}
-            <FilePill
-              @file={{item}}
-              @isAutoAttachedFile={{false}}
-              @removeFile={{@removeFile}}
-            />
-          {{/if}}
+        {{/each}}
+        {{#if
+          (and
+            (gt this.items.length MAX_ITEMS_TO_DISPLAY)
+            (not this.areAllItemsDisplayed)
+          )
+        }}
+          <Pill
+            @kind='button'
+            {{on 'click' this.toggleViewAllAttachedCards}}
+            data-test-view-all
+          >
+            View All ({{this.items.length}})
+          </Pill>
         {{/if}}
-      {{/each}}
-      {{#if
-        (and
-          (gt this.items.length MAX_ITEMS_TO_DISPLAY)
-          (not this.areAllItemsDisplayed)
-        )
-      }}
-        <Pill
-          @kind='button'
-          {{on 'click' this.toggleViewAllAttachedCards}}
-          data-test-view-all
-        >
-          View All ({{this.items.length}})
-        </Pill>
-      {{/if}}
-      {{#if this.canDisplayAddButton}}
-        {{#if (eq @submode 'code')}}
-          <AddButton
-            class={{cn 'attach-button' icon-only=this.files.length}}
-            @variant='pill'
-            @iconWidth='14'
-            @iconHeight='14'
-            {{on 'click' this.chooseFile}}
-            @disabled={{this.doChooseFile.isRunning}}
-            data-test-choose-file-btn
-          >
-            <span class={{if this.files.length 'boxel-sr-only'}}>
-              Attach File
-            </span>
-          </AddButton>
-        {{else}}
-          <AddButton
-            class={{cn 'attach-button' icon-only=this.cards.length}}
-            @variant='pill'
-            @iconWidth='14'
-            @iconHeight='14'
-            {{on 'click' this.chooseCard}}
-            @disabled={{this.doChooseCard.isRunning}}
-            data-test-choose-card-btn
-          >
-            <span class={{if this.cards.length 'boxel-sr-only'}}>
-              Add Card
-            </span>
-          </AddButton>
+        {{#if this.canDisplayAddButton}}
+          {{#if (eq @submode 'code')}}
+            <AddButton
+              class={{cn 'attach-button' icon-only=this.files.length}}
+              @variant='pill'
+              @iconWidth='14'
+              @iconHeight='14'
+              {{on 'click' this.chooseFile}}
+              @disabled={{this.doChooseFile.isRunning}}
+              data-test-choose-file-btn
+            >
+              <span class={{if this.files.length 'boxel-sr-only'}}>
+                Attach File
+              </span>
+            </AddButton>
+          {{else}}
+            <AddButton
+              class={{cn 'attach-button' icon-only=this.cards.length}}
+              @variant='pill'
+              @iconWidth='14'
+              @iconHeight='14'
+              {{on 'click' this.chooseCard}}
+              @disabled={{this.chooseCardTask.isRunning}}
+              data-test-choose-card-btn
+            >
+              <span class={{if this.cards.length 'boxel-sr-only'}}>
+                Add Card
+              </span>
+            </AddButton>
+          {{/if}}
         {{/if}}
       {{/if}}
     </div>
@@ -176,19 +186,30 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     </style>
   </template>
 
+  @consume(GetCardContextName) private declare getCard: getCard;
+
   @tracked areAllItemsDisplayed = false;
+  @tracked private cardCollectionResource:
+    | { value: ReturnType<getCard>[] | null }
+    | undefined;
 
   @action
   private toggleViewAllAttachedCards() {
     this.areAllItemsDisplayed = !this.areAllItemsDisplayed;
   }
 
+  private makeCardResources = () => {
+    this.cardCollectionResource = trackedFunction(this, () =>
+      this.cardIds.map((id) => this.getCard(this, () => id)),
+    );
+  };
+
   private isCard = (item: CardDef | FileDef): item is CardDef => {
     return isCardInstance(item);
   };
 
   private isAutoAttachedCard = (card: CardDef) => {
-    return this.args.autoAttachedCards?.has(card);
+    return this.args.autoAttachedCardIds?.has(card.id);
   };
 
   private isAutoAttachedFile = (file: FileDef) => {
@@ -199,15 +220,29 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     return [...this.cards, ...this.files];
   }
 
-  private get cards() {
-    let cards = this.args.cardsToAttach ?? [];
+  private get isLoaded() {
+    return this.cardResources.length === 0
+      ? true
+      : this.cardResources.every((r) => r.isLoaded);
+  }
 
-    if (this.args.autoAttachedCards) {
-      cards = [...new Set([...this.args.autoAttachedCards, ...cards])];
+  private get cards() {
+    return this.cardResources.map((r) => r.card).filter(Boolean) as CardDef[];
+  }
+
+  private get cardResources() {
+    return this.cardCollectionResource?.value ?? [];
+  }
+
+  private get cardIds() {
+    let cardIds = this.args.cardIdsToAttach ?? [];
+
+    if (this.args.autoAttachedCardIds) {
+      cardIds = [...new Set([...this.args.autoAttachedCardIds, ...cardIds])];
     }
 
-    cards = cards.filter((card) => card.id); // Dont show new unsaved cards
-    return cards;
+    cardIds = cardIds.filter(Boolean); // Dont show new unsaved cards
+    return cardIds;
   }
 
   private get files() {
@@ -227,25 +262,26 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   }
 
   private get canDisplayAddButton() {
-    if (!this.args.maxNumberOfItemsToAttach || !this.args.cardsToAttach) {
+    if (!this.args.maxNumberOfItemsToAttach || !this.args.cardIdsToAttach) {
       return true;
     }
-    return this.args.cardsToAttach.length < this.args.maxNumberOfItemsToAttach;
+    return (
+      this.args.cardIdsToAttach.length < this.args.maxNumberOfItemsToAttach
+    );
   }
 
   @action
-  private async chooseCard() {
-    let card = await this.doChooseCard.perform();
-    if (card) {
-      this.args.chooseCard(card);
-    }
+  private chooseCard() {
+    this.chooseCardTask.perform();
   }
 
-  private doChooseCard = restartableTask(async () => {
-    let chosenCard: CardDef | undefined = await chooseCard({
+  private chooseCardTask = restartableTask(async () => {
+    let cardId = await chooseCard({
       filter: { type: baseCardRef },
     });
-    return chosenCard;
+    if (cardId) {
+      this.args.chooseCard(cardId);
+    }
   });
 
   @action
