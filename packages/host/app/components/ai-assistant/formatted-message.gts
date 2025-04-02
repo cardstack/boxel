@@ -5,12 +5,21 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import { restartableTask } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
+import { Resource } from 'ember-resources';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { and, eq, not } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
+
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+
+import {
+  extractCodeData,
+  wrapLastTextNodeInStreamingTextSpan,
+} from '@cardstack/host/lib/formatted-message/utils';
 
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
@@ -19,18 +28,18 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import CodeBlock from './code-block';
 
+export interface CodeData {
+  fileUrl: string | null;
+  code: string | null;
+  language: string | null;
+  searchReplaceBlock?: string | null;
+}
+
 interface FormattedMessageSignature {
   html: string;
   monacoSDK: MonacoSDK;
   renderCodeBlocks: boolean;
   isStreaming: boolean;
-}
-
-interface CodeAction {
-  fileUrl: string;
-  code: string;
-  containerElement: HTMLDivElement;
-  state: 'ready' | 'applying' | 'applied' | 'failed';
 }
 
 interface HtmlTagGroup {
@@ -43,12 +52,10 @@ function sanitize(html: string): SafeString {
 }
 
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
-  @tracked codeActions: TrackedArray<CodeAction> = new TrackedArray([]);
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
   @tracked htmlGroups: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
-  @tracked copyCodeButtonText: 'Copy' | 'Copied' = 'Copy';
 
   // When html is streamed, we need to update htmlParts accordingly,
   // but only the parts that have changed so that we don't needlesly re-render
@@ -102,16 +109,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     return index === this.htmlGroups.length - 1;
   };
 
-  private isCodePatch = (code: string) => {
-    let searchReplaceRegex =
-      /<<<<<<< SEARCH\n(.*)\n=======\n(.*)\n>>>>>>> REPLACE/s;
-    return searchReplaceRegex.test(code);
-  };
-
-  private fileUrlIsPresent = (fileUrl?: string | null): fileUrl is string => {
-    return typeof fileUrl === 'string' && fileUrl.trim() !== '';
-  };
-
   <template>
     {{#if @renderCodeBlocks}}
       <div
@@ -138,27 +135,36 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
             {{#let (extractCodeData htmlGroup.content) as |codeData|}}
               <CodeBlock
                 @monacoSDK={{@monacoSDK}}
-                @code={{codeData.content}}
-                @language={{codeData.language}}
+                @codeData={{codeData}}
                 as |codeBlock|
               >
-                <codeBlock.actions as |actions|>
-                  <actions.copyCode />
-                  {{#if
-                    (and
-                      (this.isCodePatch codeData.content)
-                      (this.fileUrlIsPresent codeData.fileUrl)
-                      (not @isStreaming)
+                {{#if (bool codeData.searchReplaceBlock)}}
+                  {{#let
+                    (getCodeDiffResultResource
+                      this codeData.fileUrl codeData.searchReplaceBlock
                     )
+                    as |codeDiffResource|
                   }}
-                    <actions.applyCodePatch
-                      @codePatch={{codeData.content}}
-                      {{! @glint-ignore -- we know fileUrl is string here due to fileUrlIsPresent type guard }}
-                      @fileUrl={{codeData.fileUrl}}
-                    />
-                  {{/if}}
-                </codeBlock.actions>
-                <codeBlock.editor />
+                    {{#if codeDiffResource.isDataLoaded}}
+                      <codeBlock.actions as |actions|>
+                        <actions.copyCode
+                          @code={{codeDiffResource.modifiedCode}}
+                        />
+                        <actions.applyCodePatch />
+                      </codeBlock.actions>
+                      <codeBlock.diffEditor
+                        @originalCode={{codeDiffResource.originalCode}}
+                        @modifiedCode={{codeDiffResource.modifiedCode}}
+                        @language={{codeData.language}}
+                      />
+                    {{/if}}
+                  {{/let}}
+                {{else}}
+                  <codeBlock.actions as |actions|>
+                    <actions.copyCode @code={{codeData.code}} />
+                  </codeBlock.actions>
+                  <codeBlock.editor />
+                {{/if}}
               </CodeBlock>
             {{/let}}
           {{else}}
@@ -179,9 +185,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     {{/if}}
 
     <style scoped>
-      .copy-icon {
-        --icon-color: var(--boxel-highlight);
-      }
       .message {
         position: relative;
       }
@@ -203,19 +206,6 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         z-index: 1;
         height: 39px;
         padding: 18px 25px;
-      }
-
-      .code-copy-button {
-        color: var(--boxel-highlight);
-        background: none;
-        border: none;
-        font: 600 var(--boxel-font-xs);
-        padding: 0;
-        display: flex;
-      }
-
-      .code-copy-button svg {
-        margin-right: var(--boxel-sp-xs);
       }
 
       :deep(.monaco-container) {
@@ -284,72 +274,66 @@ function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   return result;
 }
 
-function extractCodeData(preElementString: string) {
-  if (!preElementString) {
-    return {
-      language: '',
-      content: '',
-    };
-  }
-  // Extract language using regex - finds the value of data-codeblock attribute
-  const languageMatch = preElementString.match(/data-code-language="([^"]+)"/);
-  const language = languageMatch ? languageMatch[1] : null;
-
-  // Extract content using regex - finds everything between the opening and closing pre tags
-  const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-  let content = contentMatch ? contentMatch[1] : null;
-
-  // When the model responds with a code patch block, the source-code-editing.json skill
-  // will dictate that the first comment in the search/replace file block
-  // is a file url comment, like this: // File url: http://localhost:4201/user/realm/card.gts
-  // We need this url so that we know which file the code patch applies to.
-  // We extract this url and remove it from the content.
-  let fileUrl = null;
-
-  let trimmedContent = content?.trim();
-  if (trimmedContent?.trim().startsWith('// File url: ')) {
-    let firstLine = trimmedContent.split('\n')[0];
-    let fileUrlRegex = /File url: (.*)/;
-    let fileUrlMatch = firstLine.match(fileUrlRegex);
-    if (fileUrlMatch) {
-      fileUrl = fileUrlMatch[1];
-    }
-    // Remove the first line from the content
-    content = trimmedContent.split('\n').slice(1).join('\n');
-  }
-
-  return {
-    language: language ?? '',
-    content: content ?? '',
-    fileUrl: fileUrl ?? null,
+interface CodeDiffResourceArgs {
+  named: {
+    fileUrl?: string | null;
+    searchReplaceBlock?: string | null;
   };
 }
 
-function findLastTextNodeWithContent(parentNode: Node): Text | null {
-  // iterate childNodes in reverse to find the last text node with non-whitespace text
-  for (let i = parentNode.childNodes.length - 1; i >= 0; i--) {
-    let child = parentNode.childNodes[i];
-    if (child.textContent && child.textContent.trim() !== '') {
-      if (child instanceof Text) {
-        return child;
-      }
-      return findLastTextNodeWithContent(child);
-    }
+export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
+  @tracked fileUrl: string | undefined | null;
+  @tracked originalCode: string | undefined | null;
+  @tracked modifiedCode: string | undefined | null;
+  @tracked searchReplaceBlock: string | undefined | null;
+
+  @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
+
+  modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
+    let { fileUrl, searchReplaceBlock } = named;
+    this.fileUrl = fileUrl;
+    this.searchReplaceBlock = searchReplaceBlock;
+
+    this.load.perform();
   }
-  return null;
+
+  get isDataLoaded() {
+    return !!this.originalCode || !!this.modifiedCode;
+  }
+
+  private load = restartableTask(async () => {
+    let { fileUrl, searchReplaceBlock } = this;
+    if (!fileUrl || !searchReplaceBlock) {
+      return;
+    }
+    let result = await this.cardService.getSource(new URL(fileUrl));
+    this.originalCode = result;
+    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+      this.commandService.commandContext,
+    );
+
+    let { resultContent: patchedCode } =
+      await applySearchReplaceBlockCommand.execute({
+        fileContent: this.originalCode,
+        codeBlock: searchReplaceBlock,
+      });
+    this.modifiedCode = patchedCode;
+  });
 }
 
-function wrapLastTextNodeInStreamingTextSpan(
-  html: string | SafeString,
-): SafeString {
-  let parser = new DOMParser();
-  let doc = parser.parseFromString(html.toString(), 'text/html');
-  let lastTextNode = findLastTextNodeWithContent(doc.body);
-  if (lastTextNode) {
-    let span = doc.createElement('span');
-    span.textContent = lastTextNode.textContent;
-    span.classList.add('streaming-text');
-    lastTextNode.replaceWith(span);
+function getCodeDiffResultResource(
+  parent: object,
+  fileUrl?: string | null,
+  searchReplaceBlock?: string | null,
+) {
+  if (!fileUrl || !searchReplaceBlock) {
+    throw new Error('fileUrl and searchReplaceBlock are required');
   }
-  return htmlSafe(doc.body.innerHTML);
+  return CodeDiffResource.from(parent, () => ({
+    named: {
+      fileUrl,
+      searchReplaceBlock,
+    },
+  }));
 }

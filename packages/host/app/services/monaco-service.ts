@@ -46,13 +46,15 @@ export default class MonacoService extends Service {
       this.extendMonacoLanguage(lang, monaco),
     );
     monaco.editor.onDidCreateEditor((editor: _MonacoSDK.editor.ICodeEditor) => {
-      let cssClass = ((editor as any)._domElement as HTMLElement).getAttribute(
-        'class',
-      );
-      // we only care about the code mode monaco editor here
-      if (cssClass?.includes('code-block')) {
+      let isMainEditor = ((editor as any)._domElement as HTMLElement)
+        .getAttributeNames()
+        .includes('data-monaco-container-operator-mode');
+
+      if (!isMainEditor) {
+        // Other editors (code blocks) are read only, so we don't need to track focus
         return;
       }
+
       this.editor = editor;
       this.editor.onDidFocusEditorText(() => {
         this.hasFocus = true;

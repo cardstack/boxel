@@ -2,6 +2,7 @@
 import 'decorator-transforms/globals';
 import '../setup-logger'; // This should be first
 import './auth-client-test';
+import './file-watcher-events-test';
 import './index-query-engine-test';
 import './index-writer-test';
 import './indexing-test';

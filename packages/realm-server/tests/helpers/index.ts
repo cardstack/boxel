@@ -39,6 +39,14 @@ import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
 import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
+import { SuperTest, Test } from 'supertest';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type {
+  IncrementalIndexEventContent,
+  MatrixEvent,
+  RealmEvent,
+  RealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
 
 export async function waitUntil<T>(
   condition: () => Promise<T>,
@@ -224,6 +232,7 @@ export async function createRealm({
   dbAdapter,
   matrixConfig = testMatrix,
   withWorker,
+  enableFileWatcher = false,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -235,6 +244,7 @@ export async function createRealm({
   runner?: QueueRunner;
   dbAdapter: PgAdapter;
   deferStartUp?: true;
+  enableFileWatcher?: boolean;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -249,7 +259,7 @@ export async function createRealm({
     }
   }
 
-  let adapter = new NodeAdapter(dir);
+  let adapter = new NodeAdapter(dir, enableFileWatcher);
   let worker: Worker | undefined;
   if (withWorker) {
     if (!runner) {
@@ -374,6 +384,7 @@ export async function runTestRealmServer({
   matrixConfig,
   matrixURL,
   permissions = { '*': ['read'] },
+  enableFileWatcher = false,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -386,6 +397,7 @@ export async function runTestRealmServer({
   dbAdapter: PgAdapter;
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
+  enableFileWatcher?: boolean;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -407,6 +419,7 @@ export async function runTestRealmServer({
     matrixConfig,
     publisher,
     dbAdapter,
+    enableFileWatcher,
   });
 
   await testRealm.logInToMatrix();
@@ -426,6 +439,7 @@ export async function runTestRealmServer({
       matrixConfig,
       publisher,
       dbAdapter,
+      enableFileWatcher,
     });
     virtualNetwork.mount(seedRealm.handle);
     realms.push(seedRealm);
@@ -615,4 +629,94 @@ export async function insertJob(
     result: result[0].result,
     priority: result[0].priority,
   };
+}
+
+export function setupMatrixRoom(
+  hooks: NestedHooks,
+  getTestRequest: () => SuperTest<Test>,
+) {
+  let matrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: 'node-test_realm',
+    seed: realmSecretSeed,
+  });
+
+  let testAuthRoomId: string | undefined;
+
+  hooks.beforeEach(async function () {
+    await matrixClient.login();
+    let userId = matrixClient.getUserId()!;
+
+    let response = await getTestRequest()
+      .post('/_server-session')
+      .send(JSON.stringify({ user: userId }))
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json');
+
+    let json = response.body;
+
+    let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+    if (!rooms.includes(json.room)) {
+      await matrixClient.joinRoom(json.room);
+    }
+
+    await matrixClient.sendEvent(json.room, 'm.room.message', {
+      body: `auth-response: ${json.challenge}`,
+      msgtype: 'm.text',
+    });
+
+    response = await getTestRequest()
+      .post('/_server-session')
+      .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json');
+
+    testAuthRoomId = json.room;
+
+    await matrixClient.setAccountData('boxel.session-rooms', {
+      [userId]: json.room,
+    });
+  });
+
+  return {
+    matrixClient,
+    getMessagesSince: async function (since: number) {
+      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+      let messagesAfterSentinel = allMessages.filter(
+        (m) => m.origin_server_ts > since,
+      );
+
+      return messagesAfterSentinel;
+    },
+  };
+}
+
+export async function waitForRealmEvent(
+  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
+  since: number,
+) {
+  await waitUntil(async () => {
+    let matrixMessages = await getMessagesSince(since);
+    return matrixMessages.length > 0;
+  });
+}
+
+export function findRealmEvent(
+  events: MatrixEvent[],
+  eventName: string,
+  indexType: string,
+): RealmEvent | undefined {
+  return events.find(
+    (m) =>
+      m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+      m.content.eventName === eventName &&
+      (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
+  ) as RealmEvent | undefined;
+}
+
+function realmEventIsIndex(
+  event: RealmEventContent,
+): event is IncrementalIndexEventContent {
+  return event.eventName === 'index';
 }
