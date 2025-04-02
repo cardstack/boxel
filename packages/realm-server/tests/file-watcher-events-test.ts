@@ -79,16 +79,6 @@ module(basename(__filename), function () {
             enableFileWatcher: true,
           }));
 
-          testRealmEventSource = new eventSource(
-            `${testRealmHref}_message?testFileWatcher=node`,
-          );
-
-          await new Promise<void>((resolve) => {
-            testRealmEventSource.onopen = () => {
-              resolve();
-            };
-          });
-
           setTestRequest(supertest(testRealmHttpServer));
         },
       });
