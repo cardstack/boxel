@@ -13,7 +13,7 @@ import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
@@ -326,19 +326,14 @@ class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
   private patchCodeTask = task(async (codePatch: string, fileUrl: string) => {
     this.patchCodeTaskState = 'applying';
     try {
-      let source = await this.cardService.getSource(new URL(fileUrl));
-
-      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+      let patchCodeCommand = new PatchCodeCommand(
         this.commandService.commandContext,
       );
+      await patchCodeCommand.execute({
+        fileUrl,
+        codeBlocks: [codePatch],
+      });
 
-      let { resultContent: patchedCode } =
-        await applySearchReplaceBlockCommand.execute({
-          fileContent: source,
-          codeBlock: codePatch,
-        });
-
-      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
       this.loaderService.reset();
 
       this.patchCodeTaskState = 'applied';
