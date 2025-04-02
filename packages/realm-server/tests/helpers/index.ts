@@ -828,3 +828,19 @@ export function setupPermissionedRealm(
     resetCatalogRealms();
   });
 }
+
+export function createJWT(
+  realm: Realm,
+  user: string,
+  permissions: RealmPermissions['user'] = [],
+) {
+  return realm.createJWT(
+    {
+      user,
+      realm: realm.url,
+      permissions,
+      sessionRoom: `test-session-room-for-${user}`,
+    },
+    '7d',
+  );
+}

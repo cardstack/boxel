@@ -3,7 +3,7 @@ import { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
-import { baseRealm, Realm, RealmPermissions } from '@cardstack/runtime-common';
+import { baseRealm, Realm } from '@cardstack/runtime-common';
 import {
   setupCardLogs,
   setupBaseRealmServer,
@@ -11,24 +11,9 @@ import {
   createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
+  createJWT,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | GET directory path', function (hooks) {

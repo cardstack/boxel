@@ -1,7 +1,7 @@
 import { module, test } from 'qunit';
 import { Test, SuperTest } from 'supertest';
 import { basename } from 'path';
-import { baseRealm, Realm, RealmPermissions } from '@cardstack/runtime-common';
+import { baseRealm, Realm } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
 import {
@@ -11,24 +11,9 @@ import {
   createVirtualNetworkAndLoader,
   matrixURL,
   testRealmHref,
+  createJWT,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | _search', function (hooks) {

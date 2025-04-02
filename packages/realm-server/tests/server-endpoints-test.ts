@@ -8,7 +8,6 @@ import {
   baseRealm,
   Deferred,
   Realm,
-  RealmPermissions,
   fetchUserPermissions,
   baseCardRef,
   type SingleCardDocument,
@@ -37,6 +36,7 @@ import {
   fetchSubscriptionsByUserId,
   insertJob,
   testRealmURL,
+  createJWT,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
@@ -60,21 +60,6 @@ import type {
 import { monitoringAuthToken } from '../utils/monitoring';
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(basename(__filename), function () {
   module(

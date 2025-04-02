@@ -8,7 +8,6 @@ import {
   baseRealm,
   loadCard,
   Realm,
-  RealmPermissions,
   type LooseSingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
@@ -35,6 +34,7 @@ import {
   waitUntil,
   testRealmHref,
   testRealmURL,
+  createJWT,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { RealmServer } from '../server';
@@ -51,22 +51,6 @@ import type {
 
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
 const testRealm2Href = testRealm2URL.href;
-
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints', function (hooks) {

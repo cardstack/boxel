@@ -6,7 +6,6 @@ import { copySync } from 'fs-extra';
 import {
   baseRealm,
   Realm,
-  RealmPermissions,
   fetchUserPermissions,
 } from '@cardstack/runtime-common';
 import {
@@ -17,25 +16,10 @@ import {
   matrixURL,
   testRealmHref,
   testRealmURL,
+  createJWT,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { type PgAdapter } from '@cardstack/postgres';
-
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | _permissions', function (hooks) {

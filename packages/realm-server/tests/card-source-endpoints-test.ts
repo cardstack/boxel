@@ -12,7 +12,6 @@ import {
   baseRealm,
   RealmPaths,
   Realm,
-  RealmPermissions,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
@@ -25,6 +24,7 @@ import {
   waitUntil,
   testRealmHref,
   testRealmURL,
+  createJWT,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import stripScopedCSSGlimmerAttributes from '@cardstack/runtime-common/helpers/strip-scoped-css-glimmer-attributes';
@@ -36,22 +36,6 @@ import type {
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
 import isEqual from 'lodash/isEqual';
-
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card source requests', function (hooks) {

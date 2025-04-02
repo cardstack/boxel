@@ -4,7 +4,7 @@ import { join, basename } from 'path';
 import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
 import { copySync } from 'fs-extra';
-import { baseRealm, Realm, RealmPermissions } from '@cardstack/runtime-common';
+import { baseRealm, Realm } from '@cardstack/runtime-common';
 import {
   setupCardLogs,
   setupBaseRealmServer,
@@ -14,25 +14,10 @@ import {
   closeServer,
   testRealmInfo,
   testRealmHref,
+  createJWT,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
-
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | GET _info', function (hooks) {

@@ -9,7 +9,6 @@ import {
   isSingleCardDocument,
   baseRealm,
   Realm,
-  RealmPermissions,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -26,6 +25,7 @@ import {
   cleanWhiteSpace,
   waitUntil,
   testRealmHref,
+  createJWT,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
@@ -34,22 +34,6 @@ import type {
   IncrementalIndexEventContent,
   MatrixEvent,
 } from 'https://cardstack.com/base/matrix-event';
-
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | card URLs', function (hooks) {
