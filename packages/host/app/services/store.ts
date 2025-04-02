@@ -769,7 +769,6 @@ export default class StoreService extends Service {
     return 'Unknown error';
   }
 
-  // we return undefined if the card changed locally while the save was in-flight.
   private async persistAndUpdate(
     instance: CardDef,
     defaultRealmHref?: string,
