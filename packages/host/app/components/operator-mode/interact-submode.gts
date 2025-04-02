@@ -8,7 +8,7 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, timeout } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { provide, consume } from 'ember-provide-consume-context';
 
