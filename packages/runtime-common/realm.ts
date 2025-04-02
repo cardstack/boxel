@@ -376,11 +376,6 @@ export class Realm {
         this.removeCardSource.bind(this),
       )
       .get(
-        '/_message',
-        SupportedMimeType.EventStream,
-        this.subscribe.bind(this),
-      )
-      .get(
         '.*/',
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
