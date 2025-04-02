@@ -14,6 +14,8 @@ export default {
   output: addon.output(),
 
   plugins: [
+    scopedCSS('src'),
+
     // These are the modules that users should be able to import from your
     // addon. Anything not listed here may get optimized away.
     addon.publicEntrypoints([
@@ -34,6 +36,36 @@ export default {
     // package names.
     addon.dependencies(),
 
+    // Ensure that standalone .hbs files are properly integrated as Javascript.
+    addon.hbs(),
+
+    // Ensure that .gjs files are properly integrated as Javascript
+    addon.gjs(),
+
+    // css is importable for side-effect
+    addon.keepAssets(['**/*.css']),
+
+    // these asset types are imported for their URLs
+    addon.keepAssets(
+      ['**/*.otf', '**/*.png', '**/*.webp', '**/*.woff2'],
+      'default',
+    ),
+
+    // Remove leftover build artifacts when starting a new build.
+    addon.clean({ runOnce: true }),
+
+    // Copy files into published package
+    copy({
+      targets: [
+        { src: '../README.md', dest: '.' },
+        { src: '../LICENSE.md', dest: '.' },
+        { src: './src/styles/*.{css,woff2,otf}', dest: './dist/styles' },
+      ],
+      // this makes it late enough that the `clean()` hook above doesn't remove
+      // our copied files
+      hook: 'generateBundle',
+    }),
+
     // This babel config should *not* apply presets or compile away ES modules.
     // It exists only to provide development niceties for you, like automatic
     // template colocation.
@@ -44,28 +76,6 @@ export default {
       babelHelpers: 'bundled',
       extensions: ['.js', '.gjs', '.ts', '.gts'],
     }),
-
-    // Ensure that standalone .hbs files are properly integrated as Javascript.
-    addon.hbs(),
-
-    // Ensure that .gjs files are properly integrated as Javascript
-    addon.gjs(),
-
-    // addons are allowed to contain imports of .css files, which we want rollup
-    // to leave alone and keep in the published output.
-    addon.keepAssets(['styles/*', '**/*.webp']),
-
-    // Remove leftover build artifacts when starting a new build.
-    addon.clean({ runOnce: true }),
-
-    // Copy Readme and License into published package
-    copy({
-      targets: [
-        { src: '../README.md', dest: '.' },
-        { src: '../LICENSE.md', dest: '.' },
-      ],
-    }),
-    scopedCSS('src'),
   ],
 
   onLog(level, log, handler) {
