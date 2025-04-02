@@ -302,7 +302,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     return !!this.originalCode || !!this.modifiedCode;
   }
 
-  load = restartableTask(async () => {
+  private load = restartableTask(async () => {
     let { fileUrl, searchReplaceBlock } = this;
     if (!fileUrl || !searchReplaceBlock) {
       return;
