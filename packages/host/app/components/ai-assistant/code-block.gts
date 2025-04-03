@@ -482,42 +482,46 @@ class CopyCodeButton extends Component<CopyCodeButtonSignature> {
 }
 
 class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
-  @service private declare loaderService: LoaderService;
-  @service private declare commandService: CommandService;
-  @service private declare cardService: CardService;
-  @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
-    'ready';
+  // @service private declare loaderService: LoaderService;
+  // @service private declare commandService: CommandService;
+  // @service private declare cardService: CardService;
+  // @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
+  //   'ready';
 
-  private patchCodeTask = task(async (codePatch: string, fileUrl: string) => {
-    this.patchCodeTaskState = 'applying';
-    try {
-      let source = await this.cardService.getSource(new URL(fileUrl));
+  // private patchCodeTask = task(async (codePatch: string, fileUrl: string) => {
+  //   this.patchCodeTaskState = 'applying';
+  //   try {
+  //     let source = await this.cardService.getSource(new URL(fileUrl));
 
-      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
-        this.commandService.commandContext,
-      );
+  //     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+  //       this.commandService.commandContext,
+  //     );
 
-      let { resultContent: patchedCode } =
-        await applySearchReplaceBlockCommand.execute({
-          fileContent: source,
-          codeBlock: codePatch,
-        });
+  //     let { resultContent: patchedCode } =
+  //       await applySearchReplaceBlockCommand.execute({
+  //         fileContent: source,
+  //         codeBlock: codePatch,
+  //       });
 
-      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
-      this.loaderService.reset();
+  //     await this.cardService.saveSource(new URL(fileUrl), patchedCode);
+  //     this.loaderService.reset();
 
-      this.patchCodeTaskState = 'applied';
-    } catch (error) {
-      console.error(error);
-      this.patchCodeTaskState = 'failed';
-    }
-  });
+  //     this.patchCodeTaskState = 'applied';
+  //   } catch (error) {
+  //     console.error(error);
+  //     this.patchCodeTaskState = 'failed';
+  //   }
+  // });
 
   <template>
     <ApplyButton
       data-test-apply-code-button
-      @state={{this.patchCodeTaskState}}
-      {{on 'click' (fn (perform this.patchCodeTask) @codePatch @fileUrl)}}
-    />
+      @state={{@codePatchAction.patchCodeTaskState}}
+      {{on 'click' (perform @codePatchAction.patchCodeTask)}}
+    >
+      <:default>
+        Accept
+      </:default>
+    </ApplyButton>
   </template>
 }

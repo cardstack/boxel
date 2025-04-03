@@ -5,7 +5,7 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { dropTask, restartableTask, task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { Resource } from 'ember-resources';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
@@ -27,6 +27,11 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import CodeBlock from './code-block';
+import { on } from '@ember/modifier';
+import Owner from '@ember/owner';
+import { setOwner } from '@ember/owner';
+import { getOwner } from '@ember/owner';
+import ApplyButton from './apply-button';
 
 export interface CodeData {
   fileUrl: string | null;
@@ -51,12 +56,62 @@ function sanitize(html: string): SafeString {
   return htmlSafe(sanitizeHtml(html));
 }
 
+class CodePatchAction {
+  fileUrl: string;
+  searchReplaceBlock: string;
+
+  @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
+    'ready';
+  @service private declare loaderService: LoaderService;
+  @service private declare commandService: CommandService;
+  @service private declare cardService: CardService;
+
+  constructor(owner: Owner, codeData: CodeData) {
+    setOwner(this, owner);
+    this.fileUrl = codeData.fileUrl;
+    this.searchReplaceBlock = codeData.searchReplaceBlock;
+  }
+
+  patchCodeTask = dropTask(async () => {
+    this.patchCodeTaskState = 'applying';
+    try {
+      let source = await this.cardService.getSource(new URL(this.fileUrl));
+
+      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+        this.commandService.commandContext,
+      );
+
+      let { resultContent: patchedCode } =
+        await applySearchReplaceBlockCommand.execute({
+          fileContent: source,
+          codeBlock: this.searchReplaceBlock,
+        });
+
+      await this.cardService.saveSource(new URL(this.fileUrl), patchedCode);
+
+      this.patchCodeTaskState = 'applied';
+    } catch (error) {
+      console.error(error);
+      this.patchCodeTaskState = 'failed';
+    }
+  });
+}
+
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
   @tracked htmlGroups: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
 
+  @tracked codePatchActions: TrackedArray<CodePatchAction> = new TrackedArray(
+    [],
+  );
+
+  @tracked applyAllCodePatchTasksState:
+    | 'ready'
+    | 'applying'
+    | 'applied'
+    | 'failed' = 'ready';
   // When html is streamed, we need to update htmlParts accordingly,
   // but only the parts that have changed so that we don't needlesly re-render
   // parts of the message that haven't changed. Parts are: <pre> html code, and
@@ -109,6 +164,22 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     return index === this.htmlGroups.length - 1;
   };
 
+  private createCodePatchAction = (codeData: CodeData) => {
+    let codePatchAction = new CodePatchAction(getOwner(this)!, codeData);
+    this.codePatchActions.push(codePatchAction);
+    return codePatchAction;
+  };
+
+  private applyAllCodePatchTasks = dropTask(async () => {
+    this.applyAllCodePatchTasksState = 'applying';
+    await Promise.all(
+      this.codePatchActions.map((codePatchAction) =>
+        codePatchAction.patchCodeTask.perform(),
+      ),
+    );
+    this.applyAllCodePatchTasksState = 'applied';
+  });
+
   <template>
     {{#if @renderCodeBlocks}}
       <div
@@ -150,7 +221,11 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                         <actions.copyCode
                           @code={{codeDiffResource.modifiedCode}}
                         />
-                        <actions.applyCodePatch />
+                        <actions.applyCodePatch
+                          @codePatchAction={{this.createCodePatchAction
+                            codeData
+                          }}
+                        />
                       </codeBlock.actions>
                       <codeBlock.diffEditor
                         @originalCode={{codeDiffResource.originalCode}}
@@ -177,6 +252,17 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
             {{/if}}
           {{/if}}
         {{/each}}
+
+        {{#if this.codePatchActions.length}}
+          <ApplyButton
+            {{on 'click' (perform this.applyAllCodePatchTasks)}}
+            @state={{this.applyAllCodePatchTasksState}}
+          >
+            <:default>
+              Accept all
+            </:default>
+          </ApplyButton>
+        {{/if}}
       </div>
     {{else}}
       <div class='message'>

@@ -48,7 +48,7 @@ export default class MessageService extends Service {
     if (!maybeEventSource) {
       let token = getPersistedTokenForRealm(realmURL);
       if (!token) {
-        throw new Error(`Could not find JWT for realm ${realmURL}`);
+        return () => {};
       }
       let urlWithAuth = `${realmURL}_message?${qs.stringify({
         authHeader: 'Bearer ' + token,

@@ -29,7 +29,11 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       data-test-apply-state={{@state}}
       ...attributes
     >
-      Apply
+      {{#if (has-block 'default')}}
+        {{yield to='default'}}
+      {{else}}
+        Apply
+      {{/if}}
     </BoxelButton>
   {{else}}
     <div class='state-indicator {{@state}}' data-test-apply-state={{@state}}>
