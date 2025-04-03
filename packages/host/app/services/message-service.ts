@@ -28,13 +28,6 @@ export default class MessageService extends Service {
     return () => {};
   }
 
-  relayDeprecatedSSE(realmURL: string, event: MessageEvent) {
-    let realmEvent = JSON.parse(event.data);
-    this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
-      cb(realmEvent);
-    });
-  }
-
   relayRealmEvent(realmURL: string, event: RealmEventContent) {
     this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
       cb(event);
