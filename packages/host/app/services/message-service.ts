@@ -82,7 +82,7 @@ export default class MessageService extends Service {
     });
   }
 
-  relayMatrixSSE(realmURL: string, event: RealmEventContent) {
+  relayRealmEvent(realmURL: string, event: RealmEventContent) {
     this.listenerCallbacks.get(realmURL)?.forEach((cb) => {
       cb(event);
     });
