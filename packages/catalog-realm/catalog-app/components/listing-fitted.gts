@@ -154,7 +154,6 @@ export default class ListingFitted extends Component<Signature> {
       /* Vertical Cards */
       @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
         .fitted-template {
-          padding: var(--boxel-sp);
           gap: var(--boxel-sp);
         }
         .card-title {
@@ -178,9 +177,6 @@ export default class ListingFitted extends Component<Signature> {
       }
       /* Badges */
       @container fitted-card (1.0 < aspect-ratio) and (width < 250px) {
-        .fitted-template {
-          padding: var(--boxel-sp-xxxs);
-        }
         .display-section {
           display: none;
         }
