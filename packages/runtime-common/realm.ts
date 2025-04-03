@@ -229,8 +229,6 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
 
-  #disableMatrixRealmEvents = false;
-
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -251,7 +249,6 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      disableMatrixRealmEvents,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -260,7 +257,6 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
-      disableMatrixRealmEvents?: boolean;
     },
     opts?: Options,
   ) {
@@ -288,8 +284,6 @@ export class Realm {
         new RealmAuthDataSource(this.#matrixClient, () => virtualNetwork.fetch),
       ),
     ]);
-
-    this.#disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
@@ -2014,14 +2008,7 @@ export class Realm {
   }
 
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    if (this.#disableMatrixRealmEvents) {
-      this.sendServerEvent({
-        type: 'realm-event',
-        data: event,
-      });
-    } else {
-      this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
-    }
+    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
   }
 
   private async createRequestContext(): Promise<RequestContext> {

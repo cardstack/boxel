@@ -75,7 +75,6 @@ export class RealmServer {
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
-  private disableMatrixRealmEvents: boolean;
   private enableFileWatcher: boolean;
 
   constructor({
@@ -94,7 +93,6 @@ export class RealmServer {
     getRegistrationSecret,
     seedPath,
     seedRealmURL,
-    disableMatrixRealmEvents,
     enableFileWatcher,
   }: {
     serverURL: URL;
@@ -112,7 +110,6 @@ export class RealmServer {
     seedRealmURL?: URL;
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
-    disableMatrixRealmEvents?: boolean;
     enableFileWatcher?: boolean;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
@@ -137,7 +134,6 @@ export class RealmServer {
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
-    this.disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
     this.enableFileWatcher = enableFileWatcher ?? false;
     this.realms = [...realms, ...this.loadRealms()];
   }
@@ -396,7 +392,6 @@ export class RealmServer {
           url: this.matrixClient.matrixURL,
           username,
         },
-        disableMatrixRealmEvents: this.disableMatrixRealmEvents,
       },
       {
         ...(this.seedRealmURL && copyFromSeedRealm
@@ -457,7 +452,6 @@ export class RealmServer {
               url: this.matrixClient.matrixURL,
               username,
             },
-            disableMatrixRealmEvents: this.disableMatrixRealmEvents,
           });
           this.virtualNetwork.mount(realm.handle);
           realms.push(realm);
