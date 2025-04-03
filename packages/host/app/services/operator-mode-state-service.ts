@@ -6,7 +6,7 @@ import Service, { service } from '@ember/service';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { task, restartableTask } from 'ember-concurrency';
 import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
@@ -19,15 +19,22 @@ import {
   CodeRef,
   isResolvedCodeRef,
   isCardInstance,
+  type ResolvedCodeRef,
+  internalKeyFor,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
-import { file, isReady, FileResource } from '@cardstack/host/resources/file';
+import {
+  file,
+  isReady,
+  type FileResource,
+} from '@cardstack/host/resources/file';
 import { maybe } from '@cardstack/host/resources/maybe';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type MessageService from '@cardstack/host/services/message-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type Realm from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -42,6 +49,7 @@ import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 import type CardService from './card-service';
+import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
 import type StoreService from './store';
 
@@ -108,6 +116,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private network: NetworkService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
+  @service declare private playgroundPanelService: PlaygroundPanelService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -149,7 +158,7 @@ export default class OperatorModeStateService extends Service {
     }
     if (
       item.url &&
-      this.state.stacks[stackIndex].find((i) => i.url === item.url)
+      this.state.stacks[stackIndex].find((i: StackItem) => i.url === item.url)
     ) {
       // this card is already in the stack, do nothing (maybe we could hoist
       // this card to the top instead?)
@@ -200,7 +209,7 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this.state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i) => i.url && removeFileExtension(i.url) === cardId,
+          (i: StackItem) => i.url && removeFileExtension(i.url) === cardId,
         ) as StackItem[]),
       );
     }
@@ -232,7 +241,7 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks
         .filter((_, stackIndex) => stackIndex >= item.stackIndex)
         .forEach((stack, realStackIndex) => {
-          stack.forEach((stackItem) => {
+          stack.forEach((stackItem: StackItem) => {
             if (stackItem.stackIndex !== realStackIndex) {
               stackItem.stackIndex = realStackIndex;
             }
@@ -300,6 +309,39 @@ export default class OperatorModeStateService extends Service {
     return this.state.stacks
       .filter((stack) => stack.length > 0)
       .map((stack) => stack[stack.length - 1]);
+  }
+
+  getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] | undefined {
+    // selectedCardRef is only needed for determining open playground card id in code submode
+    if (this.state.submode === Submodes.Code && selectedCardRef) {
+      let moduleId = internalKeyFor(selectedCardRef, undefined);
+      return [this.playgroundPanelService.getSelection(moduleId)?.cardId];
+    }
+    if (this.state.submode === Submodes.Interact) {
+      return this.topMostStackItems()
+        .filter((stackItem: StackItem) => stackItem)
+        .map((stackItem: StackItem) => stackItem.url)
+        .filter(Boolean) as string[];
+    }
+    return;
+  }
+
+  getOpenCards = restartableTask(async (selectedCardRef?: ResolvedCodeRef) => {
+    let cardIds = this.getOpenCardIds(selectedCardRef);
+    if (!cardIds) {
+      return;
+    }
+    let cards = (await Promise.all(cardIds.map((id) => this.store.peek(id))))
+      .filter(Boolean)
+      .filter(isCardInstance);
+    return cards;
+  });
+
+  get openFileURL(): string | undefined {
+    if (this.state.submode === Submodes.Code) {
+      return this.state.codePath?.href;
+    }
+    return undefined;
   }
 
   stackIsEmpty(stackIndex: number) {
@@ -659,7 +701,7 @@ export default class OperatorModeStateService extends Service {
     }
   }
 
-  openFile = maybe(this, (context) => {
+  openFile = maybe(this, (context: object) => {
     let codePath = this.state.codePath;
 
     if (!codePath) {
@@ -668,7 +710,7 @@ export default class OperatorModeStateService extends Service {
 
     return file(context, () => ({
       url: codePath!.href,
-      onStateChange: (state) => {
+      onStateChange: (state: FileResource['state']) => {
         if (state === 'ready') {
           this.cachedRealmURL = new URL(this.readyFile.realmURL);
           this.updateOpenDirsForNestedPath();
@@ -709,7 +751,7 @@ export default class OperatorModeStateService extends Service {
     this.addItemToStack(stackItem);
 
     let lastOpenedFile = this.recentFilesService.recentFiles.find(
-      (file) => file.realmURL.href === realmUrl,
+      (file: RecentFile) => file.realmURL.href === realmUrl,
     );
     this.updateCodePath(
       lastOpenedFile
