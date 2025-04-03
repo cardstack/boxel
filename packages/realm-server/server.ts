@@ -76,6 +76,8 @@ export class RealmServer {
     | (() => Promise<string | undefined>)
     | undefined;
   private disableMatrixRealmEvents: boolean;
+  private enableFileWatcher: boolean;
+
   constructor({
     serverURL,
     realms,
@@ -93,6 +95,7 @@ export class RealmServer {
     seedPath,
     seedRealmURL,
     disableMatrixRealmEvents,
+    enableFileWatcher,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -110,6 +113,7 @@ export class RealmServer {
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
     disableMatrixRealmEvents?: boolean;
+    enableFileWatcher?: boolean;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -134,6 +138,7 @@ export class RealmServer {
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
     this.disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
+    this.enableFileWatcher = enableFileWatcher ?? false;
     this.realms = [...realms, ...this.loadRealms()];
   }
 
@@ -329,7 +334,10 @@ export class RealmServer {
 
     let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
-    let adapter = new NodeAdapter(resolve(String(realmPath)));
+    let adapter = new NodeAdapter(
+      resolve(String(realmPath)),
+      this.enableFileWatcher,
+    );
 
     let username = `realm/${ownerUsername}_${endpoint}`;
     let { userId } = await registerUser({
@@ -436,7 +444,7 @@ export class RealmServer {
             )}/${owner}/${realmName}/`,
             this.serverURL,
           ).href;
-          let adapter = new NodeAdapter(realmPath);
+          let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = `realm/${owner}_${realmName}`;
           let realm = new Realm({
             url,

@@ -282,8 +282,6 @@ export type getCard<T extends CardDef = CardDef> = (
   url: string | undefined;
   autoSaveState: AutoSaveState | undefined;
   cardError: CardErrorJSONAPI | undefined;
-  // TODO remove this
-  loaded: Promise<void>;
   api: typeof CardAPI;
 };
 

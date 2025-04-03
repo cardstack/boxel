@@ -1,8 +1,13 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { consume } from 'ember-provide-consume-context';
+
+import { GetCardContextName, type getCard } from '@cardstack/runtime-common';
+
+import { consumeContext } from '@cardstack/host/helpers/consume-context';
 
 import ResultsSection from './results-section';
 
@@ -12,29 +17,37 @@ interface Signature {
     url: string;
     isCompact: boolean;
     handleCardSelect: (cardId: string) => void;
-    fetchCardByUrlResult: { card: CardDef | null } | undefined;
+    searchKeyAsURL: string | undefined;
   };
   Blocks: {};
 }
 export default class CardURLResults extends Component<Signature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
+
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(this, () => this.args.searchKeyAsURL);
+  };
+
   private get card() {
-    return this.args.fetchCardByUrlResult?.card;
+    return this.cardResource?.card;
   }
 
   private get searchLabel() {
-    let searchResult = this.args.fetchCardByUrlResult;
-    if (searchResult) {
-      if (searchResult.card) {
-        return `Card found at ${this.args.url}`;
-      } else {
-        return `No card found at ${this.args.url}`;
-      }
-    } else {
+    if (this.cardResource && !this.cardResource.isLoaded) {
       return `Fetching ${this.args.url}`;
     }
+    if (this.card) {
+      return `Card found at ${this.args.url}`;
+    }
+    if (this.cardResource?.cardError) {
+      return `No card found at ${this.args.url}`;
+    }
+    return '';
   }
 
   <template>
+    {{consumeContext this.makeCardResource}}
     <ResultsSection
       @label={{this.searchLabel}}
       @isCompact={{@isCompact}}
@@ -42,8 +55,8 @@ export default class CardURLResults extends Component<Signature> {
     >
       {{#if this.card}}
         <SearchResult
-          @card={{this.card}}
           @cardId={{this.card.id}}
+          @card={{this.card}}
           @isCompact={{@isCompact}}
           {{on 'click' (fn @handleCardSelect this.card.id)}}
           data-test-search-sheet-search-result='0'
