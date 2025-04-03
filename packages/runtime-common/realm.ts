@@ -1943,63 +1943,6 @@ export class Realm {
 
   private listeningClients: WritableStream[] = [];
 
-  private async subscribe(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let headers = {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    };
-
-    let { response, writable } = this.#adapter.createStreamingResponse(
-      request,
-      requestContext,
-      {
-        status: 200,
-        headers,
-      },
-      () => {
-        this.listeningClients = this.listeningClients.filter(
-          (w) => w !== writable,
-        );
-        if (this.listeningClients.length === 0) {
-          this.#adapter.unsubscribe();
-        }
-      },
-    );
-
-    // To remove as part of CS-8104, a workaround for a file watcher irregularity in tests
-    let subscribeOptions: { watcher?: string } = {};
-
-    let testFileWatcher = new URL(request.url).searchParams.get(
-      'testFileWatcher',
-    );
-
-    if (testFileWatcher) {
-      subscribeOptions.watcher = testFileWatcher;
-    }
-
-    if (this.listeningClients.length === 0) {
-      this.adapterSubscribe();
-    }
-
-    this.listeningClients.push(writable);
-
-    if (testFileWatcher) {
-      this.sendServerEvent({
-        type: 'test-file-watcher-ready',
-      });
-    }
-
-    // TODO: We may need to store something else here to do cleanup to keep
-    // tests consistent
-    waitForClose(writable);
-
-    return response;
-  }
-
   private async adapterSubscribe() {
     if (this.#adapter.fileWatcherEnabled) {
       this.#adapter.subscribe((data) => {
