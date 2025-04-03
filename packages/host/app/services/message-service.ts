@@ -1,23 +1,10 @@
 import Service, { service } from '@ember/service';
 
-import { isTesting } from '@embroider/macros';
-
 import { tracked } from '@glimmer/tracking';
-
-import window from 'ember-window-mock';
-
-import qs from 'qs';
-
-import ENV from '@cardstack/host/config/environment';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
-import { SessionLocalStorageKey } from '../utils/local-storage-keys';
-
 import type NetworkService from './network';
-
-const DISABLE_MATRIX_REALM_EVENTS =
-  ENV.featureFlags?.DISABLE_MATRIX_REALM_EVENTS ?? false;
 
 export default class MessageService extends Service {
   @tracked subscriptions: Map<string, EventSource> = new Map();
@@ -39,39 +26,6 @@ export default class MessageService extends Service {
     // events...
     this.listenerCallbacks.get(realmURL)?.push(cb);
 
-    // if (isTesting()) {
-    return () => {};
-    // }
-
-    let maybeEventSource = this.subscriptions.get(realmURL);
-
-    if (!maybeEventSource) {
-      let token = getPersistedTokenForRealm(realmURL);
-      if (!token) {
-        throw new Error(`Could not find JWT for realm ${realmURL}`);
-      }
-      let urlWithAuth = `${realmURL}_message?${qs.stringify({
-        authHeader: 'Bearer ' + token,
-      })}`;
-      maybeEventSource = this.network.createEventSource(urlWithAuth);
-
-      if (maybeEventSource) {
-        maybeEventSource.onerror = () => maybeEventSource?.close();
-
-        if (DISABLE_MATRIX_REALM_EVENTS) {
-          maybeEventSource.addEventListener('realm-event', (ev) =>
-            this.relayDeprecatedSSE(realmURL, ev),
-          );
-        } else {
-          maybeEventSource.onmessage = (ev) => {
-            throw new Error('received unexpected server-sent event: ' + ev);
-          };
-        }
-
-        this.subscriptions.set(realmURL, maybeEventSource);
-      }
-    }
-
     return () => {};
   }
 
@@ -87,14 +41,4 @@ export default class MessageService extends Service {
       cb(event);
     });
   }
-}
-
-function getPersistedTokenForRealm(realmURL: string) {
-  if (isTesting()) {
-    return 'TEST_TOKEN';
-  }
-
-  let sessionStr = window.localStorage.getItem(SessionLocalStorageKey) ?? '{}';
-  let session = JSON.parse(sessionStr);
-  return session[realmURL] as string | undefined;
 }
