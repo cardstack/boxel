@@ -494,7 +494,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           ref,
           title: ref.name,
         }) as CardDef;
-        await this.store.saveInstance(card);
+        await this.store.add(card);
         if (card.id) {
           this.specPanelService.setSelection(card.id);
           if (!this.args.isPanelOpen) {

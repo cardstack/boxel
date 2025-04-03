@@ -278,7 +278,7 @@ export default class StoreService extends Service {
   // collection--meaning that it will be detached from the store. This means you
   // MUST consume the instance IMMEDIATELY! it should not live in the state of
   // the consumer.
-  async saveInstance(instance: CardDef, realm?: string) {
+  async add(instance: CardDef, realm?: string) {
     await this.ready;
     this.guardAgainstUnknownInstances(instance);
     if (instance.id) {
@@ -368,7 +368,7 @@ export default class StoreService extends Service {
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
     await this.ready;
     let json = await this.cardService.fetchJSON(
-      `${realmURL}_search?${stringify(query)}`,
+      `${realmURL}_search?${stringify(query, { strictNullHandling: true })}`,
     );
     if (!isCardCollectionDocument(json)) {
       throw new Error(
