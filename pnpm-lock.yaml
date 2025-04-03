@@ -31,7 +31,7 @@ patchedDependencies:
     hash: sbmabuxrk2m44agmppz3qozwvq
     path: patches/magic-string@0.25.9.patch
   matrix-js-sdk@31.0.0:
-    hash: pec6np2mxojxgy6lq57qjhmiza
+    hash: qtkscoofgpwwl22tv42yzgxt3y
     path: patches/matrix-js-sdk@31.0.0.patch
   monaco-editor@0.52.2:
     hash: uyv4zdjea2vpoe2ei5nvhe5qx4
@@ -148,7 +148,7 @@ importers:
         version: 4.17.21
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=pec6np2mxojxgy6lq57qjhmiza)
+        version: 31.0.0(patch_hash=qtkscoofgpwwl22tv42yzgxt3y)
       openai:
         specifier: 4.86.1
         version: 4.86.1
@@ -246,7 +246,7 @@ importers:
         version: 6.6.2
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=pec6np2mxojxgy6lq57qjhmiza)
+        version: 31.0.0(patch_hash=qtkscoofgpwwl22tv42yzgxt3y)
       super-fast-md5:
         specifier: ^1.0.1
         version: 1.0.1
@@ -1621,7 +1621,7 @@ importers:
         version: 1.8.1
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=pec6np2mxojxgy6lq57qjhmiza)
+        version: 31.0.0(patch_hash=qtkscoofgpwwl22tv42yzgxt3y)
       moment:
         specifier: ^2.29.4
         version: 2.29.4
@@ -2208,7 +2208,7 @@ importers:
     dependencies:
       matrix-js-sdk:
         specifier: ^31.0.0
-        version: 31.0.0(patch_hash=pec6np2mxojxgy6lq57qjhmiza)
+        version: 31.0.0(patch_hash=qtkscoofgpwwl22tv42yzgxt3y)
     devDependencies:
       '@babel/preset-typescript':
         specifier: ^7.24.7
@@ -19737,7 +19737,7 @@ packages:
   /matrix-events-sdk@0.0.1:
     resolution: {integrity: sha512-1QEOsXO+bhyCroIe2/A5OwaxHvBm7EsSQ46DEDn8RBIfQwN5HWBpFvyWWR4QY0KHPPnnJdI99wgRiAl7Ad5qaA==}
 
-  /matrix-js-sdk@31.0.0(patch_hash=pec6np2mxojxgy6lq57qjhmiza):
+  /matrix-js-sdk@31.0.0(patch_hash=qtkscoofgpwwl22tv42yzgxt3y):
     resolution: {integrity: sha512-2TqDwEK34NFS0uiOti02CBCupwJcAIxWarOSD0yIrgMpIwSVNB795jEnXxNXz+bgPKsepDmiqeg2DrlinIoW1w==}
     engines: {node: '>=18.0.0'}
     dependencies:
