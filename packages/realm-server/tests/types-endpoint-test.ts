@@ -1,24 +1,22 @@
 import { module, test } from 'qunit';
-import supertest, { Test, SuperTest } from 'supertest';
-import { join, resolve, basename } from 'path';
+import { Test, SuperTest } from 'supertest';
+import { join, basename } from 'path';
 import { Server } from 'http';
-import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
+import { type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
   baseRealm,
   Realm,
-  RealmPermissions,
-  type LooseSingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
 } from '@cardstack/runtime-common';
 import {
   setupCardLogs,
   setupBaseRealmServer,
+  setupPermissionedRealm,
   runTestRealmServer,
   setupDB,
   setupMatrixRoom,
-  createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
   closeServer,
@@ -27,11 +25,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 import { type PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
 
-setGracefulCleanup();
-const testRealmURL = new URL('http://127.0.0.1:4444/');
 const testRealm2URL = new URL('http://127.0.0.1:4445/test/');
-const distDir = resolve(join(__dirname, '..', '..', 'host', 'dist'));
-console.log(`using host dist dir: ${distDir}`);
 
 module(basename(__filename), function () {
   module('Realm-specific Endpoints | GET _types', function (hooks) {
@@ -47,51 +41,26 @@ module(basename(__filename), function () {
     let testRealmDir: string;
     let seedRealm: Realm | undefined;
 
-    function setTestRequest(newRequest: SuperTest<Test>) {
-      request = newRequest;
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+      dir: DirResult;
+    }) {
+      testRealm = args.testRealm;
+      testRealmHttpServer = args.testRealmHttpServer;
+      request = args.request;
+      dir = args.dir;
     }
 
-    function getTestRequest() {
-      return request;
+    function getRealmSetup() {
+      return {
+        testRealm,
+        testRealmHttpServer,
+        request,
+        dir,
+      };
     }
-
-    function setupPermissionedRealm(
-      hooks: NestedHooks,
-      permissions: RealmPermissions,
-      setTestRequest: (newRequest: SuperTest<Test>) => void,
-      fileSystem?: Record<string, string | LooseSingleCardDocument>,
-    ) {
-      setupDB(hooks, {
-        beforeEach: async (_dbAdapter, publisher, runner) => {
-          dir = dirSync();
-          let testRealmDir = join(dir.name, 'realm_server_1', 'test');
-          ensureDirSync(testRealmDir);
-          // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-          if (!fileSystem) {
-            copySync(join(__dirname, 'cards'), testRealmDir);
-          }
-
-          let virtualNetwork = createVirtualNetwork();
-
-          ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_1'),
-            realmURL: testRealmURL,
-            permissions,
-            dbAdapter: _dbAdapter,
-            runner,
-            publisher,
-            matrixURL,
-            fileSystem,
-          }));
-
-          request = supertest(testRealmHttpServer);
-          setTestRequest(request);
-        },
-      });
-    }
-
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
     setupCardLogs(
@@ -101,25 +70,19 @@ module(basename(__filename), function () {
 
     setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-      copySync(join(__dirname, 'cards'), dir.name);
-    });
-
     hooks.afterEach(async function () {
       await closeServer(testRealmHttpServer);
       resetCatalogRealms();
     });
 
-    setupPermissionedRealm(
-      hooks,
-      {
+    setupPermissionedRealm(hooks, {
+      permissions: {
         '*': ['read', 'write'],
       },
-      setTestRequest,
-    );
+      onRealmSetup,
+    });
 
-    setupMatrixRoom(hooks, getTestRequest);
+    setupMatrixRoom(hooks, getRealmSetup);
 
     async function startRealmServer(
       dbAdapter: PgAdapter,

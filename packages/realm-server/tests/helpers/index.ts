@@ -1,4 +1,12 @@
-import { writeFileSync, writeJSONSync, readdirSync, statSync } from 'fs-extra';
+import {
+  writeFileSync,
+  writeJSONSync,
+  readdirSync,
+  statSync,
+  ensureDirSync,
+  copySync,
+} from 'fs-extra';
+import eventSource from 'eventsource';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import {
@@ -25,7 +33,8 @@ import {
   type QueueRunner,
   type IndexRunner,
 } from '@cardstack/runtime-common';
-import { dirSync } from 'tmp';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -39,7 +48,7 @@ import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
 import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
-import { SuperTest, Test } from 'supertest';
+import supertest, { SuperTest, Test } from 'supertest';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   IncrementalIndexEventContent,
@@ -47,6 +56,11 @@ import type {
   RealmEvent,
   RealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
+
+const testRealmURL = new URL('http://127.0.0.1:4444/');
+const testRealmHref = testRealmURL.href;
+
+export { testRealmHref, testRealmURL };
 
 export async function waitUntil<T>(
   condition: () => Promise<T>,
@@ -633,7 +647,12 @@ export async function insertJob(
 
 export function setupMatrixRoom(
   hooks: NestedHooks,
-  getTestRequest: () => SuperTest<Test>,
+  getRealmSetup: () => {
+    testRealm: Realm;
+    testRealmHttpServer: Server;
+    request: SuperTest<Test>;
+    dir: DirResult;
+  },
 ) {
   let matrixClient = new MatrixClient({
     matrixURL: realmServerTestMatrix.url,
@@ -647,8 +666,8 @@ export function setupMatrixRoom(
     await matrixClient.login();
     let userId = matrixClient.getUserId()!;
 
-    let response = await getTestRequest()
-      .post('/_server-session')
+    let response = await getRealmSetup()
+      .request.post('/_server-session')
       .send(JSON.stringify({ user: userId }))
       .set('Accept', 'application/json')
       .set('Content-Type', 'application/json');
@@ -666,8 +685,8 @@ export function setupMatrixRoom(
       msgtype: 'm.text',
     });
 
-    response = await getTestRequest()
-      .post('/_server-session')
+    response = await getRealmSetup()
+      .request.post('/_server-session')
       .send(JSON.stringify({ user: userId, challenge: json.challenge }))
       .set('Accept', 'application/json')
       .set('Content-Type', 'application/json');
@@ -719,4 +738,109 @@ function realmEventIsIndex(
   event: RealmEventContent,
 ): event is IncrementalIndexEventContent {
   return event.eventName === 'index';
+}
+
+export function setupPermissionedRealm(
+  hooks: NestedHooks,
+  {
+    permissions,
+    fileSystem,
+    onRealmSetup,
+    subscribeToRealmEvents = false,
+  }: {
+    permissions: RealmPermissions;
+    fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    onRealmSetup?: (args: {
+      dbAdapter: PgAdapter;
+      testRealm: Realm;
+      testRealmPath: string;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+      dir: DirResult;
+    }) => void;
+    subscribeToRealmEvents?: boolean;
+  },
+) {
+  let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
+  let testRealmEventSource: eventSource;
+
+  setGracefulCleanup();
+
+  setupDB(hooks, {
+    beforeEach: async (dbAdapter, publisher, runner) => {
+      let dir = dirSync();
+      let testRealmDir = join(dir.name, 'realm_server_1', 'test');
+
+      ensureDirSync(testRealmDir);
+
+      // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
+      if (!fileSystem) {
+        copySync(join(__dirname, '..', 'cards'), testRealmDir);
+      }
+
+      let virtualNetwork = createVirtualNetwork();
+
+      testRealmServer = await runTestRealmServer({
+        virtualNetwork,
+        testRealmDir,
+        realmsRootPath: join(dir.name, 'realm_server_1'),
+        realmURL: testRealmURL,
+        permissions,
+        dbAdapter,
+        runner,
+        publisher,
+        matrixURL,
+        fileSystem,
+        enableFileWatcher: subscribeToRealmEvents,
+      });
+
+      let request = supertest(testRealmServer.testRealmHttpServer);
+
+      if (subscribeToRealmEvents) {
+        testRealmEventSource = new eventSource(
+          `${testRealmHref}_message?testFileWatcher=node`,
+        );
+
+        await new Promise<void>((resolve) => {
+          testRealmEventSource.onopen = () => {
+            resolve();
+          };
+        });
+      }
+
+      onRealmSetup?.({
+        dbAdapter,
+        testRealm: testRealmServer.testRealm,
+        testRealmPath: testRealmServer.testRealmDir,
+        testRealmHttpServer: testRealmServer.testRealmHttpServer,
+        request,
+        dir,
+      });
+    },
+  });
+
+  hooks.afterEach(async function () {
+    if (testRealmEventSource) {
+      testRealmEventSource.close();
+    }
+
+    await closeServer(testRealmServer.testRealmHttpServer);
+    resetCatalogRealms();
+  });
+}
+
+export function createJWT(
+  realm: Realm,
+  user: string,
+  permissions: RealmPermissions['user'] = [],
+) {
+  return realm.createJWT(
+    {
+      user,
+      realm: realm.url,
+      permissions,
+      sessionRoom: `test-session-room-for-${user}`,
+    },
+    '7d',
+  );
 }

@@ -1,99 +1,50 @@
 import { module, test } from 'qunit';
-import supertest, { Test, SuperTest } from 'supertest';
+import { Test, SuperTest } from 'supertest';
 import { join, basename } from 'path';
 import { Server } from 'http';
-import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
-import eventSource from 'eventsource';
-import { copySync, ensureDirSync, removeSync, writeJSONSync } from 'fs-extra';
-import {
-  baseRealm,
-  RealmPermissions,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { type DirResult } from 'tmp';
+import { removeSync, writeJSONSync } from 'fs-extra';
+import { baseRealm, Realm } from '@cardstack/runtime-common';
 import {
   findRealmEvent,
   setupCardLogs,
   setupBaseRealmServer,
-  runTestRealmServer,
-  setupDB,
+  setupPermissionedRealm,
   setupMatrixRoom,
-  createVirtualNetwork,
   createVirtualNetworkAndLoader,
   matrixURL,
-  closeServer,
   waitForRealmEvent,
 } from './helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { resetCatalogRealms } from '../handlers/handle-fetch-catalog-realms';
-
-setGracefulCleanup();
-const testRealmURL = new URL('http://127.0.0.1:4444/');
-const testRealmHref = testRealmURL.href;
 
 module(basename(__filename), function () {
   module('file watcher realm events', function (hooks) {
+    let testRealm: Realm;
     let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
-    let testRealmDir: string;
-    let testRealmEventSource: eventSource;
     let realmEventTimestampStart: number;
 
-    function setTestRequest(newRequest: SuperTest<Test>) {
-      request = newRequest;
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+      dir: DirResult;
+    }) {
+      testRealm = args.testRealm;
+      testRealmHttpServer = args.testRealmHttpServer;
+      request = args.request;
+      dir = args.dir;
     }
 
-    function getTestRequest() {
-      return request;
+    function getRealmSetup() {
+      return {
+        testRealm,
+        testRealmHttpServer,
+        request,
+        dir,
+      };
     }
-
-    function setupPermissionedRealm(
-      hooks: NestedHooks,
-      permissions: RealmPermissions,
-      setTestRequest: (newRequest: SuperTest<Test>) => void,
-      fileSystem?: Record<string, string | LooseSingleCardDocument>,
-    ) {
-      setupDB(hooks, {
-        beforeEach: async (_dbAdapter, publisher, runner) => {
-          dir = dirSync();
-          testRealmDir = join(dir.name, 'realm_server_1', 'test');
-          ensureDirSync(testRealmDir);
-          // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-          if (!fileSystem) {
-            copySync(join(__dirname, 'cards'), testRealmDir);
-          }
-
-          let virtualNetwork = createVirtualNetwork();
-
-          ({ testRealmHttpServer } = await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, 'realm_server_1'),
-            realmURL: testRealmURL,
-            permissions,
-            dbAdapter: _dbAdapter,
-            runner,
-            publisher,
-            matrixURL,
-            fileSystem,
-            enableFileWatcher: true,
-          }));
-
-          testRealmEventSource = new eventSource(
-            `${testRealmHref}_message?testFileWatcher=node`,
-          );
-
-          await new Promise<void>((resolve) => {
-            testRealmEventSource.onopen = () => {
-              resolve();
-            };
-          });
-
-          setTestRequest(supertest(testRealmHttpServer));
-        },
-      });
-    }
-
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
     setupCardLogs(
@@ -103,24 +54,13 @@ module(basename(__filename), function () {
 
     setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
-    hooks.beforeEach(async function () {
-      dir = dirSync();
-      copySync(join(__dirname, 'cards'), dir.name);
-    });
-
-    hooks.afterEach(async function () {
-      testRealmEventSource.close();
-      await closeServer(testRealmHttpServer);
-      resetCatalogRealms();
-    });
-
-    setupPermissionedRealm(
-      hooks,
-      {
+    setupPermissionedRealm(hooks, {
+      permissions: {
         '*': ['read'],
       },
-      setTestRequest,
-      {
+      subscribeToRealmEvents: true,
+      onRealmSetup,
+      fileSystem: {
         'person.gts': `
         import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
         import StringCard from "https://cardstack.com/base/string";
@@ -158,13 +98,14 @@ module(basename(__filename), function () {
           },
         },
       },
-    );
+    });
 
-    let { getMessagesSince } = setupMatrixRoom(hooks, getTestRequest);
+    let { getMessagesSince } = setupMatrixRoom(hooks, getRealmSetup);
 
     test('file creation produces an added event', async function (assert) {
       realmEventTimestampStart = Date.now();
 
+      console.log('dir.name', dir.name);
       let newFilePath = join(
         dir.name,
         'realm_server_1',
