@@ -1,48 +1,43 @@
-import Component from '@glimmer/component';
+import { Component } from 'https://cardstack.com/base/card-api';
 // @ts-ignore
 import type { ComponentLike } from '@glint/template';
 // @ts-ignore
 import cssUrl from 'ember-css-url';
 
-// Default to show the first imageURL; if there is no imageURL, show iconComponent.
-interface Signature {
-  Args: {
-    iconComponent?: ComponentLike<{
-      Element: Element;
-    }>;
-    isEmpty?: boolean;
-    primary?: string;
-    secondary?: string;
-    imageURL?: string;
-  };
-  Element: HTMLDivElement;
-}
+import { type Listing } from '../listing/listing';
 
-export default class ListingFitted extends Component<Signature> {
+export class ListingFittedTemplate extends Component<typeof Listing> {
+  get firstImage() {
+    return this.args.model.images?.[0];
+  }
+
+  get publisherInfo() {
+    const hasPublisher = Boolean(this.args.model.publisher?.name);
+    return hasPublisher ? 'By ' + this.args.model.publisher?.name : '';
+  }
+
   <template>
-    <div class='fitted-template' ...attributes>
-      {{#if @isEmpty}}
-        {{! empty links-to field }}
-        <div data-test-empty-field class='empty-field'></div>
-      {{else}}
-        <div class='display-section'>
-          {{#if @imageURL}}
-            <div
-              class='card-image'
-              style={{cssUrl 'background-image' @imageURL}}
-              data-test-card-image
-            />
-          {{else}}
-            <@iconComponent data-test-card-type-icon class='card-type-icon' />
-          {{/if}}
-        </div>
-        <div class='info-section'>
-          <h3 class='card-title' data-test-card-title>{{@primary}}</h3>
-          <h4 class='card-display-name' data-test-card-display-name>
-            {{@secondary}}
-          </h4>
-        </div>
-      {{/if}}
+    <div class='fitted-template'>
+      <div class='display-section'>
+        {{#if @model.images}}
+          <div
+            class='card-image'
+            style={{cssUrl 'background-image' this.firstImage}}
+            data-test-card-image
+          />
+        {{else}}
+          <@model.constructor.icon
+            data-test-card-type-icon
+            class='card-type-icon'
+          />
+        {{/if}}
+      </div>
+      <div class='info-section'>
+        <h3 class='card-title' data-test-card-title>{{@model.name}}</h3>
+        <h4 class='card-display-name' data-test-card-display-name>
+          {{this.publisherInfo}}
+        </h4>
+      </div>
     </div>
 
     {{! template-lint-disable no-whitespace-for-layout  }}

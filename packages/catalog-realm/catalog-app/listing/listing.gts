@@ -29,7 +29,7 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
-import ListingFitted from '../components/listing-fitted';
+import { ListingFittedTemplate } from '../components/listing-fitted';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -511,26 +511,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   </template>
 }
 
-class FittedTemplate extends Component<typeof Listing> {
-  get firstImage() {
-    return this.args.model.images?.[0];
-  }
-
-  get publisherInfo() {
-    const hasPublisher = Boolean(this.args.model.publisher?.name);
-    return hasPublisher ? 'By ' + this.args.model.publisher?.name : '';
-  }
-
-  <template>
-    <ListingFitted
-      @imageURL={{this.firstImage}}
-      @iconComponent={{@model.constructor.icon}}
-      @primary={{@model.name}}
-      @secondary={{this.publisherInfo}}
-    />
-  </template>
-}
-
 export class Listing extends CardDef {
   static displayName = 'Listing';
   static headerColor = '#00ebac';
@@ -551,7 +531,7 @@ export class Listing extends CardDef {
 
   static isolated = EmbeddedTemplate; //temporary
   static embedded = EmbeddedTemplate;
-  static fitted = FittedTemplate;
+  static fitted = ListingFittedTemplate;
 }
 
 export class AppListing extends Listing {
