@@ -132,6 +132,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.categories?.length);
   }
 
+  get hasScreenshots() {
+    return Boolean(this.args.model.screenshots?.length);
+  }
+
   <template>
     <div class='app-listing-embedded'>
       {{#if this._setup.isRunning}}
@@ -232,14 +236,17 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
         <section class='app-listing-images-videos'>
           <h2>Images & Videos</h2>
-          {{! Todo: Add images and videos section while getting the real data }}
-          <ul class='images-videos-list'>
-            {{#each @model.screenshots as |screenshot|}}
-              <li class='images-videos-item'>
-                <img src={{screenshot}} alt={{@model.name}} />
-              </li>
-            {{/each}}
-          </ul>
+          {{#if this.hasScreenshots}}
+            <ul class='images-videos-list'>
+              {{#each @model.screenshots as |screenshot|}}
+                <li class='images-videos-item'>
+                  <img src={{screenshot}} alt={{@model.name}} />
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            No screenshots
+          {{/if}}
         </section>
 
         {{!-- 
@@ -261,7 +268,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         <section class='app-listing-categories'>
           <h2>Categories</h2>
           {{#if this.hasCategories}}
-
             <ul class='categories-list'>
               {{#each @model.categories as |category|}}
                 <li class='categories-item'>
@@ -432,7 +438,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       .images-videos-item img {
         width: 100%;
         height: 100%;
-        object-fit: cover;
+        object-fit: contain;
       }
 
       .app-listing-examples {
