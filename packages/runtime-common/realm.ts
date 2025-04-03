@@ -44,7 +44,6 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
-  waitForClose,
   writeToStream,
   type TextFileRef,
 } from './stream';
