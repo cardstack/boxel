@@ -515,6 +515,7 @@ export default class InteractSubmode extends Component<Signature> {
     });
     return newCard;
   });
+  // END ==catalog actions==
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
