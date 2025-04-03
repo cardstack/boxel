@@ -47,9 +47,9 @@ import MessageBuilder from '../lib/matrix-classes/message-builder';
 
 import type Room from '../lib/matrix-classes/room';
 
-import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type StoreService from '../services/store';
 
 export type RoomSkill = {
   cardId: string;
@@ -86,7 +86,7 @@ export class RoomResource extends Resource<Args> {
   @tracked private llmBeingActivated: string | undefined;
   @service declare private matrixService: MatrixService;
   @service declare private commandService: CommandService;
-  @service declare private cardService: CardService;
+  @service declare private store: StoreService;
 
   modify(_positional: never[], named: Args['named']) {
     if (!named.roomId) {
@@ -394,10 +394,12 @@ export class RoomResource extends Resource<Args> {
       return;
     }
     let cardId = cardDoc.data.id;
-    let skillCard = (await this.cardService.createFromSerialized(
-      cardDoc.data,
-      cardDoc,
-    )) as SkillCard;
+    // Warning these are garbage collected: probably that's ok since nothing
+    // links to this, but we should refactor this to the store for its cache
+    // instead: CS-8304
+    let skillCard = await this.store.add<SkillCard>(cardDoc, {
+      doNotPersist: true,
+    });
     this._skillCardsCache.set(cardId, skillCard);
     this._skillEventIdToCardIdCache.set(eventId, cardId);
   }

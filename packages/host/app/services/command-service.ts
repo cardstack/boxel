@@ -29,8 +29,8 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
-import CardService from './card-service';
 import RealmServerService from './realm-server';
+import StoreService from './store';
 
 import type LoaderService from './loader-service';
 
@@ -44,7 +44,7 @@ type GenericCommand = Command<
 export default class CommandService extends Service {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
-  @service declare private cardService: CardService;
+  @service declare private store: StoreService;
   @service declare private loaderService: LoaderService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
@@ -268,10 +268,7 @@ export default class CommandService extends Service {
             relationships: relationships ?? {},
           },
         };
-        typedInput = await this.cardService.createFromSerialized(
-          inputDoc.data,
-          inputDoc,
-        );
+        typedInput = await this.store.add(inputDoc, { doNotPersist: true });
       } else {
         // identifyCard can fail in some circumstances where the input type is not exported
         // in that case, we'll fall back to this less reliable method of constructing the input type

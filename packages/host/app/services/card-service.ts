@@ -5,7 +5,6 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   SupportedMimeType,
-  type LooseCardResource,
   type CardDocument,
   type SingleCardDocument,
   type LooseSingleCardDocument,
@@ -19,7 +18,6 @@ import type {
   FieldDef,
   Field,
   SerializeOpts,
-  IdentityContext,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -137,36 +135,6 @@ export default class CardService extends Service {
       return await response.json();
     }
     return;
-  }
-
-  // WARNING! please do not use this to create card instances. Use
-  // `CardResource.getCard()` or `StoreService.getInstanceDetachedFromStore()`
-  // instead for getting card instances. When you create card instances
-  // directly from here it bypasses the store's identity map and instances
-  // created directly from here will behave very problematically.
-  async createFromSerialized<T extends CardDef>(
-    resource: LooseCardResource,
-    doc: LooseSingleCardDocument | CardDocument,
-    relativeTo?: URL | undefined,
-    opts?: { identityContext?: IdentityContext },
-  ): Promise<T> {
-    let api = await this.getAPI();
-    let card = (await api.createFromSerialized(
-      resource,
-      doc,
-      relativeTo,
-      opts,
-    )) as T;
-    // it's important that we absorb the field async here so that glimmer won't
-    // encounter NotLoaded errors, since we don't have the luxury of the indexer
-    // being able to inform us of which fields are used or not at this point.
-    // (this is something that the card compiler could optimize for us in the
-    // future)
-    await api.recompute(card, {
-      recomputeAllFields: true,
-      loadFields: true,
-    });
-    return card;
   }
 
   async serializeCard(

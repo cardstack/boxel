@@ -495,7 +495,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           title: ref.name,
         }) as CardDef;
         let currentRealm = this.operatorModeStateService.realmURL;
-        await this.store.add(card, currentRealm.href);
+        await this.store.add(card, { realm: currentRealm.href });
         if (card.id) {
           this.specPanelService.setSelection(card.id);
           if (!this.args.isPanelOpen) {
