@@ -20,6 +20,7 @@ import {
   isSingleCardDocument,
   isCardCollectionDocument,
   Deferred,
+  type Store as StoreInterface,
   type Query,
   type PatchData,
   type Relationship,
@@ -56,7 +57,7 @@ export { CardError, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
 
-export default class StoreService extends Service {
+export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
   @service declare private messageService: MessageService;
@@ -137,7 +138,7 @@ export default class StoreService extends Service {
       if (index > -1) {
         let { onCardChange } = resources[index].resourceState;
         if (onCardChange && resource.card) {
-          let autoSaveState = this.getAutoSaveState(resource.card);
+          let autoSaveState = this.getSaveState(resource.card);
           if (autoSaveState?.hasUnsavedChanges) {
             this.initiateAutoSaveTask.perform(id, { isImmediate: true });
           }
@@ -250,7 +251,7 @@ export default class StoreService extends Service {
   }
 
   // This method creates a new instance in the store and return the new card ID
-  async createInstance(
+  async create(
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
     realm?: string,
@@ -330,13 +331,13 @@ export default class StoreService extends Service {
     return await this.getInstance<T>({ urlOrDoc: url });
   }
 
-  async deleteCard(cardId: string): Promise<void> {
-    if (!cardId) {
+  async delete(id: string): Promise<void> {
+    if (!id) {
       // the card isn't actually saved yet, so do nothing
       return;
     }
-    this.identityContext.delete(cardId);
-    await this.cardService.fetchJSON(cardId, { method: 'DELETE' });
+    this.identityContext.delete(id);
+    await this.cardService.fetchJSON(id, { method: 'DELETE' });
   }
 
   // This method is used for specific scenarios where you just want an instance
@@ -344,7 +345,7 @@ export default class StoreService extends Service {
   // garbage collection--meaning that it will be detached from the store. This
   // means you MUST consume the instance IMMEDIATELY! it should not live in the
   // state of the consumer.
-  async patchCard(
+  async patch(
     instance: CardDef,
     doc: LooseSingleCardDocument,
     patchData: PatchData,
@@ -381,10 +382,6 @@ export default class StoreService extends Service {
       this.identityContext,
     );
     await this.persistAndUpdate(instance);
-  }
-
-  getAutoSaveState(instance: CardDef): AutoSaveState | undefined {
-    return this.autoSaveStates.get(instance);
   }
 
   // This method is used for specific scenarios where you just want an instance
@@ -428,6 +425,10 @@ export default class StoreService extends Service {
         }),
       )
     ).filter(Boolean) as CardDef[];
+  }
+
+  getSaveState(instance: CardDef): AutoSaveState | undefined {
+    return this.autoSaveStates.get(instance);
   }
 
   private async createFromSerialized<T extends CardDef>(

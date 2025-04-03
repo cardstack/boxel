@@ -301,11 +301,29 @@ export type getCards = (
 };
 
 export interface Store {
-  createInstance(
+  save(id: string): void;
+  create(
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
+    realm?: string,
   ): Promise<string | CardErrorJSONAPI>;
+  add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: {
+      realm?: string;
+      relativeTo?: URL | undefined;
+      doNotPersist?: true;
+    },
+  ): Promise<T>;
   peek<T extends CardDef>(url: string): Promise<T | CardErrorJSONAPI>;
+  delete(id: string): Promise<void>;
+  patch(
+    instance: CardDef,
+    doc: LooseSingleCardDocument,
+    patchData: PatchData,
+  ): Promise<void>;
+  search(query: Query, realmURL: URL): Promise<CardDef[]>;
+  getSaveState(instance: CardDef): AutoSaveState | undefined;
 }
 
 export interface CardCatalogQuery extends Query {

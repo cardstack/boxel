@@ -786,7 +786,7 @@ export class ${className} extends ${exportName} {
     };
 
     try {
-      let maybeId = await this.store.createInstance(
+      let maybeId = await this.store.create(
         doc,
         relativeTo,
         this.selectedRealmURL.href,

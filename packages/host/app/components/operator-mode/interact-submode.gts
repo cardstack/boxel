@@ -207,7 +207,7 @@ export default class InteractSubmode extends Component {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        let maybeUrl = await here.store.createInstance(
+        let maybeUrl = await here.store.create(
           doc,
           relativeTo,
           opts?.realmURL?.href,

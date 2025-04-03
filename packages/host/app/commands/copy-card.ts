@@ -40,7 +40,7 @@ export default class CopyCardCommand extends HostBaseCommand<
       useAbsoluteURL: true,
     });
     delete doc.data.id;
-    let maybeId = await this.store.createInstance(doc, undefined, realmUrl);
+    let maybeId = await this.store.create(doc, undefined, realmUrl);
     if (typeof maybeId !== 'string') {
       throw new Error(
         `unable to save copied card instance: ${JSON.stringify(
