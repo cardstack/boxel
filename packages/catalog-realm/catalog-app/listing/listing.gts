@@ -9,6 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
+import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -76,6 +77,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           this.args.context?.actions?.create?.(spec, realmUrl),
         ) ?? [],
     );
+    if (this.args.model instanceof SkillListing) {
+      await Promise.all(
+        this.args.model.skills.map((skill) => {
+          this.args.context?.actions?.copy?.(skill, realmUrl);
+        }),
+      );
+    }
     this.createdInstances = true;
   });
 
@@ -83,11 +91,18 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.args.model.specs && this.args.model?.specs?.length > 0;
   }
 
+  get hasSkills() {
+    return (
+      this.args.model instanceof SkillListing &&
+      this.args.model?.skills?.length > 0
+    );
+  }
+
   get createButtonDisabled() {
     return (
       this.createdInstances ||
       !this.args.context?.actions?.create ||
-      !this.hasOneOrMoreSpec
+      (!this.hasOneOrMoreSpec && !this.hasSkills)
     );
   }
 
@@ -585,6 +600,7 @@ export class FieldListing extends Listing {
 
 export class SkillListing extends Listing {
   static displayName = 'SkillListing';
+  @field skills = linksToMany(() => SkillCard);
 }
 
 function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {
