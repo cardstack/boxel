@@ -394,25 +394,6 @@ export class Realm {
         return createResponse({ init: { status: 200 }, requestContext });
       });
     });
-
-    if (this.#adapter.fileWatcherEnabled) {
-      this.#adapter.subscribe((data) => {
-        let tracked = this.getTrackedWrite(data);
-        if (!tracked || tracked.isTracked) {
-          return;
-        }
-        this.broadcastRealmEvent(data);
-        this.#updateItems.push({
-          operation: ('added' in data
-            ? 'add'
-            : 'updated' in data
-              ? 'update'
-              : 'removed') as UpdateItem['operation'],
-          url: tracked.url,
-        });
-        this.drainUpdates();
-      }, {});
-    }
   }
 
   async logInToMatrix() {
@@ -441,6 +422,7 @@ export class Realm {
 
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
+    await this.adapterSubscribe();
     await this.#startedUp.promise;
   }
 
@@ -2000,22 +1982,7 @@ export class Realm {
     }
 
     if (this.listeningClients.length === 0) {
-      await this.#adapter.subscribe((data) => {
-        let tracked = this.getTrackedWrite(data);
-        if (!tracked || tracked.isTracked) {
-          return;
-        }
-        this.broadcastRealmEvent(data);
-        this.#updateItems.push({
-          operation: ('added' in data
-            ? 'add'
-            : 'updated' in data
-              ? 'update'
-              : 'removed') as UpdateItem['operation'],
-          url: tracked.url,
-        });
-        this.drainUpdates();
-      }, subscribeOptions);
+      this.adapterSubscribe();
     }
 
     this.listeningClients.push(writable);
@@ -2031,6 +1998,28 @@ export class Realm {
     waitForClose(writable);
 
     return response;
+  }
+
+  private async adapterSubscribe() {
+    if (this.#adapter.fileWatcherEnabled) {
+      this.#adapter.subscribe((data) => {
+        let tracked = this.getTrackedWrite(data);
+        if (!tracked || tracked.isTracked) {
+          return;
+        }
+        this.broadcastRealmEvent(data);
+        this.#updateItems.push({
+          operation: ('added' in data
+            ? 'add'
+            : 'updated' in data
+              ? 'update'
+              : 'removed') as UpdateItem['operation'],
+          url: tracked.url,
+        });
+        this.drainUpdates();
+        // FIXME what to do about subscribeOptions?
+      }, {});
+    }
   }
 
   unsubscribe() {
