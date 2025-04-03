@@ -70,13 +70,37 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _create = task(async (realmUrl: string) => {
+    const specsToCopy: Spec[] =
+      this.args.model?.specs?.filter(
+        // Copying a field is not supported yet
+        (spec: Spec) => spec.specType !== 'field',
+      ) ?? [];
+
+    // First, create the cards
     await Promise.all(
-      this.args.model?.specs
-        ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
-        .map((spec: Spec) =>
-          this.args.context?.actions?.create?.(spec, realmUrl),
-        ) ?? [],
+      specsToCopy.map((spec: Spec) =>
+        this.args.context?.actions?.create?.(spec, realmUrl),
+      ),
     );
+
+    // Then, copy the gts file based on the attached spec's moduleHref
+    await Promise.all(
+      specsToCopy.map((spec: Spec) => {
+        const absoluteModulePath = spec.moduleHref;
+        const relativeModulePath = spec.ref.module;
+        // Remove the leading "../" to get the path relative to the target realm
+        const normalizedPath = relativeModulePath.replace(/^\.\.\//, '');
+
+        const targetUrl = new URL(normalizedPath, realmUrl).href;
+        const targetFilePath = targetUrl.concat('.gts');
+
+        this.args.context?.actions?.copySource?.(
+          absoluteModulePath,
+          targetFilePath,
+        );
+      }),
+    );
+
     if (this.args.model instanceof SkillListing) {
       await Promise.all(
         this.args.model.skills.map((skill) => {
