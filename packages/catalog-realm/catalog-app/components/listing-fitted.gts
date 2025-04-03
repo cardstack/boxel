@@ -4,7 +4,7 @@ import type { ComponentLike } from '@glint/template';
 // @ts-ignore
 import cssUrl from 'ember-css-url';
 
-// Default to show the first screenshotUrl; if there is no screenshotUrl, show iconComponent.
+// Default to show the first imageURL; if there is no imageURL, show iconComponent.
 interface Signature {
   Args: {
     iconComponent?: ComponentLike<{
@@ -13,7 +13,7 @@ interface Signature {
     isEmpty?: boolean;
     primary?: string;
     secondary?: string;
-    screenshotURL?: string;
+    imageURL?: string;
   };
   Element: HTMLDivElement;
 }
@@ -26,11 +26,11 @@ export default class ListingFitted extends Component<Signature> {
         <div data-test-empty-field class='empty-field'></div>
       {{else}}
         <div class='display-section'>
-          {{#if @screenshotURL}}
+          {{#if @imageURL}}
             <div
-              class='card-screenshot'
-              style={{cssUrl 'background-image' @screenshotURL}}
-              data-test-card-screenshot
+              class='card-image'
+              style={{cssUrl 'background-image' @imageURL}}
+              data-test-card-image
             />
           {{else}}
             <@iconComponent data-test-card-type-icon class='card-type-icon' />
@@ -44,6 +44,9 @@ export default class ListingFitted extends Component<Signature> {
         </div>
       {{/if}}
     </div>
+
+    {{! template-lint-disable no-whitespace-for-layout  }}
+    {{! ignore the above error because ember-template-lint complains about the whitespace in the multi-line comment below }}
     <style scoped>
       @layer {
         .fitted-template {
@@ -62,7 +65,7 @@ export default class ListingFitted extends Component<Signature> {
           padding: var(--boxel-sp);
           background-color: var(--boxel-300);
         }
-        .card-screenshot {
+        .card-image {
           background-position: center;
           background-size: contain;
           background-repeat: no-repeat;
@@ -210,10 +213,6 @@ export default class ListingFitted extends Component<Signature> {
           display: none;
         }
       }
-      /* Double Strip (250 x 65) */
-      /* Triple Strip (250 x 105) */
-      /* Double Wide Strip (400 x 65) */
-      /* Triple Wide Strip (400 x 105) */
 
       /* Horizontal Tiles */
       /* Regular Tile (250 x 170) */

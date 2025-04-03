@@ -147,8 +147,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.categories?.length);
   }
 
-  get hasScreenshots() {
-    return Boolean(this.args.model.screenshots?.length);
+  get hasImages() {
+    return Boolean(this.args.model.images?.length);
   }
 
   <template>
@@ -251,16 +251,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
         <section class='app-listing-images-videos'>
           <h2>Images & Videos</h2>
-          {{#if this.hasScreenshots}}
+          {{#if this.hasImages}}
             <ul class='images-videos-list'>
-              {{#each @model.screenshots as |screenshot|}}
+              {{#each @model.images as |image|}}
                 <li class='images-videos-item'>
-                  <img src={{screenshot}} alt={{@model.name}} />
+                  <img src={{image}} alt={{@model.name}} />
                 </li>
               {{/each}}
             </ul>
           {{else}}
-            No screenshots
+            No Images & Videos
           {{/if}}
         </section>
 
@@ -443,7 +443,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }
 
       .images-videos-item {
-        background-color: var(--boxel-300);
+        background-color: var(--boxel-light);
         display: flex;
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
@@ -512,6 +512,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 }
 
 class FittedTemplate extends Component<typeof Listing> {
+  get firstImage() {
+    return this.args.model.images?.[0];
+  }
+
   get publisherInfo() {
     const hasPublisher = Boolean(this.args.model.publisher?.name);
     return hasPublisher ? 'By ' + this.args.model.publisher?.name : '';
@@ -519,7 +523,7 @@ class FittedTemplate extends Component<typeof Listing> {
 
   <template>
     <ListingFitted
-      @screenshotURL={{@model.screenshots.[0]}}
+      @imageURL={{this.firstImage}}
       @iconComponent={{@model.constructor.icon}}
       @primary={{@model.name}}
       @secondary={{this.publisherInfo}}
@@ -537,9 +541,7 @@ export class Listing extends CardDef {
   @field categories = linksToMany(() => Category);
   @field tags = linksToMany(() => Tag);
   @field license = linksTo(() => License);
-  @field screenshots = containsMany(StringField);
-  //   @field pricing = contains(PricingField)
-  //   @field images = containsMany(StringField) // thumbnailURLs
+  @field images = containsMany(StringField);
 
   @field title = contains(StringField, {
     computeVia(this: Listing) {
