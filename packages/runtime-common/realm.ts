@@ -422,7 +422,7 @@ export class Realm {
 
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
-    await this.adapterSubscribe();
+    await this.startFileWatcher();
     await this.#startedUp.promise;
   }
 
@@ -1943,7 +1943,7 @@ export class Realm {
 
   private listeningClients: WritableStream[] = [];
 
-  private async adapterSubscribe() {
+  private async startFileWatcher() {
     if (this.#adapter.fileWatcherEnabled) {
       this.#adapter.subscribe((data) => {
         let tracked = this.getTrackedWrite(data);
