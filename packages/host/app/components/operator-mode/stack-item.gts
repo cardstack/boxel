@@ -54,7 +54,7 @@ import { type StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
-import { consumeContext } from '../../helpers/consume-context';
+import consumeContext from '../../helpers/consume-context';
 import { htmlComponent } from '../../lib/html-component';
 import ElementTracker, {
   type RenderedCardForOverlayActions,

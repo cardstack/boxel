@@ -22,7 +22,7 @@ import type { StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import { consumeContext } from '../../helpers/consume-context';
+import consumeContext from '../../helpers/consume-context';
 
 import type CardService from '../../services/card-service';
 import type LoaderService from '../../services/loader-service';
