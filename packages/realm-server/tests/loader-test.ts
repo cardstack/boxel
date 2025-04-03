@@ -6,7 +6,7 @@ import {
   fetcher,
   maybeHandleScopedCSSRequest,
 } from '@cardstack/runtime-common';
-import { dirSync, setGracefulCleanup, DirResult } from 'tmp';
+import { dirSync, DirResult } from 'tmp';
 import {
   createRealm,
   setupBaseRealmServer,
@@ -14,16 +14,13 @@ import {
   setupDB,
   matrixURL,
   closeServer,
+  testRealmHref,
+  testRealmURL,
 } from './helpers';
 import { copySync } from 'fs-extra';
 import { shimExternals } from '../lib/externals';
 import { Server } from 'http';
 import { join, basename } from 'path';
-
-setGracefulCleanup();
-
-const testRealmURL = new URL('http://127.0.0.1:4444/');
-const testRealmHref = testRealmURL.href;
 
 module(basename(__filename), function () {
   module('loader', function (hooks) {
