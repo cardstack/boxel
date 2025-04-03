@@ -7,7 +7,6 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 import type NetworkService from './network';
 
 export default class MessageService extends Service {
-  @tracked subscriptions: Map<string, EventSource> = new Map();
   @tracked listenerCallbacks: Map<string, ((ev: RealmEventContent) => void)[]> =
     new Map();
   @service declare private network: NetworkService;
