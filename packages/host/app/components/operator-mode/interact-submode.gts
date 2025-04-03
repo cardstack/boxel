@@ -369,6 +369,9 @@ export default class InteractSubmode extends Component<Signature> {
       create: async (spec: Spec, targetRealm: string) => {
         await here._createFromSpec.perform(spec, targetRealm);
       },
+      copy: async (card: CardDef, targetRealm: string) => {
+        return await here._copy.perform(card, targetRealm);
+      },
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
       },
@@ -487,6 +490,7 @@ export default class InteractSubmode extends Component<Signature> {
     },
   );
 
+  //==catalog actions==
   private _createFromSpec = task(async (spec: Spec, targetRealm: string) => {
     let url = new URL(spec.id);
     let ref = codeRefWithAbsoluteURL(spec.ref, url);
@@ -502,6 +506,16 @@ export default class InteractSubmode extends Component<Signature> {
       realm: targetRealm,
     });
   });
+
+  private _copy = dropTask(async (sourceCard: CardDef, targetRealm: string) => {
+    let { commandContext } = this.commandService;
+    let newCard = await new CopyCardCommand(commandContext).execute({
+      sourceCard,
+      targetRealmUrl: targetRealm,
+    });
+    return newCard;
+  });
+  // END ==catalog actions==
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
