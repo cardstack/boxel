@@ -44,8 +44,6 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
-  waitForClose,
-  writeToStream,
   type TextFileRef,
 } from './stream';
 import { transpileJS } from './transpile';
@@ -162,12 +160,9 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
-  subscribe(
-    cb: (message: UpdateRealmEventContent) => void,
-    options?: {
-      watcher?: string;
-    },
-  ): Promise<void>;
+  fileWatcherEnabled: boolean;
+
+  subscribe(cb: (message: UpdateRealmEventContent) => void): Promise<void>;
 
   unsubscribe(): void;
 
@@ -228,8 +223,6 @@ export class Realm {
   ]);
   #dbAdapter: DBAdapter;
 
-  #disableMatrixRealmEvents = false;
-
   // This loader is not meant to be used operationally, rather it serves as a
   // template that we clone for each indexing operation
   readonly loaderTemplate: Loader;
@@ -250,7 +243,6 @@ export class Realm {
       dbAdapter,
       queue,
       virtualNetwork,
-      disableMatrixRealmEvents,
     }: {
       url: string;
       adapter: RealmAdapter;
@@ -259,7 +251,6 @@ export class Realm {
       dbAdapter: DBAdapter;
       queue: QueuePublisher;
       virtualNetwork: VirtualNetwork;
-      disableMatrixRealmEvents?: boolean;
     },
     opts?: Options,
   ) {
@@ -287,8 +278,6 @@ export class Realm {
         new RealmAuthDataSource(this.#matrixClient, () => virtualNetwork.fetch),
       ),
     ]);
-
-    this.#disableMatrixRealmEvents = disableMatrixRealmEvents ?? false;
 
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
@@ -376,11 +365,6 @@ export class Realm {
         this.removeCardSource.bind(this),
       )
       .get(
-        '/_message',
-        SupportedMimeType.EventStream,
-        this.subscribe.bind(this),
-      )
-      .get(
         '.*/',
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
@@ -425,6 +409,11 @@ export class Realm {
 
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
+
+    if (this.#adapter.fileWatcherEnabled) {
+      await this.startFileWatcher();
+    }
+
     await this.#startedUp.promise;
   }
 
@@ -1943,78 +1932,23 @@ export class Realm {
     return data;
   }
 
-  private listeningClients: WritableStream[] = [];
-
-  private async subscribe(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let headers = {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    };
-
-    let { response, writable } = this.#adapter.createStreamingResponse(
-      request,
-      requestContext,
-      {
-        status: 200,
-        headers,
-      },
-      () => {
-        this.listeningClients = this.listeningClients.filter(
-          (w) => w !== writable,
-        );
-        if (this.listeningClients.length === 0) {
-          this.#adapter.unsubscribe();
-        }
-      },
-    );
-
-    // To remove as part of CS-8104, a workaround for a file watcher irregularity in tests
-    let subscribeOptions: { watcher?: string } = {};
-
-    let testFileWatcher = new URL(request.url).searchParams.get(
-      'testFileWatcher',
-    );
-
-    if (testFileWatcher) {
-      subscribeOptions.watcher = testFileWatcher;
-    }
-
-    if (this.listeningClients.length === 0) {
-      await this.#adapter.subscribe((data) => {
-        let tracked = this.getTrackedWrite(data);
-        if (!tracked || tracked.isTracked) {
-          return;
-        }
-        this.broadcastRealmEvent(data);
-        this.#updateItems.push({
-          operation: ('added' in data
-            ? 'add'
-            : 'updated' in data
-              ? 'update'
-              : 'removed') as UpdateItem['operation'],
-          url: tracked.url,
-        });
-        this.drainUpdates();
-      }, subscribeOptions);
-    }
-
-    this.listeningClients.push(writable);
-
-    if (testFileWatcher) {
-      this.sendServerEvent({
-        type: 'test-file-watcher-ready',
+  private async startFileWatcher() {
+    this.#adapter.subscribe((data) => {
+      let tracked = this.getTrackedWrite(data);
+      if (!tracked || tracked.isTracked) {
+        return;
+      }
+      this.broadcastRealmEvent(data);
+      this.#updateItems.push({
+        operation: ('added' in data
+          ? 'add'
+          : 'updated' in data
+            ? 'update'
+            : 'removed') as UpdateItem['operation'],
+        url: tracked.url,
       });
-    }
-
-    // TODO: We may need to store something else here to do cleanup to keep
-    // tests consistent
-    waitForClose(writable);
-
-    return response;
+      this.drainUpdates();
+    });
   }
 
   unsubscribe() {
@@ -2051,30 +1985,8 @@ export class Realm {
     });
   }
 
-  private async sendServerEvent(event: Partial<MessageEvent>): Promise<void> {
-    this.#log.info(
-      `sending updates to ${this.listeningClients.length} clients`,
-    );
-    let { type, data } = event;
-    let chunkArr = [];
-    for (let item in data) {
-      chunkArr.push(`"${item}": ${JSON.stringify((data as any)[item])}`);
-    }
-    let chunk = sseToChunkData(type!, `{${chunkArr.join(', ')}}`);
-    await Promise.allSettled(
-      this.listeningClients.map((client) => writeToStream(client, chunk)),
-    );
-  }
-
   private async broadcastRealmEvent(event: RealmEventContent): Promise<void> {
-    if (this.#disableMatrixRealmEvents) {
-      this.sendServerEvent({
-        type: 'realm-event',
-        data: event,
-      });
-    } else {
-      this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
-    }
+    this.#adapter.broadcastRealmEvent(event, this.#matrixClient);
   }
 
   private async createRequestContext(): Promise<RequestContext> {
@@ -2197,12 +2109,4 @@ function assertRealmPermissions(
       }
     }
   }
-}
-
-function sseToChunkData(type: string, data: string, id?: string): string {
-  let info = [`event: ${type}`, `data: ${data}`];
-  if (id) {
-    info.push(`id: ${id}`);
-  }
-  return info.join('\n') + '\n\n';
 }

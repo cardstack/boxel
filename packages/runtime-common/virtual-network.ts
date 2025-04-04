@@ -201,11 +201,6 @@ export class VirtualNetwork {
       response.headers.set('Location', finalRedirectionURL);
     }
   }
-
-  createEventSource(url: string) {
-    let mappedUrl = this.resolveURLMapping(url, 'virtual-to-real');
-    return new EventSource(mappedUrl || url);
-  }
 }
 
 export function isUrlLike(moduleIdentifier: string): boolean {

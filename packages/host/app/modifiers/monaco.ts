@@ -62,7 +62,7 @@ export default class Monaco extends Modifier<Signature> {
       }
       if (
         content !== this.model.getValue() &&
-        // ignore SSE server echoes of our own saves by not processing content changes
+        // ignore realm event echoes of our own saves by not processing content changes
         // within serverEchoDebounceMs of the last monaco change in memory
         Date.now() >=
           this.lastModified + this.monacoService.serverEchoDebounceMs

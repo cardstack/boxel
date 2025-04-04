@@ -47,7 +47,7 @@ test.describe('Live Cards', () => {
     await synapseStop(synapse.synapseId);
   });
 
-  test('it can subscribe to SSE events of a private realm', async ({
+  test('it can subscribe to realm events of a private realm', async ({
     page,
   }) => {
     await clearLocalStorage(page, serverIndexUrl);
