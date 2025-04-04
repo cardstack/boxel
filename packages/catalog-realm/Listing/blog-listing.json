@@ -4,6 +4,10 @@
     "attributes": {
       "name": "Blog App",
       "summary": "A modern, card-based blogging platform built with Cardstack framework.\n\n### Features\n\n- Create and manage blog posts, author profiles, and categories\n- Track publish dates, update history, word counts, and content status\n- Easy content creation with one-click \"New\" button",
+      "images": [
+        "https://cdn.pixabay.com/photo/2014/10/17/11/53/blog-492184_1280.jpg",
+        "https://media.istockphoto.com/id/1040372536/vector/creative-blogging-isometric-flat-vector-conceptual-illustration.jpg?s=1024x1024&w=is&k=20&c=YrZUs8ehU2MA8ik6h42zGNooWp_UYef2nDJV4R70Ers="
+      ],
       "description": null,
       "thumbnailURL": null
     },

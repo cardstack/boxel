@@ -2,6 +2,7 @@ import {
   contains,
   field,
   CardDef,
+  containsMany,
   linksToMany,
   StringField,
   linksTo,
@@ -19,7 +20,6 @@ import { task } from 'ember-concurrency';
 import {
   Accordion,
   Pill,
-  BasicFitted,
   BoxelDropdown,
   BoxelButton,
   Menu as BoxelMenu,
@@ -29,6 +29,7 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
+import { ListingFittedTemplate } from '../components/listing-fitted';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -133,21 +134,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this._create.perform(realmUrl);
   }
 
-  mockCards = [
-    { name: 'Card 1' },
-    { name: 'Card 2' },
-    { name: 'Card 3' },
-    { name: 'Card 4' },
-    { name: 'Card 5' },
-    { name: 'Card 6' },
-  ];
-
   get appName(): string {
     return this.args.model.name || '';
   }
 
-  get publisherName(): string {
-    return this.args.model.publisher?.name || '';
+  get publisherInfo(): string {
+    const hasPublisher = Boolean(this.args.model.publisher?.name);
+    return hasPublisher ? 'By ' + this.args.model.publisher?.name : '';
   }
 
   get specBreakdown() {
@@ -178,6 +171,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.categories?.length);
   }
 
+  get hasImages() {
+    return Boolean(this.args.model.images?.length);
+  }
+
   <template>
     <div class='app-listing-embedded'>
       {{#if this._setup.isRunning}}
@@ -185,9 +182,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       {{else}}
 
         <AppListingHeader
+          @thumbnailUrl={{@model.thumbnailURL}}
           @name={{this.appName}}
-          @publisher={{this.publisherName}}
-          @buttonText='Add to Workspace'
+          @description={{@model.description}}
+          @publisher={{this.publisherInfo}}
         >
           <:action>
             <BoxelDropdown>
@@ -217,12 +215,23 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         </AppListingHeader>
 
         <section class='app-listing-info'>
+          <div class='app-listing-price-plan'>
+            <Pill class='free-plan-pill'>
+              <:default>Free Plan</:default>
+            </Pill>
+          </div>
+
           <div class='app-listing-summary info-box'>
             <h2>Summary</h2>
             <@fields.summary />
           </div>
 
-          <div class='license-statistic'>
+          <div class='license-section'>
+            <h2>License</h2>
+            {{@model.license.name}}
+          </div>
+
+          {{!-- <div class='license-statistic'>
             {{! Todo: Add license section while getting the real data }}
             <div class='license-section'>
               <h2>License</h2>
@@ -244,9 +253,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 </div>
               </div>
             </div>
-          </div>
+          </div> --}}
 
-          <div class='pricing-plans'>
+          {{!-- <div class='pricing-plans'>
             {{! Todo: Add price plan section while getting the real data }}
             <div class='price-plan-item info-box'>
               <span class='price-plan-label'>$250</span>
@@ -271,23 +280,27 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <:default>Premium plan</:default>
               </Pill>
             </div>
-          </div>
+          </div> --}}
         </section>
 
         <hr class='divider' />
 
-        {{!-- <section class='app-listing-images-videos'>
+        <section class='app-listing-images-videos'>
           <h2>Images & Videos</h2>
-          {{! Todo: Add images and videos section while getting the real data }}
-          <ul class='images-videos-list'>
-            {{#each this.mockCards as |card|}}
-              <li class='images-videos-item'>
-                {{card.name}}
-              </li>
-            {{/each}}
-          </ul>
+          {{#if this.hasImages}}
+            <ul class='images-videos-list'>
+              {{#each @model.images as |image|}}
+                <li class='images-videos-item'>
+                  <img src={{image}} alt={{@model.name}} />
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            No Images & Videos
+          {{/if}}
         </section>
 
+        {{!-- 
         <section class='app-listing-examples'>
           <h2>Examples</h2>
           {{! Todo: Add examples section while getting the real data }}
@@ -299,13 +312,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             {{/each}}
           </ul>
         </section>
+        --}}
 
-        <hr class='divider' /> --}}
+        <hr class='divider' />
 
         <section class='app-listing-categories'>
           <h2>Categories</h2>
           {{#if this.hasCategories}}
-
             <ul class='categories-list'>
               {{#each @model.categories as |category|}}
                 <li class='categories-item'>
@@ -347,7 +360,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                             fieldName=undefined
                           }}
                         >
-
                           <CardComponent @format='fitted' />
                         </CardContainer>
                       {{/let}}
@@ -388,6 +400,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         gap: var(--boxel-sp-xl);
         margin-left: 60px;
         margin-top: var(--boxel-sp-lg);
+      }
+      .app-listing-price-plan {
+        --pill-font-color: var(--boxel-purple);
+        --pill-border: 1px solid var(--boxel-purple);
+      }
+      .action-button {
+        width: 100%;
       }
       .app-listing-summary {
         padding: var(--boxel-sp);
@@ -465,15 +484,19 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         margin-block: 0;
         padding-inline-start: 0;
       }
+
       .images-videos-item {
-        height: auto;
-        max-width: 100%;
-        min-height: 100px;
-        background-color: var(--boxel-300);
+        background-color: var(--boxel-light);
         display: flex;
-        align-items: center;
-        justify-content: center;
+        border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
+        overflow: hidden;
+      }
+
+      .images-videos-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
       }
 
       .app-listing-examples {
@@ -514,71 +537,17 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         .license-statistic,
         .stats-container,
         .pricing-plans,
-        .images-videos-list,
         .examples-list {
           grid-template-columns: 1fr;
         }
-      }
-    </style>
-  </template>
-}
-
-class FittedTemplate extends Component<typeof Listing> {
-  <template>
-    <BasicFitted
-      @thumbnailURL={{@model.thumbnailURL}}
-      @iconComponent={{@model.constructor.icon}}
-      @primary={{@model.name}}
-      @secondary={{@model.publisher.name}}
-      class='app-listing-fitted'
-    />
-    <style scoped>
-      /* Vertical card (aspect-ratio <= 1.0) */
-      @container fitted-card (aspect-ratio <= 1.0) {
-        .app-listing-fitted {
-          padding: 0;
-        }
-        .app-listing-fitted :deep(.thumbnail-section) {
-          background-color: var(--boxel-300);
-          max-height: 60cqh;
-          height: 100%;
-        }
-        .app-listing-fitted :deep(.info-section) {
-          text-align: left;
-          padding: var(--boxel-sp-xs) var(--boxel-sp);
-        }
-        .app-listing-fitted :deep(.card-title) {
-          font: 600 var(--boxel-font-lg);
-        }
-        .app-listing-fitted :deep(.card-display-name) {
-          font: 400 var(--boxel-font-sm);
-        }
-
-        /* Height <= 275px */
-        @container fitted-card (height <= 275px) {
-          .app-listing-fitted :deep(.info-section) {
-            text-align: left;
-            padding: var(--boxel-sp-xs);
-          }
-          .app-listing-fitted :deep(.card-title) {
-            font: 600 var(--boxel-font);
-          }
+        .images-videos-list {
+          grid-template-columns: repeat(2, 1fr);
         }
       }
 
-      /* Horizontal card (aspect-ratio > 1.0) */
-      @container fitted-card (1.0 < aspect-ratio) {
-        .app-listing-fitted {
-          padding: 0;
-        }
-        .app-listing-fitted :deep(.thumbnail-section) {
-          background-color: var(--boxel-300);
-          width: 40cqw;
-          height: 100%;
-        }
-        .app-listing-fitted :deep(.info-section) {
-          text-align: left;
-          padding: var(--boxel-sp) var(--boxel-sp-xs);
+      @container app-listing-embedded (inline-size <= 360px) {
+        .images-videos-list {
+          grid-template-columns: repeat(1, 1fr);
         }
       }
     </style>
@@ -595,8 +564,7 @@ export class Listing extends CardDef {
   @field categories = linksToMany(() => Category);
   @field tags = linksToMany(() => Tag);
   @field license = linksTo(() => License);
-  //   @field pricing = contains(PricingField)
-  //   @field images = containsMany(StringField) // thumbnailURLs
+  @field images = containsMany(StringField);
 
   @field title = contains(StringField, {
     computeVia(this: Listing) {
@@ -606,7 +574,7 @@ export class Listing extends CardDef {
 
   static isolated = EmbeddedTemplate; //temporary
   static embedded = EmbeddedTemplate;
-  static fitted = FittedTemplate;
+  static fitted = ListingFittedTemplate;
 }
 
 export class AppListing extends Listing {
