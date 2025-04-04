@@ -114,7 +114,7 @@ export class CardResource extends Resource<Args> {
   }
 
   get autoSaveState() {
-    return this._card ? this.store.getAutoSaveState(this._card) : undefined;
+    return this._card ? this.store.getSaveState(this._card) : undefined;
   }
 
   private load = restartableTask(async (url: string | undefined) => {

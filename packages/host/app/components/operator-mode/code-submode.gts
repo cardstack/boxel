@@ -94,7 +94,6 @@ import SubmodeLayout from './submode-layout';
 interface Signature {
   Args: {
     saveSourceOnClose: (url: URL, content: string) => void;
-    saveCardOnClose: (card: CardDef) => void;
   };
 }
 
@@ -260,7 +259,9 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get cardError() {
-    return this.cardResource?.cardError;
+    return this.cardResource?.cardError?.meta
+      ? this.cardResource?.cardError
+      : undefined;
   }
 
   private backgroundURLStyle(backgroundURL: string | null) {

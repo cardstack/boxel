@@ -37,11 +37,11 @@ import {
   isCardDef,
   isFieldDef,
   internalKeyFor,
+  loadCard,
 } from '@cardstack/runtime-common';
 import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
-  loadCard,
 } from '@cardstack/runtime-common/code-ref';
 
 import Preview from '@cardstack/host/components/preview';
@@ -66,11 +66,9 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import {
-  CardContext,
-  type CardDef,
-  type Format,
-} from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import { CardContext, type Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -462,6 +460,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare loaderService: LoaderService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
+  @service private declare store: StoreService;
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -496,7 +495,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           title: ref.name,
         }) as CardDef;
         let currentRealm = this.operatorModeStateService.realmURL;
-        await this.cardService.saveModel(card, currentRealm.href);
+        await this.store.add(card, { realm: currentRealm.href });
         if (card.id) {
           this.specPanelService.setSelection(card.id);
           if (!this.args.isPanelOpen) {

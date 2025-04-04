@@ -32,6 +32,7 @@ import {
   logger,
   markdownToHtml,
   ResolvedCodeRef,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import {
@@ -105,6 +106,7 @@ import type NetworkService from './network';
 import type RealmService from './realm';
 import type RealmServerService from './realm-server';
 import type ResetService from './reset';
+import type StoreService from './store';
 
 import type * as MatrixSDK from 'matrix-js-sdk';
 
@@ -133,6 +135,7 @@ export default class MatrixService extends Service {
   @service declare private router: RouterService;
   @service declare private reset: ResetService;
   @service declare private network: NetworkService;
+  @service declare private store: StoreService;
   @tracked private _client: ExtendedClient | undefined;
   @tracked private _isInitializingNewUser = false;
   @tracked private _isNewUser = false;
@@ -881,15 +884,15 @@ export default class MatrixService extends Service {
       defaultSkills = interactModeDefaultSkills;
     }
 
-    return await Promise.all(
-      defaultSkills.map(async (skillCardURL) => {
-        // WARNING This card is not part of the identity map!
-        // TODO refactor this to use CardResource (please make ticket)
-        return await this.cardService.getCard<SkillCardModule.SkillCard>(
-          skillCardURL,
-        );
-      }),
-    );
+    return (
+      await Promise.all(
+        defaultSkills.map(async (skillCardURL) => {
+          let maybeCard =
+            await this.store.peek<SkillCardModule.SkillCard>(skillCardURL);
+          return isCardInstance(maybeCard) ? maybeCard : undefined;
+        }),
+      )
+    ).filter(Boolean) as SkillCardModule.SkillCard[];
   }
 
   @cached
