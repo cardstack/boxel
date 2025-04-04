@@ -18,11 +18,7 @@ export async function cachedFetch(
   urlOrRequest: string | URL | Request,
   init?: RequestInit,
 ): Promise<MaybeCachedResponse> {
-  if (
-    isNode ||
-    isFastBoot
-    //  || (globalThis as any).__isBrowserBasedServer
-  ) {
+  if (isNode || isFastBoot) {
     // we don't have the necessary isolation to cache safely with module scoped
     // cache on the server and during indexing
     return fetchImplementation(urlOrRequest, init);

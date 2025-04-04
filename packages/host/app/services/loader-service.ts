@@ -40,6 +40,8 @@ export default class LoaderService extends Service {
   }
 
   resetState() {
+    // this clears the fetch cache in between logins, the idea being that we
+    // don't want to leak modules from private realms between sessions.
     clearFetchCache();
   }
 
@@ -51,6 +53,9 @@ export default class LoaderService extends Service {
     // unnecessary screen flashes) we add a simple leading edge debounce.
     if (this.resetTime == null || Date.now() - this.resetTime > 250) {
       this.resetTime = Date.now();
+      // importantly we do _not_ want to clear the fetch cache between loader
+      // resets so that we can take advantage of HTTP caching when rebuilding
+      // the loader state
       if (this.loader) {
         this.loader = Loader.cloneLoader(this.loader);
       } else {
