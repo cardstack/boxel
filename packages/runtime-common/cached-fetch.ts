@@ -1,5 +1,7 @@
 import merge from 'lodash/merge';
 
+import { isNode } from './index';
+
 const cache = new Map<string, { etag: string; body: string }>();
 
 // we need to be careful not to read the response stream before the intended
@@ -22,7 +24,7 @@ export async function cachedFetch(
         ? urlOrRequest.href
         : urlOrRequest.url;
   let cached = cache.get(key);
-  if (cached?.etag) {
+  if (!isNode && cached?.etag) {
     if (urlOrRequest instanceof Request) {
       urlOrRequest.headers.set('If-None-Match', cached.etag);
     } else {
@@ -37,7 +39,7 @@ export async function cachedFetch(
     urlOrRequest,
     init,
   )) as MaybeCachedResponse;
-  if (response.status === 304) {
+  if (!isNode && response.status === 304) {
     if (!cached) {
       throw new Error(
         `Received HTTP 304 "not modified" when we don't have cache for ${key}`,

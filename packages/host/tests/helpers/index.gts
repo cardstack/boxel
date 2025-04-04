@@ -242,6 +242,7 @@ class MockLocalIndexer extends Service {
 
 export function setupLocalIndexing(hooks: NestedHooks) {
   hooks.beforeEach(async function () {
+    clearFetchCache();
     let dbAdapter = await getDbAdapter();
     await dbAdapter.reset();
     this.owner.register('service:local-indexer', MockLocalIndexer);
