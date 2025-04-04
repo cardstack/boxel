@@ -67,13 +67,31 @@ export class CreateInstanceInput extends CardDef {
   @field realm = contains(StringField);
 }
 
-export class ApplySearchReplaceBlockInput extends CardDef {
+export class FileContentInput extends CardDef {
   @field fileContent = contains(StringField);
+}
+
+export class PatchCodeInput extends CardDef {
+  @field fileUrl = contains(StringField);
+  @field codeBlocks = containsMany(StringField);
+}
+
+export class ApplySearchReplaceBlockInput extends FileContentInput {
   @field codeBlock = contains(StringField);
 }
 
 export class ApplySearchReplaceBlockResult extends CardDef {
   @field resultContent = contains(StringField);
+}
+
+export class LintAndFixInput extends FileContentInput {
+  @field realm = contains(StringField);
+}
+
+export class LintAndFixResult extends CardDef {
+  @field output = contains(StringField);
+  @field fixed = contains(BooleanField);
+  @field messages = containsMany(JsonField);
 }
 
 export class CreateAIAssistantRoomInput extends CardDef {

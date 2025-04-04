@@ -26,7 +26,6 @@ import {
   SupportedMimeType,
   type RealmInfo,
   RealmPermissions,
-  RealmPaths,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -496,16 +495,6 @@ export default class RealmService extends Service {
       realmsMeta[url] = this.meta(url);
     }
     return realmsMeta;
-  }
-
-  realmOfURL(url: URL) {
-    for (const realm of this.realms.keys()) {
-      let realmURL = new URL(realm);
-      if (new RealmPaths(realmURL).inRealm(url)) {
-        return new URL(realmURL);
-      }
-    }
-    return undefined;
   }
 
   realmForSessionRoomId(sessionRoomId: string) {

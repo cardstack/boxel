@@ -12,6 +12,7 @@ import Pill from '../pill/index.gts';
 // We follow the same convention when defining our own selected item component
 export interface SelectedItemSignature<ItemT> {
   Args: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     option: any;
     select: Select & {
       actions: {

@@ -29,8 +29,11 @@ interface Signature {
     href?: string;
     kind?: BoxelButtonKind;
     loading?: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     models?: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     query?: any;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     route?: any;
     size?: BoxelButtonSize;
   };

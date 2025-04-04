@@ -101,6 +101,7 @@ let moveResizePanelHandle = async function ({
   let groupSizeInPixels =
     orientation === 'horizontal' ? groupRect.width : groupRect.height;
   let resizeHandleRect =
+    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     resizePanelHandles[panelIndex].children[0]!.getBoundingClientRect();
   let moveDeltaInPixels = (groupSizeInPixels * moveDelta) / 100;
   await triggerEvent(
@@ -196,7 +197,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         renderController: RenderController,
       ) {
         // Putting this in <style scoped> causes syntax highlighting to break
-        let testContainerStyles = `
+        const testContainerStyles = `
             #test-container {
               ${orientationProperties.perpendicularDimension}: 100px;
               max-${orientationProperties.dimension}: 100%;

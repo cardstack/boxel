@@ -36,6 +36,7 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
+  userInitiatedPriority,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -85,6 +86,7 @@ import type {
   RealmEventContent,
   UpdateRealmEventContent,
 } from 'https://cardstack.com/base/matrix-event';
+import type { LintArgs, LintResult } from './lint';
 
 export const REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME = 60 * 60 * 1000;
 
@@ -177,6 +179,11 @@ export interface RealmAdapter {
     event: RealmEventContent,
     matrixClient: MatrixClient,
   ): Promise<void>;
+
+  lintStub?(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<LintResult>;
 }
 
 interface Options {
@@ -227,6 +234,7 @@ export class Realm {
     ],
   ]);
   #dbAdapter: DBAdapter;
+  #queue: QueuePublisher;
 
   #disableMatrixRealmEvents = false;
 
@@ -296,6 +304,7 @@ export class Realm {
     this.loaderTemplate = loader;
 
     this.#adapter = adapter;
+    this.#queue = queue;
     this.#realmIndexUpdater = new RealmIndexUpdater({
       realm: this,
       dbAdapter,
@@ -330,6 +339,7 @@ export class Realm {
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
       )
+      .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
       .get(
         '/_types',
         SupportedMimeType.CardTypeSummary,
@@ -1612,6 +1622,34 @@ export class Realm {
       body: JSON.stringify(doc, null, 2),
       init: {
         headers: { 'content-type': SupportedMimeType.CardJson },
+      },
+      requestContext,
+    });
+  }
+
+  private async lint(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let result;
+    // eslint does not work well in a browser environment, so our TestRealmAdapter supplies a replaceable stub
+    if (this.#adapter.lintStub) {
+      result = await this.#adapter.lintStub(request, requestContext);
+    } else {
+      let source = await request.text();
+      let job = await this.#queue.publish<LintResult>({
+        jobType: `lint-source`,
+        concurrencyGroup: `linting:${this.url}`,
+        timeout: 10,
+        priority: userInitiatedPriority,
+        args: { source } satisfies LintArgs,
+      });
+      result = await job.done;
+    }
+    return createResponse({
+      body: JSON.stringify(result),
+      init: {
+        headers: { 'content-type': SupportedMimeType.JSON },
       },
       requestContext,
     });

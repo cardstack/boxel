@@ -11,6 +11,7 @@ export interface BoxelSelectArgs<ItemT> extends PowerSelectArgs {
   options: ItemT[];
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface Signature<ItemT = any> {
   Args: BoxelSelectArgs<ItemT>;
   Blocks: {

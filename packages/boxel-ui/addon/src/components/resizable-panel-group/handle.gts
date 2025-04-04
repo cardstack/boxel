@@ -35,7 +35,7 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
-let manageHandleRegistration = modifier((element, [handle]: [Handle]) => {
+const manageHandleRegistration = modifier((element, [handle]: [Handle]) => {
   handle.element = element as HTMLDivElement;
   handle.registerHandle();
 });

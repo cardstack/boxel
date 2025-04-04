@@ -106,6 +106,7 @@ module('Integration | Component | input', function (hooks) {
     assert.dom('*:has([data-test-input])').containsText('help!');
     assert
       .dom('[data-test-input]')
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       .hasAttribute('aria-describedBy', helperElementId!);
   });
 
@@ -142,7 +143,7 @@ module('Integration | Component | input', function (hooks) {
       @tracked disabled = false;
     }
 
-    let stateObject = new StateObject();
+    const stateObject = new StateObject();
 
     await render(<template>
       <BoxelInput
@@ -175,6 +176,7 @@ module('Integration | Component | input', function (hooks) {
     assert.ok(errorElementId, 'error element should exist');
     assert
       .dom('[data-test-input]')
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       .hasAttribute('aria-errormessage', errorElementId!);
 
     stateObject.errorMessage = undefined;

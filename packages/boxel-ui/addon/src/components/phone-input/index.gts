@@ -154,11 +154,13 @@ class PhoneInput extends Component<Signature> {
 
 export interface SelectedItemSignature {
   Args: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     option: any;
   };
   Element: HTMLDivElement;
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 class PhoneSelectedItem extends Component<SelectedItemSignature> {
   <template>
     <div>

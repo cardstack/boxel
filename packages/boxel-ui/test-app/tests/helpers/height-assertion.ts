@@ -5,7 +5,7 @@ export default function (assert: Assert) {
     expectedValue: number,
     allowedDifference = 0,
   ) {
-    let message =
+    const message =
       `expected ${target} to have ${propertyName} ` +
       (allowedDifference
         ? `within ${allowedDifference} of ${expectedValue}`
@@ -20,8 +20,9 @@ export default function (assert: Assert) {
     if (!el) {
       throw new Error(`No element specified/found. Target was ${target}`);
     }
-    let cStyle = getComputedStyle(el);
-    let actualValue = cStyle[propertyName as any];
+    const cStyle = getComputedStyle(el);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const actualValue = cStyle[propertyName as any];
     let actualNumericValue: number;
     if (typeof actualValue === 'number') {
       actualNumericValue = actualValue;

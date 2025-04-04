@@ -16,6 +16,7 @@ export interface Signature {
     hideBorder?: boolean;
     hideRadio?: boolean;
     invalid?: boolean;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     items: any[];
     keyName?: string;
     name: string;
@@ -25,7 +26,9 @@ export interface Signature {
   Blocks: {
     default: [
       {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         component: any;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         data: any;
         index: number;
       },
@@ -70,7 +73,7 @@ export default class RadioInput extends Component<Signature> {
           white-space: nowrap;
         }
 
-        /* Div container inside the fieldset component. Use \`display: contents\` to move
+        /* Div container inside the fieldset component. Use display: contents to move
     these styles up when that css property is more widely available. */
         .boxel-radio-fieldset__container {
           display: flex;

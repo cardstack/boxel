@@ -98,6 +98,7 @@ export default class BoxelInputGroupUsage extends Component {
 
   @action flashCopiedConfirmation() {
     this.isShowingCopiedConfirmation = true;
+    // eslint-disable-next-line ember/no-runloop
     later(() => {
       this.isShowingCopiedConfirmation = false;
     }, 1000);

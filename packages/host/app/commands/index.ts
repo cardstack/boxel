@@ -9,6 +9,7 @@ import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room'
 import * as GetBoxelUiStateModule from './get-boxel-ui-state';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as PatchCardCommandModule from './patch-card';
+import * as PatchCodeCommandModule from './patch-code';
 import * as ReloadCardCommandModule from './reload-card';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
@@ -51,6 +52,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-card',
     PatchCardCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/patch-code',
+    PatchCodeCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/reload-card',

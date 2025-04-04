@@ -19,6 +19,7 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
   ariaLabel?: string;
   closeOnSelect?: boolean;
   disabled?: boolean;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   extra?: any;
   matchTriggerWidth?: boolean;
   onBlur?: (select: Select, e: Event) => boolean | undefined;
@@ -37,6 +38,7 @@ export interface BoxelMultiSelectArgs<ItemT> extends PowerSelectArgs {
 export interface Signature<ItemT> {
   Args: BoxelMultiSelectArgs<ItemT>;
   Blocks: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     default: [any];
   };
   Element: HTMLElement;

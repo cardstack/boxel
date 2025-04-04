@@ -118,6 +118,7 @@ export const Text: TemplateOnlyComponent<TextSignature> = <template>
   </style>
 </template>;
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 interface SelectAccessorySignature<ItemT = any> {
   Args: BoxelSelectArgs<ItemT>;
   Blocks: {

@@ -96,6 +96,24 @@ module.exports = {
         'deprecation/deprecation': 'off',
         'window-mock/mock-window-only': 'error',
         'window-mock/wrapped-setup-helpers-only': 'error',
+        'ember/template-missing-invokable': [
+          'error',
+          {
+            invokables: {
+              fn: ['fn', '@ember/helper'],
+              on: ['on', '@ember/modifier'],
+              and: ['and', '@cardstack/boxel-ui/helpers'],
+              bool: ['bool', '@cardstack/boxel-ui/helpers'],
+              eq: ['eq', '@cardstack/boxel-ui/helpers'],
+              gt: ['gt', '@cardstack/boxel-ui/helpers'],
+              lt: ['lt', '@cardstack/boxel-ui/helpers'],
+              not: ['not', '@cardstack/boxel-ui/helpers'],
+              or: ['or', '@cardstack/boxel-ui/helpers'],
+              add: ['add', '@cardstack/boxel-ui/helpers'],
+              subtract: ['subtract', '@cardstack/boxel-ui/helpers'],
+            },
+          },
+        ],
       },
     },
     // node files

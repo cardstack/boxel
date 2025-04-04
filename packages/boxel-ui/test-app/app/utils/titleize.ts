@@ -5,6 +5,6 @@ export function titleize(val: string): string | undefined {
   if (!val || typeOf(val) !== 'string') {
     return;
   }
-  let value = val.includes('-') ? val.split('-') : val.split(' ');
+  const value = val.includes('-') ? val.split('-') : val.split(' ');
   return value.map((el) => capitalize(el)).join(' ');
 }

@@ -7,62 +7,62 @@ module('Unit | contrast-color test', function () {
   const lightText = 'var(--boxel-light, #ffffff)';
 
   test('returns light-color given black', function (assert) {
-    let color = getContrastColor('#000000');
+    const color = getContrastColor('#000000');
     assert.strictEqual(color, lightText);
   });
 
   test('returns dark-color given white', function (assert) {
-    let color = getContrastColor('#fff');
+    const color = getContrastColor('#fff');
     assert.strictEqual(color, darkText);
   });
 
   test('can handle 3-digit hex value', function (assert) {
-    let color = getContrastColor('#3cf');
+    const color = getContrastColor('#3cf');
     assert.strictEqual(color, darkText);
   });
 
   test('can handle hex value without #', function (assert) {
-    let color = getContrastColor('272330');
+    const color = getContrastColor('272330');
     assert.strictEqual(color, lightText);
   });
 
   test('does not break for non-hex code value', function (assert) {
-    let color = getContrastColor('cyan');
+    const color = getContrastColor('cyan');
     assert.strictEqual(color, undefined);
   });
 
   test('returns dark-color given #00ff00', function (assert) {
-    let color = getContrastColor('#00ff00');
+    const color = getContrastColor('#00ff00');
     assert.strictEqual(color, darkText);
   });
 
   test('returns dark-color given #ff0000', function (assert) {
-    let color = getContrastColor('#ff0000');
+    const color = getContrastColor('#ff0000');
     assert.strictEqual(color, darkText);
   });
 
   test('returns dark-color given #8d8d8d', function (assert) {
-    let color = getContrastColor('#8d8d8d');
+    const color = getContrastColor('#8d8d8d');
     assert.strictEqual(color, darkText);
   });
 
   test('returns light-color given #5a586a', function (assert) {
-    let color = getContrastColor('#5a586a');
+    const color = getContrastColor('#5a586a');
     assert.strictEqual(color, lightText);
   });
 
   test('returns light-color given #6638ff', function (assert) {
-    let color = getContrastColor('#6638ff');
+    const color = getContrastColor('#6638ff');
     assert.strictEqual(color, lightText);
   });
 
   test('can use different lightColor value', function (assert) {
-    let color = getContrastColor('#000', undefined, '#ddd');
+    const color = getContrastColor('#000', undefined, '#ddd');
     assert.strictEqual(color, '#ddd');
   });
 
   test('can use different darkColor value', function (assert) {
-    let color = getContrastColor('#fff', '#333');
+    const color = getContrastColor('#fff', '#333');
     assert.strictEqual(color, '#333');
   });
 });

@@ -7,6 +7,7 @@ import Profile from '../../icons/profile.gts';
 
 interface Signature {
   Args: {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     datetime?: any;
     fullWidth?: boolean;
     hideMeta?: boolean;

@@ -33,7 +33,7 @@ export default class TabbedHeaderUsage extends Component {
   @tracked activeTabId = this.tabs[0]?.tabId;
   @tracked headerColor = '#ffd800';
 
-  constructor(owner: unknown, args: any) {
+  constructor(owner: unknown, args: Record<string, never>) {
     super(owner, args);
     this.activeTabId = window.location?.hash?.slice(1) ?? this.tabs[0]?.tabId;
   }

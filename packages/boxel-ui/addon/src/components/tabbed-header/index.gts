@@ -24,6 +24,7 @@ interface Signature {
   Element: HTMLElement;
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export default class TabbedHeader extends Component<Signature> {
   <template>
     <header

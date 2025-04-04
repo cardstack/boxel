@@ -21,6 +21,7 @@ import {
   type RealmInfo,
 } from '.';
 import { MatrixClient } from './matrix-client';
+import { lintFix } from './lint';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -182,6 +183,7 @@ export class Worker {
       this.#queue.register(`from-scratch-index`, this.fromScratch),
       this.#queue.register(`incremental-index`, this.incremental),
       this.#queue.register(`copy-index`, this.copy),
+      this.#queue.register(`lint-source`, lintFix),
     ]);
     await this.#queue.start();
   }

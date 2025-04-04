@@ -40,6 +40,7 @@ interface CheckBoxArgs {
   Element: Element;
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 class CheckboxIndicator extends Component<CheckBoxArgs> {
   <template>
     <div class='checkbox-indicator'>
@@ -82,7 +83,8 @@ interface AssigneePillArgs {
   Element: Element;
 }
 
-//Custom component for rendering dropdown items with enhanced design and functionality
+// Custom component for rendering dropdown items with enhanced design and functionality
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 class AssigneePill extends Component<AssigneePillArgs> {
   <template>
     <span class='assignee-pill'>
