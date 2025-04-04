@@ -21,13 +21,13 @@ import ResetService from '@cardstack/host/services/reset';
 import type RealmService from './realm';
 
 export default class LoaderService extends Service {
-  @service declare fastboot: { isFastBoot: boolean };
-  @service declare realmInfoService: RealmInfoService;
-  @service declare realm: RealmService;
-  @service declare network: NetworkService;
+  @service declare private fastboot: { isFastBoot: boolean };
+  @service declare private realmInfoService: RealmInfoService;
+  @service declare private realm: RealmService;
+  @service declare private network: NetworkService;
   @service declare private reset: ResetService;
 
-  @tracked loader = this.makeInstance();
+  @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
 
   public isIndexing = false;
@@ -39,13 +39,13 @@ export default class LoaderService extends Service {
     registerDestructor(this, () => this.resetState());
   }
 
-  resetState() {
+  public resetState() {
     // this clears the fetch cache in between logins, the idea being that we
     // don't want to leak modules from private realms between sessions.
     clearFetchCache();
   }
 
-  resetLoader() {
+  public resetLoader() {
     // This method is called in both the FileResource and in RealmSubscription,
     // oftentimes for the same update. It is very difficult to coordinate
     // between these two, as a CardResource is not always present (e.g. schema
@@ -64,7 +64,7 @@ export default class LoaderService extends Service {
     }
   }
 
-  setIsIndexing(value: boolean) {
+  public setIsIndexing(value: boolean) {
     this.isIndexing = value;
   }
 
