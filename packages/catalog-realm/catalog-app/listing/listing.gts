@@ -88,8 +88,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       specsToCopy.map((spec: Spec) => {
         const absoluteModulePath = spec.moduleHref;
         const relativeModulePath = spec.ref.module;
-        // Remove the leading "../" to get the path relative to the target realm
-        const normalizedPath = relativeModulePath.replace(/^\.\.\//, '');
+        const normalizedPath = relativeModulePath.split('/').slice(1).join('/');
 
         const targetUrl = new URL(normalizedPath, realmUrl).href;
         const targetFilePath = targetUrl.concat('.gts');
