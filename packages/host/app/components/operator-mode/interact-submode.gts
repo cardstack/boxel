@@ -41,6 +41,7 @@ import {
 import { loadCard } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import CopySourceCommand from '@cardstack/host/commands/copy-source';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -372,6 +373,9 @@ export default class InteractSubmode extends Component<Signature> {
       copy: async (card: CardDef, targetRealm: string) => {
         return await here._copy.perform(card, targetRealm);
       },
+      copySource: async (fromUrl: string, toUrl: string) => {
+        return await here._copySource.perform(fromUrl, toUrl);
+      },
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
       },
@@ -514,6 +518,14 @@ export default class InteractSubmode extends Component<Signature> {
       targetRealmUrl: targetRealm,
     });
     return newCard;
+  });
+
+  private _copySource = task(async (fromUrl: string, toUrl: string) => {
+    let { commandContext } = this.commandService;
+    await new CopySourceCommand(commandContext).execute({
+      fromRealmUrl: fromUrl,
+      toRealmUrl: toUrl,
+    });
   });
   // END ==catalog actions==
 
