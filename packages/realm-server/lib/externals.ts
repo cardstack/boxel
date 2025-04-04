@@ -37,6 +37,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     default: class {},
     setComponentTemplate() {},
   });
+  // import * as emberTemplateCompilation from '@ember/template-compilation';
+  virtualNetwork.shimModule('@ember/template-compilation', {
+    precompileTemplate() {},
+  });
   // import * as emberComponentTemplateOnly from "ember-source/dist/packages/@ember/component/template-only";
   virtualNetwork.shimModule('@ember/component/template-only', { default() {} });
   // import * as emberTemplateFactory from "ember-source/dist/packages/@ember/template-factory";

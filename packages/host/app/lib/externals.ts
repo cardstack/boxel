@@ -6,6 +6,7 @@ import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
 import * as emberTemplate from '@ember/template';
+import * as emberTemplateCompilation from '@ember/template-compilation';
 import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
 import * as glimmerTracking from '@glimmer/tracking';
@@ -50,6 +51,10 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     emberComponentTemplateOnly,
   );
   virtualNetwork.shimModule('ember-css-url', cssUrl);
+  virtualNetwork.shimModule(
+    '@ember/template-compilation',
+    emberTemplateCompilation,
+  );
   virtualNetwork.shimModule('@ember/template-factory', emberTemplateFactory);
   virtualNetwork.shimModule('@ember/template', emberTemplate);
   virtualNetwork.shimModule('@glimmer/tracking', glimmerTracking);

@@ -1,4 +1,3 @@
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { fn, hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -6,6 +5,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { and, eq } from '../../helpers/truth-helpers.ts';
+import LoadingIndicator from '../loading-indicator/index.gts';
 
 const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
