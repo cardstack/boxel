@@ -1,5 +1,20 @@
+import Helper from '@ember/component/helper';
 import { schedule } from '@ember/runloop';
 
-export function consumeContext(consume: () => void) {
-  schedule('afterRender', consume);
+interface Signature {
+  Args: {
+    Positional: [() => void];
+  };
+  Return: void;
+}
+
+export default class extends Helper<Signature> {
+  private didRun = false;
+
+  compute([consume]: [() => void]) {
+    if (!this.didRun) {
+      this.didRun = true;
+      schedule('afterRender', consume);
+    }
+  }
 }

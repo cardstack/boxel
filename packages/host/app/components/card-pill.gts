@@ -18,7 +18,7 @@ import { IconX } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
-import { consumeContext } from '@cardstack/host/helpers/consume-context';
+import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import RealmService from '../services/realm';
 
