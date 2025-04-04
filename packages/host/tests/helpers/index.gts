@@ -308,6 +308,7 @@ export async function setupIntegrationTestRealm({
   realmURL?: string;
   mockMatrixUtils: MockUtils;
 }) {
+  clearFetchCache();
   return await setupTestRealm({
     contents,
     realmURL,
