@@ -7,7 +7,6 @@ import {
   baseRealm,
   baseCardRef,
   internalKeyFor,
-  clearFetchCache,
   type CodeRef,
   type LooseSingleCardDocument,
   type IndexedInstance,
@@ -1520,7 +1519,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       };
     }
 
-    clearFetchCache();
     let { realm } = await setupIntegrationTestRealm({
       loader,
       mockMatrixUtils,
