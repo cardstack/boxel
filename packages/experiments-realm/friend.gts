@@ -21,7 +21,7 @@ export class Friend extends CardDef {
       return 10 / 2;
     },
   });
-  @field titles = contains(StringCard, {
+  @field title = contains(StringCard, {
     computeVia: function (this: Friend) {
       return this.firstName;
     },
