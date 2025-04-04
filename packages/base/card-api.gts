@@ -35,6 +35,8 @@ import {
   maybeRelativeURL,
   CodeRef,
   CommandContext,
+  formats,
+  type Format,
   type Meta,
   type CardFields,
   type Relationship,
@@ -102,14 +104,8 @@ export type FieldsTypeFor<T extends BaseDef> = {
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
-export const formats: Format[] = [
-  'isolated',
-  'embedded',
-  'fitted',
-  'edit',
-  'atom',
-];
-export type Format = 'isolated' | 'embedded' | 'fitted' | 'edit' | 'atom';
+
+export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 export type FieldFormats = {
   ['fieldDef']: Format;
