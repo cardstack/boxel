@@ -94,6 +94,7 @@ module('Integration | message service subscription', function (hooks) {
 
     await click('[data-test-unsubscribe]');
 
+    // @ts-expect-error using private function, is there a better way?
     await realm.broadcastRealmEvent({
       eventName: 'index',
       indexType: 'incremental-index-initiation',
