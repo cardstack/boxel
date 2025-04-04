@@ -1,6 +1,7 @@
 import TransformModulesAmdPlugin from 'transform-modules-amd-plugin';
 import { transformSync } from '@babel/core';
 import { Deferred } from './deferred';
+import { cachedFetch, type MaybeCachedResponse } from './cached-fetch';
 import { trimExecutableExtension, logger } from './index';
 
 import { CardError } from './error';
@@ -418,7 +419,7 @@ export class Loader {
   private fetch = async (
     urlOrRequest: string | URL | Request,
     init?: RequestInit,
-  ): Promise<Response> => {
+  ): Promise<MaybeCachedResponse> => {
     try {
       let shimmedModule = this.moduleShims.get(
         this.asRequest(urlOrRequest, init).url,
@@ -430,7 +431,7 @@ export class Loader {
       }
 
       let request = this.asRequest(urlOrRequest, init);
-      return await this.fetchImplementation(request);
+      return await cachedFetch(this.fetchImplementation, request);
     } catch (err: any) {
       let url =
         urlOrRequest instanceof Request
@@ -659,7 +660,7 @@ export class Loader {
     | { type: 'source'; source: string }
     | { type: 'shimmed'; module: Record<string, unknown> }
   > {
-    let response: Response;
+    let response: MaybeCachedResponse;
     try {
       response = await this.fetch(moduleURL);
     } catch (err) {
@@ -680,8 +681,11 @@ export class Loader {
         module: (response as any)[Symbol.for('shimmed-module')],
       };
     }
-
-    return { type: 'source', source: await response.text() };
+    let source = await response.text();
+    if ('cacheResponse' in response) {
+      response.cacheResponse?.(source);
+    }
+    return { type: 'source', source };
   }
 }
 

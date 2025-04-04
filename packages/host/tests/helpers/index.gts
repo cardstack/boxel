@@ -17,6 +17,7 @@ import {
   RealmPermissions,
   Worker,
   RunnerOptionsManager,
+  clearFetchCache,
   type RealmInfo,
   type TokenClaims,
   IndexWriter,
@@ -315,6 +316,7 @@ export async function setupIntegrationTestRealm({
 }
 
 export function lookupLoaderService(): LoaderService {
+  clearFetchCache();
   let owner = (getContext() as TestContext).owner;
   return owner.lookup('service:loader-service') as LoaderService;
 }

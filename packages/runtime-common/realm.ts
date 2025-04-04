@@ -777,11 +777,30 @@ export class Realm {
       });
       if (module?.type === 'module') {
         try {
+          if (
+            module.lastModified != null &&
+            request.headers.get('if-none-match') === String(module.lastModified)
+          ) {
+            return createResponse({
+              body: null,
+              init: { status: 304 },
+              requestContext,
+            });
+          }
+
           return createResponse({
             body: module.executableCode,
             init: {
               status: 200,
-              headers: { 'content-type': 'text/javascript' },
+              headers: {
+                'content-type': 'text/javascript',
+                ...(module.lastModified != null
+                  ? {
+                      etag: String(module.lastModified),
+                      'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
+                    }
+                  : {}),
+              },
             },
             requestContext,
           });
@@ -836,22 +855,35 @@ export class Realm {
           requestContext,
         );
       }
-      return await this.serveLocalFile(fileRef, requestContext);
+      return await this.serveLocalFile(request, fileRef, requestContext);
     } finally {
       this.#logRequestPerformance(request, start, 'cache miss');
     }
   }
 
   private async serveLocalFile(
+    request: Request,
     ref: FileRef,
     requestContext: RequestContext,
   ): Promise<ResponseWithNodeStream> {
+    if (
+      ref.lastModified != null &&
+      request.headers.get('if-none-match') === String(ref.lastModified)
+    ) {
+      return createResponse({
+        body: null,
+        init: { status: 304 },
+        requestContext,
+      });
+    }
     let headers = {
       'x-created': formatRFC7231(ref.created * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
         : {}),
+      etag: String(ref.lastModified),
+      'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
     };
     if (
       ref.content instanceof ReadableStream ||
@@ -1030,7 +1062,7 @@ export class Realm {
           requestContext,
         });
       }
-      return await this.serveLocalFile(handle, requestContext);
+      return await this.serveLocalFile(request, handle, requestContext);
     } finally {
       this.#logRequestPerformance(request, start);
     }
