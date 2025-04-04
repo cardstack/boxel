@@ -58,7 +58,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
-
   let mockMatrixUtils = setupMockMatrix(hooks);
 
   setupCardLogs(
