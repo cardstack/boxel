@@ -2,6 +2,7 @@ import {
   contains,
   field,
   CardDef,
+  containsMany,
   linksToMany,
   StringField,
   linksTo,
@@ -19,7 +20,6 @@ import { task } from 'ember-concurrency';
 import {
   Accordion,
   Pill,
-  BasicFitted,
   BoxelDropdown,
   BoxelButton,
   Menu as BoxelMenu,
@@ -29,6 +29,7 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import AppListingHeader from '../components/app-listing-header';
+import { ListingFittedTemplate } from '../components/listing-fitted';
 
 import { Publisher } from './publisher';
 import { Category } from './category';
@@ -110,15 +111,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this._create.perform(realmUrl);
   }
 
-  mockCards = [
-    { name: 'Card 1' },
-    { name: 'Card 2' },
-    { name: 'Card 3' },
-    { name: 'Card 4' },
-    { name: 'Card 5' },
-    { name: 'Card 6' },
-  ];
-
   get appName(): string {
     return this.args.model.name || '';
   }
@@ -153,6 +145,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   get hasCategories() {
     return Boolean(this.args.model.categories?.length);
+  }
+
+  get hasImages() {
+    return Boolean(this.args.model.images?.length);
   }
 
   <template>
@@ -253,18 +249,22 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
         <hr class='divider' />
 
-        {{!-- <section class='app-listing-images-videos'>
+        <section class='app-listing-images-videos'>
           <h2>Images & Videos</h2>
-          {{! Todo: Add images and videos section while getting the real data }}
-          <ul class='images-videos-list'>
-            {{#each this.mockCards as |card|}}
-              <li class='images-videos-item'>
-                {{card.name}}
-              </li>
-            {{/each}}
-          </ul>
+          {{#if this.hasImages}}
+            <ul class='images-videos-list'>
+              {{#each @model.images as |image|}}
+                <li class='images-videos-item'>
+                  <img src={{image}} alt={{@model.name}} />
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            No Images & Videos
+          {{/if}}
         </section>
 
+        {{!-- 
         <section class='app-listing-examples'>
           <h2>Examples</h2>
           {{! Todo: Add examples section while getting the real data }}
@@ -276,13 +276,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             {{/each}}
           </ul>
         </section>
+        --}}
 
-        <hr class='divider' /> --}}
+        <hr class='divider' />
 
         <section class='app-listing-categories'>
           <h2>Categories</h2>
           {{#if this.hasCategories}}
-
             <ul class='categories-list'>
               {{#each @model.categories as |category|}}
                 <li class='categories-item'>
@@ -324,7 +324,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                             fieldName=undefined
                           }}
                         >
-
                           <CardComponent @format='fitted' />
                         </CardContainer>
                       {{/let}}
@@ -442,15 +441,19 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         margin-block: 0;
         padding-inline-start: 0;
       }
+
       .images-videos-item {
-        height: auto;
-        max-width: 100%;
-        min-height: 100px;
-        background-color: var(--boxel-300);
+        background-color: var(--boxel-light);
         display: flex;
-        align-items: center;
-        justify-content: center;
+        border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
+        overflow: hidden;
+      }
+
+      .images-videos-item img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
       }
 
       .app-listing-examples {
@@ -491,71 +494,17 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         .license-statistic,
         .stats-container,
         .pricing-plans,
-        .images-videos-list,
         .examples-list {
           grid-template-columns: 1fr;
         }
-      }
-    </style>
-  </template>
-}
-
-class FittedTemplate extends Component<typeof Listing> {
-  <template>
-    <BasicFitted
-      @thumbnailURL={{@model.thumbnailURL}}
-      @iconComponent={{@model.constructor.icon}}
-      @primary={{@model.name}}
-      @secondary={{@model.publisher.name}}
-      class='app-listing-fitted'
-    />
-    <style scoped>
-      /* Vertical card (aspect-ratio <= 1.0) */
-      @container fitted-card (aspect-ratio <= 1.0) {
-        .app-listing-fitted {
-          padding: 0;
-        }
-        .app-listing-fitted :deep(.thumbnail-section) {
-          background-color: var(--boxel-300);
-          max-height: 60cqh;
-          height: 100%;
-        }
-        .app-listing-fitted :deep(.info-section) {
-          text-align: left;
-          padding: var(--boxel-sp-xs) var(--boxel-sp);
-        }
-        .app-listing-fitted :deep(.card-title) {
-          font: 600 var(--boxel-font-lg);
-        }
-        .app-listing-fitted :deep(.card-display-name) {
-          font: 400 var(--boxel-font-sm);
-        }
-
-        /* Height <= 275px */
-        @container fitted-card (height <= 275px) {
-          .app-listing-fitted :deep(.info-section) {
-            text-align: left;
-            padding: var(--boxel-sp-xs);
-          }
-          .app-listing-fitted :deep(.card-title) {
-            font: 600 var(--boxel-font);
-          }
+        .images-videos-list {
+          grid-template-columns: repeat(2, 1fr);
         }
       }
 
-      /* Horizontal card (aspect-ratio > 1.0) */
-      @container fitted-card (1.0 < aspect-ratio) {
-        .app-listing-fitted {
-          padding: 0;
-        }
-        .app-listing-fitted :deep(.thumbnail-section) {
-          background-color: var(--boxel-300);
-          width: 40cqw;
-          height: 100%;
-        }
-        .app-listing-fitted :deep(.info-section) {
-          text-align: left;
-          padding: var(--boxel-sp) var(--boxel-sp-xs);
+      @container app-listing-embedded (inline-size <= 360px) {
+        .images-videos-list {
+          grid-template-columns: repeat(1, 1fr);
         }
       }
     </style>
@@ -572,8 +521,7 @@ export class Listing extends CardDef {
   @field categories = linksToMany(() => Category);
   @field tags = linksToMany(() => Tag);
   @field license = linksTo(() => License);
-  //   @field pricing = contains(PricingField)
-  //   @field images = containsMany(StringField) // thumbnailURLs
+  @field images = containsMany(StringField);
 
   @field title = contains(StringField, {
     computeVia(this: Listing) {
@@ -583,7 +531,7 @@ export class Listing extends CardDef {
 
   static isolated = EmbeddedTemplate; //temporary
   static embedded = EmbeddedTemplate;
-  static fitted = FittedTemplate;
+  static fitted = ListingFittedTemplate;
 }
 
 export class AppListing extends Listing {
