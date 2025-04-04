@@ -682,9 +682,7 @@ export class Loader {
       };
     }
     let source = await response.text();
-    if ('cacheResponse' in response) {
-      response.cacheResponse?.(source);
-    }
+    response.cacheResponse?.(source);
     return { type: 'source', source };
   }
 }
