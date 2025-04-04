@@ -5,10 +5,8 @@ interface AppListingHeaderArgs {
   Args: {
     thumbnailUrl?: string;
     name: string;
-    publisher: string;
-    rating?: string; // TODO: add rating
-    reviewCount?: string; // TODO: add review count
-    buttonText: string;
+    description?: string;
+    publisher?: string;
   };
   Blocks: {
     default: [];
@@ -39,11 +37,10 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
           <div class='app-info'>
             <h1 class='app-name'>{{@name}}</h1>
             <p class='publisher'>By {{@publisher}}</p>
-            {{! Todo: add rating and review count }}
           </div>
         </div>
 
-        <div class='action-button'>
+        <div class='action-button-container'>
           {{yield to='action'}}
         </div>
 
@@ -119,22 +116,14 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
           font: 400 var(--boxel-font-sm);
           color: var(--boxel-gray);
         }
-        .action-button {
-          --boxel-button-color: var(--boxel-dark);
-          --boxel-button-text-color: var(--boxel-light);
-        }
-        .action-button:hover {
-          --boxel-button-background-color: var(--boxel-800);
-        }
 
         @container app-listing-header-container (inline-size <= 500px) {
           .app-listing-header-content {
             flex-direction: column;
             align-items: flex-start;
           }
-          .action-button {
+          .action-button-container {
             width: 100%;
-            margin-top: var(--boxel-sp-xs);
           }
         }
       }
