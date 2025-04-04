@@ -257,7 +257,7 @@ export default class StoreService extends Service {
       // the invalidation included code changes too. in this case we
       // need to flush the loader so that we can pick up any updated
       // code before re-running the card
-      this.loaderService.reset();
+      this.loaderService.resetLoader();
       // the code changes have destabilized our identity context so we
       // need to rebuild it
       this.identityContext.reset();

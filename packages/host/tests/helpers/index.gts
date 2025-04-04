@@ -289,13 +289,18 @@ export async function setupAcceptanceTestRealm({
   permissions?: RealmPermissions;
   mockMatrixUtils: MockUtils;
 }) {
-  return await setupTestRealm({
-    contents,
-    realmURL,
-    isAcceptanceTest: true,
-    permissions,
-    mockMatrixUtils,
-  });
+  try {
+    (globalThis as any).__isBrowserBasedServer = true;
+    return await setupTestRealm({
+      contents,
+      realmURL,
+      isAcceptanceTest: true,
+      permissions,
+      mockMatrixUtils,
+    });
+  } finally {
+    (globalThis as any).__isBrowserBasedServer = undefined;
+  }
 }
 
 export async function setupIntegrationTestRealm({
@@ -308,13 +313,17 @@ export async function setupIntegrationTestRealm({
   realmURL?: string;
   mockMatrixUtils: MockUtils;
 }) {
-  clearFetchCache();
-  return await setupTestRealm({
-    contents,
-    realmURL,
-    isAcceptanceTest: false,
-    mockMatrixUtils,
-  });
+  try {
+    (globalThis as any).__isBrowserBasedServer = true;
+    return await setupTestRealm({
+      contents,
+      realmURL,
+      isAcceptanceTest: false,
+      mockMatrixUtils,
+    });
+  } finally {
+    (globalThis as any).__isBrowserBasedServer = undefined;
+  }
 }
 
 export function lookupLoaderService(): LoaderService {

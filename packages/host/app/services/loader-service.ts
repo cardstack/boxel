@@ -1,3 +1,5 @@
+import { registerDestructor } from '@ember/destroyable';
+import Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
@@ -7,12 +9,14 @@ import {
   maybeHandleScopedCSSRequest,
   FetcherMiddlewareHandler,
   authorizationMiddleware,
+  clearFetchCache,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import config from '@cardstack/host/config/environment';
 import NetworkService from '@cardstack/host/services/network';
 import RealmInfoService from '@cardstack/host/services/realm-info-service';
+import ResetService from '@cardstack/host/services/reset';
 
 import type RealmService from './realm';
 
@@ -21,13 +25,25 @@ export default class LoaderService extends Service {
   @service declare realmInfoService: RealmInfoService;
   @service declare realm: RealmService;
   @service declare network: NetworkService;
+  @service declare private reset: ResetService;
 
   @tracked loader = this.makeInstance();
   private resetTime: number | undefined;
 
   public isIndexing = false;
 
-  reset() {
+  constructor(owner: Owner) {
+    super(owner);
+    this.reset.register(this);
+    this.resetState();
+    registerDestructor(this, () => this.resetState());
+  }
+
+  resetState() {
+    clearFetchCache();
+  }
+
+  resetLoader() {
     // This method is called in both the FileResource and in RealmSubscription,
     // oftentimes for the same update. It is very difficult to coordinate
     // between these two, as a CardResource is not always present (e.g. schema
