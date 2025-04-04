@@ -9,7 +9,7 @@ import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common';
 
-import { consumeContext } from '@cardstack/host/helpers/consume-context';
+import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import type { FieldDef } from 'https://cardstack.com/base/card-api';
 

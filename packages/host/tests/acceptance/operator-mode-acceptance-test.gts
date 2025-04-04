@@ -468,6 +468,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
       .doesNotExist('grid cards do not show other grid cards');
+    assert.dom('[data-test-ask-ai-input]').exists();
 
     await percySnapshot(assert);
 

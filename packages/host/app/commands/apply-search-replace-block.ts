@@ -31,9 +31,10 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
       input.codeBlock,
     );
 
-    // If parsing failed, return the original content
-    if (!searchPattern || !replacePattern) {
-      throw new Error('Invalid search/replace block');
+    if (searchPattern == null) {
+      throw new Error("Can't parse SEARCH block");
+    } else if (replacePattern == null) {
+      throw new Error("Can't parse REPLACE block");
     }
 
     // Apply the search/replace operation
@@ -139,6 +140,11 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
         while (i < contentLines.length) {
           resultLines.push(contentLines[i]);
           i++;
+        }
+
+        // Case when replace pattern is empty (deleting code) - don't produce an uneccesary empty line at the beginning of the result
+        if (replacePattern === '' && resultLines[0] === '') {
+          return resultLines.slice(1).join('\n');
         }
         return resultLines.join('\n');
       } else {

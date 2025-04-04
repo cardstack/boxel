@@ -558,7 +558,7 @@ export default class MatrixService extends Service {
         timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       },
       this.client as any,
-      500,
+      30000,
     );
     this.slidingSync.on(
       SlidingSyncEvent.Lifecycle,
