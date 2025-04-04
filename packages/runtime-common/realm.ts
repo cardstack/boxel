@@ -44,7 +44,6 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
-  writeToStream,
   type TextFileRef,
 } from './stream';
 import { transpileJS } from './transpile';
@@ -1929,8 +1928,6 @@ export class Realm {
     return data;
   }
 
-  private listeningClients: WritableStream[] = [];
-
   private async startFileWatcher() {
     if (this.#adapter.fileWatcherEnabled) {
       this.#adapter.subscribe((data) => {
@@ -2110,12 +2107,4 @@ function assertRealmPermissions(
       }
     }
   }
-}
-
-function sseToChunkData(type: string, data: string, id?: string): string {
-  let info = [`event: ${type}`, `data: ${data}`];
-  if (id) {
-    info.push(`id: ${id}`);
-  }
-  return info.join('\n') + '\n\n';
 }
