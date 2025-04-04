@@ -7,6 +7,7 @@ import {
   baseRealm,
   baseCardRef,
   internalKeyFor,
+  clearFetchCache,
   type CodeRef,
   type LooseSingleCardDocument,
   type IndexedInstance,
@@ -54,6 +55,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
+    clearFetchCache();
     loader = lookupLoaderService().loader;
   });
 

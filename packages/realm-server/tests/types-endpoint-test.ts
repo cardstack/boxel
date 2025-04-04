@@ -7,6 +7,7 @@ import { copySync, ensureDirSync } from 'fs-extra';
 import {
   baseRealm,
   Realm,
+  clearFetchCache,
   type QueuePublisher,
   type QueueRunner,
 } from '@cardstack/runtime-common';
@@ -62,6 +63,10 @@ module(basename(__filename), function () {
       };
     }
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
+
+    hooks.beforeEach(function () {
+      clearFetchCache();
+    });
 
     setupCardLogs(
       hooks,
