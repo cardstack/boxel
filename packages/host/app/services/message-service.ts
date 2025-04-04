@@ -26,19 +26,8 @@ export default class MessageService extends Service {
     this.listenerCallbacks.get(realmURL)?.push(cb);
 
     return () => {
-      this.removeSubscriptionCallback(realmURL, cb);
+      // TODO restore subscription cleanup in CS-8316
     };
-  }
-
-  private removeSubscriptionCallback(
-    realmURL: string,
-    cb: (ev: RealmEventContent) => void,
-  ) {
-    let callbacksForRealm = this.listenerCallbacks.get(realmURL);
-
-    if (callbacksForRealm) {
-      callbacksForRealm.splice(callbacksForRealm.indexOf(cb), 1);
-    }
   }
 
   relayRealmEvent(realmURL: string, event: RealmEventContent) {
