@@ -42,6 +42,10 @@ export class NodeAdapter implements RealmAdapter {
     private enableFileWatcher?: boolean,
   ) {}
 
+  get fileWatcherEnabled(): boolean {
+    return this.enableFileWatcher ?? false;
+  }
+
   async *readdir(
     path: string,
     opts?: { create?: true },
@@ -70,7 +74,6 @@ export class NodeAdapter implements RealmAdapter {
 
   async subscribe(
     cb: (message: UpdateRealmEventContent) => void,
-    options: { watcher?: string },
   ): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
@@ -78,12 +81,10 @@ export class NodeAdapter implements RealmAdapter {
 
     if (this.enableFileWatcher) {
       realmEventsLog.debug(`Starting file watcher at ${this.realmDir}`);
-      // TODO remove with CS-8014
-      let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
 
       let watcherPath = join(this.realmDir, '/');
 
-      this.watcher = sane(watcherPath, watcherOptions);
+      this.watcher = sane(watcherPath);
 
       this.watcher.on('change', (path, _root, stat) => {
         if (stat.isFile()) {

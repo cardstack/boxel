@@ -56,10 +56,6 @@ export default class NetworkService extends Service {
     return this.virtualNetwork.resolveImport;
   }
 
-  get createEventSource() {
-    return this.virtualNetwork.createEventSource.bind(this.virtualNetwork);
-  }
-
   get authedFetch() {
     if (this.fastboot.isFastBoot) {
       return this.fetch; // "nativeFetch" already handles auth

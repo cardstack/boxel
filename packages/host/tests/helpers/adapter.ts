@@ -420,6 +420,10 @@ export class TestRealmAdapter implements RealmAdapter {
     return { response, writable: s.writable };
   }
 
+  get fileWatcherEnabled() {
+    return false;
+  }
+
   async subscribe(
     cb: (message: UpdateRealmEventContent) => void,
   ): Promise<void> {

@@ -93,7 +93,7 @@ export class RealmIndexUpdater {
     return this.#indexingDeferred?.promise;
   }
 
-  // TODO consider triggering SSE events for invalidations now that we can
+  // TODO consider triggering realm events for invalidations now that we can
   // calculate fine grained invalidations for from-scratch indexing by passing
   // in an onInvalidation callback
   async fullIndex() {
