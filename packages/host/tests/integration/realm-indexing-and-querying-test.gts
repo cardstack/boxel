@@ -55,16 +55,10 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   setupBaseRealm(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
-    clearFetchCache();
     loader = lookupLoaderService().loader;
   });
 
   setupLocalIndexing(hooks);
-
-  hooks.beforeEach(function (this: RenderingTestContext) {
-    // don't mix the fetch cache between the server (running on host) with the client
-    clearFetchCache();
-  });
 
   let mockMatrixUtils = setupMockMatrix(hooks);
 
@@ -1526,6 +1520,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       };
     }
 
+    clearFetchCache();
     let { realm } = await setupIntegrationTestRealm({
       loader,
       mockMatrixUtils,
