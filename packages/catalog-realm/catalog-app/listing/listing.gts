@@ -115,8 +115,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.args.model.name || '';
   }
 
-  get publisherName(): string {
-    return this.args.model.publisher?.name || '';
+  get publisherInfo(): string {
+    const hasPublisher = Boolean(this.args.model.publisher?.name);
+    return hasPublisher ? 'By ' + this.args.model.publisher?.name : '';
   }
 
   get specBreakdown() {
@@ -158,9 +159,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       {{else}}
 
         <AppListingHeader
+          @thumbnailUrl={{@model.thumbnailURL}}
           @name={{this.appName}}
-          @publisher={{this.publisherName}}
-          @buttonText='Add to Workspace'
+          @description={{@model.description}}
+          @publisher={{this.publisherInfo}}
         >
           <:action>
             <BoxelDropdown>
@@ -190,12 +192,23 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         </AppListingHeader>
 
         <section class='app-listing-info'>
+          <div class='app-listing-price-plan'>
+            <Pill class='free-plan-pill'>
+              <:default>Free Plan</:default>
+            </Pill>
+          </div>
+
           <div class='app-listing-summary info-box'>
             <h2>Summary</h2>
             <@fields.summary />
           </div>
 
-          <div class='license-statistic'>
+          <div class='license-section'>
+            <h2>License</h2>
+            {{@model.license.name}}
+          </div>
+
+          {{!-- <div class='license-statistic'>
             {{! Todo: Add license section while getting the real data }}
             <div class='license-section'>
               <h2>License</h2>
@@ -217,9 +230,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 </div>
               </div>
             </div>
-          </div>
+          </div> --}}
 
-          <div class='pricing-plans'>
+          {{!-- <div class='pricing-plans'>
             {{! Todo: Add price plan section while getting the real data }}
             <div class='price-plan-item info-box'>
               <span class='price-plan-label'>$250</span>
@@ -244,7 +257,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <:default>Premium plan</:default>
               </Pill>
             </div>
-          </div>
+          </div> --}}
         </section>
 
         <hr class='divider' />
@@ -364,6 +377,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         gap: var(--boxel-sp-xl);
         margin-left: 60px;
         margin-top: var(--boxel-sp-lg);
+      }
+      .app-listing-price-plan {
+        --pill-font-color: var(--boxel-purple);
+        --pill-border: 1px solid var(--boxel-purple);
+      }
+      .action-button {
+        width: 100%;
       }
       .app-listing-summary {
         padding: var(--boxel-sp);
