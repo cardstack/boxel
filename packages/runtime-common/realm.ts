@@ -409,7 +409,11 @@ export class Realm {
 
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
-    await this.startFileWatcher();
+
+    if (this.#adapter.fileWatcherEnabled) {
+      await this.startFileWatcher();
+    }
+
     await this.#startedUp.promise;
   }
 
@@ -1929,24 +1933,22 @@ export class Realm {
   }
 
   private async startFileWatcher() {
-    if (this.#adapter.fileWatcherEnabled) {
-      this.#adapter.subscribe((data) => {
-        let tracked = this.getTrackedWrite(data);
-        if (!tracked || tracked.isTracked) {
-          return;
-        }
-        this.broadcastRealmEvent(data);
-        this.#updateItems.push({
-          operation: ('added' in data
-            ? 'add'
-            : 'updated' in data
-              ? 'update'
-              : 'removed') as UpdateItem['operation'],
-          url: tracked.url,
-        });
-        this.drainUpdates();
+    this.#adapter.subscribe((data) => {
+      let tracked = this.getTrackedWrite(data);
+      if (!tracked || tracked.isTracked) {
+        return;
+      }
+      this.broadcastRealmEvent(data);
+      this.#updateItems.push({
+        operation: ('added' in data
+          ? 'add'
+          : 'updated' in data
+            ? 'update'
+            : 'removed') as UpdateItem['operation'],
+        url: tracked.url,
       });
-    }
+      this.drainUpdates();
+    });
   }
 
   unsubscribe() {
