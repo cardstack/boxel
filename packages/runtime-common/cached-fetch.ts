@@ -3,6 +3,7 @@ import merge from 'lodash/merge';
 import { isNode } from './index';
 
 const cache = new Map<string, { etag: string; body: string }>();
+const isFastBoot = typeof (globalThis as any).FastBoot !== 'undefined';
 
 // we need to be careful not to read the response stream before the intended
 // consumer has read it. so we use this callback to allow the consumer to set
@@ -17,6 +18,10 @@ export async function cachedFetch(
   urlOrRequest: string | URL | Request,
   init?: RequestInit,
 ): Promise<MaybeCachedResponse> {
+  if (isNode || isFastBoot) {
+    return fetchImplementation(urlOrRequest, init);
+  }
+
   let key =
     typeof urlOrRequest === 'string'
       ? urlOrRequest
@@ -24,7 +29,7 @@ export async function cachedFetch(
         ? urlOrRequest.href
         : urlOrRequest.url;
   let cached = cache.get(key);
-  if (!isNode && cached?.etag) {
+  if (cached?.etag) {
     if (urlOrRequest instanceof Request) {
       urlOrRequest.headers.set('If-None-Match', cached.etag);
     } else {
@@ -39,7 +44,7 @@ export async function cachedFetch(
     urlOrRequest,
     init,
   )) as MaybeCachedResponse;
-  if (!isNode && response.status === 304) {
+  if (response.status === 304) {
     if (!cached) {
       throw new Error(
         `Received HTTP 304 "not modified" when we don't have cache for ${key}`,
@@ -48,7 +53,6 @@ export async function cachedFetch(
     return new Response(cached.body);
   } else if (response.ok) {
     let maybeETag = response.headers.get('ETag');
-
     if (maybeETag) {
       let etag = maybeETag;
       response.cacheResponse = (body: string) => {

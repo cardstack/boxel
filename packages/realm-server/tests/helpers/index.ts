@@ -28,7 +28,6 @@ import {
   param,
   unixTime,
   RealmPaths,
-  clearFetchCache,
   type MatrixConfig,
   type QueuePublisher,
   type QueueRunner,
@@ -141,7 +140,6 @@ export function createVirtualNetworkAndLoader() {
 }
 
 export function createVirtualNetwork() {
-  clearFetchCache();
   let virtualNetwork = new VirtualNetwork();
   shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
