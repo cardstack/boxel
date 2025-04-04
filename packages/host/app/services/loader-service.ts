@@ -35,6 +35,7 @@ export default class LoaderService extends Service {
   constructor(owner: Owner) {
     super(owner);
     this.reset.register(this);
+    // this clears the fetch cache in between tests
     this.resetState();
     registerDestructor(this, () => this.resetState());
   }
