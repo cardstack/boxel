@@ -60,6 +60,12 @@ module(`Integration | realm indexing and querying`, function (hooks) {
   });
 
   setupLocalIndexing(hooks);
+
+  hooks.beforeEach(function (this: RenderingTestContext) {
+    // don't mix the fetch cache between the server (running on host) with the client
+    clearFetchCache();
+  });
+
   let mockMatrixUtils = setupMockMatrix(hooks);
 
   setupCardLogs(
