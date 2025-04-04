@@ -163,12 +163,7 @@ export interface RealmAdapter {
 
   fileWatcherEnabled: boolean;
 
-  subscribe(
-    cb: (message: UpdateRealmEventContent) => void,
-    options?: {
-      watcher?: string;
-    },
-  ): Promise<void>;
+  subscribe(cb: (message: UpdateRealmEventContent) => void): Promise<void>;
 
   unsubscribe(): void;
 
@@ -1953,8 +1948,7 @@ export class Realm {
           url: tracked.url,
         });
         this.drainUpdates();
-        // FIXME what to do about subscribeOptions?
-      }, {});
+      });
     }
   }
 
