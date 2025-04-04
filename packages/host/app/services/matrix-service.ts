@@ -558,7 +558,12 @@ export default class MatrixService extends Service {
         timeline_limit: SLIDING_SYNC_LIST_TIMELINE_LIMIT,
       },
       this.client as any,
-      500,
+      // this is the sliding sync timeout value. the client will long poll for
+      // up to this amount of time during the sync. the server will immediately
+      // respond if it receives and event during this timeframe. We should tune
+      // this down if we start to see synapse timeouts during syncing from our
+      // clients.
+      30_000,
     );
     this.slidingSync.on(
       SlidingSyncEvent.Lifecycle,
