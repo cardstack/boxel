@@ -455,7 +455,7 @@ export default class CardService extends Service {
     destinationURL: URL, //directory
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.fetchJSON(destinationURL, {
+    let json = await this.fetchJSON(doc.data.id ?? destinationURL, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(doc, null, 2),
     });
