@@ -196,6 +196,18 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       }
   }`;
 
+  const petCard = `import { contains, containsMany, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+    export class ToyField extends FieldDef {
+      static displayName = 'Toy';
+      @field title = contains(StringField);
+    }
+    export class PetCard extends CardDef {
+      static displayName = 'Pet';
+      @field firstName = contains(StringField);
+      @field favoriteToys = containsMany(ToyField);
+    }
+  `;
+
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -209,6 +221,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       contents: {
         'author.gts': authorCard,
         'blog-post.gts': blogPostCard,
+        'pet.gts': petCard,
         'Author/jane-doe.json': {
           data: {
             attributes: {
@@ -755,6 +768,24 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       format: 'edit',
       fieldIndex: 0,
     });
+  });
+
+  test('has default templates when a format template is not provided', async function (assert) {
+    await openFileInPlayground('pet.gts', testRealmURL, 'ToyField');
+    assert.dom('[data-test-instance-chooser]').hasText('ToyField - Example 1');
+    assertFieldExists(assert, 'edit');
+    await selectFormat('embedded');
+    assert
+      .dom('[data-test-missing-template-text="embedded"]')
+      .hasText('Missing embedded component for FieldDef: Toy');
+    await selectFormat('fitted');
+    assert
+      .dom('[data-test-missing-template-text="fitted"]')
+      .hasText('Missing fitted component for FieldDef: Toy');
+    await selectFormat('atom');
+    assert
+      .dom('[data-test-compound-field-format="atom"]')
+      .hasText('Untitled Toy');
   });
 
   test('editing compound field instance live updates the preview', async function (assert) {
