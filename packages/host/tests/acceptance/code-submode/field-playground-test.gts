@@ -832,6 +832,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
     };
     setRecentFiles([[testRealmURL, 'Pet/mango.json']]);
     setPlaygroundSelections(selections);
+
     await openFileInPlayground('pet.gts', testRealmURL, 'ToyField');
     assert.dom('[data-test-instance-chooser]').hasText('Toy - Example 1');
     assertFieldExists(assert, 'embedded');
@@ -848,9 +849,9 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       selections,
       'persisted selections are correct',
     );
-    // await this.pauseTest();
 
     await selectDeclaration('PetCard');
+    assertCardExists(assert, cardId, 'isolated');
     await selectDeclaration('ToyField');
     assert.dom('[data-test-instance-chooser]').hasText('Toy - Example 1');
     assertFieldExists(assert, 'embedded');
