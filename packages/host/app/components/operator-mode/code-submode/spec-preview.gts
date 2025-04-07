@@ -670,11 +670,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
     if (selections) {
       const selection = JSON.parse(selections)[moduleId];
-      // If we already have selections for this module, preserve the format
-      existingFormat = selection?.format as Format;
-
       if (selection?.cardId === cardId) {
         return;
+      }
+      // If we already have selections for this module, preserve the format
+      if (selection?.format) {
+        existingFormat = selection?.format;
       }
     }
 
