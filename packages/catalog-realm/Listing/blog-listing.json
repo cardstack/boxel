@@ -19,50 +19,55 @@
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/blog-category"
+          "self": "../Spec/blog-app"
         }
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/blog-post"
+          "self": "../Spec/blog-category"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/review-blog"
+          "self": "../Spec/blog-post"
         }
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/user"
+          "self": "../Spec/review-blog"
         }
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/sort"
+          "self": "../Spec/user"
         }
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/layout"
+          "self": "../Spec/sort"
         }
       },
       "specs.7": {
         "links": {
-          "self": "../Spec/card-list"
+          "self": "../Spec/layout"
         }
       },
       "specs.8": {
         "links": {
-          "self": "../Spec/grid"
+          "self": "../Spec/card-list"
         }
       },
       "specs.9": {
         "links": {
-          "self": "../Spec/featured-image"
+          "self": "../Spec/grid"
         }
       },
       "specs.10": {
+        "links": {
+          "self": "../Spec/featured-image"
+        }
+      },
+      "specs.11": {
         "links": {
           "self": "../Spec/contact-link"
         }

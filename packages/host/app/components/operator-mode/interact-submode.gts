@@ -496,13 +496,13 @@ export default class InteractSubmode extends Component<Signature> {
 
   //==catalog actions==
   private _createFromSpec = task(async (spec: Spec, targetRealm: string) => {
+    if (spec.isComponent) {
+      return;
+    }
     let url = new URL(spec.id);
     let ref = codeRefWithAbsoluteURL(spec.ref, url);
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
-    }
-    if (spec.isComponent) {
-      return;
     }
     let Klass = await loadCard(ref, {
       loader: this.loaderService.loader,
