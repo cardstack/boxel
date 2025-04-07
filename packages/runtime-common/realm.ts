@@ -310,7 +310,7 @@ export class Realm {
     this.#dbAdapter = dbAdapter;
 
     this.#router = new Router(new URL(url))
-      .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
+      .post('/.*', SupportedMimeType.CardJson, this.createCard.bind(this))
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -379,6 +379,11 @@ export class Realm {
         '/_message',
         SupportedMimeType.EventStream,
         this.subscribe.bind(this),
+      )
+      .post(
+        '.*/',
+        SupportedMimeType.DirectoryListing,
+        this.createDirectory.bind(this),
       )
       .get(
         '.*/',
@@ -1174,14 +1179,16 @@ export class Realm {
       name = 'cards';
     }
 
+    let url = request.url ?? this.url;
+
     let fileURL = this.paths.fileURL(
-      `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
+      `/${join(new URL(url).pathname, name, uuidV4() + '.json')}`,
     );
     let localPath = this.paths.local(fileURL);
     let fileSerialization: LooseSingleCardDocument | undefined;
     try {
       fileSerialization = await this.fileSerialization(
-        merge(json, { data: { meta: { realmURL: this.url } } }),
+        merge(json, { data: { meta: { realmURL: url } } }),
         fileURL,
       );
     } catch (err: any) {
@@ -1486,6 +1493,24 @@ export class Realm {
       entries.push(entry);
     }
     return entries;
+  }
+
+  private async createDirectory(
+    request: Request,
+    requestContext: RequestContext,
+  ): Promise<Response> {
+    let fileURL = this.paths.fileURL(
+      `/${join(new URL(request.url).pathname, 'Test', uuidV4())}`,
+    );
+    let localPath: LocalPath = this.paths.local(fileURL);
+    let res = await this.#adapter.createDirectory(localPath);
+    return createResponse({
+      body: JSON.stringify({ name: 'jsutin' }, null, 2),
+      init: {
+        headers: { 'content-type': SupportedMimeType.DirectoryListing },
+      },
+      requestContext,
+    });
   }
 
   private async getDirectoryListing(

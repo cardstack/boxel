@@ -13,6 +13,7 @@ import perform from 'ember-concurrency/helpers/perform';
 import { provide, consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
+import { v4 as uuidv4 } from 'uuid';
 
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
@@ -42,6 +43,7 @@ import { loadCard } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
+
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -372,6 +374,13 @@ export default class InteractSubmode extends Component<Signature> {
       copy: async (card: CardDef, targetRealm: string) => {
         return await here._copy.perform(card, targetRealm);
       },
+      copyCards: async (
+        cards: CardDef[],
+        targetRealm: string,
+        directoryName?: string,
+      ) => {
+        return await here._copyCards.perform(cards, targetRealm, directoryName);
+      },
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
       },
@@ -511,11 +520,27 @@ export default class InteractSubmode extends Component<Signature> {
     let { commandContext } = this.commandService;
     let newCard = await new CopyCardCommand(commandContext).execute({
       sourceCard,
-      targetRealmUrl: targetRealm,
+      targetUrl: targetRealm,
     });
     return newCard;
   });
-  // END ==catalog actions==
+
+  private _copyCards = dropTask(
+    async (cards: CardDef[], targetRealm: string, directoryName?: string) => {
+      let { commandContext } = this.commandService;
+      let targetUrl = directoryName
+        ? new URL(`${capitalize(directoryName)}-${uuidv4()}/`, targetRealm)
+        : targetRealm;
+      await Promise.all(
+        cards.map((card) => {
+          return new CopyCardCommand(commandContext).execute({
+            sourceCard: card,
+            targetUrl,
+          });
+        }),
+      );
+    },
+  );
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
@@ -555,7 +580,7 @@ export default class InteractSubmode extends Component<Signature> {
             this.commandService.commandContext,
           ).execute({
             sourceCard: card,
-            targetRealmUrl: realmURL.href,
+            targetUrl: realmURL.href,
           });
           if (index === 0) {
             scrollToCard = newCard; // we scroll to the first card lexically by title
@@ -909,3 +934,5 @@ export default class InteractSubmode extends Component<Signature> {
 const neighborStackTooltipMessage = (side: 'left' | 'right') => {
   return `Open a card to the ${side} of the current card`;
 };
+
+const capitalize = (str: string) => str[0].toUpperCase() + str.slice(1);

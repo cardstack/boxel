@@ -46,6 +46,16 @@
         "links": {
           "self": "../License/4c5a023b-a72c-4f90-930b-da60a1de5b2d"
         }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../blog-app/BlogApp/ramped"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../blog-app/Author/alice-enwunder"
+        }
       }
     },
     "meta": {

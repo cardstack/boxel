@@ -405,6 +405,11 @@ export interface CardActions {
 export interface CatalogActions {
   create: (spec: Spec, targetRealm: string) => void;
   copy: (card: CardDef, targetRealm: string) => Promise<CardDef>;
+  copyCards: (
+    cards: CardDef[],
+    targetRealm: string,
+    directoryName?: string,
+  ) => Promise<CardDef[]>;
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;
