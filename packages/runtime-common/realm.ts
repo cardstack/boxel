@@ -845,8 +845,12 @@ export class Realm {
   private async serveLocalFile(
     ref: FileRef,
     requestContext: RequestContext,
+    options?: {
+      defaultHeaders?: Record<string, string>;
+    },
   ): Promise<ResponseWithNodeStream> {
     let headers = {
+      ...(options?.defaultHeaders || {}),
       'x-created': formatRFC7231(ref.created * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
@@ -1030,7 +1034,11 @@ export class Realm {
           requestContext,
         });
       }
-      return await this.serveLocalFile(handle, requestContext);
+      return await this.serveLocalFile(handle, requestContext, {
+        defaultHeaders: {
+          'content-type': 'text/plain; charset=utf-8',
+        },
+      });
     } finally {
       this.#logRequestPerformance(request, start);
     }

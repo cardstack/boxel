@@ -715,19 +715,22 @@ export default class MatrixService extends Service {
         if (!file.sourceUrl) {
           throw new Error('File needs a realm server source URL to upload');
         }
+
         let response = await this.network.authedFetch(file.sourceUrl, {
           headers: {
             Accept: 'application/vnd.card+source',
           },
         });
 
-        let blob = await response.blob();
+        // We only support uploading text files (code) for now
+        let text = await response.text();
         let contentType = response.headers.get('content-type');
 
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        let uploadResponse = await this.client.uploadContent(blob, {
+
+        let uploadResponse = await this.client.uploadContent(text, {
           type: contentType,
         });
 
