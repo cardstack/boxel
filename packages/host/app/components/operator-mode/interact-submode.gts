@@ -501,6 +501,9 @@ export default class InteractSubmode extends Component<Signature> {
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
     }
+    if (spec.isComponent) {
+      return;
+    }
     let Klass = await loadCard(ref, {
       loader: this.loaderService.loader,
     });
