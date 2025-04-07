@@ -14,6 +14,7 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
+  assertCardExists,
   assertFieldExists,
   chooseAnotherInstance,
   createNewInstance,
@@ -26,6 +27,8 @@ import {
   setRecentFiles,
   togglePlaygroundPanel,
   toggleSpecPanel,
+  type PlaygroundSelection,
+  type Format,
 } from '../../helpers/playground';
 import { setupApplicationTest } from '../../helpers/setup';
 
@@ -196,6 +199,18 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       }
   }`;
 
+  const petCard = `import { contains, containsMany, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+    export class ToyField extends FieldDef {
+      static displayName = 'Toy';
+      @field title = contains(StringField);
+    }
+    export class PetCard extends CardDef {
+      static displayName = 'Pet';
+      @field firstName = contains(StringField);
+      @field favoriteToys = containsMany(ToyField);
+    }
+  `;
+
   hooks.beforeEach(async function () {
     matrixRoomId = createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -209,6 +224,7 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       contents: {
         'author.gts': authorCard,
         'blog-post.gts': blogPostCard,
+        'pet.gts': petCard,
         'Author/jane-doe.json': {
           data: {
             attributes: {
@@ -389,6 +405,21 @@ module('Acceptance | code-submode | field playground', function (hooks) {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/spec',
                 name: 'Spec',
+              },
+            },
+          },
+        },
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              firstName: 'Mango',
+              title: 'Mango',
+              favoriteToys: [{ title: 'Tug rope' }, { title: 'Lambchop' }],
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'PetCard',
               },
             },
           },
@@ -755,6 +786,51 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       format: 'edit',
       fieldIndex: 0,
     });
+  });
+
+  test('does not persist the wrong card for field', async function (assert) {
+    const cardId = `${testRealmURL}Pet/mango`;
+    let selections: Record<string, PlaygroundSelection> = {
+      [`${testRealmURL}pet/PetCard`]: { cardId, format: 'isolated' as Format },
+    };
+    setRecentFiles([[testRealmURL, 'Pet/mango.json']]);
+    setPlaygroundSelections(selections);
+    await openFileInPlayground('pet.gts', testRealmURL, 'PetCard');
+    assert.dom('[data-test-instance-chooser]').hasText('Mango');
+    assertCardExists(assert, cardId, 'isolated');
+    await selectDeclaration('ToyField');
+    assert.dom('[data-test-instance-chooser]').hasText('ToyField - Example 1');
+    assertFieldExists(assert, 'edit');
+    await toggleSpecPanel();
+    let specId =
+      testRealmURL +
+      document
+        .querySelector('[data-test-spec-selector-item-path]')
+        ?.textContent?.trim();
+    await togglePlaygroundPanel();
+    selections = {
+      ...selections,
+      [`${testRealmURL}pet/ToyField`]: {
+        cardId: specId,
+        fieldIndex: 0,
+        format: 'edit',
+      },
+    };
+    assert.deepEqual(
+      getPlaygroundSelections(),
+      selections,
+      'persisted selections are correct',
+    );
+
+    await selectDeclaration('PetCard');
+    await selectDeclaration('ToyField');
+    assert.dom('[data-test-instance-chooser]').hasText('ToyField - Example 1');
+    assertFieldExists(assert, 'edit');
+    assert.deepEqual(
+      getPlaygroundSelections(),
+      selections,
+      'persisted selections are still correct',
+    );
   });
 
   test('editing compound field instance live updates the preview', async function (assert) {
