@@ -418,8 +418,7 @@ module(basename(__filename), function () {
       }
     });
 
-    // CS-8095
-    skip('can index a file deleted from the filesystem', async function (assert) {
+    test('can index deleted file', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
       {
@@ -429,7 +428,13 @@ module(basename(__filename), function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
       }
 
-      removeSync(join(dir.name, 'realm_server_1', 'test', 'person-1.json'));
+      await request
+        .delete('/person-1')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
 
       await waitForIncrementalIndexEvent(
         getMessagesSince,
@@ -446,7 +451,6 @@ module(basename(__filename), function () {
 
       let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
 
-      // FIXME split this test from the response-checking
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
