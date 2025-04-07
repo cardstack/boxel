@@ -984,7 +984,7 @@ async function waitForIncrementalIndexEvent(
   } catch (e) {
     let matrixMessages = await getMessagesSince(since);
 
-    console.log(e);
+    console.log('waitForIncrementalIndexEvent failed, no event found. Events:');
     console.log(JSON.stringify(matrixMessages, null, 2));
     throw e;
   }
