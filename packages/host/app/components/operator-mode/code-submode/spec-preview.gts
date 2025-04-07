@@ -141,8 +141,9 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
     <span class='has-spec' data-test-has-spec>
       {{#if @showCreateSpec}}
         <BoxelButton
+          class='create-spec-button'
           @kind='primary'
-          @size='small'
+          @size='extra-small'
           @loading={{@isCreateSpecInstanceRunning}}
           {{on 'click' @createSpec}}
           data-test-create-spec-button
@@ -169,11 +170,15 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 
     <style scoped>
       .has-spec {
-        margin-left: auto;
         color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
+      }
+      .create-spec-button {
+        --boxel-button-min-height: auto;
+        --boxel-button-min-width: auto;
+        font-weight: 500;
       }
       .number-of-instance {
         margin-left: auto;
