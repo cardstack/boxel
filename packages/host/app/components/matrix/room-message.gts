@@ -21,7 +21,7 @@ import {
   markdownToHtml,
 } from '@cardstack/runtime-common';
 
-import { consumeContext } from '@cardstack/host/helpers/consume-context';
+import consumeContext from '@cardstack/host/helpers/consume-context';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';

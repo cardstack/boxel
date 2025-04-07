@@ -357,7 +357,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         },
       };
     }
-    let cardId = await this.store.createInstance(newCardJSON, undefined);
+    let cardId = await this.store.create(newCardJSON, undefined);
     if (typeof cardId === 'string') {
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
       this.persistSelections(

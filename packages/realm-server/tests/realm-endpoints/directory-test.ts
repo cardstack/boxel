@@ -1,91 +1,25 @@
 import { module, test } from 'qunit';
-import supertest, { Test, SuperTest } from 'supertest';
-import { join, resolve, basename } from 'path';
-import { Server } from 'http';
-import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
-import { copySync, ensureDirSync } from 'fs-extra';
-import {
-  baseRealm,
-  Realm,
-  RealmPermissions,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { Test, SuperTest } from 'supertest';
+import { join, basename } from 'path';
+import { dirSync, type DirResult } from 'tmp';
+import { copySync } from 'fs-extra';
+import { baseRealm, Realm } from '@cardstack/runtime-common';
 import {
   setupCardLogs,
   setupBaseRealmServer,
-  runTestRealmServer,
-  setupDB,
-  createVirtualNetwork,
+  setupPermissionedRealm,
   createVirtualNetworkAndLoader,
   matrixURL,
-  closeServer,
+  testRealmHref,
+  createJWT,
 } from '../helpers';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
-import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
-
-setGracefulCleanup();
-const testRealmURL = new URL('http://127.0.0.1:4444/');
-const testRealmHref = testRealmURL.href;
-const distDir = resolve(join(__dirname, '..', '..', '..', 'host', 'dist'));
-console.log(`using host dist dir: ${distDir}`);
-
-let createJWT = (
-  realm: Realm,
-  user: string,
-  permissions: RealmPermissions['user'] = [],
-) => {
-  return realm.createJWT(
-    {
-      user,
-      realm: realm.url,
-      permissions,
-      sessionRoom: `test-session-room-for-${user}`,
-    },
-    '7d',
-  );
-};
 
 module(`realm-endpoints/${basename(__filename)}`, function () {
   module('Realm-specific Endpoints | GET directory path', function (hooks) {
     let testRealm: Realm;
-    let testRealmHttpServer: Server;
     let request: SuperTest<Test>;
     let dir: DirResult;
-
-    function setupPermissionedRealm(
-      hooks: NestedHooks,
-      permissions: RealmPermissions,
-      fileSystem?: Record<string, string | LooseSingleCardDocument>,
-    ) {
-      setupDB(hooks, {
-        beforeEach: async (_dbAdapter, publisher, runner) => {
-          dir = dirSync();
-          let testRealmDir = join(dir.name, '..', 'realm_server_1', 'test');
-          ensureDirSync(testRealmDir);
-          // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
-          if (!fileSystem) {
-            copySync(join(__dirname, '..', 'cards'), testRealmDir);
-          }
-
-          let virtualNetwork = createVirtualNetwork();
-
-          ({ testRealm, testRealmHttpServer } = await runTestRealmServer({
-            virtualNetwork,
-            testRealmDir,
-            realmsRootPath: join(dir.name, '..', 'realm_server_1'),
-            realmURL: testRealmURL,
-            permissions,
-            dbAdapter: _dbAdapter,
-            runner,
-            publisher,
-            matrixURL,
-            fileSystem,
-          }));
-
-          request = supertest(testRealmHttpServer);
-        },
-      });
-    }
 
     let { virtualNetwork, loader } = createVirtualNetworkAndLoader();
 
@@ -101,14 +35,22 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
       copySync(join(__dirname, '..', 'cards'), dir.name);
     });
 
-    hooks.afterEach(async function () {
-      await closeServer(testRealmHttpServer);
-      resetCatalogRealms();
-    });
+    function onRealmSetup(args: {
+      testRealm: Realm;
+      request: SuperTest<Test>;
+      dir: DirResult;
+    }) {
+      testRealm = args.testRealm;
+      request = args.request;
+      dir = args.dir;
+    }
 
     module('public readable realm', function (hooks) {
       setupPermissionedRealm(hooks, {
-        '*': ['read'],
+        permissions: {
+          '*': ['read'],
+        },
+        onRealmSetup,
       });
 
       test('serves the request', async function (assert) {
@@ -119,7 +61,7 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         assert.strictEqual(
           response.get('X-boxel-realm-url'),
-          testRealmURL.href,
+          testRealmHref,
           'realm url header is correct',
         );
         assert.strictEqual(
@@ -172,7 +114,10 @@ module(`realm-endpoints/${basename(__filename)}`, function () {
 
     module('permissioned realm', function (hooks) {
       setupPermissionedRealm(hooks, {
-        john: ['read'],
+        permissions: {
+          john: ['read'],
+        },
+        onRealmSetup,
       });
 
       test('401 with invalid JWT', async function (assert) {

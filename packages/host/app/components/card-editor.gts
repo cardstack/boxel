@@ -4,8 +4,6 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
-
 import { Button } from '@cardstack/boxel-ui/components';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
@@ -13,7 +11,7 @@ import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import FormatPicker from './format-picker';
 import Preview from './preview';
 
-import type CardService from '../services/card-service';
+import type StoreService from '../services/store';
 
 interface Signature {
   Args: {
@@ -63,7 +61,7 @@ export default class CardEditor extends Component<Signature> {
   </template>
 
   formats = formats;
-  @service declare cardService: CardService;
+  @service declare store: StoreService;
   @tracked format: Format = this.args.format ?? 'edit';
 
   @action
@@ -73,12 +71,8 @@ export default class CardEditor extends Component<Signature> {
 
   @action
   save() {
-    this.write.perform();
-  }
-
-  private write = restartableTask(async () => {
-    await this.cardService.saveModel(this.args.card);
+    this.store.save(this.args.card.id);
     this.args.onSave?.(this.args.card);
     this.format = 'isolated';
-  });
+  }
 }

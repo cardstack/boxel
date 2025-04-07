@@ -40,9 +40,6 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import ENV from '@cardstack/host/config/environment';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
-import type CardService from '@cardstack/host/services/card-service';
-import type { CardSaveSubscriber } from '@cardstack/host/services/card-service';
-
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type NetworkService from '@cardstack/host/services/network';
 
@@ -51,6 +48,9 @@ import type QueueService from '@cardstack/host/services/queue';
 import RealmServerService, {
   RealmServerTokenClaims,
 } from '@cardstack/host/services/realm-server';
+
+import type StoreService from '@cardstack/host/services/store';
+import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
   type CardDef,
@@ -258,10 +258,9 @@ export function setupLocalIndexing(hooks: NestedHooks) {
 
 export function setupOnSave(hooks: NestedHooks) {
   hooks.beforeEach<TestContextWithSave>(function () {
-    let cardService = this.owner.lookup('service:card-service') as CardService;
-    this.onSave = cardService.onSave.bind(cardService);
-    this.unregisterOnSave =
-      cardService.unregisterSaveSubscriber.bind(cardService);
+    let store = this.owner.lookup('service:store') as StoreService;
+    this.onSave = store._onSave.bind(store);
+    this.unregisterOnSave = store._unregisterSaveSubscriber.bind(store);
   });
 }
 
