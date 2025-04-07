@@ -14,6 +14,7 @@ import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 
@@ -50,7 +51,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.writableRealms.map((realmUrl) => {
       return new MenuItem(realmUrl, 'action', {
         action: () => {
-          this.create(realmUrl);
+          this.use(realmUrl);
         },
       });
     });
@@ -70,7 +71,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this.writableRealms = writableRealms;
   });
 
-  _create = task(async (realmUrl: string) => {
+  _use = task(async (realmUrl: string) => {
     await Promise.all(
       this.args.model?.specs
         ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
@@ -116,8 +117,19 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     );
   }
 
-  @action create(realmUrl: string) {
-    this._create.perform(realmUrl);
+  @action preview() {
+    if (!this.args.model.examples || this.args.model.examples.length === 0) {
+      throw new Error('No examples to preview');
+    }
+    this.args.context?.actions?.viewCard?.(this.args.model.examples[0]);
+  }
+
+  @action use(realmUrl: string) {
+    this._use.perform(realmUrl);
+  }
+
+  @action fork() {
+    console.log('forking...');
   }
 
   get appName(): string {
@@ -174,29 +186,37 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           @publisher={{this.publisherInfo}}
         >
           <:action>
-            <BoxelDropdown>
-              <:trigger as |bindings|>
-                <BoxelButton
-                  class='action-button'
-                  @disabled={{this.createButtonDisabled}}
-                  {{bindings}}
-                >
-                  {{#if this._create.isRunning}}
-                    Creating...
-                  {{else if this.createdInstances}}
-                    Created Instances
-                  {{else}}
-                    Add to Workspace
-                  {{/if}}
-                </BoxelButton>
-              </:trigger>
-              <:content as |dd|>
-                <BoxelMenu
-                  @closeMenu={{dd.close}}
-                  @items={{this.realmOptions}}
-                />
-              </:content>
-            </BoxelDropdown>
+            <div class='action-buttons'>
+              <BoxelButton class='action-button' {{on 'click' this.preview}}>
+                Preview
+              </BoxelButton>
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <BoxelButton
+                    class='action-button'
+                    @disabled={{this.createButtonDisabled}}
+                    {{bindings}}
+                  >
+                    {{#if this._use.isRunning}}
+                      Creating...
+                    {{else if this.createdInstances}}
+                      Created Instances
+                    {{else}}
+                      Use
+                    {{/if}}
+                  </BoxelButton>
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    @closeMenu={{dd.close}}
+                    @items={{this.realmOptions}}
+                  />
+                </:content>
+              </BoxelDropdown>
+              <BoxelButton class='action-button' {{on 'click' this.fork}}>
+                Fork
+              </BoxelButton>
+            </div>
           </:action>
         </AppListingHeader>
 
@@ -387,6 +407,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       .app-listing-price-plan {
         --pill-font-color: var(--boxel-purple);
         --pill-border: 1px solid var(--boxel-purple);
+      }
+      .action-buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: var(--boxel-sp-xxs);
       }
       .action-button {
         width: 100%;
