@@ -452,10 +452,10 @@ export default class CardService extends Service {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    realmUrl: URL,
+    destinationURL: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.fetchJSON(doc.data.id ?? realmUrl, {
+    let json = await this.fetchJSON(doc.data.id ?? destinationURL, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(doc, null, 2),
     });
@@ -468,13 +468,13 @@ export default class CardService extends Service {
     return json;
   }
 
-  async copyCard(source: CardDef, destinationRealm: URL): Promise<CardDef> {
+  async copyCard(source: CardDef, destinationURL: URL): Promise<CardDef> {
     let api = await this.getAPI();
     let serialized = await this.serializeCard(source, {
       useAbsoluteURL: true,
     });
     delete serialized.data.id;
-    let json = await this.saveCardDocument(serialized, destinationRealm);
+    let json = await this.saveCardDocument(serialized, destinationURL);
     let result = (await api.createFromSerialized(
       json.data,
       json,
@@ -484,6 +484,21 @@ export default class CardService extends Service {
       this.subscriber(new URL(json.data.id), json);
     }
     return result;
+  }
+
+  async copyCards(
+    sourceCards: CardDef[],
+    destinationRealm: URL,
+    directoryName?: string,
+  ) {
+    let directoryPath = directoryName
+      ? new URL(`${directoryName}/${uuidv4()}/`, destinationRealm)
+      : destinationRealm;
+    await Promise.all(
+      sourceCards.map(async (card) => {
+        await this.copyCard(card, directoryPath);
+      }),
+    );
   }
 
   async deleteCard(cardId: string): Promise<void> {

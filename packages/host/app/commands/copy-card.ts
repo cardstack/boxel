@@ -31,28 +31,27 @@ export default class CopyCardCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CopyCardInput,
   ): Promise<BaseCommandModule.CopyCardResult> {
-    const realmUrl = await this.determineTargetRealmUrl(input);
+    const targetUrl = await this.determineTargetUrl(input);
     const newCard = await this.cardService.copyCard(
       input.sourceCard,
-      new URL(realmUrl),
+      new URL(targetUrl),
     );
     let commandModule = await this.loadCommandModule();
     const { CopyCardResult } = commandModule;
     return new CopyCardResult({ newCard });
   }
 
-  private async determineTargetRealmUrl({
+  private async determineTargetUrl({
     targetStackIndex,
-    targetRealmUrl,
+    targetUrl,
   }: BaseCommandModule.CopyCardInput) {
-    if (targetRealmUrl !== undefined && targetStackIndex !== undefined) {
+    if (targetUrl !== undefined && targetStackIndex !== undefined) {
       console.warn(
-        'Both targetStackIndex and targetRealmUrl are set; only one should be set; using targetRealmUrl',
+        'Both targetStackIndex and targetUrl are set; only one should be set; using targetUrl',
       );
     }
-    let realmUrl = targetRealmUrl;
-    if (realmUrl) {
-      return realmUrl;
+    if (targetUrl) {
+      return targetUrl;
     }
     if (targetStackIndex !== undefined) {
       // use existing card in stack to determine realm url,

@@ -16,6 +16,7 @@ import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
+import { camelCase } from 'lodash';
 
 import {
   Accordion,
@@ -71,18 +72,27 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _create = task(async (realmUrl: string) => {
-    await Promise.all(
-      this.args.model?.specs
-        ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
-        .map((spec: Spec) =>
-          this.args.context?.actions?.create?.(spec, realmUrl),
-        ) ?? [],
-    );
-    if (this.args.model instanceof SkillListing) {
-      await Promise.all(
-        this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copy?.(skill, realmUrl);
-        }),
+    // await Promise.all(
+    //   this.args.model?.specs
+    //     ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
+    //     .map((spec: Spec) =>
+    //       this.args.context?.actions?.create?.(spec, realmUrl),
+    //     ) ?? [],
+    // );
+    // if (this.args.model instanceof SkillListing) {
+    //   await Promise.all(
+    //     this.args.model.skills.map((skill) => {
+    //       this.args.context?.actions?.copy?.(skill, realmUrl);
+    //     }),
+    //   );
+    // }
+    if (this.args.model.examples) {
+      await this.args.context?.actions?.copyCards?.(
+        this.args.model.examples,
+        realmUrl,
+        this.args.model.name
+          ? camelCase(`${this.args.model.name}Examples`)
+          : 'ListingExamples',
       );
     }
     this.createdInstances = true;
@@ -277,19 +287,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           {{/if}}
         </section>
 
-        {{!-- 
         <section class='app-listing-examples'>
           <h2>Examples</h2>
-          {{! Todo: Add examples section while getting the real data }}
           <ul class='examples-list'>
-            {{#each this.mockCards as |card|}}
+            {{#each @fields.examples as |Example|}}
               <li class='examples-item'>
-                {{card.name}}
+                <Example />
               </li>
             {{/each}}
           </ul>
         </section>
-        --}}
 
         <hr class='divider' />
 
@@ -542,6 +549,7 @@ export class Listing extends CardDef {
   @field tags = linksToMany(() => Tag);
   @field license = linksTo(() => License);
   @field images = containsMany(StringField);
+  @field examples = linksToMany(CardDef);
 
   @field title = contains(StringField, {
     computeVia(this: Listing) {
