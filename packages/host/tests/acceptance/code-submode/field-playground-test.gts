@@ -409,6 +409,42 @@ module('Acceptance | code-submode | field playground', function (hooks) {
             },
           },
         },
+        'Spec/toy.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'ToyField',
+                module: '../pet',
+              },
+              specType: 'field',
+              containedExamples: [{ title: 'Tug rope' }, { title: 'Lambchop' }],
+              title: 'Toy',
+            },
+            meta: {
+              fields: {
+                containedExamples: [
+                  {
+                    adoptsFrom: {
+                      module: '../pet',
+                      name: 'ToyField',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: '../pet',
+                      name: 'ToyField',
+                    },
+                  },
+                ],
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
         'Pet/mango.json': {
           data: {
             attributes: {
@@ -790,30 +826,21 @@ module('Acceptance | code-submode | field playground', function (hooks) {
 
   test('does not persist the wrong card for field', async function (assert) {
     const cardId = `${testRealmURL}Pet/mango`;
+    const specId = `${testRealmURL}Spec/toy`;
     let selections: Record<string, PlaygroundSelection> = {
       [`${testRealmURL}pet/PetCard`]: { cardId, format: 'isolated' as Format },
     };
     setRecentFiles([[testRealmURL, 'Pet/mango.json']]);
     setPlaygroundSelections(selections);
-    await openFileInPlayground('pet.gts', testRealmURL, 'PetCard');
-    assert.dom('[data-test-instance-chooser]').hasText('Mango');
-    assertCardExists(assert, cardId, 'isolated');
-    await selectDeclaration('ToyField');
-    assert.dom('[data-test-instance-chooser]').hasText('ToyField - Example 1');
-    assertFieldExists(assert, 'edit');
-    await toggleSpecPanel();
-    let specId =
-      testRealmURL +
-      document
-        .querySelector('[data-test-spec-selector-item-path]')
-        ?.textContent?.trim();
-    await togglePlaygroundPanel();
+    await openFileInPlayground('pet.gts', testRealmURL, 'ToyField');
+    assert.dom('[data-test-instance-chooser]').hasText('Toy - Example 1');
+    assertFieldExists(assert, 'embedded');
     selections = {
       ...selections,
       [`${testRealmURL}pet/ToyField`]: {
         cardId: specId,
         fieldIndex: 0,
-        format: 'edit',
+        format: 'embedded',
       },
     };
     assert.deepEqual(
@@ -821,11 +848,12 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       selections,
       'persisted selections are correct',
     );
+    // await this.pauseTest();
 
     await selectDeclaration('PetCard');
     await selectDeclaration('ToyField');
-    assert.dom('[data-test-instance-chooser]').hasText('ToyField - Example 1');
-    assertFieldExists(assert, 'edit');
+    assert.dom('[data-test-instance-chooser]').hasText('Toy - Example 1');
+    assertFieldExists(assert, 'embedded');
     assert.deepEqual(
       getPlaygroundSelections(),
       selections,
