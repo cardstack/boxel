@@ -63,6 +63,7 @@ module('Integration | message service subscription', function (hooks) {
 
     await renderComponent(
       class SubscriberContainer extends GlimmerComponent {
+        // @ts-expect-error TS1206: Decorators are not valid here.
         @tracked subscribe = true;
 
         <template>
