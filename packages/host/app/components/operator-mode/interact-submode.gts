@@ -13,9 +13,8 @@ import perform from 'ember-concurrency/helpers/perform';
 import { provide, consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
-import { v4 as uuidv4 } from 'uuid';
-
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
+import { v4 as uuidv4 } from 'uuid';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
