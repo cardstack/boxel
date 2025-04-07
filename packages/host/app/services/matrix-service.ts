@@ -722,7 +722,9 @@ export default class MatrixService extends Service {
           },
         });
 
-        // We only support uploading text files (code) for now
+        // We only support uploading text files (code) for now.
+        // When we start supporting other file types (pdfs, images, etc)
+        // we will need to update this to support those file types.
         let text = await response.text();
         let contentType = response.headers.get('content-type');
 
