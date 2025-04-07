@@ -290,9 +290,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         <section class='app-listing-examples'>
           <h2>Examples</h2>
           <ul class='examples-list'>
-            {{#each @fields.examples as |listingExample|}}
+            {{#each @fields.examples as |Example|}}
               <li class='examples-item'>
-                <listingExample />
+                <Example />
               </li>
             {{/each}}
           </ul>
