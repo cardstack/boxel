@@ -2,83 +2,69 @@ import { SafeString, htmlSafe } from '@ember/template';
 
 import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
 
-import {
-  isCompleteSearchReplaceBlock,
-  parseSearchReplace,
-} from '../search-replace-block-parsing';
+function findMatchingClosingTag(str: string, startPos: number): number {
+  let nestLevel = 1;
+  let pos = startPos;
 
-export function extractCodeData(preElementString: string): CodeData {
-  let emptyCodeData: CodeData = {
-    language: null,
-    fileUrl: null,
-    searchReplaceBlock: null,
-    code: null,
-  };
+  while (nestLevel > 0 && pos < str.length) {
+    let openTag = str.indexOf('<pre', pos);
+    let closeTag = str.indexOf('</pre>', pos);
 
-  if (!preElementString) {
-    return emptyCodeData;
-  }
+    if (closeTag === -1) return -1;
 
-  const languageMatch = preElementString.match(
-    new RegExp('data-code-language="([^"]+)"'),
-  );
-  const language = languageMatch ? languageMatch[1] : null;
-  const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-  let content = contentMatch ? contentMatch[1] : null;
-
-  if (!content) {
-    return emptyCodeData;
-  }
-
-  let parsedContent = parseSearchReplace(content);
-
-  // Transform the incomplete search/replace block into a format for streaming,
-  // so that the user can see the search replace block in a human friendly format.
-  // // existing code ...
-  // SEARCH BLOCK
-  // // new code ...
-  // REPLACE BLOCK
-  let adjustedContentForStreamedContentInMonacoEditor = '';
-  if (parsedContent.searchContent) {
-    // get count of leading spaces in the first line of searchContent
-    let firstLine = parsedContent.searchContent.split('\n')[0];
-    let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
-    let emptyString = ' '.repeat(leadingSpaces);
-    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${parsedContent.searchContent.replace(
-      new RegExp(emptyString, 'g'),
-      '',
-    )}`;
-
-    if (parsedContent.replaceContent) {
-      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
-        new RegExp(emptyString, 'g'),
-        '',
-      )}`;
+    if (openTag !== -1 && openTag < closeTag) {
+      nestLevel++;
+      pos = openTag + 4;
+    } else {
+      nestLevel--;
+      pos = closeTag + 6;
+      if (nestLevel === 0) {
+        return closeTag;
+      }
     }
   }
+  return -1;
+}
 
-  const lines = content.split('\n');
+export function extractCodeData(preElementString: string): CodeData {
+  // Find the opening pre tag
+  let openTagEnd = preElementString.indexOf('>');
+  if (openTagEnd === -1) return { fileUrl: null, code: null, language: null };
 
-  let fileUrl: string | null = null;
-  const fileUrlIndex = lines.findIndex((line) =>
-    line.startsWith('// File url: '),
-  );
-  if (fileUrlIndex !== -1) {
-    fileUrl = lines[fileUrlIndex].substring('// File url: '.length).trim();
+  // Find the matching closing tag considering nesting
+  let closingTagStart = findMatchingClosingTag(preElementString, openTagEnd);
+  if (closingTagStart === -1)
+    return { fileUrl: null, code: null, language: null };
+
+  // Extract the content between tags
+  let content = preElementString.slice(openTagEnd + 1, closingTagStart);
+
+  let language = null;
+  let fileUrl = null;
+  let searchReplaceBlock = null;
+
+  let languageMatch = preElementString.match(/data-code-language="([^"]+)"/);
+  if (languageMatch) {
+    language = languageMatch[1];
   }
 
-  let contentWithoutFileUrl;
-  if (fileUrl) {
-    contentWithoutFileUrl = lines.slice(fileUrlIndex + 1).join('\n');
+  let fileUrlMatch = preElementString.match(/data-file-url="([^"]+)"/);
+  if (fileUrlMatch) {
+    fileUrl = fileUrlMatch[1];
+  }
+
+  let searchReplaceBlockMatch = preElementString.match(
+    /data-search-replace-block="([^"]+)"/,
+  );
+  if (searchReplaceBlockMatch) {
+    searchReplaceBlock = searchReplaceBlockMatch[1];
   }
 
   return {
-    language: language ?? '',
-    code: adjustedContentForStreamedContentInMonacoEditor || content,
     fileUrl,
-    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
-      ? contentWithoutFileUrl
-      : null,
+    code: content,
+    language,
+    searchReplaceBlock,
   };
 }
 

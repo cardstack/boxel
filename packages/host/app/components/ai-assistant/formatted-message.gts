@@ -249,25 +249,84 @@ class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
 }
 
 function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
-  const result: HtmlTagGroup[] = [];
+  let result: HtmlTagGroup[] = [];
+  let tagStack: { tag: string; startPos: number }[] = [];
+  let currentPosition = 0;
 
-  // Regular expression to match <pre> tags and their content
-  const regex = /(<pre[\s\S]*?<\/pre>)|([\s\S]+?)(?=<pre|$)/g;
+  let findNextTag = (
+    pos: number,
+  ): { type: 'open' | 'close'; tag: string; position: number } | null => {
+    let currentPos = pos;
+    while (currentPos < htmlString.length) {
+      let openTag = htmlString.indexOf('<', currentPos);
+      if (openTag === -1) return null;
 
-  let match;
-  while ((match = regex.exec(htmlString)) !== null) {
-    if (match[1]) {
-      // This is a code block (pre tag)
-      result.push({
-        type: 'pre_tag',
-        content: match[1],
-      });
-    } else if (match[2] && match[2].trim() !== '') {
-      // This is non <pre> tag HTML
-      result.push({
-        type: 'non_pre_tag',
-        content: match[2],
-      });
+      // Check if this is a comment
+      if (htmlString.startsWith('<!--', openTag)) {
+        let commentEnd = htmlString.indexOf('-->', openTag);
+        if (commentEnd === -1) return null;
+        // Skip past the comment and continue searching
+        currentPos = commentEnd + 3;
+        continue;
+      }
+
+      if (htmlString[openTag + 1] === '/') {
+        let closeEnd = htmlString.indexOf('>', openTag);
+        if (closeEnd === -1) return null;
+        let tag = htmlString.slice(openTag + 2, closeEnd).toLowerCase();
+        return { type: 'close', tag, position: openTag };
+      } else {
+        let spaceOrClose = /[\s>]/;
+        let tagEnd = htmlString.indexOf('>', openTag);
+        let spacePos = htmlString.slice(openTag, tagEnd).search(spaceOrClose);
+        let tagNameEnd = spacePos !== -1 ? openTag + spacePos : tagEnd;
+        let tag = htmlString.slice(openTag + 1, tagNameEnd).toLowerCase();
+        return { type: 'open', tag, position: openTag };
+      }
+    }
+    return null;
+  };
+
+  while (currentPosition < htmlString.length) {
+    let nextTag = findNextTag(currentPosition);
+
+    if (!nextTag) {
+      if (tagStack.length === 0) {
+        let remaining = htmlString.slice(currentPosition).trim();
+        if (remaining) {
+          result.push({
+            type: 'non_pre_tag',
+            content: remaining,
+          });
+        }
+      }
+      break;
+    }
+
+    if (nextTag.type === 'open') {
+      tagStack.push({ tag: nextTag.tag, startPos: nextTag.position });
+      currentPosition = nextTag.position + 1;
+    } else {
+      if (
+        tagStack.length > 0 &&
+        tagStack[tagStack.length - 1].tag === nextTag.tag
+      ) {
+        let openTag = tagStack.pop()!;
+
+        if (tagStack.length === 0) {
+          let content = htmlString.slice(
+            openTag.startPos,
+            nextTag.position + nextTag.tag.length + 3,
+          );
+          result.push({
+            type: nextTag.tag === 'pre' ? 'pre_tag' : 'non_pre_tag',
+            content: content,
+          });
+        }
+        currentPosition = nextTag.position + nextTag.tag.length + 3;
+      } else {
+        currentPosition = nextTag.position + 1;
+      }
     }
   }
 

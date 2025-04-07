@@ -279,4 +279,103 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
 
     await percySnapshot(assert);
   });
+
+  test('handles nested pre tags', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let complexHtmlMessage = `<p>I&#39;ll help you create an example with pre tags in HTML. Here&#39;s a useful example that demonstrates different ways to use the pre tag:</p>
+<pre data-code-language="html"><!-- Basic pre tag example -->
+<pre>
+This is preformatted text
+    It preserves both spaces
+        and line breaks
+exactly as written
+</pre>
+
+<!-- Pre tag with code -->
+<pre>
+<code>
+function sayHello() {
+    console.log("Hello World!");
+}
+</code>
+</pre>
+
+<!-- Pre tag with styling -->
+<pre style="background-color: #f4f4f4; padding: 15px; border-radius: 5px;">
+const data = {
+    name: "John",
+    age: 30,
+    city: "New York"
+};
+</pre>
+
+<!-- Pre tag with HTML entities -->
+<pre>
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;title&gt;Sample Page&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;h1&gt;Hello World!&lt;/h1&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre></pre></div><p>These examples show different ways to use the <code>&lt;pre&gt;</code> tag:</p>
+<ol>
+<li>Basic preformatted text</li>
+<li>Code display with <code>&lt;pre&gt;</code> and <code>&lt;code&gt;</code> combined</li>
+<li>Styled <code>&lt;pre&gt;</code> block</li>
+<li>HTML code display using entities</li>
+</ol>
+<p>You can use these in your HTML documents to display formatted text, code snippets, or any content where you want to preserve spacing and line breaks exactly as written.</p>`;
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: complexHtmlMessage,
+        formatted_body: complexHtmlMessage,
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+
+    assert
+      .dom('.monaco-editor')
+      .exists(
+        { count: 1 },
+        'Should only have one monaco editor for the outer pre tag',
+      );
+
+    let monacoContent = getMonacoContent();
+    assert.ok(
+      monacoContent.includes('Basic pre tag example'),
+      'Monaco content includes the first comment',
+    );
+    assert.ok(
+      monacoContent.includes('This is preformatted text'),
+      'Monaco content includes the first nested pre content',
+    );
+    assert.ok(
+      monacoContent.includes('function sayHello()'),
+      'Monaco content includes the code block',
+    );
+    assert.ok(
+      monacoContent.includes('const data = {'),
+      'Monaco content includes the styled pre block',
+    );
+    assert.ok(
+      monacoContent.includes('&lt;html&gt;'),
+      'Monaco content includes the HTML entities block',
+    );
+
+    assert.dom('ol li').exists({ count: 4 }, 'Should have 4 list items');
+
+    await percySnapshot(assert);
+  });
 });
