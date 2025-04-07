@@ -8,8 +8,9 @@ import { tracked } from '@glimmer/tracking';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+import { testRealmURLToUsername } from '@cardstack/runtime-common/helpers/const';
 import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from '@cardstack/runtime-common/realm';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import SubscribeToRealms from '@cardstack/host/helpers/subscribe-to-realms';
 
@@ -30,8 +31,6 @@ import { setupRenderingTest } from '../helpers/setup';
 let loader: Loader;
 
 module('Integration | message service subscription', function (hooks) {
-  let realm: Realm;
-
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function () {
@@ -45,17 +44,24 @@ module('Integration | message service subscription', function (hooks) {
     autostart: true,
   });
 
+  let realmMatrixUsername = testRealmURLToUsername(testRealmURL);
+
+  let realmRoomId = mockMatrixUtils.getRoomIdForRealmAndUser(
+    testRealmURL,
+    '@testuser:localhost',
+  );
+
   setupCardLogs(
     hooks,
     async () => await loader.import(`${baseRealm.url}card-api`),
   );
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
-    ({ realm } = await setupIntegrationTestRealm({
+    await setupIntegrationTestRealm({
       loader,
       mockMatrixUtils,
       contents: {},
-    }));
+    });
   });
 
   test('realm event subscriptions are released when the subscriber is destroyed', async function (assert) {
@@ -95,11 +101,13 @@ module('Integration | message service subscription', function (hooks) {
 
     await click('[data-test-unsubscribe]');
 
-    // @ts-expect-error using private function, is there a better way?
-    await realm.broadcastRealmEvent({
-      eventName: 'index',
-      indexType: 'incremental-index-initiation',
-      updatedFile: 'index.json',
+    mockMatrixUtils.simulateRemoteMessage(realmRoomId, realmMatrixUsername, {
+      type: APP_BOXEL_REALM_EVENT_TYPE,
+      content: {
+        eventName: 'index',
+        indexType: 'incremental-index-initiation',
+        updatedFile: 'index.json',
+      },
     });
 
     await settled();
