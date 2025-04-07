@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Author",
+        "module": "../blog-app/author"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Author",
+      "description": "Spec for Author card",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../blog-app/Author/alice-enwunder"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
