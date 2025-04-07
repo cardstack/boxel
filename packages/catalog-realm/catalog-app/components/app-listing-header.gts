@@ -81,6 +81,7 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
           display: flex;
           align-items: start;
           gap: var(--boxel-sp);
+          flex: 0 0 50%;
         }
         .app-listing-header-logo {
           width: var(--app-listing-thumbnail-size);

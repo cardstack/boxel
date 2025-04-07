@@ -128,8 +128,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this._use.perform(realmUrl);
   }
 
-  @action fork() {
-    console.log('forking...');
+  @action install() {
+    console.log('Install...');
   }
 
   get appName(): string {
@@ -213,8 +213,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                   />
                 </:content>
               </BoxelDropdown>
-              <BoxelButton class='action-button' {{on 'click' this.fork}}>
-                Fork
+              <BoxelButton class='action-button' {{on 'click' this.install}}>
+                Install
               </BoxelButton>
             </div>
           </:action>
@@ -409,12 +409,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         --pill-border: 1px solid var(--boxel-purple);
       }
       .action-buttons {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
+        display: flex;
+        flex-wrap: wrap;
         gap: var(--boxel-sp-xxs);
       }
       .action-button {
-        width: 100%;
+        flex: 1;
+      }
+      .app-listing-embedded
+        :deep(.ember-basic-dropdown-content-wormhole-origin) {
+        position: absolute;
       }
       .app-listing-summary {
         padding: var(--boxel-sp);
