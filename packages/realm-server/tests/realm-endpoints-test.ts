@@ -234,7 +234,7 @@ module(basename(__filename), function () {
       assert.deepEqual(testCard.ref, ref, 'card data is correct');
     });
 
-    test('can index a newly added file to the filesystem', async function (assert) {
+    test('can index a newly added file', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
       let postResponse = await request
@@ -338,7 +338,7 @@ module(basename(__filename), function () {
       }
     });
 
-    test('can index a changed file in the filesystem', async function (assert) {
+    test('can index a changed file', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
       {
