@@ -452,7 +452,7 @@ export default class CardService extends Service {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    destinationURL: URL, //directory
+    destinationURL: URL,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
     let json = await this.fetchJSON(doc.data.id ?? destinationURL, {
@@ -468,10 +468,7 @@ export default class CardService extends Service {
     return json;
   }
 
-  async copyCard(
-    source: CardDef,
-    destinationURL: URL, //directory
-  ): Promise<CardDef> {
+  async copyCard(source: CardDef, destinationURL: URL): Promise<CardDef> {
     let api = await this.getAPI();
     let serialized = await this.serializeCard(source, {
       useAbsoluteURL: true,
