@@ -16,6 +16,7 @@ import { action } from '@ember/object';
 import { fn } from '@ember/helper';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
+import { camelCase } from 'lodash';
 
 import {
   Accordion,
@@ -71,26 +72,26 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _create = task(async (realmUrl: string) => {
-    await Promise.all(
-      this.args.model?.specs
-        ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
-        .map((spec: Spec) =>
-          this.args.context?.actions?.create?.(spec, realmUrl),
-        ) ?? [],
-    );
-    if (this.args.model instanceof SkillListing) {
-      await Promise.all(
-        this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copy?.(skill, realmUrl);
-        }),
-      );
-    }
+    // await Promise.all(
+    //   this.args.model?.specs
+    //     ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
+    //     .map((spec: Spec) =>
+    //       this.args.context?.actions?.create?.(spec, realmUrl),
+    //     ) ?? [],
+    // );
+    // if (this.args.model instanceof SkillListing) {
+    //   await Promise.all(
+    //     this.args.model.skills.map((skill) => {
+    //       this.args.context?.actions?.copy?.(skill, realmUrl);
+    //     }),
+    //   );
+    // }
     if (this.args.model.examples) {
       await this.args.context?.actions?.copyCards?.(
         this.args.model.examples,
         realmUrl,
         this.args.model.name
-          ? `${this.args.model.name}Examples`
+          ? camelCase(`${this.args.model.name}Examples`)
           : 'ListingExamples',
       );
     }
