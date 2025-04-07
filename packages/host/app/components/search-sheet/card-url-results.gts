@@ -7,7 +7,7 @@ import { consume } from 'ember-provide-consume-context';
 
 import { GetCardContextName, type getCard } from '@cardstack/runtime-common';
 
-import { consumeContext } from '@cardstack/host/helpers/consume-context';
+import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import ResultsSection from './results-section';
 

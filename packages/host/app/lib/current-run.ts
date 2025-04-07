@@ -525,7 +525,7 @@ export class CurrentRun {
         meta: {
           lastModified,
           resourceCreatedAt,
-          realmInfo: this.#realmInfo,
+          realmInfo: { ...this.#realmInfo },
           realmURL: this.realmURL.href,
         },
       });

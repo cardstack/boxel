@@ -228,7 +228,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           let pet = this.args.model.pet;
           if (pet) {
             pet.name = 'Updated Pet';
-            this.args.context?.actions?.saveCard(pet);
+            this.args.context?.actions?.saveCard(pet.id);
           }
         };
         <template>

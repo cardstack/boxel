@@ -376,7 +376,7 @@ export default class CardCatalogModal extends Component<Signature> {
           await Promise.all(
             this.realmServer.availableRealmURLs.map(
               async (realm) =>
-                await this.cardService.search(
+                await this.store.search(
                   opts.preselectedCardTypeQuery!,
                   new URL(realm),
                 ),

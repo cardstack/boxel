@@ -41,6 +41,11 @@ export default class Index extends Route<void> {
 
   didMatrixServiceStart = false;
 
+  // WARNING! Mke sure we are _very_ careful with our async in this model. This
+  // model hook is called _every_  time
+  // OperatorModeStateService.schedulePersist() is called (due to the fact we
+  // care about the back button, see note at bottom). Because of that make sure
+  // that there is as little async as possible in this model hook.
   async model(params: {
     cardPath?: string;
     path: string;
@@ -62,7 +67,7 @@ export default class Index extends Route<void> {
     if (!isTesting()) {
       // we don't want to fetch subscription data in integration tests
       // we need to fetch the subscription data right after login
-      await this.billingService.fetchSubscriptionData();
+      await this.billingService.initializeSubscriptionData();
     }
 
     let cardUrl: string | undefined;
@@ -77,6 +82,7 @@ export default class Index extends Route<void> {
       // we only get a card to understand its canonical URL so it's ok to fetch
       // a card that is detached from the store as we only care about it's ID.
       let canonicalCardUrl: string | undefined;
+      // the peek takes advantage of the store cache so this should be quick
       canonicalCardUrl = (await this.store.peek(cardUrl))?.id;
       if (!canonicalCardUrl) {
         // TODO: show a 404 page

@@ -95,7 +95,7 @@ interface OpenFileSubscriber {
 
 export default class OperatorModeStateService extends Service {
   @tracked state: OperatorModeState = new TrackedObject({
-    stacks: new TrackedArray([]),
+    stacks: new TrackedArray<Stack>([]),
     submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
@@ -190,7 +190,7 @@ export default class OperatorModeStateService extends Service {
           document.data.relationships = mergedRel;
         }
       }
-      await this.cardService.patchCard(card, document, patch);
+      await this.store.patch(card, document, patch);
     }
   });
 
@@ -202,7 +202,7 @@ export default class OperatorModeStateService extends Service {
       throw new Error(`Could not determine the realm for card "${cardId}"`);
     }
 
-    await this.cardService.deleteCard(cardId);
+    await this.store.delete(cardId);
 
     // remove all stack items for the deleted card
     let items: StackItem[] = [];

@@ -45,7 +45,7 @@ import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 
-import { consumeContext } from '@cardstack/host/helpers/consume-context';
+import consumeContext from '@cardstack/host/helpers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
@@ -94,7 +94,6 @@ import SubmodeLayout from './submode-layout';
 interface Signature {
   Args: {
     saveSourceOnClose: (url: URL, content: string) => void;
-    saveCardOnClose: (card: CardDef) => void;
   };
 }
 
@@ -260,7 +259,9 @@ export default class CodeSubmode extends Component<Signature> {
   }
 
   private get cardError() {
-    return this.cardResource?.cardError;
+    return this.cardResource?.cardError?.meta
+      ? this.cardResource?.cardError
+      : undefined;
   }
 
   private backgroundURLStyle(backgroundURL: string | null) {

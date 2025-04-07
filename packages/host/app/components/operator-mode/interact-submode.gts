@@ -29,6 +29,7 @@ import {
   moduleFrom,
   RealmPaths,
   isCardInstance,
+  CardError,
   type getCard,
   type getCards,
   type Actions,
@@ -141,19 +142,12 @@ class NeighborStackTriggerButton extends Component<NeighborStackTriggerButtonSig
   </template>
 }
 
-interface Signature {
-  Element: HTMLDivElement;
-  Args: {
-    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
-  };
-}
-
 interface CardToDelete {
   id: string;
   title: string;
 }
 
-export default class InteractSubmode extends Component<Signature> {
+export default class InteractSubmode extends Component {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
 
@@ -213,7 +207,11 @@ export default class InteractSubmode extends Component<Signature> {
           doc.data.meta.realmURL = opts.realmURL.href;
         }
 
-        let maybeUrl = await here.store.createInstance(doc, relativeTo);
+        let maybeUrl = await here.store.create(
+          doc,
+          relativeTo,
+          opts?.realmURL?.href,
+        );
         if (typeof maybeUrl === 'string') {
           let url = maybeUrl;
           let newItem = new StackItem({
@@ -277,19 +275,15 @@ export default class InteractSubmode extends Component<Signature> {
           }),
         );
       },
-      copyCard: async (card: CardDef): Promise<CardDef> => {
-        let deferred = new Deferred<CardDef>();
+      copyCard: async (card: CardDef): Promise<string> => {
+        let deferred = new Deferred<string>();
         here._copyCard.perform(card, stackIndex, deferred);
         return await deferred.promise;
       },
-      saveCard: async (card: CardDef): Promise<void> => {
-        await here.args.saveCard(card);
+      saveCard: (id: string): void => {
+        here.store.save(id);
       },
       delete: async (card: CardDef | URL | string): Promise<void> => {
-        if (here.cardToDelete) {
-          return here.delete.perform(here.cardToDelete.id);
-        }
-
         let cardToDelete: CardToDelete | undefined;
 
         if (typeof card === 'object' && 'id' in card) {
@@ -300,38 +294,30 @@ export default class InteractSubmode extends Component<Signature> {
           };
         } else {
           let cardUrl = card instanceof URL ? card : new URL(card as string);
-          try {
-            // This usage of CardService.getCard() that bypasses the identity
-            // map is ok since we just pluck off some values from the card. we
-            //don't pass the instance around
-            let loadedCard = await here.cardService.getCard(cardUrl);
+          let loadedCard = await here.store.peek(cardUrl.href);
+          if (isCardInstance(loadedCard)) {
             cardToDelete = {
               id: loadedCard.id,
               title: loadedCard.title,
             };
-          } catch (error: any) {
-            // If we get a 500 Internal Server Error, it is probable that the card is in error state.
-            // In this case a cardTitle should be present - we use this to display the card title in the delete modal.
-            if (error.status === 500) {
-              let cardTitle = JSON.parse(error.responseText)?.errors?.[0]?.meta
-                ?.cardTitle;
-
+          } else {
+            let error = loadedCard;
+            if (error.meta != null) {
+              let cardTitle = error.meta.cardTitle;
               if (!cardTitle) {
                 throw new Error(
                   `Could not get card title for ${card} - the server returned a 500 but perhaps for other reason than the card being in error state`,
                 );
               }
-
               cardToDelete = {
                 id: cardUrl.href,
                 title: cardTitle,
               };
             } else {
-              throw error;
+              throw new CardError(error.message, error);
             }
           }
         }
-
         here.cardToDelete = cardToDelete;
       },
       doWithStableScroll: async (
@@ -404,11 +390,11 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   // dropTask will ignore any subsequent delete requests until the one in progress is done
-  private delete = dropTask(async (cardId: string) => {
-    if (!cardId) {
-      // the card isn't actually saved yet, so do nothing
+  private delete = dropTask(async () => {
+    if (!this.cardToDelete) {
       return;
     }
+    let cardId = this.cardToDelete.id;
 
     for (let stack of this.stacks) {
       // remove all selections for the deleted card
@@ -447,24 +433,20 @@ export default class InteractSubmode extends Component<Signature> {
   }
 
   private _copyCard = dropTask(
-    async (
-      sourceCard: CardDef,
-      stackIndex: number,
-      done: Deferred<CardDef>,
-    ) => {
-      let newCard: CardDef | undefined;
+    async (sourceCard: CardDef, stackIndex: number, done: Deferred<string>) => {
+      let newCardId: string | undefined;
       try {
         let { commandContext } = this.commandService;
-        const result = await new CopyCardCommand(commandContext).execute({
+        const { newCard } = await new CopyCardCommand(commandContext).execute({
           sourceCard,
           targetStackIndex: stackIndex,
         });
-        newCard = result.newCard;
+        newCardId = newCard.id;
       } catch (e) {
         done.reject(e);
       } finally {
-        if (newCard) {
-          done.fulfill(newCard);
+        if (newCardId) {
+          done.fulfill(newCardId);
         }
       }
     },
@@ -502,7 +484,7 @@ export default class InteractSubmode extends Component<Signature> {
         }
         let realmURL = destinationRealmURL;
         sources.sort((a, b) => a.title.localeCompare(b.title));
-        let scrollToCard: CardDef | undefined;
+        let scrollToCardId: string | undefined;
         for (let [index, card] of sources.entries()) {
           let { newCard } = await new CopyCardCommand(
             this.commandService.commandContext,
@@ -511,7 +493,7 @@ export default class InteractSubmode extends Component<Signature> {
             targetRealmUrl: realmURL.href,
           });
           if (index === 0) {
-            scrollToCard = newCard; // we scroll to the first card lexically by title
+            scrollToCardId = newCard.id; // we scroll to the first card lexically by title
           }
         }
         let clearSelection =
@@ -522,11 +504,11 @@ export default class InteractSubmode extends Component<Signature> {
         cardSelections.delete(sourceItem);
         let scrollIntoView =
           stackItemComponentAPI.get(destinationItem)?.scrollIntoView;
-        if (scrollToCard) {
+        if (scrollToCardId) {
           // Currently the destination item is always a cards-grid, so we use that
           // fact to be able to scroll to the newly copied item
           scrollIntoView?.(
-            `[data-stack-card="${destinationIndexCardUrl}"] [data-cards-grid-item="${scrollToCard.id}"]`,
+            `[data-stack-card="${destinationIndexCardUrl}"] [data-cards-grid-item="${scrollToCardId}"]`,
           );
         }
       });
@@ -766,7 +748,6 @@ export default class InteractSubmode extends Component<Signature> {
                 @close={{this.close}}
                 @onSelectedCards={{this.onSelectedCards}}
                 @setupStackItem={{this.setupStackItem}}
-                @saveCard={{@saveCard}}
               />
             {{/let}}
           {{/each}}
@@ -799,10 +780,7 @@ export default class InteractSubmode extends Component<Signature> {
         {{#if this.cardToDelete}}
           <DeleteModal
             @itemToDelete={{this.cardToDelete}}
-            @onConfirm={{fn
-              (get (this.publicAPI this 0) 'delete')
-              this.cardToDelete.id
-            }}
+            @onConfirm={{perform this.delete}}
             @onCancel={{this.onCancelDelete}}
             @isDeleteRunning={{this.delete.isRunning}}
           >
