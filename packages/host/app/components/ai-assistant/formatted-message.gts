@@ -261,11 +261,20 @@ function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
       let openTag = htmlString.indexOf('<', currentPos);
       if (openTag === -1) return null;
 
-      // Check if this is a comment
+      if (htmlString.startsWith('<<<<<<<', openTag)) {
+        let endMarker = htmlString.indexOf('>>>>>>>', openTag);
+        if (endMarker === -1) {
+          currentPos = openTag + 7; // length of '<<<<<<<'
+          continue;
+        }
+        // Skip past the entire search/replace block
+        currentPos = endMarker + 7; // length of '>>>>>>>'
+        continue;
+      }
+
       if (htmlString.startsWith('<!--', openTag)) {
         let commentEnd = htmlString.indexOf('-->', openTag);
         if (commentEnd === -1) return null;
-        // Skip past the comment and continue searching
         currentPos = commentEnd + 3;
         continue;
       }
