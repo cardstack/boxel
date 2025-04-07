@@ -338,8 +338,7 @@ module(basename(__filename), function () {
       }
     });
 
-    // CS-8095
-    skip('can index a changed file in the filesystem', async function (assert) {
+    test('can index a changed file in the filesystem', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
       {
@@ -354,20 +353,29 @@ module(basename(__filename), function () {
         );
       }
 
-      writeJSONSync(join(dir.name, 'realm_server_1', 'test', 'person-1.json'), {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person.gts',
-              name: 'Person',
+      await request
+        .patch('/person-1')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
+                },
+              },
             },
-          },
-        },
-      } as LooseSingleCardDocument);
+          }),
+        );
 
       await waitForIncrementalIndexEvent(
         getMessagesSince,
@@ -394,6 +402,7 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental',
         invalidations: [`${testRealmHref}person-1`],
+        clientRequestId: null,
       });
 
       {
@@ -957,16 +966,24 @@ async function waitForIncrementalIndexEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
   since: number,
 ) {
-  await waitUntil(async () => {
+  try {
+    await waitUntil(async () => {
+      let matrixMessages = await getMessagesSince(since);
+
+      return matrixMessages.some(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      );
+    });
+  } catch (e) {
     let matrixMessages = await getMessagesSince(since);
 
-    return matrixMessages.some(
-      (m) =>
-        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-        m.content.eventName === 'index' &&
-        m.content.indexType === 'incremental',
-    );
-  });
+    console.log(e);
+    console.log(JSON.stringify(matrixMessages, null, 2));
+    throw e;
+  }
 }
 
 function findRealmEvent(
