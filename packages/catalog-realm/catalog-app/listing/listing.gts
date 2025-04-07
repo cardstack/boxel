@@ -71,17 +71,18 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _create = task(async (realmUrl: string) => {
-    const specsToCopy: Spec[] =
-      this.args.model?.specs?.filter(
-        // Copying a field is not supported yet
-        (spec: Spec) => spec.specType !== 'field',
-      ) ?? [];
+    const specsToCopy: Spec[] = this.args.model?.specs ?? [];
 
     // First, create the cards
     await Promise.all(
-      specsToCopy.map((spec: Spec) =>
-        this.args.context?.actions?.create?.(spec, realmUrl),
-      ),
+      specsToCopy
+        .filter(
+          // Field type is not supported yet
+          (spec: Spec) => spec.specType !== 'field',
+        )
+        .map((spec: Spec) =>
+          this.args.context?.actions?.create?.(spec, realmUrl),
+        ),
     );
 
     // Then, copy the gts file based on the attached spec's moduleHref
@@ -94,7 +95,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         const targetUrl = new URL(normalizedPath, realmUrl).href;
         const targetFilePath = targetUrl.concat('.gts');
 
-        this.args.context?.actions?.copySource?.(
+        return this.args.context?.actions?.copySource?.(
           absoluteModulePath,
           targetFilePath,
         );
