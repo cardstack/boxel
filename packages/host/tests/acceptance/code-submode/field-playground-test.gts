@@ -1,4 +1,4 @@
-import { click, fillIn, waitUntil } from '@ember/test-helpers';
+import { click, fillIn, settled } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -881,14 +881,14 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       }
     }`;
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+    assertFieldExists(assert, 'embedded');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
-    await realm.write('blog-post.gts', updatedCommentField),
-      await waitUntil(
-        () =>
-          document.querySelector('[data-test-embedded-comment-title]') === null,
-      );
+
+    await realm.write('blog-post.gts', updatedCommentField);
+    await settled();
+    assertFieldExists(assert, 'embedded');
     assert.dom('[data-test-embedded-comment-title]').doesNotExist();
   });
 });
