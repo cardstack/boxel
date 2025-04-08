@@ -2633,6 +2633,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         ref: `${testModuleRealm}pet-person/PetPerson`,
         specType: 'card',
         isCard: true,
+        isComponent: false,
         isField: false,
       });
     } else {
