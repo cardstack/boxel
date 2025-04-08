@@ -375,6 +375,11 @@ module('Integration | computeds', function (hooks) {
           return this.author.bestFriend;
         },
       });
+      @field friendName = contains(StringField, {
+        computeVia: function (this: Post) {
+          return this.author.bestFriend.name;
+        },
+      });
     }
 
     let friend = new Pet({ name: 'Van Gogh' });
@@ -389,6 +394,9 @@ module('Integration | computeds', function (hooks) {
     assert
       .dom('[data-test-field="friend"] [data-test="name"]')
       .hasText('Van Gogh');
+    assert
+      .dom('[data-test-field="friendName"]')
+      .hasText('Friend Name Van Gogh');
 
     await renderCard(loader, firstPost, 'edit');
     assert
