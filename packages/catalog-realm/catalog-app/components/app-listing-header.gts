@@ -36,7 +36,9 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
 
           <div class='app-info'>
             <h1 class='app-name'>{{@name}}</h1>
-            <p class='publisher'>By {{@publisher}}</p>
+            {{#if @publisher}}
+              <p class='publisher'>By {{@publisher}}</p>
+            {{/if}}
           </div>
         </div>
 
@@ -81,6 +83,7 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
           display: flex;
           align-items: start;
           gap: var(--boxel-sp);
+          flex: 0 0 50%;
         }
         .app-listing-header-logo {
           width: var(--app-listing-thumbnail-size);

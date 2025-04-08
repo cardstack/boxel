@@ -14,6 +14,7 @@ import { SkillCard } from 'https://cardstack.com/base/skill-card';
 
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { camelCase } from 'lodash';
@@ -51,7 +52,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.writableRealms.map((realmUrl) => {
       return new MenuItem(realmUrl, 'action', {
         action: () => {
-          this.create(realmUrl);
+          this.use(realmUrl);
         },
       });
     });
@@ -71,21 +72,21 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this.writableRealms = writableRealms;
   });
 
-  _create = task(async (realmUrl: string) => {
-    // await Promise.all(
-    //   this.args.model?.specs
-    //     ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
-    //     .map((spec: Spec) =>
-    //       this.args.context?.actions?.create?.(spec, realmUrl),
-    //     ) ?? [],
-    // );
-    // if (this.args.model instanceof SkillListing) {
-    //   await Promise.all(
-    //     this.args.model.skills.map((skill) => {
-    //       this.args.context?.actions?.copy?.(skill, realmUrl);
-    //     }),
-    //   );
-    // }
+  _use = task(async (realmUrl: string) => {
+    await Promise.all(
+      this.args.model?.specs
+        ?.filter((spec: Spec) => spec.specType !== 'field') // Copying a field is not supported yet
+        .map((spec: Spec) =>
+          this.args.context?.actions?.create?.(spec, realmUrl),
+        ) ?? [],
+    );
+    if (this.args.model instanceof SkillListing) {
+      await Promise.all(
+        this.args.model.skills.map((skill) => {
+          this.args.context?.actions?.copy?.(skill, realmUrl);
+        }),
+      );
+    }
     if (this.args.model.examples) {
       await this.args.context?.actions?.copyCards?.(
         this.args.model.examples,
@@ -117,17 +118,28 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     );
   }
 
-  @action create(realmUrl: string) {
-    this._create.perform(realmUrl);
+  @action preview() {
+    if (!this.args.model.examples || this.args.model.examples.length === 0) {
+      throw new Error('No examples to preview');
+    }
+    this.args.context?.actions?.viewCard?.(this.args.model.examples[0]);
+  }
+
+  @action use(realmUrl: string) {
+    this._use.perform(realmUrl);
+  }
+
+  @action install() {
+    console.log('Install...');
   }
 
   get appName(): string {
     return this.args.model.name || '';
   }
 
-  get publisherInfo(): string {
+  get publisherName() {
     const hasPublisher = Boolean(this.args.model.publisher?.name);
-    return hasPublisher ? 'By ' + this.args.model.publisher?.name : '';
+    return hasPublisher ? this.args.model.publisher?.name : '';
   }
 
   get specBreakdown() {
@@ -162,6 +174,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.images?.length);
   }
 
+  get hasExamples() {
+    return Boolean(this.args.model.examples?.length);
+  }
+
   <template>
     <div class='app-listing-embedded'>
       {{#if this._setup.isRunning}}
@@ -172,32 +188,42 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           @thumbnailUrl={{@model.thumbnailURL}}
           @name={{this.appName}}
           @description={{@model.description}}
-          @publisher={{this.publisherInfo}}
+          @publisher={{this.publisherName}}
         >
           <:action>
-            <BoxelDropdown>
-              <:trigger as |bindings|>
-                <BoxelButton
-                  class='action-button'
-                  @disabled={{this.createButtonDisabled}}
-                  {{bindings}}
-                >
-                  {{#if this._create.isRunning}}
-                    Creating...
-                  {{else if this.createdInstances}}
-                    Created Instances
-                  {{else}}
-                    Add to Workspace
-                  {{/if}}
+            <div class='action-buttons'>
+              {{#if this.hasExamples}}
+                <BoxelButton class='action-button' {{on 'click' this.preview}}>
+                  Preview
                 </BoxelButton>
-              </:trigger>
-              <:content as |dd|>
-                <BoxelMenu
-                  @closeMenu={{dd.close}}
-                  @items={{this.realmOptions}}
-                />
-              </:content>
-            </BoxelDropdown>
+              {{/if}}
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <BoxelButton
+                    class='action-button'
+                    @disabled={{this.createButtonDisabled}}
+                    {{bindings}}
+                  >
+                    {{#if this._use.isRunning}}
+                      Creating...
+                    {{else if this.createdInstances}}
+                      Created Instances
+                    {{else}}
+                      Use
+                    {{/if}}
+                  </BoxelButton>
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    @closeMenu={{dd.close}}
+                    @items={{this.realmOptions}}
+                  />
+                </:content>
+              </BoxelDropdown>
+              <BoxelButton class='action-button' {{on 'click' this.install}}>
+                Install
+              </BoxelButton>
+            </div>
           </:action>
         </AppListingHeader>
 
@@ -217,57 +243,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             <h2>License</h2>
             {{@model.license.name}}
           </div>
-
-          {{!-- <div class='license-statistic'>
-            {{! Todo: Add license section while getting the real data }}
-            <div class='license-section'>
-              <h2>License</h2>
-              {{@model.license.name}}
-            </div>
-
-            {{! Todo: Add statistics section while getting the real data }}
-            <div class='statistics-section'>
-              <h2>Statistics</h2>
-              <div class='stats-container'>
-                <div class='stat-item info-box'>
-                  <span class='stat-label'>Downloads</span>
-                  <span class='stat-value'>16,842</span>
-                </div>
-
-                <div class='stat-item info-box'>
-                  <span class='stat-label'>Subscriptions</span>
-                  <span class='stat-value'>5,439</span>
-                </div>
-              </div>
-            </div>
-          </div> --}}
-
-          {{!-- <div class='pricing-plans'>
-            {{! Todo: Add price plan section while getting the real data }}
-            <div class='price-plan-item info-box'>
-              <span class='price-plan-label'>$250</span>
-              <span class='price-plan-info'>= $250USD</span>
-              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-                <:default>One-time purchase</:default>
-              </Pill>
-            </div>
-
-            <div class='price-plan-item info-box'>
-              <span class='price-plan-label'>$ 0.50</span>
-              <span class='price-plan-info'>per month</span>
-              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-                <:default>Cancel anytime</:default>
-              </Pill>
-            </div>
-
-            <div class='price-plan-item premium-plan-item info-box'>
-              <span class='price-plan-label'>$ 250</span>
-              <span class='price-plan-info'>with Boxel Creator</span>
-              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-                <:default>Premium plan</:default>
-              </Pill>
-            </div>
-          </div> --}}
         </section>
 
         <hr class='divider' />
@@ -389,69 +364,21 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         --pill-font-color: var(--boxel-purple);
         --pill-border: 1px solid var(--boxel-purple);
       }
+      .action-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xxs);
+      }
       .action-button {
-        width: 100%;
+        flex: 1;
+      }
+      .app-listing-embedded
+        :deep(.ember-basic-dropdown-content-wormhole-origin) {
+        position: absolute;
       }
       .app-listing-summary {
         padding: var(--boxel-sp);
         background-color: var(--boxel-100);
-      }
-      .license-statistic {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--boxel-sp);
-      }
-      .stats-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--boxel-sp);
-      }
-      .stat-item {
-        padding: var(--boxel-sp-xs);
-        border: 1px solid var(--boxel-border-color);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .stat-label {
-        font: 500 var(--boxel-font-xs);
-        color: var(--boxel-400);
-      }
-      .stat-value {
-        font: 600 var(--boxel-font);
-      }
-      .pricing-plans {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: var(--boxel-sp);
-        margin-top: var(--boxel-sp-lg);
-      }
-      .price-plan-item {
-        padding: var(--boxel-sp-lg) var(--boxel-sp);
-        background-color: var(--boxel-dark);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .premium-plan-item {
-        background-color: var(--boxel-purple);
-      }
-      .price-plan-label {
-        font: 600 var(--boxel-font-lg);
-        color: var(--boxel-light);
-        text-align: center;
-      }
-      .price-plan-info {
-        font: 400 var(--boxel-font);
-        color: var(--boxel-light);
-        text-align: center;
-      }
-      .price-plan-pill {
-        --pill-font-color: var(--boxel-light);
-        margin-top: var(--boxel-sp-sm);
-        text-align: center;
       }
 
       .divider {

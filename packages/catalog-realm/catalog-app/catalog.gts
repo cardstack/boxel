@@ -106,7 +106,6 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
         <:intro>
           <div class='intro-title'>
             <h2>Feature Collection</h2>
-            <p>:Personal Organization</p>
           </div>
           <p class='intro-description'>A hand-picked duo of focused, flexible
             tools for personal</p>
