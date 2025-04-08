@@ -243,57 +243,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             <h2>License</h2>
             {{@model.license.name}}
           </div>
-
-          {{!-- <div class='license-statistic'>
-            {{! Todo: Add license section while getting the real data }}
-            <div class='license-section'>
-              <h2>License</h2>
-              {{@model.license.name}}
-            </div>
-
-            {{! Todo: Add statistics section while getting the real data }}
-            <div class='statistics-section'>
-              <h2>Statistics</h2>
-              <div class='stats-container'>
-                <div class='stat-item info-box'>
-                  <span class='stat-label'>Downloads</span>
-                  <span class='stat-value'>16,842</span>
-                </div>
-
-                <div class='stat-item info-box'>
-                  <span class='stat-label'>Subscriptions</span>
-                  <span class='stat-value'>5,439</span>
-                </div>
-              </div>
-            </div>
-          </div> --}}
-
-          {{!-- <div class='pricing-plans'>
-            {{! Todo: Add price plan section while getting the real data }}
-            <div class='price-plan-item info-box'>
-              <span class='price-plan-label'>$250</span>
-              <span class='price-plan-info'>= $250USD</span>
-              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-                <:default>One-time purchase</:default>
-              </Pill>
-            </div>
-
-            <div class='price-plan-item info-box'>
-              <span class='price-plan-label'>$ 0.50</span>
-              <span class='price-plan-info'>per month</span>
-              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-                <:default>Cancel anytime</:default>
-              </Pill>
-            </div>
-
-            <div class='price-plan-item premium-plan-item info-box'>
-              <span class='price-plan-label'>$ 250</span>
-              <span class='price-plan-info'>with Boxel Creator</span>
-              <Pill @pillBackgroundColor='#ffffff50' class='price-plan-pill'>
-                <:default>Premium plan</:default>
-              </Pill>
-            </div>
-          </div> --}}
         </section>
 
         <hr class='divider' />
@@ -430,63 +379,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       .app-listing-summary {
         padding: var(--boxel-sp);
         background-color: var(--boxel-100);
-      }
-      .license-statistic {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--boxel-sp);
-      }
-      .stats-container {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: var(--boxel-sp);
-      }
-      .stat-item {
-        padding: var(--boxel-sp-xs);
-        border: 1px solid var(--boxel-border-color);
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-      }
-      .stat-label {
-        font: 500 var(--boxel-font-xs);
-        color: var(--boxel-400);
-      }
-      .stat-value {
-        font: 600 var(--boxel-font);
-      }
-      .pricing-plans {
-        display: grid;
-        grid-template-columns: 1fr 1fr 1fr;
-        gap: var(--boxel-sp);
-        margin-top: var(--boxel-sp-lg);
-      }
-      .price-plan-item {
-        padding: var(--boxel-sp-lg) var(--boxel-sp);
-        background-color: var(--boxel-dark);
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: var(--boxel-sp-xs);
-      }
-      .premium-plan-item {
-        background-color: var(--boxel-purple);
-      }
-      .price-plan-label {
-        font: 600 var(--boxel-font-lg);
-        color: var(--boxel-light);
-        text-align: center;
-      }
-      .price-plan-info {
-        font: 400 var(--boxel-font);
-        color: var(--boxel-light);
-        text-align: center;
-      }
-      .price-plan-pill {
-        --pill-font-color: var(--boxel-light);
-        margin-top: var(--boxel-sp-sm);
-        text-align: center;
       }
 
       .divider {
