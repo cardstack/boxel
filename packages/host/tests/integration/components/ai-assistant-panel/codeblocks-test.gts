@@ -282,8 +282,9 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
 
   test('handles nested pre tags', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
-    let complexHtmlMessage = `<p>I&#39;ll help you create an example with pre tags in HTML. Here&#39;s a useful example that demonstrates different ways to use the pre tag:</p>
-<pre data-code-language="html"><!-- Basic pre tag example -->
+    let messageWithNestedPreTags = `I'll help you create an example with pre tags in HTML. Here's a useful example that demonstrates different ways to use the pre tag:
+\`\`\`html
+<!-- Basic pre tag example -->
 <pre>
 This is preformatted text
     It preserves both spaces
@@ -319,21 +320,31 @@ const data = {
         &lt;h1&gt;Hello World!&lt;/h1&gt;
     &lt;/body&gt;
 &lt;/html&gt;
-</pre></pre></div><p>These examples show different ways to use the <code>&lt;pre&gt;</code> tag:</p>
-<ol>
-<li>Basic preformatted text</li>
-<li>Code display with <code>&lt;pre&gt;</code> and <code>&lt;code&gt;</code> combined</li>
-<li>Styled <code>&lt;pre&gt;</code> block</li>
-<li>HTML code display using entities</li>
-</ol>
-<p>You can use these in your HTML documents to display formatted text, code snippets, or any content where you want to preserve spacing and line breaks exactly as written.</p>`;
+</pre>
+\`\`\`
+
+\`\`\`typescript
+  <<<<<<< SEARCH
+    let a = 1;
+    let c = 3;
+  =======
+    let a = 2;
+\`\`\`
+
+These examples show different ways to use the \`<pre>\` tag:
+1. Basic preformatted text
+2. Code display with \`<pre>\` and \`<code>\` combined
+3. Styled \`<pre>\` block
+4. HTML code display using entities
+
+You can use these in your HTML documents to display formatted text, code snippets, or any content where you want to preserve spacing and line breaks exactly as written.`;
 
     simulateRemoteMessage(
       roomId,
       '@aibot:localhost',
       {
-        body: complexHtmlMessage,
-        formatted_body: complexHtmlMessage,
+        body: messageWithNestedPreTags,
+        formatted_body: messageWithNestedPreTags,
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
@@ -348,7 +359,7 @@ const data = {
     assert
       .dom('.monaco-editor')
       .exists(
-        { count: 1 },
+        { count: 2 },
         'Should only have one monaco editor for the outer pre tag',
       );
 
@@ -369,9 +380,10 @@ const data = {
       monacoContent.includes('const data = {'),
       'Monaco content includes the styled pre block',
     );
-    assert.ok(
-      monacoContent.includes('&lt;html&gt;'),
-      'Monaco content includes the HTML entities block',
+    assert.equal(
+      (document.getElementsByClassName('view-lines')[1] as HTMLElement)
+        .innerText,
+      '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
     );
 
     assert.dom('ol li').exists({ count: 4 }, 'Should have 4 list items');

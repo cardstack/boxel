@@ -7,34 +7,12 @@ import {
   parseSearchReplace,
 } from '../search-replace-block-parsing';
 
-function findMatchingClosingTag(str: string, startPos: number): number {
-  let nestLevel = 1;
-  let pos = startPos;
-
-  while (nestLevel > 0 && pos < str.length) {
-    let openTag = str.indexOf('<pre', pos);
-    let closeTag = str.indexOf('</pre>', pos);
-
-    if (closeTag === -1) return -1;
-
-    if (openTag !== -1 && openTag < closeTag) {
-      nestLevel++;
-      pos = openTag + 4;
-    } else {
-      nestLevel--;
-      pos = closeTag + 6;
-      if (nestLevel === 0) {
-        return closeTag;
-      }
-    }
-  }
-  return -1;
-}
-
 export function extractCodeData(preElementString: string): CodeData {
-  // Find the opening pre tag
-  let openTagEnd = preElementString.indexOf('>');
-  if (openTagEnd === -1) {
+  let tempContainer = document.createElement('div');
+  tempContainer.innerHTML = preElementString;
+  let preElement = tempContainer.querySelector('pre');
+
+  if (!preElement) {
     return {
       fileUrl: null,
       code: null,
@@ -43,25 +21,15 @@ export function extractCodeData(preElementString: string): CodeData {
     };
   }
 
-  // Find the matching closing tag considering nesting
-  let closingTagStart = findMatchingClosingTag(preElementString, openTagEnd);
-  if (closingTagStart === -1) {
-    return {
-      fileUrl: null,
-      code: null,
-      language: null,
-      searchReplaceBlock: null,
-    };
-  }
+  let language = preElement.getAttribute('data-code-language') || null;
 
-  let content = preElementString.slice(openTagEnd + 1, closingTagStart);
-  let language = null;
-  let languageMatch = preElementString.match(/data-code-language="([^"]+)"/);
-  if (languageMatch) {
-    language = languageMatch[1];
-  }
-
+  let content = preElement.innerHTML;
+  // Decode HTML entities to handle special characters like < and >
+  let textarea = document.createElement('textarea');
+  textarea.innerHTML = content;
+  content = textarea.value;
   let parsedContent = parseSearchReplace(content);
+
   // Transform the incomplete search/replace block into a format for streaming,
   // so that the user can see the search replace block in a human friendly format.
   // // existing code ...
@@ -139,4 +107,79 @@ export function wrapLastTextNodeInStreamingTextSpan(
     lastTextNode.replaceWith(span);
   }
   return htmlSafe(doc.body.innerHTML);
+}
+
+export interface HtmlTagGroup {
+  type: 'pre_tag' | 'non_pre_tag';
+  content: string;
+}
+
+export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
+  let result: HtmlTagGroup[] = [];
+  let tagStack: { tag: string; startPos: number }[] = [];
+  let currentPosition = 0;
+
+  let findNextTag = (
+    pos: number,
+  ): { type: 'open' | 'close'; tag: string; position: number } | null => {
+    // Match either:
+    // 1. Opening tag: <tag> or <tag attr="value">
+    // 2. Closing tag: </tag>
+    let tagPattern = /<\/?([a-zA-Z][a-zA-Z0-9]*)\s*(?:[^>]*?)>/g;
+    tagPattern.lastIndex = pos;
+
+    let match = tagPattern.exec(htmlString);
+    if (!match) return null;
+
+    return {
+      type: match[0].startsWith('</') ? 'close' : 'open',
+      tag: match[1].toLowerCase(),
+      position: match.index,
+    };
+  };
+
+  while (currentPosition < htmlString.length) {
+    let nextTag = findNextTag(currentPosition);
+
+    if (!nextTag) {
+      if (tagStack.length === 0) {
+        let remaining = htmlString.slice(currentPosition).trim();
+        if (remaining) {
+          result.push({
+            type: 'non_pre_tag',
+            content: remaining,
+          });
+        }
+      }
+      break;
+    }
+
+    if (nextTag.type === 'open') {
+      tagStack.push({ tag: nextTag.tag, startPos: nextTag.position });
+      currentPosition = nextTag.position + 1;
+    } else {
+      if (
+        tagStack.length > 0 &&
+        tagStack[tagStack.length - 1].tag === nextTag.tag
+      ) {
+        let openTag = tagStack.pop()!;
+
+        if (tagStack.length === 0) {
+          let content = htmlString.slice(
+            openTag.startPos,
+            nextTag.position + nextTag.tag.length + 3,
+          );
+          result.push({
+            type: nextTag.tag === 'pre' ? 'pre_tag' : 'non_pre_tag',
+            content: content,
+          });
+        }
+        currentPosition = nextTag.position + nextTag.tag.length + 3;
+      } else {
+        currentPosition = nextTag.position + 1;
+      }
+    }
+  }
+
+  return result;
 }

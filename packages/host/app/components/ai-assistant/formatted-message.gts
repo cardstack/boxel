@@ -19,6 +19,8 @@ import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-searc
 import {
   extractCodeData,
   wrapLastTextNodeInStreamingTextSpan,
+  parseHtmlContent,
+  HtmlTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -40,11 +42,6 @@ interface FormattedMessageSignature {
   monacoSDK: MonacoSDK;
   renderCodeBlocks: boolean;
   isStreaming: boolean;
-}
-
-interface HtmlTagGroup {
-  type: 'pre_tag' | 'non_pre_tag';
-  content: string;
 }
 
 function sanitize(html: string): SafeString {
@@ -246,100 +243,6 @@ class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
   ) {
     onHtmlUpdate(html);
   }
-}
-
-function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
-  let result: HtmlTagGroup[] = [];
-  let tagStack: { tag: string; startPos: number }[] = [];
-  let currentPosition = 0;
-
-  let findNextTag = (
-    pos: number,
-  ): { type: 'open' | 'close'; tag: string; position: number } | null => {
-    let currentPos = pos;
-    while (currentPos < htmlString.length) {
-      let openTag = htmlString.indexOf('<', currentPos);
-      if (openTag === -1) return null;
-
-      if (htmlString.startsWith('<<<<<<<', openTag)) {
-        let endMarker = htmlString.indexOf('>>>>>>>', openTag);
-        if (endMarker === -1) {
-          currentPos = openTag + 7; // length of '<<<<<<<'
-          continue;
-        }
-        // Skip past the entire search/replace block
-        currentPos = endMarker + 7; // length of '>>>>>>>'
-        continue;
-      }
-
-      if (htmlString.startsWith('<!--', openTag)) {
-        let commentEnd = htmlString.indexOf('-->', openTag);
-        if (commentEnd === -1) return null;
-        currentPos = commentEnd + 3;
-        continue;
-      }
-
-      if (htmlString[openTag + 1] === '/') {
-        let closeEnd = htmlString.indexOf('>', openTag);
-        if (closeEnd === -1) return null;
-        let tag = htmlString.slice(openTag + 2, closeEnd).toLowerCase();
-        return { type: 'close', tag, position: openTag };
-      } else {
-        let spaceOrClose = /[\s>]/;
-        let tagEnd = htmlString.indexOf('>', openTag);
-        let spacePos = htmlString.slice(openTag, tagEnd).search(spaceOrClose);
-        let tagNameEnd = spacePos !== -1 ? openTag + spacePos : tagEnd;
-        let tag = htmlString.slice(openTag + 1, tagNameEnd).toLowerCase();
-        return { type: 'open', tag, position: openTag };
-      }
-    }
-    return null;
-  };
-
-  while (currentPosition < htmlString.length) {
-    let nextTag = findNextTag(currentPosition);
-
-    if (!nextTag) {
-      if (tagStack.length === 0) {
-        let remaining = htmlString.slice(currentPosition).trim();
-        if (remaining) {
-          result.push({
-            type: 'non_pre_tag',
-            content: remaining,
-          });
-        }
-      }
-      break;
-    }
-
-    if (nextTag.type === 'open') {
-      tagStack.push({ tag: nextTag.tag, startPos: nextTag.position });
-      currentPosition = nextTag.position + 1;
-    } else {
-      if (
-        tagStack.length > 0 &&
-        tagStack[tagStack.length - 1].tag === nextTag.tag
-      ) {
-        let openTag = tagStack.pop()!;
-
-        if (tagStack.length === 0) {
-          let content = htmlString.slice(
-            openTag.startPos,
-            nextTag.position + nextTag.tag.length + 3,
-          );
-          result.push({
-            type: nextTag.tag === 'pre' ? 'pre_tag' : 'non_pre_tag',
-            content: content,
-          });
-        }
-        currentPosition = nextTag.position + nextTag.tag.length + 3;
-      } else {
-        currentPosition = nextTag.position + 1;
-      }
-    }
-  }
-
-  return result;
 }
 
 interface CodeDiffResourceArgs {
