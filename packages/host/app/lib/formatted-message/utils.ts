@@ -134,7 +134,6 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
       let tagName = element.tagName.toLowerCase();
 
       if (tagName === 'pre') {
-        console.log('pre tag', element.outerHTML);
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,
