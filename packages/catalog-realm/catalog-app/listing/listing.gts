@@ -136,9 +136,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return this.args.model.name || '';
   }
 
-  get publisherInfo(): string {
+  get publisherName() {
     const hasPublisher = Boolean(this.args.model.publisher?.name);
-    return hasPublisher ? 'By ' + this.args.model.publisher?.name : '';
+    return hasPublisher ? this.args.model.publisher?.name : '';
   }
 
   get specBreakdown() {
@@ -183,7 +183,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           @thumbnailUrl={{@model.thumbnailURL}}
           @name={{this.appName}}
           @description={{@model.description}}
-          @publisher={{this.publisherInfo}}
+          @publisher={{this.publisherName}}
         >
           <:action>
             <div class='action-buttons'>

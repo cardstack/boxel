@@ -36,7 +36,9 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
 
           <div class='app-info'>
             <h1 class='app-name'>{{@name}}</h1>
-            <p class='publisher'>By {{@publisher}}</p>
+            {{#if @publisher}}
+              <p class='publisher'>By {{@publisher}}</p>
+            {{/if}}
           </div>
         </div>
 
