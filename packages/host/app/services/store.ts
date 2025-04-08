@@ -96,7 +96,7 @@ export default class StoreService extends Service implements StoreInterface {
   > = new Map();
   private autoSaveStates: TrackedWeakMap<CardDef, AutoSaveState> =
     new TrackedWeakMap();
-  private _api?: typeof CardAPI;
+  private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
   private inflightCards: Map<string, Promise<CardDef | CardError>> = new Map();
@@ -157,9 +157,8 @@ export default class StoreService extends Service implements StoreInterface {
           }
           let card = this.identityContext.get(id);
 
-          // using this._api in case the unload happens before this.ready is fulfilled
-          if (this._api && card) {
-            this._api?.unsubscribeFromChanges(card, onCardChange);
+          if (this.cardApiCache && card) {
+            this.cardApiCache?.unsubscribeFromChanges(card, onCardChange);
           }
         }
         resources.splice(index, 1);
@@ -320,7 +319,7 @@ export default class StoreService extends Service implements StoreInterface {
       instance = instanceOrDoc;
       this.guardAgainstUnknownInstances(instance);
     }
-    this.assertLocalIdMapping(instance);
+    await this.assertLocalIdMapping(instance);
     this.identityContext.set(instance.id, instance);
 
     if (!opts?.doNotPersist) {
@@ -368,7 +367,7 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<void> {
     await this.ready;
     this.guardAgainstUnknownInstances(instance);
-    this.assertLocalIdMapping(instance);
+    await this.assertLocalIdMapping(instance);
     let linkedCards = await this.loadPatchedInstances(
       patchData,
       new URL(instance.id),
@@ -393,7 +392,8 @@ export default class StoreService extends Service implements StoreInterface {
         (instance as any)[field] = value;
       }
     }
-    await this.api.updateFromSerialized<typeof CardDef>(
+    let api = await this.cardService.getAPI();
+    await api.updateFromSerialized<typeof CardDef>(
       instance,
       doc,
       this.identityContext,
@@ -448,17 +448,9 @@ export default class StoreService extends Service implements StoreInterface {
     return this.autoSaveStates.get(instance);
   }
 
-  private get api(): typeof CardAPI {
-    if (!this._api) {
-      throw new Error(
-        `please await this.ready before trying to access this.api`,
-      );
-    }
-    return this._api;
-  }
-
-  private assertLocalIdMapping(instance: CardDef, remoteId?: string) {
-    let localId = instance[this.api.localId];
+  private async assertLocalIdMapping(instance: CardDef, remoteId?: string) {
+    let api = await this.cardService.getAPI();
+    let localId = instance[api.localId];
     let existingRemoteId = this.localIds.get(localId);
     if (existingRemoteId && instance.id !== existingRemoteId) {
       throw new Error(
@@ -474,7 +466,8 @@ export default class StoreService extends Service implements StoreInterface {
     relativeTo?: URL | undefined,
   ): Promise<T> {
     await this.ready;
-    let card = (await this.api.createFromSerialized(resource, doc, relativeTo, {
+    let api = await this.cardService.getAPI();
+    let card = (await api.createFromSerialized(resource, doc, relativeTo, {
       identityContext: this.identityContext,
     })) as T;
     // it's important that we absorb the field async here so that glimmer won't
@@ -482,7 +475,7 @@ export default class StoreService extends Service implements StoreInterface {
     // being able to inform us of which fields are used or not at this point.
     // (this is something that the card compiler could optimize for us in the
     // future)
-    await this.api.recompute(card, {
+    await api.recompute(card, {
       recomputeAllFields: true,
       loadFields: true,
     });
@@ -495,8 +488,8 @@ export default class StoreService extends Service implements StoreInterface {
         `tried to add ${instance.id} to the store, but the store already has a different instance with this id. Please obtain the instances that already exists from the store`,
       );
     }
-    await this.ready;
-    let deps = getDeps(this.api, instance);
+    let api = await this.cardService.getAPI();
+    let deps = getDeps(api, instance);
     for (let dep of deps) {
       if (dep.id && !this.identityContext.get(dep.id)) {
         this.identityContext.set(dep.id, dep);
@@ -509,9 +502,9 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async setup() {
-    this._api = await this.cardService.getAPI();
+    let api = await this.cardService.getAPI();
     this.identityContext = new IdentityContext({
-      api: this.api,
+      api,
       remoteIdSubscribers: this.remoteIdSubscribers,
       localIds: this.localIds,
       localIdSubscribers: this.localIdSubscribers,
@@ -624,6 +617,9 @@ export default class StoreService extends Service implements StoreInterface {
 
     await this.ready;
     if (maybeUpdatedInstance?.id) {
+      // module updates will break the cached api. so don't hang on to this longer
+      // than necessary
+      this.cardApiCache = await this.cardService.getAPI();
       for (let subscriber of this.remoteIdSubscribers.get(
         maybeUpdatedInstance.id,
       )?.resources ?? []) {
@@ -632,7 +628,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         let autoSaveState;
         if (oldInstance) {
-          this.api.unsubscribeFromChanges(
+          this.cardApiCache.unsubscribeFromChanges(
             oldInstance,
             subscriber.resourceState.onCardChange,
           );
@@ -640,7 +636,7 @@ export default class StoreService extends Service implements StoreInterface {
           this.autoSaveStates.delete(oldInstance);
         }
         if (isCardInstance(maybeUpdatedInstance)) {
-          this.api.subscribeToChanges(
+          this.cardApiCache.subscribeToChanges(
             maybeUpdatedInstance,
             subscriber.resourceState.onCardChange,
           );
@@ -733,7 +729,7 @@ export default class StoreService extends Service implements StoreInterface {
         doc,
         new URL(doc.data.id),
       );
-      this.assertLocalIdMapping(instance);
+      await this.assertLocalIdMapping(instance);
       deferred?.fulfill(instance);
       return instance as T;
     } catch (error: any) {
@@ -864,9 +860,10 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let token = waiter.beginAsync();
     let api: typeof CardAPI | undefined;
-    await this.ready;
     try {
-      this.api.subscribeToChanges(instance, onCardChange);
+      await this.ready;
+      api = await this.cardService.getAPI();
+      api.subscribeToChanges(instance, onCardChange);
       let doc = await this.cardService.serializeCard(instance, {
         // for a brand new card that has no id yet, we don't know what we are
         // relativeTo because its up to the realm server to assign us an ID, so
@@ -888,7 +885,7 @@ export default class StoreService extends Service implements StoreInterface {
         realmURL = new URL(defaultRealmHref);
       }
       let json = await this.saveCardDocument(doc, realmURL);
-      this.assertLocalIdMapping(instance, json.data.id);
+      await this.assertLocalIdMapping(instance, json.data.id);
       let isNew = !instance.id;
 
       // if the card changed while the save was in flight then don't load the
@@ -899,11 +896,7 @@ export default class StoreService extends Service implements StoreInterface {
         // should always use updateFromSerialized()--this way a newly created
         // instance that does not yet have an id is still the same instance after an
         // ID has been assigned by the server.
-        await this.api.updateFromSerialized(
-          instance,
-          json,
-          this.identityContext,
-        );
+        await api.updateFromSerialized(instance, json, this.identityContext);
       } else if (isNew) {
         // in this case a new card was created, but there is an immediate change
         // that was made--so we save off the new ID for the card so in the next
@@ -914,7 +907,7 @@ export default class StoreService extends Service implements StoreInterface {
         this.onSaveSubscriber(new URL(json.data.id), json);
       }
 
-      let localId = instance[this.api.localId];
+      let localId = instance[api.localId];
       let subscribers = this.localIdSubscribers.get(localId)?.resources;
       if (isNew && subscribers) {
         // now that we have a remote ID, promote the local ID subscription to a
@@ -949,7 +942,7 @@ export default class StoreService extends Service implements StoreInterface {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
     await this.withTestWaiters(async () => {
-      await this.ready;
+      let api = await this.cardService.getAPI();
       let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
         instance.id,
         undefined,
@@ -961,7 +954,7 @@ export default class StoreService extends Service implements StoreInterface {
         ${JSON.stringify(incomingDoc, null, 2)}`,
         );
       }
-      await this.api.updateFromSerialized<typeof CardDef>(
+      await api.updateFromSerialized<typeof CardDef>(
         instance,
         incomingDoc,
         this.identityContext,
