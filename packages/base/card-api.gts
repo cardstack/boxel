@@ -56,7 +56,7 @@ import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
 import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
-import MissingEmbeddedTemplate from './default-templates/missing-embedded';
+import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -1850,9 +1850,10 @@ export class FieldDef extends BaseDef {
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
 
-  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
+  static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
+  static fitted: BaseDefComponent = MissingTemplate;
 }
 
 export class ReadOnlyField extends FieldDef {

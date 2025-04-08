@@ -63,6 +63,7 @@ export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.ran
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
+export * from './cached-fetch';
 export * from './commands';
 export * from './constants';
 export * from './matrix-constants';
