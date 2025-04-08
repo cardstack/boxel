@@ -178,7 +178,6 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  // TODO how to create subscriber with no remote ID
   async createSubscriber({
     resource,
     idOrDoc,
@@ -256,7 +255,7 @@ export default class StoreService extends Service implements StoreInterface {
       setCardError,
     });
     await this.handleUpdatedInstance(undefined, cardOrError);
-    return { instance: instance, error };
+    return { instance, error };
   }
 
   // This method creates a new instance in the store and return the new card ID
@@ -394,7 +393,7 @@ export default class StoreService extends Service implements StoreInterface {
     await this.persistAndUpdate(instance);
   }
 
-  // This method is used for specific scenarios where you just want a instances
+  // This method is used for specific scenarios where you just want instances
   // that are not auto saving and not receiving live updates and are eligible for
   // garbage collection--meaning that it will be detached from the store. This
   // means you MUST consume the instance IMMEDIATELY! they should not live in the

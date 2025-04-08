@@ -59,7 +59,7 @@ export interface RealmPrerenderedCards {
   realmInfo: RealmInfo;
   prerenderedCards: PrerenderedCard[];
 }
-export { v4 as uuidv4 } from 'uuid';
+export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';

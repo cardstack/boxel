@@ -169,7 +169,6 @@ export class CardResource extends Resource<Args> {
 // let's talk.
 export function getCard(
   parent: object,
-  // TODO how to getCard that doesn't have a remote ID because it's not saved yet...
   id: () => string | undefined,
   opts?: {
     relativeTo?: URL; // used for new cards
