@@ -516,6 +516,18 @@ export default class StoreService extends Service implements StoreInterface {
             !event.clientRequestId ||
             !this.cardService.clientRequestIds.has(event.clientRequestId)
           ) {
+            console.debug(`store reloading ${invalidation}`);
+            if (!event.clientRequestId) {
+              console.debug('because event has null clientRequestId');
+            } else if (
+              !this.cardService.clientRequestIds.has(event.clientRequestId)
+            ) {
+              console.debug(
+                `because clientRequestId ${event.clientRequestId} is not found in`,
+                Array.from(this.cardService.clientRequestIds.values()),
+              );
+            }
+
             this.reloadTask.perform(liveInstance);
           } else {
             if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
