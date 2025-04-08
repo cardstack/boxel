@@ -8,7 +8,7 @@
         "https://boxel-images.boxel.ai/app-assets/catalog/blackjack-listing/screenshot_02.png"
       ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blackjack-listing/thumbnail.png"
     },
     "relationships": {
       "specs.0": {
