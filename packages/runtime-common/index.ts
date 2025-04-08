@@ -280,7 +280,7 @@ export type getCard<T extends CardDef = CardDef> = (
 {
   card: T | undefined;
   isLoaded: boolean;
-  url: string | undefined;
+  id: string | undefined;
   autoSaveState: AutoSaveState | undefined;
   cardError: CardErrorJSONAPI | undefined;
   api: typeof CardAPI;

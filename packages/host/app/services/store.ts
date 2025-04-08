@@ -135,8 +135,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.ready = this.setup();
   }
 
-  // TODO handle unload of resource for this.localIdSubscribers: need to decide
-  // if that does a final save...
+  // TODO handle unload of resource for this.localIdSubscribers: don't forget final save...
   unloadResource(resource: CardResource) {
     let id = resource.id;
     if (!id) {
@@ -916,8 +915,8 @@ export default class StoreService extends Service implements StoreInterface {
       }
 
       let localId = instance[this.api.localId];
-      let unsavedConsumers = this.localIdSubscribers.get(localId)?.resources;
-      if (isNew && unsavedConsumers) {
+      let subscribers = this.localIdSubscribers.get(localId)?.resources;
+      if (isNew && subscribers) {
         // now that we have a remote ID, promote the local ID subscription to a
         // remote ID subscription
         for (let {
@@ -925,7 +924,7 @@ export default class StoreService extends Service implements StoreInterface {
           isAutoSaved,
           setCard,
           setCardError,
-        } of unsavedConsumers) {
+        } of subscribers) {
           this.makeRemoteIdSubscription({
             url: instance.id,
             resource,
