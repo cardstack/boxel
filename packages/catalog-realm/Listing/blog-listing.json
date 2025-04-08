@@ -10,7 +10,7 @@
         "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/screenshot-04.png"
       ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blog-app-listing/thumbnail.png"
     },
     "relationships": {
       "specs.0": {

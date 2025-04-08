@@ -80,7 +80,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           align-items: center;
           overflow: hidden;
           padding: var(--boxel-sp);
-          background-color: var(--boxel-300);
+          background-color: var(--boxel-200);
         }
         .card-image {
           background-position: center;
@@ -305,6 +305,9 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
 
       /* Control Card which is Shorter than **px */
       @container fitted-card (aspect-ratio <= 1.0) and (height <= 275px) {
+        .card-title {
+          -webkit-line-clamp: 1;
+        }
         .card-display-name {
           display: none;
         }
