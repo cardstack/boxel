@@ -315,12 +315,21 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
           <div class='app-listing-summary info-box'>
             <h2>Summary</h2>
-            <@fields.summary />
+            {{#if @model.summary}}
+              <@fields.summary />
+            {{else}}
+              <p class='no-data-text'>No Summary Provided</p>
+            {{/if}}
+
           </div>
 
           <div class='license-section'>
             <h2>License</h2>
-            {{@model.license.name}}
+            {{#if @model.license.name}}
+              {{@model.license.name}}
+            {{else}}
+              <p class='no-data-text'>No license Provided</p>
+            {{/if}}
           </div>
         </section>
 
@@ -337,19 +346,23 @@ class EmbeddedTemplate extends Component<typeof Listing> {
               {{/each}}
             </ul>
           {{else}}
-            No Images
+            <p class='no-data-text'>No Images Provided</p>
           {{/if}}
         </section>
 
         <section class='app-listing-examples'>
           <h2>Examples</h2>
-          <ul class='examples-list'>
-            {{#each @fields.examples as |Example|}}
-              <li>
-                <Example />
-              </li>
-            {{/each}}
-          </ul>
+          {{#if this.hasExamples}}
+            <ul class='examples-list'>
+              {{#each @fields.examples as |Example|}}
+                <li>
+                  <Example />
+                </li>
+              {{/each}}
+            </ul>
+          {{else}}
+            <p class='no-data-text'>No Examples Provided</p>
+          {{/if}}
         </section>
 
         <hr class='divider' />
@@ -365,7 +378,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
               {{/each}}
             </ul>
           {{else}}
-            No categories
+            <p class='no-data-text'>No Categories Provided</p>
           {{/if}}
         </section>
 
@@ -407,7 +420,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
               {{/each-in}}
             </Accordion>
           {{else}}
-            No specs
+            <p class='no-data-text'>No Specs Provided</p>
           {{/if}}
         </section>
       {{/if}}
@@ -418,6 +431,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         font-weight: 600;
         margin: 0;
         margin-bottom: var(--boxel-sp-sm);
+      }
+      .no-data-text {
+        color: var(--boxel-400);
       }
       .info-box {
         width: 100%;

@@ -302,6 +302,13 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           padding: var(--boxel-sp);
         }
       }
+
+      /* Control Card which is Shorter than **px */
+      @container fitted-card (aspect-ratio <= 1.0) and (height <= 275px) {
+        .card-display-name {
+          display: none;
+        }
+      }
     </style>
   </template>
 }
