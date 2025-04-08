@@ -348,4 +348,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
       'the GC candidates are correct',
     );
   });
+
+  // TODO add tests that use local ID's
 });
