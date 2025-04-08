@@ -8,7 +8,7 @@
         "https://boxel-images.boxel.ai/app-assets/catalog/mortgage-calculator-listing/screenshot_01.png"
       ],
       "description": null,
-      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/mortgage-calculator-listing/thumbnail.png"
+      "thumbnailURL": null
     },
     "relationships": {
       "specs.0": {
