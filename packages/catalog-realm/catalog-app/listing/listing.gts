@@ -491,7 +491,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         padding-inline-start: 0;
       }
       .images-item {
-        background-color: var(--boxel-300);
+        background-color: var(--boxel-200);
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
@@ -506,8 +506,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         object-fit: contain;
         border-radius: var(--boxel-border-radius-sm);
         box-shadow:
-          0 15px 30px rgba(0, 0, 0, 0.12),
-          0 5px 15px rgba(0, 0, 0, 0.1);
+          0 15px 20px rgba(0, 0, 0, 0.12),
+          0 5px 10px rgba(0, 0, 0, 0.1);
         transition:
           transform 0.3s ease,
           box-shadow 0.3s ease;

@@ -11,11 +11,6 @@
           "self": "./Listing/blog-listing"
         }
       },
-      "startHere.1": {
-        "links": {
-          "self": "./Listing/5721ca5d-f89a-42d6-aa60-421f4c1c1c30"
-        }
-      },
       "new.0": {
         "links": {
           "self": "./Listing/fb9494c4-0d61-4d2d-a6c0-7b16ca40b42b"
@@ -34,6 +29,11 @@
       "new.3": {
         "links": {
           "self": "./CardListing/552da558-5642-4541-89b0-28622db3bc84"
+        }
+      },
+      "new.4": {
+        "links": {
+          "self": "./CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9"
         }
       },
       "featured": {
