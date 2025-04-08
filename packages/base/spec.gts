@@ -43,7 +43,7 @@ import Brain from '@cardstack/boxel-icons/brain';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
-export type SpecType = 'card' | 'field' | 'app' | 'skill';
+export type SpecType = 'card' | 'field' | 'component' | 'app' | 'skill';
 
 class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
@@ -912,6 +912,13 @@ export class Spec extends CardDef {
       );
     },
   });
+
+  @field isComponent = contains(BooleanField, {
+    computeVia: function (this: Spec) {
+      return this.specType === 'component';
+    },
+  });
+
   @field moduleHref = contains(StringField, {
     computeVia: function (this: Spec) {
       if (!this.ref || !this.ref.module) {
@@ -1030,6 +1037,8 @@ function getIcon(specType: string) {
       return LayoutList;
     case 'skill':
       return Brain;
+    case 'component':
+      return LayoutList;
     default:
       return;
   }

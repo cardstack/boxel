@@ -15,12 +15,62 @@
     "relationships": {
       "specs.0": {
         "links": {
-          "self": "../Spec/review-blog"
+          "self": "../Spec/author"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/blog"
+          "self": "../Spec/blog-app"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/blog-category"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/blog-post"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/review-blog"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/user"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/sort"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/layout"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/card-list"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/grid"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/featured-image"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/contact-link"
         }
       },
       "publisher": {

@@ -41,6 +41,7 @@ import {
 import { loadCard } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import CopySourceCommand from '@cardstack/host/commands/copy-source';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 
 import config from '@cardstack/host/config/environment';
@@ -373,6 +374,9 @@ export default class InteractSubmode extends Component<Signature> {
       copy: async (card: CardDef, targetRealm: string) => {
         return await here._copy.perform(card, targetRealm);
       },
+      copySource: async (fromUrl: string, toUrl: string) => {
+        return await here._copySource.perform(fromUrl, toUrl);
+      },
       copyCards: async (
         cards: CardDef[],
         targetRealm: string,
@@ -500,6 +504,9 @@ export default class InteractSubmode extends Component<Signature> {
 
   //==catalog actions==
   private _createFromSpec = task(async (spec: Spec, targetRealm: string) => {
+    if (spec.isComponent) {
+      return;
+    }
     let url = new URL(spec.id);
     let ref = codeRefWithAbsoluteURL(spec.ref, url);
     if (!isResolvedCodeRef(ref)) {
@@ -524,6 +531,14 @@ export default class InteractSubmode extends Component<Signature> {
     return newCard;
   });
 
+  private _copySource = task(async (fromUrl: string, toUrl: string) => {
+    let { commandContext } = this.commandService;
+    await new CopySourceCommand(commandContext).execute({
+      fromRealmUrl: fromUrl,
+      toRealmUrl: toUrl,
+    });
+  });
+
   private _copyCards = dropTask(
     async (cards: CardDef[], targetRealm: string, directoryName?: string) => {
       let { commandContext } = this.commandService;
@@ -540,6 +555,7 @@ export default class InteractSubmode extends Component<Signature> {
       );
     },
   );
+  // END ==catalog actions==
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
