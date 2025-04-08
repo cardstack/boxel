@@ -272,18 +272,18 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
         <hr class='divider' />
 
-        <section class='app-listing-images-videos'>
-          <h2>Images & Videos</h2>
+        <section class='app-listing-images'>
+          <h2>Images</h2>
           {{#if this.hasImages}}
-            <ul class='images-videos-list'>
+            <ul class='images-list'>
               {{#each @model.images as |image|}}
-                <li class='images-videos-item'>
+                <li class='images-item'>
                   <img src={{image}} alt={{@model.name}} />
                 </li>
               {{/each}}
             </ul>
           {{else}}
-            No Images & Videos
+            No Images
           {{/if}}
         </section>
 
@@ -291,7 +291,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           <h2>Examples</h2>
           <ul class='examples-list'>
             {{#each @fields.examples as |Example|}}
-              <li class='examples-item'>
+              <li>
                 <Example />
               </li>
             {{/each}}
@@ -456,11 +456,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
       .divider {
         width: 100%;
-        margin: var(--boxel-sp-xxl) 0;
-        border: 0.5px solid var(--boxel-border-color);
+        margin: var(--boxel-sp-xxxl) 0;
+        border: 0.5px solid var(--boxel-200);
       }
 
-      .images-videos-list {
+      .images-list {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
         gap: var(--boxel-sp);
@@ -468,23 +468,31 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         margin-block: 0;
         padding-inline-start: 0;
       }
-
-      .images-videos-item {
-        background-color: var(--boxel-light);
-        display: flex;
+      .images-item {
+        background-color: var(--boxel-300);
         border: 1px solid var(--boxel-border-color);
         border-radius: var(--boxel-border-radius);
         overflow: hidden;
+        padding: var(--boxel-sp-sm);
+        display: flex;
+        align-items: center;
+        min-height: 160px;
       }
-
-      .images-videos-item img {
+      .images-item img {
         width: 100%;
-        height: 100%;
+        height: auto;
         object-fit: contain;
+        border-radius: var(--boxel-border-radius-sm);
+        box-shadow:
+          0 15px 30px rgba(0, 0, 0, 0.12),
+          0 5px 15px rgba(0, 0, 0, 0.1);
+        transition:
+          transform 0.3s ease,
+          box-shadow 0.3s ease;
       }
 
       .app-listing-examples {
-        margin-top: var(--boxel-sp-xl);
+        margin-top: var(--boxel-sp-xxl);
       }
       .examples-list {
         display: grid;
@@ -493,16 +501,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         list-style: none;
         margin-block: 0;
         padding-inline-start: 0;
-      }
-      .examples-item {
-        height: auto;
-        max-width: 100%;
-        min-height: 100px;
-        background-color: var(--boxel-300);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: var(--boxel-border-radius);
       }
 
       .categories-list {
@@ -514,7 +512,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         padding-inline-start: 0;
       }
 
-      @container app-listing-embedded (inline-size <= 500px) {
+      @container app-listing-embedded (inline-size <= 600px) {
         .app-listing-info {
           margin-left: 0;
         }
@@ -524,13 +522,13 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         .examples-list {
           grid-template-columns: 1fr;
         }
-        .images-videos-list {
+        .images-list {
           grid-template-columns: repeat(2, 1fr);
         }
       }
 
       @container app-listing-embedded (inline-size <= 360px) {
-        .images-videos-list {
+        .images-list {
           grid-template-columns: repeat(1, 1fr);
         }
       }
