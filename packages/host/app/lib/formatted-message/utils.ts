@@ -116,70 +116,37 @@ export interface HtmlTagGroup {
 
 export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   let result: HtmlTagGroup[] = [];
-  let tagStack: { tag: string; startPos: number }[] = [];
-  let currentPosition = 0;
 
-  let findNextTag = (
-    pos: number,
-  ): { type: 'open' | 'close'; tag: string; position: number } | null => {
-    // Match either:
-    // 1. Opening tag: <tag> or <tag attr="value">
-    // 2. Closing tag: </tag>
-    let tagPattern = /<\/?([a-zA-Z][a-zA-Z0-9]*)\s*(?:[^>]*?)>/g;
-    tagPattern.lastIndex = pos;
+  let doc = document.createElement('div');
+  doc.innerHTML = htmlString;
 
-    let match = tagPattern.exec(htmlString);
-    if (!match) return null;
-
-    return {
-      type: match[0].startsWith('</') ? 'close' : 'open',
-      tag: match[1].toLowerCase(),
-      position: match.index,
-    };
-  };
-
-  while (currentPosition < htmlString.length) {
-    let nextTag = findNextTag(currentPosition);
-
-    if (!nextTag) {
-      if (tagStack.length === 0) {
-        let remaining = htmlString.slice(currentPosition).trim();
-        if (remaining) {
-          result.push({
-            type: 'non_pre_tag',
-            content: remaining,
-          });
-        }
+  Array.from(doc.childNodes).forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      let textContent = node.textContent?.trim() || '';
+      if (textContent) {
+        result.push({
+          type: 'non_pre_tag',
+          content: textContent,
+        });
       }
-      break;
-    }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      let element = node as HTMLElement;
+      let tagName = element.tagName.toLowerCase();
 
-    if (nextTag.type === 'open') {
-      tagStack.push({ tag: nextTag.tag, startPos: nextTag.position });
-      currentPosition = nextTag.position + 1;
-    } else {
-      if (
-        tagStack.length > 0 &&
-        tagStack[tagStack.length - 1].tag === nextTag.tag
-      ) {
-        let openTag = tagStack.pop()!;
-
-        if (tagStack.length === 0) {
-          let content = htmlString.slice(
-            openTag.startPos,
-            nextTag.position + nextTag.tag.length + 3,
-          );
-          result.push({
-            type: nextTag.tag === 'pre' ? 'pre_tag' : 'non_pre_tag',
-            content: content,
-          });
-        }
-        currentPosition = nextTag.position + nextTag.tag.length + 3;
+      if (tagName === 'pre') {
+        console.log('pre tag', element.outerHTML);
+        result.push({
+          type: 'pre_tag',
+          content: element.outerHTML,
+        });
       } else {
-        currentPosition = nextTag.position + 1;
+        result.push({
+          type: 'non_pre_tag',
+          content: element.outerHTML,
+        });
       }
     }
-  }
+  });
 
   return result;
 }
