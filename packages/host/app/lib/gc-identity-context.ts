@@ -14,12 +14,7 @@ export type Subscriber = Map<string, { resources: unknown[] }>;
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
-  #cards = new Map<
-    string,
-    {
-      card: CardDef | undefined;
-    }
-  >();
+  #cards = new Map<string, CardDef | null>();
   #gcCandidates: Set<string> = new Set(); // this is a set of local id's
   #api: typeof CardAPI;
   #remoteIdSubscribers: Subscriber;
@@ -44,10 +39,10 @@ export default class IdentityContextWithGarbageCollection
   }
 
   get(id: string): CardDef | undefined {
-    let instance = this.#cards.get(id)?.card;
+    let instance = this.#cards.get(id);
     let remoteId = this.#localIds.get(id);
     if (!instance && remoteId) {
-      instance = this.#cards.get(remoteId)?.card;
+      instance = this.#cards.get(remoteId);
     }
 
     if (instance && id === instance[this.#api.localId]) {
@@ -61,20 +56,20 @@ export default class IdentityContextWithGarbageCollection
         this.#gcCandidates.delete(localId);
       }
     }
-    return instance;
+    return instance ?? undefined;
   }
 
-  set(id: string, instance: CardDef | undefined): void {
+  set(id: string, instance: CardDef | null): void {
     if (instance) {
       this.#gcCandidates.delete(id);
       this.#gcCandidates.delete(instance[this.#api.localId]);
     }
     // make entries for both the local ID and the remote ID in the identity map
-    this.#cards.set(id, { card: instance });
+    this.#cards.set(id, instance);
     if (instance && id === instance[this.#api.localId]) {
-      this.#cards.set(instance.id, { card: instance });
+      this.#cards.set(instance.id, instance);
     } else if (instance && id === instance.id) {
-      this.#cards.set(instance[this.#api.localId], { card: instance });
+      this.#cards.set(instance[this.#api.localId], instance);
     }
     if (!instance) {
       let [localId] =
@@ -82,7 +77,7 @@ export default class IdentityContextWithGarbageCollection
           ([_local, remote]) => remote === id,
         ) ?? [];
       if (localId) {
-        this.#cards.set(localId, { card: instance });
+        this.#cards.set(localId, instance);
       }
     }
   }
@@ -100,9 +95,7 @@ export default class IdentityContextWithGarbageCollection
   }
 
   reset() {
-    for (let id of this.#cards.keys()) {
-      this.#cards.set(id, { card: undefined });
-    }
+    this.#cards.clear();
     this.#gcCandidates.clear();
   }
 
@@ -114,7 +107,7 @@ export default class IdentityContextWithGarbageCollection
     let consumptionGraph = this.makeConsumptionGraph();
     let cache = new Map<string, boolean>();
     let visited = new WeakSet<CardDef>();
-    for (let { card: instance } of this.#cards.values()) {
+    for (let instance of this.#cards.values()) {
       if (!instance) {
         continue;
       }
@@ -182,7 +175,7 @@ export default class IdentityContextWithGarbageCollection
   // this consumption graph uses local ID's
   private makeConsumptionGraph(): Map<string, Set<string>> {
     let consumptionGraph = new Map<string, Set<string>>();
-    for (let { card: instance } of this.#cards.values()) {
+    for (let instance of this.#cards.values()) {
       if (!instance) {
         continue;
       }

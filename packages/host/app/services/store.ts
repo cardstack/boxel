@@ -619,7 +619,7 @@ export default class StoreService extends Service implements StoreInterface {
       instance = maybeUpdatedInstance;
       this.identityContext.set(instance.id, instance);
     } else if (maybeUpdatedInstance?.id) {
-      this.identityContext.set(maybeUpdatedInstance.id, undefined);
+      this.identityContext.set(maybeUpdatedInstance.id, null);
     }
 
     await this.ready;

@@ -436,7 +436,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
-  test('a GC candidate remains a GC candidate if it is accessed via a set "undefined" in the identity map by remote id', async function (assert) {
+  test('a GC candidate remains a GC candidate if it is accessed via a set "null" in the identity map by remote id', async function (assert) {
     let {
       remoteIdSubscribers,
       identityContext,
@@ -447,7 +447,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     identityContext.sweep();
 
-    identityContext.set(boris.id, undefined);
+    identityContext.set(boris.id, null);
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -456,7 +456,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
-  test('a GC candidate remains a GC candidate if it is accessed via a set "undefined" in the identity map by local id', async function (assert) {
+  test('a GC candidate remains a GC candidate if it is accessed via a set "null" in the identity map by local id', async function (assert) {
     let {
       localIdSubscribers,
       identityContext,
@@ -467,7 +467,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     identityContext.sweep();
 
-    identityContext.set(boris[localId], undefined);
+    identityContext.set(boris[localId], null);
 
     assert.deepEqual(
       identityContext.gcCandidates,
