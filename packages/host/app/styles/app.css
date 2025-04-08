@@ -1,5 +1,5 @@
 :root {
-  --boxel-ai-purple: #272331;
+  --boxel-ai-purple: var(--boxel-700);
 
   --host-ai-panel-popover-z-index: 900;
   --host-ai-panel-button-z-index: 800;
@@ -13,7 +13,6 @@
   --host-search-sheet-z-index: 300;
 
   --host-workspace-chooser-z-index: 200;
-  --host-disclaimer-z-index: 201;
 }
 
 .error {

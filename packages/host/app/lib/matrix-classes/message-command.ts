@@ -7,9 +7,9 @@ import { tracked } from '@glimmer/tracking';
 import { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -41,7 +41,7 @@ export default class MessageCommand {
 
   @service declare commandService: CommandService;
   @service declare matrixService: MatrixService;
-  @service declare cardService: CardService;
+  @service declare store: StoreService;
 
   get id() {
     return this.commandRequest.id;
@@ -93,11 +93,7 @@ export default class MessageCommand {
     if (!cardDoc) {
       return undefined;
     }
-    let card = await this.cardService.createFromSerialized(
-      cardDoc.data,
-      cardDoc,
-      undefined,
-    );
+    let card = await this.store.add(cardDoc, { doNotPersist: true });
     return card;
   }
 }

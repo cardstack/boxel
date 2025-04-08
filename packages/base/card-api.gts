@@ -2472,8 +2472,11 @@ function buildIdentityContext(
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
+  identityContext?: IdentityContext,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = buildIdentityContext(instance);
+  if (!identityContext) {
+    identityContext = buildIdentityContext(instance);
+  }
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
@@ -2525,9 +2528,6 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!instance) {
     instance = new card({ id: resource.id }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
-    if (isCardInstance(instance)) {
-      instance[meta] = data?.meta;
-    }
   }
   identityContexts.set(instance, identityContext);
   return await _updateFromSerialized(instance, resource, doc, identityContext);
@@ -2640,6 +2640,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       // fields, such that subsequent assignment of the id field when the model is
       // saved will throw
       instance[isSavedInstance] = true;
+      (instance as any)[meta] = resource.meta;
     }
   }
 

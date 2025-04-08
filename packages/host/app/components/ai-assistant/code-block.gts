@@ -505,6 +505,8 @@ class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
 
   //     await this.cardService.saveSource(new URL(fileUrl), patchedCode);
   //     this.loaderService.reset();
+  // await this.cardService.saveSource(new URL(fileUrl), patchedCode);
+  // this.loaderService.resetLoader();
 
   //     this.patchCodeTaskState = 'applied';
   //   } catch (error) {

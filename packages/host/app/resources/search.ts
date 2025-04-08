@@ -162,7 +162,6 @@ export class SearchResource extends Resource<Args> {
                       this.store.createSubscriber({
                         resource: this,
                         urlOrDoc: { data: jsonAPIResource },
-                        relativeTo: undefined,
                         isAutoSaved: this.isAutoSaved,
                         isLive: this.isLive,
                       }),
