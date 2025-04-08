@@ -1,0 +1,69 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Leaflet Map",
+      "summary": "The Leaflet Map card is an interactive mapping component built using the Leaflet.js library. It accepts three key parameters: latitude and longitude coordinates for map positioning, and an optional custom tile server URL (defaulting to OpenStreetMap). The map is rendered in a full-width and full-height container, automatically loading the necessary Leaflet.js library and CSS from CDN.\n\nThe component centers the map on the specified coordinates with a default zoom level of 13, providing users with an interactive experience that includes panning and zooming capabilities. It supports both isolated and embedded views, though the embedded view functionality is currently not implemented. This makes it a versatile tool for displaying geographical data in various contexts.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/screenshot_02.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/screenshot_03.png",
+        "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/screenshot_01.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/leaflet-listing/thumbnail.png "
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/leaflet-map"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/3e7ef86b-79d8-4814-beda-d24b176029b7"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/23802db3-afb3-46c2-b82c-8d30833aa35e"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/49af3b96-eb8d-46d8-a193-497042b6bbf3"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../leaflet-map/LeafletMap/new-york-city-leaflet-map"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../leaflet-map/LeafletMap/singapore-leaflet-map"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../leaflet-map/LeafletMap/winnipeg"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
