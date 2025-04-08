@@ -32,6 +32,7 @@ import Owner from '@ember/owner';
 import { setOwner } from '@ember/owner';
 import { getOwner } from '@ember/owner';
 import ApplyButton from './apply-button';
+import perform from 'ember-concurrency/helpers/perform';
 
 export interface CodeData {
   fileUrl: string | null;
@@ -172,11 +173,43 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
   private applyAllCodePatchTasks = dropTask(async () => {
     this.applyAllCodePatchTasksState = 'applying';
-    await Promise.all(
-      this.codePatchActions.map((codePatchAction) =>
-        codePatchAction.patchCodeTask.perform(),
-      ),
+
+    this.codePatchActions.forEach((codePatchAction) => {
+      codePatchAction.patchCodeTaskState = 'applying';
+    });
+
+    let codePatchActionsGroupedByFileUrl = this.codePatchActions.reduce(
+      (acc, codePatchAction) => {
+        acc[codePatchAction.fileUrl] = [
+          ...(acc[codePatchAction.fileUrl] || []),
+          codePatchAction,
+        ];
+        return acc;
+      },
+      {} as Record<string, CodePatchAction[]>,
     );
+
+    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+      this.commandService.commandContext,
+    );
+
+    for (let fileUrl in codePatchActionsGroupedByFileUrl) {
+      let source = await this.cardService.getSource(new URL(fileUrl));
+      let patchedCode = source;
+      for (let codePatchAction of codePatchActionsGroupedByFileUrl[fileUrl]) {
+        let { resultContent: patchedCodeResult } =
+          await applySearchReplaceBlockCommand.execute({
+            fileContent: patchedCode,
+            codeBlock: codePatchAction.searchReplaceBlock,
+          });
+        patchedCode = patchedCodeResult;
+      }
+      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
+      codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
+        codePatchAction.patchCodeTaskState = 'applied';
+      });
+    }
+
     this.applyAllCodePatchTasksState = 'applied';
   });
 
@@ -254,14 +287,17 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         {{/each}}
 
         {{#if this.codePatchActions.length}}
-          <ApplyButton
-            {{on 'click' (perform this.applyAllCodePatchTasks)}}
-            @state={{this.applyAllCodePatchTasksState}}
-          >
-            <:default>
-              Accept all
-            </:default>
-          </ApplyButton>
+          {{! todo disable while it's still streaming }}
+          <div class='code-patch-actions'>
+            <ApplyButton
+              {{on 'click' (perform this.applyAllCodePatchTasks)}}
+              @state={{this.applyAllCodePatchTasksState}}
+            >
+              <:default>
+                Accept All
+              </:default>
+            </ApplyButton>
+          </div>
         {{/if}}
       </div>
     {{else}}
@@ -271,6 +307,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     {{/if}}
 
     <style scoped>
+      .code-patch-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp);
+      }
       .message {
         position: relative;
       }
