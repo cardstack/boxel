@@ -1,4 +1,4 @@
-import { click, fillIn, waitUntil } from '@ember/test-helpers';
+import { click, fillIn, settled } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -14,6 +14,7 @@ import {
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
+  assertCardExists,
   assertFieldExists,
   chooseAnotherInstance,
   createNewInstance,
@@ -26,6 +27,8 @@ import {
   setRecentFiles,
   togglePlaygroundPanel,
   toggleSpecPanel,
+  type PlaygroundSelection,
+  type Format,
 } from '../../helpers/playground';
 import { setupApplicationTest } from '../../helpers/setup';
 
@@ -402,6 +405,57 @@ module('Acceptance | code-submode | field playground', function (hooks) {
               adoptsFrom: {
                 module: 'https://cardstack.com/base/spec',
                 name: 'Spec',
+              },
+            },
+          },
+        },
+        'Spec/toy.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              ref: {
+                name: 'ToyField',
+                module: '../pet',
+              },
+              specType: 'field',
+              containedExamples: [{ title: 'Tug rope' }, { title: 'Lambchop' }],
+              title: 'Toy',
+            },
+            meta: {
+              fields: {
+                containedExamples: [
+                  {
+                    adoptsFrom: {
+                      module: '../pet',
+                      name: 'ToyField',
+                    },
+                  },
+                  {
+                    adoptsFrom: {
+                      module: '../pet',
+                      name: 'ToyField',
+                    },
+                  },
+                ],
+              },
+              adoptsFrom: {
+                module: 'https://cardstack.com/base/spec',
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'Pet/mango.json': {
+          data: {
+            attributes: {
+              firstName: 'Mango',
+              title: 'Mango',
+              favoriteToys: [{ title: 'Tug rope' }, { title: 'Lambchop' }],
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}pet`,
+                name: 'PetCard',
               },
             },
           },
@@ -788,6 +842,44 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       .hasText('Untitled Toy');
   });
 
+  test('does not persist the wrong card for field', async function (assert) {
+    const cardId = `${testRealmURL}Pet/mango`;
+    const specId = `${testRealmURL}Spec/toy`;
+    let selections: Record<string, PlaygroundSelection> = {
+      [`${testRealmURL}pet/PetCard`]: { cardId, format: 'isolated' as Format },
+    };
+    setRecentFiles([[testRealmURL, 'Pet/mango.json']]);
+    setPlaygroundSelections(selections);
+
+    await openFileInPlayground('pet.gts', testRealmURL, 'ToyField');
+    assert.dom('[data-test-instance-chooser]').hasText('Toy - Example 1');
+    assertFieldExists(assert, 'embedded');
+    selections = {
+      ...selections,
+      [`${testRealmURL}pet/ToyField`]: {
+        cardId: specId,
+        fieldIndex: 0,
+        format: 'embedded',
+      },
+    };
+    assert.deepEqual(
+      getPlaygroundSelections(),
+      selections,
+      'persisted selections are correct',
+    );
+
+    await selectDeclaration('PetCard');
+    assertCardExists(assert, cardId, 'isolated');
+    await selectDeclaration('ToyField');
+    assert.dom('[data-test-instance-chooser]').hasText('Toy - Example 1');
+    assertFieldExists(assert, 'embedded');
+    assert.deepEqual(
+      getPlaygroundSelections(),
+      selections,
+      'persisted selections are still correct',
+    );
+  });
+
   test('editing compound field instance live updates the preview', async function (assert) {
     const updatedCommentField = `import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
       import StringField from "https://cardstack.com/base/string";
@@ -807,14 +899,14 @@ module('Acceptance | code-submode | field playground', function (hooks) {
       }
     }`;
     await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+    assertFieldExists(assert, 'embedded');
     assert
       .dom('[data-test-embedded-comment-title]')
       .hasText('Terrible product');
-    await realm.write('blog-post.gts', updatedCommentField),
-      await waitUntil(
-        () =>
-          document.querySelector('[data-test-embedded-comment-title]') === null,
-      );
+
+    await realm.write('blog-post.gts', updatedCommentField);
+    await settled();
+    assertFieldExists(assert, 'embedded');
     assert.dom('[data-test-embedded-comment-title]').doesNotExist();
   });
 });
