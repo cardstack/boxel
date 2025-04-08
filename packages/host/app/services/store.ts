@@ -66,17 +66,19 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private reset: ResetService;
   declare private identityContext: IdentityContext;
   private localIds: Map<string, string | null> = new Map(); // localId => remoteId
-  private unsavedConsumers: Map<
+  private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
+  private localIdSubscribers: Map<
     string,
     {
-      resource: CardResource | SearchResource;
-      isAutoSaved?: boolean;
-      setCard?: (card: CardDef | undefined) => void;
-      setCardError?: (error: CardError | undefined) => void;
+      resources: {
+        resource: CardResource | SearchResource;
+        isAutoSaved?: boolean;
+        setCard?: (card: CardDef | undefined) => void;
+        setCardError?: (error: CardError | undefined) => void;
+      }[];
     }
   > = new Map();
-  private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
-  private subscribers: Map<
+  private remoteIdSubscribers: Map<
     string,
     {
       // it's possible to have the same card instance used in different
@@ -127,19 +129,20 @@ export default class StoreService extends Service implements StoreInterface {
     clearInterval(this.gcInterval);
     this.subscriptions = new Map();
     this.onSaveSubscriber = undefined;
-    this.subscribers = new Map();
+    this.remoteIdSubscribers = new Map();
     this.autoSaveStates = new TrackedWeakMap();
     this.inflightCards = new Map();
     this.ready = this.setup();
   }
 
-  // TODO cleanup this.unsavedConsumers
+  // TODO handle unload of resource for this.localIdSubscribers: need to decide
+  // if that does a final save...
   unloadResource(resource: CardResource) {
     let id = resource.id;
     if (!id) {
       return;
     }
-    let subscriber = this.subscribers.get(id);
+    let subscriber = this.remoteIdSubscribers.get(id);
     if (subscriber) {
       let { resources, realm } = subscriber;
       const index = resources.findIndex(
@@ -163,14 +166,14 @@ export default class StoreService extends Service implements StoreInterface {
         resources.splice(index, 1);
       }
       if (resources.length === 0) {
-        this.subscribers.delete(id);
+        this.remoteIdSubscribers.delete(id);
       }
 
       // if there are no more subscribers to this realm then unsubscribe from realm
       let subscription = this.subscriptions.get(realm);
       if (
         subscription &&
-        ![...this.subscribers.values()].find((s) => s.realm === realm)
+        ![...this.remoteIdSubscribers.values()].find((s) => s.realm === realm)
       ) {
         subscription.unsubscribe();
         this.subscriptions.delete(realm);
@@ -217,7 +220,12 @@ export default class StoreService extends Service implements StoreInterface {
           `Instance with local ID ${localId} does not exist in the store`,
         );
       }
-      this.unsavedConsumers.set(localId, {
+      let unsavedConsumers = this.localIdSubscribers.get(localId)?.resources;
+      if (!unsavedConsumers) {
+        unsavedConsumers = [];
+        this.localIdSubscribers.set(localId, { resources: unsavedConsumers });
+      }
+      unsavedConsumers.push({
         resource,
         isAutoSaved,
         setCard,
@@ -246,7 +254,7 @@ export default class StoreService extends Service implements StoreInterface {
       console.warn(`cannot load card ${url}`, cardOrError);
     }
 
-    this.addRealmSubscription({
+    this.makeRemoteIdSubscription({
       url,
       resource,
       instance,
@@ -360,6 +368,7 @@ export default class StoreService extends Service implements StoreInterface {
     patchData: PatchData,
   ): Promise<void> {
     await this.ready;
+    this.guardAgainstUnknownInstances(instance);
     this.assertLocalIdMapping(instance);
     let linkedCards = await this.loadPatchedInstances(
       patchData,
@@ -449,7 +458,7 @@ export default class StoreService extends Service implements StoreInterface {
     return this._api;
   }
 
-  private assertLocalIdMapping(instance: CardDef) {
+  private assertLocalIdMapping(instance: CardDef, remoteId?: string) {
     let localId = instance[this.api.localId];
     let existingRemoteId = this.localIds.get(localId);
     if (existingRemoteId && instance.id !== existingRemoteId) {
@@ -457,7 +466,7 @@ export default class StoreService extends Service implements StoreInterface {
         `the instance ${instance.constructor.name} with local id ${localId} has conflicting remote id: ${instance.id} and ${existingRemoteId}`,
       );
     }
-    this.localIds.set(localId, instance.id ?? null);
+    this.localIds.set(localId, instance.id ?? remoteId);
   }
 
   private async createFromSerialized<T extends CardDef>(
@@ -502,11 +511,12 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async setup() {
     this._api = await this.cardService.getAPI();
-    this.identityContext = new IdentityContext(
-      this.api,
-      this.subscribers,
-      this.localIds,
-    );
+    this.identityContext = new IdentityContext({
+      api: this.api,
+      remoteIdSubscribers: this.remoteIdSubscribers,
+      localIds: this.localIds,
+      localIdSubscribers: this.localIdSubscribers,
+    });
     this.gcInterval = setInterval(
       () => this.identityContext.sweep(),
       2 * 60_000,
@@ -538,7 +548,7 @@ export default class StoreService extends Service implements StoreInterface {
         // we already dealt with this
         continue;
       }
-      let subscriber = this.subscribers.get(invalidation);
+      let subscriber = this.remoteIdSubscribers.get(invalidation);
       if (subscriber) {
         let liveInstance = this.identityContext.get(invalidation);
         if (liveInstance) {
@@ -615,8 +625,9 @@ export default class StoreService extends Service implements StoreInterface {
 
     await this.ready;
     if (maybeUpdatedInstance?.id) {
-      for (let subscriber of this.subscribers.get(maybeUpdatedInstance.id)
-        ?.resources ?? []) {
+      for (let subscriber of this.remoteIdSubscribers.get(
+        maybeUpdatedInstance.id,
+      )?.resources ?? []) {
         if (!subscriber.resourceState.onCardChange) {
           continue;
         }
@@ -646,7 +657,7 @@ export default class StoreService extends Service implements StoreInterface {
     url: string,
     maybeInstance: CardDef | CardError | undefined,
   ) {
-    for (let { setCard, setCardError } of this.subscribers.get(url)
+    for (let { setCard, setCardError } of this.remoteIdSubscribers.get(url)
       ?.resources ?? []) {
       if (!setCard || !setCardError) {
         continue;
@@ -878,6 +889,7 @@ export default class StoreService extends Service implements StoreInterface {
         realmURL = new URL(defaultRealmHref);
       }
       let json = await this.saveCardDocument(doc, realmURL);
+      this.assertLocalIdMapping(instance, json.data.id);
       let isNew = !instance.id;
 
       // if the card changed while the save was in flight then don't load the
@@ -888,7 +900,11 @@ export default class StoreService extends Service implements StoreInterface {
         // should always use updateFromSerialized()--this way a newly created
         // instance that does not yet have an id is still the same instance after an
         // ID has been assigned by the server.
-        await this.api.updateFromSerialized(instance, json);
+        await this.api.updateFromSerialized(
+          instance,
+          json,
+          this.identityContext,
+        );
       } else if (isNew) {
         // in this case a new card was created, but there is an immediate change
         // that was made--so we save off the new ID for the card so in the next
@@ -898,21 +914,28 @@ export default class StoreService extends Service implements StoreInterface {
       if (this.onSaveSubscriber) {
         this.onSaveSubscriber(new URL(json.data.id), json);
       }
-      this.assertLocalIdMapping(instance);
 
-      let unsavedConsumer = this.unsavedConsumers.get(
-        instance[this.api.localId],
-      );
-      if (isNew && unsavedConsumer) {
-        let { resource, isAutoSaved, setCard, setCardError } = unsavedConsumer;
-        this.addRealmSubscription({
-          url: instance.id,
+      let localId = instance[this.api.localId];
+      let unsavedConsumers = this.localIdSubscribers.get(localId)?.resources;
+      if (isNew && unsavedConsumers) {
+        // now that we have a remote ID, promote the local ID subscription to a
+        // remote ID subscription
+        for (let {
           resource,
-          instance,
           isAutoSaved,
           setCard,
           setCardError,
-        });
+        } of unsavedConsumers) {
+          this.makeRemoteIdSubscription({
+            url: instance.id,
+            resource,
+            instance,
+            isAutoSaved,
+            setCard,
+            setCardError,
+          });
+        }
+        this.localIdSubscribers.delete(localId);
       }
     } catch (err) {
       console.error(`Failed to save ${instance.id}: `, err);
@@ -947,7 +970,7 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
-  private addRealmSubscription({
+  private makeRemoteIdSubscription({
     resource,
     instance,
     url,
@@ -975,13 +998,13 @@ export default class StoreService extends Service implements StoreInterface {
       );
     } else {
       let realm = realmURL.href;
-      let subscriber = this.subscribers.get(url);
+      let subscriber = this.remoteIdSubscribers.get(url);
       if (!subscriber) {
         subscriber = {
           resources: [],
           realm,
         };
-        this.subscribers.set(url, subscriber);
+        this.remoteIdSubscribers.set(url, subscriber);
       }
       subscriber.resources.push({
         resourceState: {

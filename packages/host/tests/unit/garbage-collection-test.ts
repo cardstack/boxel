@@ -4,9 +4,12 @@ import { module, test } from 'qunit';
 
 import { baseRealm, type Loader } from '@cardstack/runtime-common';
 
-import IdentityContext from '@cardstack/host/lib/gc-identity-context';
+import IdentityContext, {
+  type Subscriber,
+} from '@cardstack/host/lib/gc-identity-context';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type CardDef as CardInstance } from 'https://cardstack.com/base/card-api';
 
 import { saveCard, lookupLoaderService, testRealmURL } from '../helpers';
 import {
@@ -26,17 +29,13 @@ module('Unit | identity-context garbage collection', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   let api: typeof CardAPI;
+  let localId: (typeof CardAPI)['localId'];
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = lookupLoaderService().loader;
     api = await loader.import(`${baseRealm.url}card-api`);
+    localId = api.localId;
   });
-
-  class Person extends CardDef {
-    @field name = contains(StringField);
-    @field bestFriend = linksTo(() => Person);
-    @field friends = linksToMany(() => Person);
-  }
 
   async function saveAll({
     localIds,
@@ -47,34 +46,39 @@ module('Unit | identity-context garbage collection', function (hooks) {
     hassan,
   }: {
     localIds: Map<string, string | null>;
-    jade: Person;
-    queenzy: Person;
-    germaine: Person;
-    boris: Person;
-    hassan: Person;
+    jade: CardInstance;
+    queenzy: CardInstance;
+    germaine: CardInstance;
+    boris: CardInstance;
+    hassan: CardInstance;
   }) {
     await saveCard(jade, `${testRealmURL}jade`, loader);
-    localIds.set(jade[api.localId], jade.id);
+    localIds.set(jade[localId], jade.id);
     await saveCard(queenzy, `${testRealmURL}queenzy`, loader);
-    localIds.set(queenzy[api.localId], queenzy.id);
+    localIds.set(queenzy[localId], queenzy.id);
     await saveCard(germaine, `${testRealmURL}germaine`, loader);
-    localIds.set(germaine[api.localId], germaine.id);
+    localIds.set(germaine[localId], germaine.id);
     await saveCard(boris, `${testRealmURL}boris`, loader);
-    localIds.set(boris[api.localId], boris.id);
+    localIds.set(boris[localId], boris.id);
     await saveCard(hassan, `${testRealmURL}hassan`, loader);
-    localIds.set(hassan[api.localId], hassan.id);
+    localIds.set(hassan[localId], hassan.id);
   }
 
   async function setupTest(
-    doSave: (args: {
+    doSave?: (args: {
       localIds: Map<string, string | null>;
-      jade: Person;
-      queenzy: Person;
-      germaine: Person;
-      boris: Person;
-      hassan: Person;
+      jade: CardInstance;
+      queenzy: CardInstance;
+      germaine: CardInstance;
+      boris: CardInstance;
+      hassan: CardInstance;
     }) => Promise<void>,
   ) {
+    class Person extends CardDef {
+      @field name = contains(StringField);
+      @field bestFriend = linksTo(() => Person);
+      @field friends = linksToMany(() => Person);
+    }
     loader.shimModule(`${testRealmURL}test-cards`, { Person });
 
     let jade = new Person({ name: 'Jade' });
@@ -87,13 +91,13 @@ module('Unit | identity-context garbage collection', function (hooks) {
       friends: [germaine],
     });
     let localIds = new Map<string, string | null>([
-      [jade[api.localId], null],
-      [queenzy[api.localId], null],
-      [germaine[api.localId], null],
-      [boris[api.localId], null],
-      [hassan[api.localId], null],
+      [jade[localId], null],
+      [queenzy[localId], null],
+      [germaine[localId], null],
+      [boris[localId], null],
+      [hassan[localId], null],
     ]);
-    await doSave({
+    await doSave?.({
       localIds,
       jade,
       queenzy,
@@ -102,8 +106,14 @@ module('Unit | identity-context garbage collection', function (hooks) {
       hassan,
     });
 
-    let subscribers = new Map<string, { resources: unknown[] }>();
-    let identityContext = new IdentityContext(api, subscribers, localIds);
+    let remoteIdSubscribers: Subscriber = new Map();
+    let localIdSubscribers: Subscriber = new Map();
+    let identityContext = new IdentityContext({
+      api,
+      localIds,
+      remoteIdSubscribers,
+      localIdSubscribers,
+    });
 
     identityContext.set(jade.id, jade);
     identityContext.set(germaine.id, germaine);
@@ -113,26 +123,27 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     return {
       localIds,
-      subscribers,
+      remoteIdSubscribers,
+      localIdSubscribers,
       identityContext,
       instances: { jade, queenzy, germaine, boris, hassan },
     };
   }
 
-  test('can mark unsubscribed instances for GC', async function (assert) {
+  test('can mark unsubscribed instances that have been saved for GC', async function (assert) {
     let {
-      subscribers,
+      remoteIdSubscribers,
       identityContext,
       instances: { jade, germaine, queenzy, boris, hassan },
     } = await setupTest(saveAll);
 
-    subscribers.set(hassan.id, { resources: [true] });
+    remoteIdSubscribers.set(hassan.id, { resources: [true] });
 
     identityContext.sweep();
 
     assert.deepEqual(
       identityContext.gcCandidates,
-      [boris.id],
+      [boris[localId]],
       'the GC candidates are correct',
     );
     assert.strictEqual(
@@ -162,14 +173,57 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
+  test('can mark unsaved instances without subscribers for GC', async function (assert) {
+    let {
+      localIdSubscribers,
+      identityContext,
+      instances: { jade, germaine, queenzy, boris, hassan },
+    } = await setupTest();
+
+    localIdSubscribers.set(hassan[localId], { resources: [true] });
+
+    identityContext.sweep();
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [boris[localId]],
+      'the GC candidates are correct',
+    );
+    assert.strictEqual(
+      identityContext.get(jade[localId]),
+      jade,
+      'identityContext contains "jade"',
+    );
+    assert.strictEqual(
+      identityContext.get(queenzy[localId]),
+      queenzy,
+      'identityContext contains "queenzy"',
+    );
+    assert.strictEqual(
+      identityContext.get(germaine[localId]),
+      germaine,
+      'identityContext contains "germaine"',
+    );
+    assert.strictEqual(
+      identityContext.get(boris[localId]),
+      boris,
+      'identityContext contains "boris"',
+    );
+    assert.strictEqual(
+      identityContext.get(hassan[localId]),
+      hassan,
+      'identityContext contains "hassan"',
+    );
+  });
+
   test('can remove unsubscribed instances for GC after being marked in 2 consecutive sweeps', async function (assert) {
     let {
-      subscribers,
+      remoteIdSubscribers,
       identityContext,
       instances: { jade, germaine, queenzy, boris, hassan },
     } = await setupTest(saveAll);
 
-    subscribers.set(hassan.id, { resources: [true] });
+    remoteIdSubscribers.set(hassan.id, { resources: [true] });
 
     identityContext.sweep();
     identityContext.sweep();
@@ -208,12 +262,12 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   test('a GC candidate is no longer considered a GC candidate if it is consumed by a subscriber', async function (assert) {
     let {
-      subscribers,
+      remoteIdSubscribers,
       identityContext,
       instances: { germaine, boris, hassan },
     } = await setupTest(saveAll);
 
-    subscribers.set(hassan.id, { resources: [true] });
+    remoteIdSubscribers.set(hassan.id, { resources: [true] });
 
     identityContext.sweep();
 
@@ -232,36 +286,94 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
+  test('a GC candidate is no longer considered a GC candidate if it is consumed by an unsaved subscriber', async function (assert) {
+    let {
+      localIdSubscribers,
+      identityContext,
+      instances: { germaine, boris, hassan },
+    } = await setupTest();
+
+    localIdSubscribers.set(hassan[localId], { resources: [true] });
+
+    identityContext.sweep();
+
+    germaine.friends = [boris];
+    identityContext.sweep();
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [],
+      'the GC candidates are correct',
+    );
+    assert.strictEqual(
+      identityContext.get(boris[localId]),
+      boris,
+      'identityContext contains "boris"',
+    );
+  });
+
   test('an instance becomes a GC candidate when it loses all subscribers', async function (assert) {
     let {
-      subscribers,
+      remoteIdSubscribers,
       identityContext,
       instances: { jade, germaine, queenzy, hassan },
     } = await setupTest(saveAll);
 
-    subscribers.set(hassan.id, { resources: [true] });
+    remoteIdSubscribers.set(hassan.id, { resources: [true] });
 
     identityContext.sweep();
 
-    subscribers.set(hassan.id, { resources: [] });
+    remoteIdSubscribers.set(hassan.id, { resources: [] });
 
     identityContext.sweep(); // this sweep removed boris
 
     assert.deepEqual(
-      identityContext.gcCandidates,
-      [jade.id, germaine.id, queenzy.id, hassan.id],
+      identityContext.gcCandidates.sort(),
+      [
+        jade[localId],
+        germaine[localId],
+        queenzy[localId],
+        hassan[localId],
+      ].sort(),
       'the GC candidates are correct',
     );
   });
 
-  test('a GC candidate no longer becomes a GC candidate if it is accessed in the identity map', async function (assert) {
+  test('an instance becomes a GC candidate when it loses all unsaved subscribers', async function (assert) {
     let {
-      subscribers,
+      localIdSubscribers,
+      identityContext,
+      instances: { jade, germaine, queenzy, hassan },
+    } = await setupTest();
+
+    localIdSubscribers.set(hassan[localId], { resources: [true] });
+
+    identityContext.sweep();
+
+    localIdSubscribers.set(hassan[localId], { resources: [] });
+
+    identityContext.sweep(); // this sweep removed boris
+
+    assert.deepEqual(
+      identityContext.gcCandidates.sort(),
+      [
+        jade[localId],
+        germaine[localId],
+        queenzy[localId],
+        hassan[localId],
+      ].sort(),
+      'the GC candidates are correct',
+    );
+  });
+
+  test('a GC candidate no longer becomes a GC candidate if it is accessed in the identity map by remote id', async function (assert) {
+    let {
+      remoteIdSubscribers,
       identityContext,
       instances: { boris, hassan },
     } = await setupTest(saveAll);
 
-    subscribers.set(hassan.id, { resources: [true] });
+    remoteIdSubscribers.set(hassan.id, { resources: [true] });
 
     identityContext.sweep();
 
@@ -270,33 +382,68 @@ module('Unit | identity-context garbage collection', function (hooks) {
     assert.deepEqual(
       identityContext.gcCandidates,
       [],
-      'the GC candidates are correct',
+      'the GC candidates are correct after getting by remote id',
     );
 
     identityContext.sweep();
 
     assert.deepEqual(
       identityContext.gcCandidates,
-      [boris.id],
-      'the GC candidates are correct',
+      [boris[localId]],
+      'the GC candidates are correct, sweep reintroduces GC candidate',
     );
 
     identityContext.set(boris.id, boris);
     assert.deepEqual(
       identityContext.gcCandidates,
       [],
-      'the GC candidates are correct',
+      'the GC candidates are correct after setting by remote id',
     );
   });
 
-  test('a GC candidate remains a GC candidate if it is accessed via a set "undefined" in the identity map', async function (assert) {
+  test('a GC candidate no longer becomes a GC candidate if it is accessed in the identity map by local id', async function (assert) {
     let {
-      subscribers,
+      localIdSubscribers,
+      identityContext,
+      instances: { boris, hassan },
+    } = await setupTest();
+
+    localIdSubscribers.set(hassan[localId], { resources: [true] });
+
+    identityContext.sweep();
+
+    identityContext.get(boris[localId]);
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [],
+      'the GC candidates are correct after getting by local id',
+    );
+
+    identityContext.sweep();
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [boris[localId]],
+      'the GC candidates are correct, sweep reintroduces GC candidate',
+    );
+
+    identityContext.set(boris[localId], boris);
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [],
+      'the GC candidates are correct after setting by local id',
+    );
+  });
+
+  test('a GC candidate remains a GC candidate if it is accessed via a set "undefined" in the identity map by remote id', async function (assert) {
+    let {
+      remoteIdSubscribers,
       identityContext,
       instances: { boris, hassan },
     } = await setupTest(saveAll);
 
-    subscribers.set(hassan.id, { resources: [true] });
+    remoteIdSubscribers.set(hassan.id, { resources: [true] });
 
     identityContext.sweep();
 
@@ -304,19 +451,39 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     assert.deepEqual(
       identityContext.gcCandidates,
-      [boris.id],
+      [boris[localId]],
       'the GC candidates are correct',
     );
   });
 
-  test('deleting an entry from the identity map removes the GC candidate', async function (assert) {
+  test('a GC candidate remains a GC candidate if it is accessed via a set "undefined" in the identity map by local id', async function (assert) {
     let {
-      subscribers,
+      localIdSubscribers,
+      identityContext,
+      instances: { boris, hassan },
+    } = await setupTest();
+
+    localIdSubscribers.set(hassan[localId], { resources: [true] });
+
+    identityContext.sweep();
+
+    identityContext.set(boris[localId], undefined);
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [boris[localId]],
+      'the GC candidates are correct',
+    );
+  });
+
+  test('deleting an entry from the identity map by remote id removes the GC candidate', async function (assert) {
+    let {
+      remoteIdSubscribers,
       identityContext,
       instances: { boris, hassan },
     } = await setupTest(saveAll);
 
-    subscribers.set(hassan.id, { resources: [true] });
+    remoteIdSubscribers.set(hassan.id, { resources: [true] });
 
     identityContext.sweep();
 
@@ -329,14 +496,34 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
+  test('deleting an entry from the identity map by local id removes the GC candidate', async function (assert) {
+    let {
+      localIdSubscribers,
+      identityContext,
+      instances: { boris, hassan },
+    } = await setupTest();
+
+    localIdSubscribers.set(hassan[localId], { resources: [true] });
+
+    identityContext.sweep();
+
+    identityContext.delete(boris[localId]);
+
+    assert.deepEqual(
+      identityContext.gcCandidates,
+      [],
+      'the GC candidates are correct',
+    );
+  });
+
   test('resetting the identity map clears all GC candidates', async function (assert) {
     let {
-      subscribers,
+      remoteIdSubscribers,
       identityContext,
       instances: { hassan },
     } = await setupTest(saveAll);
 
-    subscribers.set(hassan.id, { resources: [true] });
+    remoteIdSubscribers.set(hassan.id, { resources: [true] });
 
     identityContext.sweep();
 
