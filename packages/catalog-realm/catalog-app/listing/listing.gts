@@ -41,6 +41,7 @@ import { Tag } from './tag';
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
   @tracked createdInstances = false;
+  @tracked installedListing = false;
   @tracked writableRealms: string[] = [];
 
   constructor(owner: any, args: any) {
@@ -48,11 +49,21 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this._setup.perform();
   }
 
-  get realmOptions() {
+  get useRealmOptions() {
     return this.writableRealms.map((realmUrl) => {
       return new MenuItem(realmUrl, 'action', {
         action: () => {
           this.use(realmUrl);
+        },
+      });
+    });
+  }
+
+  get installRealmOptions() {
+    return this.writableRealms.map((realmUrl) => {
+      return new MenuItem(realmUrl, 'action', {
+        action: () => {
+          this.install(realmUrl);
         },
       });
     });
@@ -75,7 +86,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   _use = task(async (realmUrl: string) => {
     const specsToCopy: Spec[] = this.args.model?.specs ?? [];
 
-    // First, create the cards
     await Promise.all(
       specsToCopy
         .filter(
@@ -87,7 +97,29 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         ),
     );
 
-    // Then, copy the gts file based on the attached spec's moduleHref
+    if (this.args.model instanceof SkillListing) {
+      await Promise.all(
+        this.args.model.skills.map((skill) => {
+          this.args.context?.actions?.copy?.(skill, realmUrl);
+        }),
+      );
+    }
+    if (this.args.model.examples) {
+      await this.args.context?.actions?.copyCards?.(
+        this.args.model.examples,
+        realmUrl,
+        this.args.model.name
+          ? camelCase(`${this.args.model.name}Examples`)
+          : 'ListingExamples',
+      );
+    }
+    this.createdInstances = true;
+  });
+
+  _install = task(async (realmUrl: string) => {
+    const specsToCopy: Spec[] = this.args.model?.specs ?? [];
+
+    // Copy the gts file based on the attached spec's moduleHref
     await Promise.all(
       specsToCopy.map((spec: Spec) => {
         const absoluteModulePath = spec.moduleHref;
@@ -111,16 +143,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         }),
       );
     }
-    if (this.args.model.examples) {
-      await this.args.context?.actions?.copyCards?.(
-        this.args.model.examples,
-        realmUrl,
-        this.args.model.name
-          ? camelCase(`${this.args.model.name}Examples`)
-          : 'ListingExamples',
-      );
-    }
-    this.createdInstances = true;
+    this.installedListing = true;
   });
 
   get hasOneOrMoreSpec() {
@@ -134,11 +157,23 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     );
   }
 
-  get createButtonDisabled() {
+  get useOrInstallDisabled() {
+    return !this.hasOneOrMoreSpec && !this.hasSkills;
+  }
+
+  get useButtonDisabled() {
     return (
       this.createdInstances ||
       !this.args.context?.actions?.create ||
-      (!this.hasOneOrMoreSpec && !this.hasSkills)
+      this.useOrInstallDisabled
+    );
+  }
+
+  get installButtonDisabled() {
+    return (
+      this.installedListing ||
+      !this.args.context?.actions?.copySource ||
+      this.useOrInstallDisabled
     );
   }
 
@@ -153,8 +188,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this._use.perform(realmUrl);
   }
 
-  @action install() {
-    console.log('Install...');
+  @action install(realmUrl: string) {
+    this._install.perform(realmUrl);
   }
 
   get appName(): string {
@@ -225,7 +260,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <:trigger as |bindings|>
                   <BoxelButton
                     class='action-button'
-                    @disabled={{this.createButtonDisabled}}
+                    @disabled={{this.useButtonDisabled}}
                     {{bindings}}
                   >
                     {{#if this._use.isRunning}}
@@ -240,13 +275,33 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <:content as |dd|>
                   <BoxelMenu
                     @closeMenu={{dd.close}}
-                    @items={{this.realmOptions}}
+                    @items={{this.useRealmOptions}}
                   />
                 </:content>
               </BoxelDropdown>
-              <BoxelButton class='action-button' {{on 'click' this.install}}>
-                Install
-              </BoxelButton>
+              <BoxelDropdown>
+                <:trigger as |bindings|>
+                  <BoxelButton
+                    class='action-button'
+                    @disabled={{this.installButtonDisabled}}
+                    {{bindings}}
+                  >
+                    {{#if this._install.isRunning}}
+                      Installing...
+                    {{else if this.installedListing}}
+                      Installed
+                    {{else}}
+                      Install
+                    {{/if}}
+                  </BoxelButton>
+                </:trigger>
+                <:content as |dd|>
+                  <BoxelMenu
+                    @closeMenu={{dd.close}}
+                    @items={{this.installRealmOptions}}
+                  />
+                </:content>
+              </BoxelDropdown>
             </div>
           </:action>
         </AppListingHeader>
