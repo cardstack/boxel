@@ -20,29 +20,41 @@ export default class IdentityContextWithGarbageCollection
   constructor(
     private api: typeof CardAPI,
     private subscribers: Map<string, { resources: unknown[] }>,
+    private localIds: Map<string, string | null>,
   ) {}
 
-  get(url: string): CardDef | undefined {
-    let instance = this.#cards.get(url)?.card;
-    this.#gcCandidates.delete(url);
+  get(id: string): CardDef | undefined {
+    let instance = this.#cards.get(id)?.card;
+    let remoteId = this.localIds.get(id);
+    this.#gcCandidates.delete(id);
+    if (remoteId && !instance) {
+      instance = this.#cards.get(remoteId)?.card;
+      this.#gcCandidates.delete(remoteId);
+    }
     return instance;
   }
 
-  set(url: string, instance: CardDef | undefined): void {
+  set(id: string, instance: CardDef | undefined): void {
     if (instance) {
-      this.#gcCandidates.delete(url);
+      this.#gcCandidates.delete(id);
+      this.#gcCandidates.delete(instance[this.api.localId]);
     }
-    this.#cards.set(url, { card: instance });
+    this.#cards.set(id, { card: instance });
   }
 
-  delete(url: string): void {
-    this.#cards.delete(url);
-    this.#gcCandidates.delete(url);
+  delete(id: string): void {
+    this.#cards.delete(id);
+    this.#gcCandidates.delete(id);
+    let remoteId = this.localIds.get(id);
+    if (remoteId) {
+      this.#cards.delete(remoteId);
+      this.#gcCandidates.delete(remoteId);
+    }
   }
 
   reset() {
-    for (let url of this.#cards.keys()) {
-      this.#cards.set(url, { card: undefined });
+    for (let id of this.#cards.keys()) {
+      this.#cards.set(id, { card: undefined });
     }
     this.#gcCandidates.clear();
   }
@@ -57,51 +69,59 @@ export default class IdentityContextWithGarbageCollection
       if (!instance) {
         continue;
       }
-      if (this.gcVisit(instance.id, consumptionGraph)) {
-        if (this.#gcCandidates.has(instance.id)) {
-          console.log(`garbage collecting instance ${instance.id} from store`);
+      if (this.gcVisit(instance[this.api.localId], consumptionGraph)) {
+        if (this.#gcCandidates.has(instance[this.api.localId])) {
+          console.log(
+            `garbage collecting instance ${instance[this.api.localId]} (remote id: ${instance.id}) from store`,
+          );
           // brand the instance to make it easier for debugging
           (instance as unknown as any)[
             Symbol.for('__instance_detached_from_store')
           ] = true;
-          this.delete(instance.id);
+          this.delete(instance[this.api.localId]);
         } else {
-          this.#gcCandidates.add(instance.id);
+          this.#gcCandidates.add(instance[this.api.localId]);
         }
       } else {
-        this.#gcCandidates.delete(instance.id);
+        this.#gcCandidates.delete(instance[this.api.localId]);
       }
     }
   }
 
   gcVisit(
-    id: string,
+    localId: string,
     consumptionGraph: Map<string, string[]>,
     hasSubscribers = new Map<string, boolean>(),
-  ): boolean {
-    let cached = hasSubscribers.get(id);
+  ): boolean /* true = eligible for GC, false = not eligible for GC */ {
+    let remoteId = this.localIds.get(localId);
+    if (!remoteId) {
+      // TODO how to subscribe to card with no remote id?
+      return true;
+    }
+    let cached = hasSubscribers.get(remoteId);
     if (cached !== undefined) {
       return cached;
     }
 
-    let subscribers = this.subscribers.get(id);
+    let subscribers = this.subscribers.get(remoteId);
     if (subscribers && subscribers.resources.length > 0) {
-      hasSubscribers.set(id, true);
+      hasSubscribers.set(remoteId, true);
       return false;
     }
-    let consumers = consumptionGraph.get(id);
+    let consumers = consumptionGraph.get(localId);
     if (!consumers || consumers.length === 0) {
-      hasSubscribers.set(id, false);
+      hasSubscribers.set(remoteId, false);
       return true;
     }
 
     let result = consumers
       .map((c) => this.gcVisit(c, consumptionGraph, hasSubscribers))
       .some((result) => result);
-    hasSubscribers.set(id, result);
+    hasSubscribers.set(remoteId, result);
     return result;
   }
 
+  // this consumption graph uses local ID's
   private makeConsumptionGraph(): Map<string, string[]> {
     let consumptionGraph = new Map<string, string[]>();
     for (let { card: instance } of this.#cards.values()) {
@@ -110,12 +130,12 @@ export default class IdentityContextWithGarbageCollection
       }
       let deps = getDeps(this.api, instance);
       for (let dep of deps) {
-        let consumers = consumptionGraph.get(dep.id);
+        let consumers = consumptionGraph.get(dep[this.api.localId]);
         if (!consumers) {
           consumers = [];
-          consumptionGraph.set(dep.id, consumers);
+          consumptionGraph.set(dep[this.api.localId], consumers);
         }
-        consumers.push(instance.id);
+        consumers.push(instance[this.api.localId]);
       }
     }
     return consumptionGraph;

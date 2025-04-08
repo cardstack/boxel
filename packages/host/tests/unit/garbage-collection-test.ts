@@ -32,12 +32,49 @@ module('Unit | identity-context garbage collection', function (hooks) {
     api = await loader.import(`${baseRealm.url}card-api`);
   });
 
-  async function setupTest() {
-    class Person extends CardDef {
-      @field name = contains(StringField);
-      @field bestFriend = linksTo(() => Person);
-      @field friends = linksToMany(() => Person);
-    }
+  class Person extends CardDef {
+    @field name = contains(StringField);
+    @field bestFriend = linksTo(() => Person);
+    @field friends = linksToMany(() => Person);
+  }
+
+  async function saveAll({
+    localIds,
+    jade,
+    queenzy,
+    germaine,
+    boris,
+    hassan,
+  }: {
+    localIds: Map<string, string | null>;
+    jade: Person;
+    queenzy: Person;
+    germaine: Person;
+    boris: Person;
+    hassan: Person;
+  }) {
+    await saveCard(jade, `${testRealmURL}jade`, loader);
+    localIds.set(jade[api.localId], jade.id);
+    await saveCard(queenzy, `${testRealmURL}queenzy`, loader);
+    localIds.set(queenzy[api.localId], queenzy.id);
+    await saveCard(germaine, `${testRealmURL}germaine`, loader);
+    localIds.set(germaine[api.localId], germaine.id);
+    await saveCard(boris, `${testRealmURL}boris`, loader);
+    localIds.set(boris[api.localId], boris.id);
+    await saveCard(hassan, `${testRealmURL}hassan`, loader);
+    localIds.set(hassan[api.localId], hassan.id);
+  }
+
+  async function setupTest(
+    doSave: (args: {
+      localIds: Map<string, string | null>;
+      jade: Person;
+      queenzy: Person;
+      germaine: Person;
+      boris: Person;
+      hassan: Person;
+    }) => Promise<void>,
+  ) {
     loader.shimModule(`${testRealmURL}test-cards`, { Person });
 
     let jade = new Person({ name: 'Jade' });
@@ -49,14 +86,24 @@ module('Unit | identity-context garbage collection', function (hooks) {
       bestFriend: jade,
       friends: [germaine],
     });
-    await saveCard(jade, `${testRealmURL}jade`, loader);
-    await saveCard(queenzy, `${testRealmURL}queenzy`, loader);
-    await saveCard(germaine, `${testRealmURL}germaine`, loader);
-    await saveCard(boris, `${testRealmURL}boris`, loader);
-    await saveCard(hassan, `${testRealmURL}hassan`, loader);
+    let localIds = new Map<string, string | null>([
+      [jade[api.localId], null],
+      [queenzy[api.localId], null],
+      [germaine[api.localId], null],
+      [boris[api.localId], null],
+      [hassan[api.localId], null],
+    ]);
+    await doSave({
+      localIds,
+      jade,
+      queenzy,
+      germaine,
+      boris,
+      hassan,
+    });
 
     let subscribers = new Map<string, { resources: unknown[] }>();
-    let identityContext = new IdentityContext(api, subscribers);
+    let identityContext = new IdentityContext(api, subscribers, localIds);
 
     identityContext.set(jade.id, jade);
     identityContext.set(germaine.id, germaine);
@@ -65,6 +112,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     identityContext.set(hassan.id, hassan);
 
     return {
+      localIds,
       subscribers,
       identityContext,
       instances: { jade, queenzy, germaine, boris, hassan },
@@ -76,7 +124,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       subscribers,
       identityContext,
       instances: { jade, germaine, queenzy, boris, hassan },
-    } = await setupTest();
+    } = await setupTest(saveAll);
 
     subscribers.set(hassan.id, { resources: [true] });
 
@@ -119,7 +167,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       subscribers,
       identityContext,
       instances: { jade, germaine, queenzy, boris, hassan },
-    } = await setupTest();
+    } = await setupTest(saveAll);
 
     subscribers.set(hassan.id, { resources: [true] });
 
@@ -163,7 +211,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       subscribers,
       identityContext,
       instances: { germaine, boris, hassan },
-    } = await setupTest();
+    } = await setupTest(saveAll);
 
     subscribers.set(hassan.id, { resources: [true] });
 
@@ -189,7 +237,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       subscribers,
       identityContext,
       instances: { jade, germaine, queenzy, hassan },
-    } = await setupTest();
+    } = await setupTest(saveAll);
 
     subscribers.set(hassan.id, { resources: [true] });
 
@@ -211,7 +259,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       subscribers,
       identityContext,
       instances: { boris, hassan },
-    } = await setupTest();
+    } = await setupTest(saveAll);
 
     subscribers.set(hassan.id, { resources: [true] });
 
@@ -246,7 +294,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       subscribers,
       identityContext,
       instances: { boris, hassan },
-    } = await setupTest();
+    } = await setupTest(saveAll);
 
     subscribers.set(hassan.id, { resources: [true] });
 
@@ -266,7 +314,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       subscribers,
       identityContext,
       instances: { boris, hassan },
-    } = await setupTest();
+    } = await setupTest(saveAll);
 
     subscribers.set(hassan.id, { resources: [true] });
 
@@ -286,7 +334,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       subscribers,
       identityContext,
       instances: { hassan },
-    } = await setupTest();
+    } = await setupTest(saveAll);
 
     subscribers.set(hassan.id, { resources: [true] });
 
