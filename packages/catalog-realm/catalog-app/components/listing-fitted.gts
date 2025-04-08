@@ -4,7 +4,12 @@ import type { ComponentLike } from '@glint/template';
 // @ts-ignore
 import cssUrl from 'ember-css-url';
 
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+
 import { type Listing } from '../listing/listing';
+
+import { BoxelButton } from '@cardstack/boxel-ui/components';
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
   get firstImage() {
@@ -14,6 +19,11 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   get publisherInfo() {
     const hasPublisher = Boolean(this.args.model.publisher?.name);
     return hasPublisher ? 'By ' + this.args.model.publisher?.name : '';
+  }
+
+  @action remix(e) {
+    e.stopPropagation();
+    console.log('remix');
   }
 
   <template>
@@ -33,10 +43,23 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         {{/if}}
       </div>
       <div class='info-section'>
-        <h3 class='card-title' data-test-card-title>{{@model.name}}</h3>
-        <h4 class='card-display-name' data-test-card-display-name>
-          {{this.publisherInfo}}
-        </h4>
+        <div class='card-content'>
+          <h3 class='card-title' data-test-card-title>{{@model.name}}</h3>
+          <h4 class='card-display-name' data-test-card-display-name>
+            {{this.publisherInfo}}
+          </h4>
+        </div>
+        <div class='card-tags-action'>
+          <span class='card-tags'>#taghere</span>
+          <BoxelButton
+            @kind='primary'
+            @size='extra-small'
+            class='card-remix-button'
+            {{on 'click' this.remix}}
+          >
+            Remix
+          </BoxelButton>
+        </div>
       </div>
     </div>
 
@@ -48,7 +71,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           width: 100%;
           height: 100%;
           display: flex;
-          gap: var(--boxel-sp-xs);
           overflow: hidden;
         }
         .display-section {
@@ -75,10 +97,19 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           max-height: 100%;
         }
         .info-section {
+          display: flex;
+          gap: var(--boxel-sp-sm);
           width: 100%;
           overflow: hidden;
           text-align: left;
           padding: var(--boxel-sp-xs) var(--boxel-sp);
+        }
+        .card-tags-action {
+          display: flex;
+          align-items: end;
+          flex-direction: column;
+          flex-wrap: wrap;
+          gap: var(--boxel-sp-sm);
         }
         .card-title {
           display: -webkit-box;
@@ -101,6 +132,13 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           white-space: nowrap;
           overflow: hidden;
         }
+        .card-tags {
+          color: var(--boxel-400);
+          font-size: var(--boxel-font-size-sm);
+        }
+        .card-remix-button {
+          --boxel-button-font: 600 var(--boxel-font-sm);
+        }
       }
 
       /* Aspect Ratio <= 1.0 (Vertical) */
@@ -111,6 +149,19 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         .display-section {
           width: 100%;
           height: 70cqmax;
+        }
+        .info-section {
+          flex-direction: column;
+          justify-content: space-between;
+          height: 100%;
+          padding: var(--boxel-sp-xs);
+        }
+        .card-tags-action {
+          flex-direction: row;
+          justify-content: space-between;
+        }
+        .card-remix-button {
+          --boxel-button-padding: var(--boxel-sp-4xs) var(--boxel-sp);
         }
       }
 
@@ -151,9 +202,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       }
       /* Vertical Cards */
       @container fitted-card (aspect-ratio <= 1.0) and (400px <= width) {
-        .fitted-template {
-          gap: var(--boxel-sp);
-        }
         .card-title {
           font-size: var(--boxel-font-size-med);
           -webkit-line-clamp: 4;
@@ -166,6 +214,14 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         .display-section {
           aspect-ratio: 1;
           max-width: 44%;
+        }
+        .info-section {
+          flex-direction: column;
+          justify-content: space-between;
+        }
+        .card-tags-action {
+          flex-direction: row;
+          justify-content: space-between;
         }
       }
       @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
@@ -239,12 +295,11 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
 
       /* Full Card (400 x 275) */
       @container fitted-card (1.0 < aspect-ratio) and (400px <= width) and (275px <= height) {
-        .fitted-template {
-          padding: var(--boxel-sp);
-          gap: var(--boxel-sp);
-        }
         .card-title {
           font-size: var(--boxel-font-size-med);
+        }
+        .info-section {
+          padding: var(--boxel-sp);
         }
       }
     </style>
