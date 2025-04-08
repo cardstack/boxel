@@ -174,6 +174,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     return Boolean(this.args.model.images?.length);
   }
 
+  get hasExamples() {
+    return Boolean(this.args.model.examples?.length);
+  }
+
   <template>
     <div class='app-listing-embedded'>
       {{#if this._setup.isRunning}}
@@ -188,9 +192,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         >
           <:action>
             <div class='action-buttons'>
-              <BoxelButton class='action-button' {{on 'click' this.preview}}>
-                Preview
-              </BoxelButton>
+              {{#if this.hasExamples}}
+                <BoxelButton class='action-button' {{on 'click' this.preview}}>
+                  Preview
+                </BoxelButton>
+              {{/if}}
               <BoxelDropdown>
                 <:trigger as |bindings|>
                   <BoxelButton
