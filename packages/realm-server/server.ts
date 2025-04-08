@@ -147,7 +147,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-HTTP-Method-Override',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-HTTP-Method-Override',
         }),
       )
       .use(async (ctx, next) => {
@@ -158,9 +158,11 @@ export class RealmServer {
         );
 
         if (
-          Object.values(SupportedMimeType).includes(
-            mimeType as SupportedMimeType,
-          )
+          Object.values(SupportedMimeType)
+            // Actually, we want to use HTTP caching for executable modules which
+            // are requested with the "*/*" accept header
+            .filter((m) => m === '*/*')
+            .includes(mimeType as SupportedMimeType)
         ) {
           ctx.set('Cache-Control', 'no-store, no-cache, must-revalidate');
         }

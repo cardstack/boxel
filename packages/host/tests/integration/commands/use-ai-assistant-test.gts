@@ -11,6 +11,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import UseAiAssistantCommand from '@cardstack/host/commands/ai-assistant';
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 import type CommandService from '@cardstack/host/services/command-service';
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -30,7 +31,6 @@ import {
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 
 let loader: Loader, commandService: CommandService;
 

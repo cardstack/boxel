@@ -116,7 +116,7 @@ export default class OperatorModeStack extends Component<Signature> {
         transition: padding-top var(--boxel-transition);
       }
       .operator-mode-stack
-        :deep(.field-component-card.fitted-format .missing-embedded-template) {
+        :deep(.field-component-card.fitted-format .missing-template) {
         margin-top: calc(-1 * var(--boxel-sp-lg));
         border-radius: 0;
         border-bottom-left-radius: var(--boxel-form-control-border-radius);
