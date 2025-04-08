@@ -358,10 +358,7 @@ You can use these in your HTML documents to display formatted text, code snippet
 
     assert
       .dom('.monaco-editor')
-      .exists(
-        { count: 2 },
-        'Should only have one monaco editor for the outer pre tag',
-      );
+      .exists({ count: 2 }, 'Should have 2 monaco editors');
 
     let monacoContent = getMonacoContent();
     assert.ok(
