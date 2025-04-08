@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Blackjack Game",
+      "summary": null,
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/blackjack-listing/screenshot_02.png"
+      ],
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/5cef210f-cb2d-43d5-83ee-d5144deb3671"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/ae15f401-5340-4098-ba7f-ab23a3058dff"
+        }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../blackjack/BlackjackGame/7afce4bc-c331-48ca-bc53-3b9cc2e81333"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}

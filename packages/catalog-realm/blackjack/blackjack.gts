@@ -16,14 +16,14 @@ import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
 
-export class PlayingCardField extends FieldDef {
+class PlayingCardField extends FieldDef {
   static displayName = 'Playing Card';
   @field suit = contains(StringField);
   @field value = contains(StringField);
   @field faceUp = contains(BooleanField);
 }
 
-export class StatsField extends FieldDef {
+class StatsField extends FieldDef {
   static displayName = 'Hand Statistics';
 
   @field wins = contains(NumberField);
@@ -31,7 +31,7 @@ export class StatsField extends FieldDef {
   @field earnings = contains(NumberField);
 }
 
-class IsolatedTemplate extends Component<typeof BlackjackSimulator> {
+class IsolatedTemplate extends Component<typeof BlackjackGame> {
   // Game state
   @tracked gameState = this.args.model.gameState;
   @tracked gameMessage = this.args.model.gameMessage;
@@ -1049,8 +1049,8 @@ class IsolatedTemplate extends Component<typeof BlackjackSimulator> {
   </template>
 }
 
-export class BlackjackSimulator extends CardDef {
-  static displayName = 'Blackjack Simulator';
+export class BlackjackGame extends CardDef {
+  static displayName = 'Blackjack Game';
   static prefersWideFormat = true;
 
   @field playerName = contains(StringField);
