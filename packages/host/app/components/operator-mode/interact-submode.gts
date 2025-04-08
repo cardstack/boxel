@@ -13,8 +13,9 @@ import perform from 'ember-concurrency/helpers/perform';
 import { provide, consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
-import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 import { v4 as uuidv4 } from 'uuid';
+
+import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
@@ -377,7 +378,7 @@ export default class InteractSubmode extends Component<Signature> {
         cards: CardDef[],
         targetRealm: string,
         directoryName?: string,
-      ) => {
+      ): Promise<CardDef[]> => {
         return await here._copyCards.perform(cards, targetRealm, directoryName);
       },
       allRealmsInfo: async () => {
@@ -528,9 +529,9 @@ export default class InteractSubmode extends Component<Signature> {
     async (cards: CardDef[], targetRealm: string, directoryName?: string) => {
       let { commandContext } = this.commandService;
       let targetUrl = directoryName
-        ? new URL(`${capitalize(directoryName)}-${uuidv4()}/`, targetRealm)
+        ? new URL(`${capitalize(directoryName)}-${uuidv4()}/`, targetRealm).href
         : targetRealm;
-      await Promise.all(
+      return await Promise.all(
         cards.map((card) => {
           return new CopyCardCommand(commandContext).execute({
             sourceCard: card,

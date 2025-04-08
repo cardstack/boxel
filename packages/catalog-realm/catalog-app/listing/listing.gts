@@ -17,6 +17,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
+import { camelCase } from 'lodash';
 
 import {
   Accordion,
@@ -91,7 +92,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         this.args.model.examples,
         realmUrl,
         this.args.model.name
-          ? `${this.args.model.name}Examples`
+          ? camelCase(`${this.args.model.name}Examples`)
           : 'ListingExamples',
       );
     }
@@ -309,9 +310,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         <section class='app-listing-examples'>
           <h2>Examples</h2>
           <ul class='examples-list'>
-            {{#each @fields.examples as |example|}}
+            {{#each @fields.examples as |Example|}}
               <li class='examples-item'>
-                <example />
+                <Example />
               </li>
             {{/each}}
           </ul>
