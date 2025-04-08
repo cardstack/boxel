@@ -23,7 +23,7 @@ interface Signature {
  * ```
  *
  * The `handleMessage` function will be called with the `MessageEvent` and the realm URL
- * when a SSE event is received from any of the realms in the `realms` array.
+ * when a realm event is received from any of the realms in the `realms` array.
  */
 
 export default class SubscribeToRealms extends Helper<Signature> {

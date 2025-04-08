@@ -1497,7 +1497,7 @@ export default class MatrixService extends Service {
         );
       } else {
         (event.content as any).origin_server_ts = event.origin_server_ts;
-        this.messageService.relayMatrixSSE(
+        this.messageService.relayRealmEvent(
           realmResourceForEvent.url,
           event.content as RealmEventContent,
         );

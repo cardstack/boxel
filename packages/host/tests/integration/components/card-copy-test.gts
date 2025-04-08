@@ -707,7 +707,7 @@ module('Integration | card-copy', function (hooks) {
         realmSessionRoomId,
         realmEventTimestampStart,
       );
-      console.log(matrixMessages);
+
       return matrixMessages.some(
         (m) =>
           m.type === APP_BOXEL_REALM_EVENT_TYPE &&

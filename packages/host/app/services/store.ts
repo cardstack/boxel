@@ -494,7 +494,7 @@ export default class StoreService extends Service implements StoreInterface {
       // the invalidation included code changes too. in this case we
       // need to flush the loader so that we can pick up any updated
       // code before re-running the card
-      this.loaderService.reset();
+      this.loaderService.resetLoader();
       // the code changes have destabilized our identity context so we
       // need to rebuild it
       this.identityContext.reset();
@@ -511,7 +511,7 @@ export default class StoreService extends Service implements StoreInterface {
         if (liveInstance) {
           // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
           // the inputs with past values. This can happen if the user makes edits in the time between the auto
-          // save request and the arrival SSE event.
+          // save request and the arrival realm event.
           if (
             !event.clientRequestId ||
             !this.cardService.clientRequestIds.has(event.clientRequestId)

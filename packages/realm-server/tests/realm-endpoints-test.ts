@@ -1,9 +1,9 @@
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 import supertest, { Test, SuperTest } from 'supertest';
 import { join, resolve, basename } from 'path';
 import { Server } from 'http';
 import { dirSync, type DirResult } from 'tmp';
-import { copySync, ensureDirSync, removeSync, writeJSONSync } from 'fs-extra';
+import { copySync, ensureDirSync } from 'fs-extra';
 import {
   baseRealm,
   loadCard,
@@ -234,30 +234,34 @@ module(basename(__filename), function () {
       assert.deepEqual(testCard.ref, ref, 'card data is correct');
     });
 
-    // CS-8095
-    skip('can index a newly added file to the filesystem', async function (assert) {
+    test('can index a newly added file', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
-      {
-        let response = await request
-          .get('/new-card')
-          .set('Accept', 'application/vnd.card+json');
-        assert.strictEqual(response.status, 404, 'HTTP 404 status');
-      }
-
-      writeJSONSync(join(dir.name, 'realm_server_1', 'test', 'new-card.json'), {
-        data: {
-          attributes: {
-            firstName: 'Mango',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person',
-              name: 'Person',
+      let postResponse = await request
+        .post('/')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              attributes: {
+                firstName: 'Mango',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '/person',
+                  name: 'Person',
+                },
+              },
             },
-          },
-        },
-      } as LooseSingleCardDocument);
+          }),
+        );
+
+      let newCardId = postResponse.body.data.id;
+      let newCardPath = new URL(newCardId).pathname;
 
       await waitForIncrementalIndexEvent(
         getMessagesSince,
@@ -276,18 +280,19 @@ module(basename(__filename), function () {
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
-        updatedFile: `${testRealmHref}new-card.json`,
+        updatedFile: `${newCardId}.json`,
       });
 
       assert.deepEqual(incrementalEvent?.content, {
         eventName: 'index',
         indexType: 'incremental',
-        invalidations: [`${testRealmHref}new-card`],
+        invalidations: [newCardId],
+        clientRequestId: null,
       });
 
       {
         let response = await request
-          .get('/new-card')
+          .get(newCardPath)
           .set('Accept', 'application/vnd.card+json');
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
         let json = response.body;
@@ -306,7 +311,7 @@ module(basename(__filename), function () {
         );
         assert.deepEqual(json, {
           data: {
-            id: `${testRealmHref}new-card`,
+            id: newCardId,
             type: 'card',
             attributes: {
               title: 'Mango',
@@ -316,10 +321,9 @@ module(basename(__filename), function () {
             },
             meta: {
               adoptsFrom: {
-                module: `./person`,
+                module: '/person',
                 name: 'Person',
               },
-              // FIXME how to globally fix this?
               realmInfo: {
                 ...testRealmInfo,
                 realmUserId: '@node-test_realm:localhost',
@@ -327,15 +331,14 @@ module(basename(__filename), function () {
               realmURL: testRealmHref,
             },
             links: {
-              self: `${testRealmHref}new-card`,
+              self: newCardId,
             },
           },
         });
       }
     });
 
-    // CS-8095
-    skip('can index a changed file in the filesystem', async function (assert) {
+    test('can index a changed file', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
       {
@@ -350,20 +353,29 @@ module(basename(__filename), function () {
         );
       }
 
-      writeJSONSync(join(dir.name, 'realm_server_1', 'test', 'person-1.json'), {
-        data: {
-          type: 'card',
-          attributes: {
-            firstName: 'Van Gogh',
-          },
-          meta: {
-            adoptsFrom: {
-              module: './person.gts',
-              name: 'Person',
+      await request
+        .patch('/person-1')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        )
+        .send(
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'Van Gogh',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: './person.gts',
+                  name: 'Person',
+                },
+              },
             },
-          },
-        },
-      } as LooseSingleCardDocument);
+          }),
+        );
 
       await waitForIncrementalIndexEvent(
         getMessagesSince,
@@ -390,6 +402,7 @@ module(basename(__filename), function () {
         eventName: 'index',
         indexType: 'incremental',
         invalidations: [`${testRealmHref}person-1`],
+        clientRequestId: null,
       });
 
       {
@@ -405,8 +418,7 @@ module(basename(__filename), function () {
       }
     });
 
-    // CS-8095
-    skip('can index a file deleted from the filesystem', async function (assert) {
+    test('can index deleted file', async function (assert) {
       let realmEventTimestampStart = Date.now();
 
       {
@@ -416,7 +428,13 @@ module(basename(__filename), function () {
         assert.strictEqual(response.status, 200, 'HTTP 200 status');
       }
 
-      removeSync(join(dir.name, 'realm_server_1', 'test', 'person-1.json'));
+      await request
+        .delete('/person-1')
+        .set('Accept', 'application/vnd.card+json')
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
 
       await waitForIncrementalIndexEvent(
         getMessagesSince,
@@ -433,7 +451,6 @@ module(basename(__filename), function () {
 
       let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
 
-      // FIXME split this test from the response-checking
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {
         eventName: 'index',
         indexType: 'incremental-index-initiation',
@@ -953,16 +970,24 @@ async function waitForIncrementalIndexEvent(
   getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
   since: number,
 ) {
-  await waitUntil(async () => {
+  try {
+    await waitUntil(async () => {
+      let matrixMessages = await getMessagesSince(since);
+
+      return matrixMessages.some(
+        (m) =>
+          m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+          m.content.eventName === 'index' &&
+          m.content.indexType === 'incremental',
+      );
+    });
+  } catch (e) {
     let matrixMessages = await getMessagesSince(since);
 
-    return matrixMessages.some(
-      (m) =>
-        m.type === APP_BOXEL_REALM_EVENT_TYPE &&
-        m.content.eventName === 'index' &&
-        m.content.indexType === 'incremental',
-    );
-  });
+    console.log('waitForIncrementalIndexEvent failed, no event found. Events:');
+    console.log(JSON.stringify(matrixMessages, null, 2));
+    throw e;
+  }
 }
 
 function findRealmEvent(
