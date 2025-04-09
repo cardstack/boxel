@@ -473,8 +473,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @tracked private search: ReturnType<getCards<Spec>> | undefined;
 
   // We need a way to shield ourselves from the fact that ultimately the
-  // ModuleContentsResource's declarations are not strict equal after a loader reset,
-  // but still structurally the same (like a strictEqual vs deepEqual). This value
+  // ModuleContentsResource's declarations are not strict equal after a source file change,
+  // but may still be structurally the same (like a strictEqual vs deepEqual). This value
   // ultimately is consumed by the search resource, and even though the value never
   // changes from a deepEqual perspective, because of reactivity the search thunk is
   // triggered because it is not equivalent in a strict equality sense. So we use a
