@@ -1,0 +1,63 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Cycling Mileage Log",
+      "summary": "Track your cycling progress with this elegant, feature-rich mileage logger. Set targets, log your rides with origin and destination details, and visualize your progress with beautiful charts. Perfect for casual cyclists and serious riders looking to achieve their distance goals.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/cycling-mileage-listing/screenshot_01.png ",
+        "https://boxel-images.boxel.ai/app-assets/catalog/cycling-mileage-listing/screenshot_02.png "
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cycling-mileage-listing/thumbnail.png "
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/74f2e937-553d-408f-b8fc-aba2fa844f98"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/187c0111-8e4b-4af4-88d0-e6ea77abe0c1"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/f79a73f8-07f9-4944-83b3-54814b33d5b2"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../cycling-mileage/CyclingMileageLog/9fc98a27-ad5c-450d-843f-9c55730f0122"
+        }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../cycling-mileage/CyclingMileageLog/866ddaf1-ea85-4a11-b012-7b2e9758a248"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../cycling-mileage/CyclingMileageLog/e4f0c385-5558-4c68-acc9-3476baa61333"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
