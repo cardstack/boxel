@@ -761,7 +761,7 @@ export default class Room extends Component<Signature> {
           .filter(Boolean) as string[],
       };
       try {
-        if (files) {
+        if (files?.length) {
           files = await this.matrixService.uploadFiles(files);
         }
         let cards: CardDef[] | undefined;

@@ -106,7 +106,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
         }),
       );
     }
-    if (files) {
+    if (files?.length) {
       files = await this.matrixService.uploadFiles(files);
     }
 
@@ -135,6 +135,6 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     } as CardMessageContent);
     let commandModule = await this.loadCommandModule();
     const { SendAiAssistantMessageResult } = commandModule;
-    return new SendAiAssistantMessageResult({ eventId: event_id });
+    return new SendAiAssistantMessageResult({ roomId, eventId: event_id });
   }
 }
