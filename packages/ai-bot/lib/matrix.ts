@@ -8,6 +8,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 
 let log = logger('ai-bot');
 
@@ -60,12 +61,13 @@ export async function sendMessageEvent(
   commandRequests: Partial<CommandRequest>[] = [],
   reasoning: string | undefined = undefined,
 ) {
+  let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
   log.debug('sending message', body);
   let contentObject: IContent = {
     ...{
       body,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: body,
+      formatted_body: html,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
@@ -76,7 +78,7 @@ export async function sendMessageEvent(
     contentObject['m.new_content'] = {
       body,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: body,
+      formatted_body: html,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,

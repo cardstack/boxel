@@ -21,7 +21,7 @@ export function extractCodeData(preElementString: string): CodeData {
     };
   }
 
-  let language = preElement.getAttribute('data-code-language') || null;
+  let language = preElement.getAttribute('data-code-language') || 'text';
 
   let content = preElement.innerHTML;
   // Decode HTML entities to handle special characters like < and >
