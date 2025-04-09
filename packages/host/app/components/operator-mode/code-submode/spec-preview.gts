@@ -5,6 +5,7 @@ import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
+import { tracked, cached } from '@glimmer/tracking';
 
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import Brain from '@cardstack/boxel-icons/brain';
@@ -15,7 +16,9 @@ import StackIcon from '@cardstack/boxel-icons/stack';
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
+import { use, resource } from 'ember-resources';
 import window from 'ember-window-mock';
+import { TrackedObject } from 'tracked-built-ins';
 
 import {
   BoxelButton,
@@ -45,13 +48,12 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import Preview from '@cardstack/host/components/preview';
-
+import consumeContext from '@cardstack/host/helpers/consume-context';
 import {
   CardOrFieldDeclaration,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
-import { getSearch } from '@cardstack/host/resources/search';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
@@ -456,6 +458,8 @@ const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
   </template>;
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
@@ -466,17 +470,41 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
+  @tracked private search: ReturnType<getCards<Spec>> | undefined;
 
-  private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
-    if (!this.args.selectedDeclaration?.exportName) {
+  // We need a way to shield ourselves from the fact that ultimately the
+  // ModuleContentsResource's declarations are not strict equal after a loader reset,
+  // but still structurally the same (like a strictEqual vs deepEqual). This value
+  // ultimately is consumed by the search resource, and even though the value never
+  // changes from a deepEqual perspective, because of reactivity the search thunk is
+  // triggered because it is not equivalent in a strict equality sense. So we use a
+  // simple resource to cache the string and reactivity is only triggered when the
+  // export name changes as opposed to being triggered because of strict equality
+  // change in the selectedDeclaration arg.
+  @use private selectedDeclarationExportName = resource(() => {
+    let exportName = new TrackedObject<{ value: string | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      await Promise.resolve(); // buffer 1 microtask to prevent re-render cycles
+      if (this.args.selectedDeclaration?.exportName !== exportName.value) {
+        exportName.value = this.args.selectedDeclaration?.exportName;
+      }
+    })();
+    return exportName;
+  });
+
+  @cached
+  private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {
+    if (!this.selectedDeclarationExportName.value) {
       return {
         name: '',
         module: '',
       };
     }
     return {
-      name: this.args.selectedDeclaration.exportName,
-      module: `${this.operatorModeStateService.state.codePath!.href.replace(
+      name: this.selectedDeclarationExportName.value,
+      module: `${this.operatorModeStateService.codePathString!.replace(
         /\.[^.]+$/,
         '',
       )}`,
@@ -513,16 +541,18 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     },
   );
 
+  @cached
   private get realms() {
     return this.realmServer.availableRealmURLs;
   }
 
+  @cached
   private get specQuery(): Query {
     return {
       filter: {
         on: specRef,
         eq: {
-          ref: this.getSelectedDeclarationAsCodeRef, //ref is primitive
+          ref: this.selectedDeclarationAsCodeRef, //ref is primitive
         },
       },
       sort: [
@@ -595,12 +625,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');
     }
-    if (!this.getSelectedDeclarationAsCodeRef) {
+    if (!this.selectedDeclarationAsCodeRef) {
       throw new Error('bug: no code ref');
     }
     let specType = await this.guessSpecType(this.args.selectedDeclaration);
     this.createSpecInstance.perform(
-      this.getSelectedDeclarationAsCodeRef,
+      this.selectedDeclarationAsCodeRef,
       specType,
     );
   }
@@ -613,12 +643,13 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private search = getSearch(
-    this,
-    () => this.specQuery,
-    () => this.realms,
-    { isLive: true, isAutoSaved: true },
-  );
+  private makeSearch = () => {
+    this.search = this.getCards(
+      this,
+      () => this.specQuery,
+      () => this.realms,
+    ) as ReturnType<getCards<Spec>>;
+  };
 
   get _selectedCard() {
     let selectedCardId = this.specPanelService.specSelection;
@@ -629,7 +660,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   get cards() {
-    return this.search.instances as unknown as Spec[];
+    return this.search?.instances ?? [];
   }
 
   private get card() {
@@ -642,7 +673,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   get showCreateSpec() {
     return (
       Boolean(this.args.selectedDeclaration?.exportName) &&
-      !this.search.isLoading &&
+      !this.search?.isLoading &&
       this.cards.length === 0 &&
       this.canWrite
     );
@@ -665,7 +696,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     }
 
     const moduleId = internalKeyFor(
-      this.getSelectedDeclarationAsCodeRef,
+      this.selectedDeclarationAsCodeRef,
       undefined,
     );
     const cardId = id.replace(/\.json$/, '');
@@ -697,8 +728,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       return; // not a field spec
     }
     if (
-      this.getSelectedDeclarationAsCodeRef.name !== spec.ref.name ||
-      this.getSelectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
+      this.selectedDeclarationAsCodeRef.name !== spec.ref.name ||
+      this.selectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
     ) {
       return; // not the right field spec
     }
@@ -714,6 +745,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
+    {{consumeContext this.makeSearch}}
     {{#if this.isLoading}}
       {{yield
         (component
