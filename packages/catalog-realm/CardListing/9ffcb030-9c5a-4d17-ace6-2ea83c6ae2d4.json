@@ -27,6 +27,11 @@
           "self": "../Category/f79a73f8-07f9-4944-83b3-54814b33d5b2"
         }
       },
+      "categories.1": {
+        "links": {
+          "self": "../Category/38b5d1dc-00d3-4a19-8998-29f0c19081de"
+        }
+      },
       "tags.0": {
         "links": {
           "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"

@@ -909,7 +909,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
     <div class='blackjack-table'>
       <div class='table-content'>
         <div class='table-header'>
-          <div class='game-title'>{{this.args.model.casinoName}}
+          <div class='game-title'>{{@model.casinoName}}
             Blackjack</div>
           <div class='statistics'>
             <div class='stat'>Wins: {{this.statistics.wins}}</div>
@@ -954,7 +954,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
 
           <div class='player-area'>
             <div class='area-label'>
-              <span>Player ({{this.args.model.playerName}})</span>
+              <span>Player ({{@model.playerName}})</span>
               <span>Score: {{this.calculatedPlayerScore}}</span>
             </div>
             <div class='card-area'>
@@ -989,7 +989,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
             {{this.gameMessage}}
           </div>
 
-          <div class='area-label' style='margin-top: 10px;'>
+          <div class='area-label'>
             <span class='chips-display'>Chips: {{this.playerChips}}</span>
             <span class='bet-amount'>Current Bet: {{this.currentBet}}</span>
           </div>
@@ -997,22 +997,22 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
           <div class='controls-container'>
             {{#if (eq this.gameState 'betting')}}
               <div class='betting-controls'>
-                <div
+                <button
                   class='chip red'
                   {{on 'click' (fn this.placeBet 5)}}
-                >5</div>
-                <div
+                >5</button>
+                <button
                   class='chip blue'
                   {{on 'click' (fn this.placeBet 20)}}
-                >20</div>
-                <div
+                >20</button>
+                <button
                   class='chip green'
                   {{on 'click' (fn this.placeBet 50)}}
-                >50</div>
-                <div
+                >50</button>
+                <button
                   class='chip black'
                   {{on 'click' (fn this.placeBet 100)}}
-                >100</div>
+                >100</button>
                 <button
                   class='button primary'
                   {{on 'click' this.deal}}
