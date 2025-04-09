@@ -6,10 +6,11 @@ import Component from '@glimmer/component';
 import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 
 import { didCancel, restartableTask } from 'ember-concurrency';
+import { use, resource } from 'ember-resources';
 import { trackedFunction } from 'ember-resources/util/function';
 import { flatMap, isEqual } from 'lodash';
 
-import { TrackedSet } from 'tracked-built-ins';
+import { TrackedSet, TrackedObject } from 'tracked-built-ins';
 
 import { Query, RealmPaths } from '@cardstack/runtime-common';
 import {
@@ -128,6 +129,20 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     }
   }
 
+  // we want our query to be reactive in a deepEqual sense vs a strict equal sense
+  @use private query = resource(() => {
+    let query = new TrackedObject<{ value: Query | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      await Promise.resolve(); // buffer 1 microtask to prevent re-render cycles
+      if (!isEqual(this.args.query, query.value)) {
+        query.value = this.args.query;
+      }
+    })();
+    return query;
+  });
+
   async searchPrerendered(
     query: Query,
     format: Format,
@@ -173,11 +188,8 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   }
 
   private runSearch = trackedFunction(this, async () => {
-    let { query, format, cardUrls, realms } = this.args;
-
+    let { format, cardUrls, realms } = this.args;
     let realmsChanged = !isEqual(realms, this._lastRealms);
-    // guard against a query that is deeply equal to the last query, but not strictly equal
-    let queryChanged = !isEqual(query, this._lastSearchQuery);
     if (realmsChanged) {
       this._lastSearchResults = this._lastSearchResults?.filter((r) =>
         realms.includes(r.realmUrl),
@@ -187,13 +199,11 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     this._lastRealms = realms;
 
     if (
-      query &&
-      queryChanged &&
-      format &&
-      (realmsChanged || this.realmsNeedingRefresh.size > 0)
+      (this.query.value,
+      format && (realmsChanged || this.realmsNeedingRefresh.size > 0))
     ) {
       try {
-        await this.runSearchTask.perform(query, format, cardUrls);
+        await this.runSearchTask.perform(this.query.value, format, cardUrls);
       } catch (e) {
         if (!didCancel(e)) {
           // re-throw the non-cancelation error
