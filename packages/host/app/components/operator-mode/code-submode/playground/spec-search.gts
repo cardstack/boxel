@@ -12,7 +12,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import { consumeContext } from '@cardstack/host/helpers/consume-context';
+import consumeContext from '@cardstack/host/helpers/consume-context';
 
 interface Signature {
   Args: {

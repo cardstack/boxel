@@ -539,7 +539,7 @@ class CardTemplate extends Component<typeof ContactCard> {
     // Search pattern has spurious blank
     const codeBlock = `<<<<<<< SEARCH
   @field bio = contains(StringField);
-  
+
   @field avatar = linksTo(ImageAsset);
 =======
   @field bio = contains(StringField);
@@ -644,9 +644,9 @@ class CardTemplate extends Component<typeof ContactCard> {
 
     // Search pattern has trailing spaces on some lines
     const codeBlock = `<<<<<<< SEARCH
-      <div class="form-group">  
+      <div class="form-group">
         <label for="date">Date:</label>
-        <Input @value={{@model.date}} id="date" type="date" />  
+        <Input @value={{@model.date}} id="date" type="date" />
       </div>
 =======
       <div class="form-group">
@@ -684,5 +684,35 @@ class CardTemplate extends Component<typeof ContactCard> {
   </template>
 }`;
     assert.strictEqual(result.resultContent, expectedResult);
+  });
+
+  test('it applies search/replace block when replace block is empty', async function (assert) {
+    let commandService = lookupService<CommandService>('command-service');
+    let applyCommand = new ApplySearchReplaceBlockCommand(
+      commandService.commandContext,
+    );
+
+    const fileContent = `class Task extends CardDef {
+  static displayName = 'Task';
+  @field title = contains(StringField);
+  @field description = contains(StringField);
+}`;
+    const codeBlock = `<<<<<<< SEARCH
+  class Task extends CardDef {
+    static displayName = 'Task';
+    @field title = contains(StringField);
+=======
+>>>>>>> REPLACE`;
+
+    let result = await applyCommand.execute({
+      fileContent,
+      codeBlock,
+    });
+
+    assert.strictEqual(
+      result.resultContent,
+      `  @field description = contains(StringField);
+}`,
+    );
   });
 });

@@ -468,6 +468,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}grid"]`)
       .doesNotExist('grid cards do not show other grid cards');
+    assert.dom('[data-test-ask-ai-input]').exists();
 
     await percySnapshot(assert);
 
@@ -640,7 +641,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await percySnapshot(assert);
     assert
       .dom(
-        '[data-test-address-with-no-embedded] [data-test-missing-embedded-template-text]',
+        '[data-test-address-with-no-embedded] [data-test-missing-template-text]',
       )
       .hasText('Missing embedded component for FieldDef: Address');
     assert

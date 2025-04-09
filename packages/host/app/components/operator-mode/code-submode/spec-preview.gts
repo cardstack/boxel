@@ -37,11 +37,11 @@ import {
   isCardDef,
   isFieldDef,
   internalKeyFor,
+  loadCard,
 } from '@cardstack/runtime-common';
 import {
   codeRefWithAbsoluteURL,
   isResolvedCodeRef,
-  loadCard,
 } from '@cardstack/runtime-common/code-ref';
 
 import Preview from '@cardstack/host/components/preview';
@@ -66,11 +66,9 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import {
-  CardContext,
-  type CardDef,
-  type Format,
-} from 'https://cardstack.com/base/card-api';
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+
+import { CardContext, type Format } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -143,8 +141,9 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
     <span class='has-spec' data-test-has-spec>
       {{#if @showCreateSpec}}
         <BoxelButton
+          class='create-spec-button'
           @kind='primary'
-          @size='small'
+          @size='extra-small'
           @loading={{@isCreateSpecInstanceRunning}}
           {{on 'click' @createSpec}}
           data-test-create-spec-button
@@ -171,11 +170,15 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 
     <style scoped>
       .has-spec {
-        margin-left: auto;
         color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xl);
         text-transform: uppercase;
+      }
+      .create-spec-button {
+        --boxel-button-min-height: auto;
+        --boxel-button-min-width: auto;
+        font-weight: 500;
       }
       .number-of-instance {
         margin-left: auto;
@@ -462,6 +465,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare loaderService: LoaderService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
+  @service private declare store: StoreService;
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -495,7 +499,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           ref,
           title: ref.name,
         }) as CardDef;
-        await this.cardService.saveModel(card);
+        let currentRealm = this.operatorModeStateService.realmURL;
+        await this.store.add(card, { realm: currentRealm.href });
         if (card.id) {
           this.specPanelService.setSelection(card.id);
           if (!this.args.isPanelOpen) {
@@ -670,11 +675,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
     if (selections) {
       const selection = JSON.parse(selections)[moduleId];
-      // If we already have selections for this module, preserve the format
-      existingFormat = selection?.format as Format;
-
       if (selection?.cardId === cardId) {
         return;
+      }
+      // If we already have selections for this module, preserve the format
+      if (selection?.format) {
+        existingFormat = selection?.format;
       }
     }
 

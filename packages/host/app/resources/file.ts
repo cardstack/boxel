@@ -246,7 +246,7 @@ class _FileResource extends Resource<Args> {
       });
 
       if (flushLoader) {
-        this.loaderService.reset();
+        this.loaderService.resetLoader();
       }
     },
   );

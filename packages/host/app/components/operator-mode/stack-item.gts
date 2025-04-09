@@ -54,7 +54,7 @@ import { type StackItem } from '@cardstack/host/lib/stack-item';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
-import { consumeContext } from '../../helpers/consume-context';
+import consumeContext from '../../helpers/consume-context';
 import { htmlComponent } from '../../lib/html-component';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
@@ -99,7 +99,6 @@ interface Signature {
       model: StackItem,
       componentAPI: StackItemComponentAPI,
     ) => void;
-    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
 }
 
@@ -410,7 +409,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   });
 
-  private doneEditing = restartableTask(async () => {
+  private doneEditing = () => {
     let item = this.args.item;
     let { request } = item;
     // if the card is actually different do the save and dismiss, otherwise
@@ -418,8 +417,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
     if (this.card && this.cardResource?.autoSaveState?.hasUnsavedChanges) {
       // we dont want to have the user wait for the save to complete before
       // dismissing edit mode so intentionally not awaiting here
-      await this.args.saveCard(this.card);
       request?.fulfill(this.card.id);
+      this.store.save(this.card.id);
     }
     this.operatorModeStateService.replaceItemInStack(
       item,
@@ -428,7 +427,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
         format: 'isolated',
       }),
     );
-  });
+  };
 
   private doWithStableScroll = restartableTask(
     async (changeSizeCallback: () => Promise<void>) => {
@@ -649,7 +648,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{realmInfo}}
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
-              @onFinishEditing={{if this.isEditing (perform this.doneEditing)}}
+              @onFinishEditing={{if this.isEditing this.doneEditing}}
               @onClose={{unless this.isBuried (perform this.closeItem)}}
               class='stack-item-header'
               style={{cssVar

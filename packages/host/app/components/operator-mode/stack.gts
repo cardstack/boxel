@@ -7,8 +7,6 @@ import type { Actions, CommandContext } from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
-import type { CardDef } from 'https://cardstack.com/base/card-api';
-
 import OperatorModeStackItem, {
   type StackItemComponentAPI,
   CardDefOrId,
@@ -31,7 +29,6 @@ interface Signature {
       model: StackItem,
       componentAPI: StackItemComponentAPI,
     ) => void;
-    saveCard: (card: CardDef) => Promise<CardDef | undefined>;
   };
   Blocks: {};
 }
@@ -91,7 +88,6 @@ export default class OperatorModeStack extends Component<Signature> {
             @close={{@close}}
             @onSelectedCards={{@onSelectedCards}}
             @setupStackItem={{this.setupStackItem}}
-            @saveCard={{@saveCard}}
           />
         {{/each}}
       </div>
@@ -120,7 +116,7 @@ export default class OperatorModeStack extends Component<Signature> {
         transition: padding-top var(--boxel-transition);
       }
       .operator-mode-stack
-        :deep(.field-component-card.fitted-format .missing-embedded-template) {
+        :deep(.field-component-card.fitted-format .missing-template) {
         margin-top: calc(-1 * var(--boxel-sp-lg));
         border-radius: 0;
         border-bottom-left-radius: var(--boxel-form-control-border-radius);

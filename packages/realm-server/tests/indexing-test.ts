@@ -1,5 +1,5 @@
 import { module, test } from 'qunit';
-import { dirSync, setGracefulCleanup } from 'tmp';
+import { dirSync } from 'tmp';
 import {
   baseRealm,
   DBAdapter,
@@ -33,8 +33,6 @@ function trimCardContainer(text: string) {
 }
 
 let testDbAdapter: DBAdapter;
-
-setGracefulCleanup();
 
 // Using the node tests for indexing as it is much easier to support the dynamic
 // loading of cards necessary for indexing and the ability to manipulate the
@@ -919,8 +917,8 @@ module(basename(__filename), function () {
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/missing-embedded\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/missing-embedded.gts',
+            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/missing-template.gts',
         },
         {
           pattern:

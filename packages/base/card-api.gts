@@ -55,7 +55,7 @@ import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
 import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
-import MissingEmbeddedTemplate from './default-templates/missing-embedded';
+import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -1842,9 +1842,10 @@ export class FieldDef extends BaseDef {
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
 
-  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
+  static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
+  static fitted: BaseDefComponent = MissingTemplate;
 }
 
 export class ReadOnlyField extends FieldDef {
@@ -2472,8 +2473,11 @@ function buildIdentityContext(
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
+  identityContext?: IdentityContext,
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = buildIdentityContext(instance);
+  if (!identityContext) {
+    identityContext = buildIdentityContext(instance);
+  }
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
@@ -2525,9 +2529,6 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   if (!instance) {
     instance = new card({ id: resource.id }) as BaseInstanceType<T>;
     instance[relativeTo] = _relativeTo;
-    if (isCardInstance(instance)) {
-      instance[meta] = data?.meta;
-    }
   }
   identityContexts.set(instance, identityContext);
   return await _updateFromSerialized(instance, resource, doc, identityContext);
@@ -2640,6 +2641,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       // fields, such that subsequent assignment of the id field when the model is
       // saved will throw
       instance[isSavedInstance] = true;
+      (instance as any)[meta] = resource.meta;
     }
   }
 
