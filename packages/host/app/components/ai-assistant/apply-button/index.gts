@@ -17,6 +17,9 @@ interface Signature {
   Args: {
     state: ApplyButtonState;
   };
+  Blocks: {
+    default: [];
+  };
 }
 
 const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
