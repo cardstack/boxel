@@ -1599,8 +1599,8 @@ importers:
         specifier: ^5.0.2
         version: 5.0.2
       glimmer-scoped-css:
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.8.0
+        version: 0.8.0
       ignore:
         specifier: ^5.2.0
         version: 5.2.0
