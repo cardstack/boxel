@@ -105,6 +105,7 @@ interface Signature {
     format: Format;
     cardUrls?: string[];
     realms: string[];
+    isLive?: boolean;
   };
   Blocks: {
     loading: [];
@@ -265,7 +266,9 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   };
 
   <template>
-    {{SubscribeToRealms @realms this.markRealmNeedsRefreshing}}
+    {{#if @isLive}}
+      {{SubscribeToRealms @realms this.markRealmNeedsRefreshing}}
+    {{/if}}
     {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}
     {{else}}

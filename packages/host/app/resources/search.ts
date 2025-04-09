@@ -50,6 +50,8 @@ export class SearchResource extends Resource<Args> {
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
   #isAutoSaved = false;
+  #previousQuery: Query | undefined;
+  #previousRealms: string[] | undefined;
 
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing, isAutoSaved } = named;
@@ -66,6 +68,17 @@ export class SearchResource extends Resource<Args> {
     this.loaded = this.search.perform(query);
 
     if (isLive) {
+      // need to unsubscribe the old query before subscribing the new query
+      if (
+        this.subscriptions &&
+        (this.#previousQuery !== query || this.#previousRealms !== realms)
+      ) {
+        for (let subscription of this.subscriptions) {
+          subscription.unsubscribe();
+        }
+      }
+      this.#previousQuery = query;
+      this.#previousRealms = realms;
       this.subscriptions = this.realmsToSearch.map((realm) => ({
         url: `${realm}_message`,
         unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
@@ -222,7 +235,7 @@ export function getSearch(
     named: {
       query: getQuery(),
       realms: getRealms ? getRealms() : undefined,
-      isLive: opts?.isLive != null ? opts.isLive : true,
+      isLive: opts?.isLive != null ? opts.isLive : false,
       isAutoSaved: opts?.isAutoSaved != null ? opts.isAutoSaved : false,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,
