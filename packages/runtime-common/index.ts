@@ -63,6 +63,7 @@ export interface RealmPrerenderedCards {
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
+export * from './cached-fetch';
 export * from './commands';
 export * from './constants';
 export * from './matrix-constants';
@@ -302,11 +303,29 @@ export type getCards = (
 };
 
 export interface Store {
-  createInstance(
+  save(id: string): void;
+  create(
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
+    realm?: string,
   ): Promise<string | CardErrorJSONAPI>;
+  add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: {
+      realm?: string;
+      relativeTo?: URL | undefined;
+      doNotPersist?: true;
+    },
+  ): Promise<T>;
   peek<T extends CardDef>(url: string): Promise<T | CardErrorJSONAPI>;
+  delete(id: string): Promise<void>;
+  patch(
+    instance: CardDef,
+    doc: LooseSingleCardDocument,
+    patchData: PatchData,
+  ): Promise<void>;
+  search(query: Query, realmURL: URL): Promise<CardDef[]>;
+  getSaveState(instance: CardDef): AutoSaveState | undefined;
 }
 
 export interface CardCatalogQuery extends Query {
@@ -392,8 +411,8 @@ export interface CardActions {
   ) => void;
   copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
   editCard: (card: CardDef) => void;
-  copyCard?: (card: CardDef) => Promise<CardDef>;
-  saveCard(card: CardDef): Promise<void>;
+  copyCard?: (card: CardDef) => Promise<string>;
+  saveCard: (id: string) => void;
   delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
     card: CardDef,

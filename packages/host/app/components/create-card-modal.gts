@@ -108,7 +108,7 @@ export default class CreateCardModal extends Component {
         },
       };
 
-      let maybeUrl = await this.store.createInstance(doc, relativeTo);
+      let maybeUrl = await this.store.create(doc, relativeTo);
       if (typeof maybeUrl === 'string') {
         let url = maybeUrl;
         let cardResource = this.getCard(this, () => url, {

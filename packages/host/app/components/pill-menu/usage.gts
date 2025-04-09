@@ -19,7 +19,7 @@ import {
   type getCard,
 } from '@cardstack/runtime-common';
 
-import { consumeContext } from '@cardstack/host/helpers/consume-context';
+import consumeContext from '@cardstack/host/helpers/consume-context';
 import type StoreService from '@cardstack/host/services/store';
 
 import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';

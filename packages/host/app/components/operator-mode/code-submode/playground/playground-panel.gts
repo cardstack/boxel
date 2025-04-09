@@ -74,6 +74,7 @@ interface Signature {
       (
         | WithBoundArgs<
             typeof PlaygroundContent,
+            | 'makeCardResource'
             | 'card'
             | 'field'
             | 'moduleId'
@@ -125,6 +126,23 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.cardResource?.card;
   }
 
+  private get specCard(): Spec | undefined {
+    let card = this.card;
+    if (!card || !this.args.isFieldDef) {
+      return undefined;
+    }
+    if (!('ref' in card) || !('moduleHref' in card)) {
+      return undefined;
+    }
+    if (
+      card.moduleHref !== this.args.codeRef.module ||
+      (card.ref as ResolvedCodeRef).name !== this.args.codeRef.name
+    ) {
+      return undefined;
+    }
+    return card as Spec;
+  }
+
   private get recentCardIds() {
     return this.recentFilesService.recentFiles
       .map((f) => `${f.realmURL}${f.filePath}`)
@@ -165,10 +183,10 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get fieldInstances(): FieldOption[] | undefined {
-    if (!this.args.isFieldDef || !this.card) {
+    if (!this.args.isFieldDef || !this.specCard) {
       return undefined;
     }
-    let spec = this.card as Spec;
+    let spec = this.specCard;
     let instances = spec.containedExamples;
     if (!instances?.length) {
       this.createNewField.perform(spec);
@@ -357,7 +375,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         },
       };
     }
-    let cardId = await this.store.createInstance(newCardJSON, undefined);
+    let cardId = await this.store.create(newCardJSON, undefined);
     if (typeof cardId === 'string') {
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
       this.persistSelections(
@@ -412,6 +430,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         (component LoadingIndicator color='var(--boxel-light)')
         (component
           PlaygroundContent
+          makeCardResource=this.makeCardResource
           card=this.card
           field=this.field
           moduleId=this.moduleId

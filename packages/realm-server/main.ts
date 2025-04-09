@@ -64,8 +64,7 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
   );
 }
 
-const DISABLE_MATRIX_REALM_EVENTS =
-  process.env.DISABLE_MATRIX_REALM_EVENTS === 'true';
+const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
 
@@ -237,7 +236,6 @@ let autoMigrate = migrateDB || undefined;
         virtualNetwork,
         dbAdapter,
         queue,
-        disableMatrixRealmEvents: DISABLE_MATRIX_REALM_EVENTS,
       },
       {
         ...(process.env.DISABLE_MODULE_CACHING === 'true'
@@ -281,7 +279,6 @@ let autoMigrate = migrateDB || undefined;
     seedPath,
     seedRealmURL: seedRealmURL ? new URL(seedRealmURL) : undefined,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
-    disableMatrixRealmEvents: DISABLE_MATRIX_REALM_EVENTS,
     enableFileWatcher: ENABLE_FILE_WATCHER,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
