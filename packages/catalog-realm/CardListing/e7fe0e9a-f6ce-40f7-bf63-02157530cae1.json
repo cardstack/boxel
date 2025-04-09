@@ -45,6 +45,16 @@
         "links": {
           "self": "../map/Map/livarska-ulica"
         }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../map/Map/petronas-twin-tower"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../map/Map/golden-gate-bridge"
+        }
       }
     },
     "meta": {
