@@ -26,6 +26,14 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     console.log('remix');
   }
 
+  get hasTags() {
+    return this.args.model.tags && this.args.model.tags?.length > 0;
+  }
+
+  get firstTagName() {
+    return this.args.model.tags?.[0]?.name;
+  }
+
   <template>
     <div class='fitted-template'>
       <div class='display-section'>
@@ -50,7 +58,9 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           </h4>
         </div>
         <div class='card-tags-action'>
-          <span class='card-tags'>#taghere</span>
+          {{#if this.hasTags}}
+            <span class='card-tags'># {{this.firstTagName}}</span>
+          {{/if}}
           <BoxelButton
             @kind='primary'
             @size='extra-small'

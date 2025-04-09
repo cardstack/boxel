@@ -21,14 +21,19 @@
           "self": "../Publisher/ae15f401-5340-4098-ba7f-ab23a3058dff"
         }
       },
-      "categories": {
+      "categories.0": {
         "links": {
-          "self": null
+          "self": "../Category/f6a67357-ba77-4e38-a5de-03e20fa46193"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
         }
       },
       "license": {
