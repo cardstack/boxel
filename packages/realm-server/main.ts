@@ -66,8 +66,6 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
 
 const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
 
-const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
-
 let {
   port,
   matrixURL,
