@@ -312,6 +312,16 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           display: none;
         }
       }
+
+      /* Control linked to many component fitted size */
+      @container fitted-card (height <= 65px) {
+        .display-section {
+          padding: var(--boxel-sp-xs);
+        }
+        .card-tags-action {
+          display: none;
+        }
+      }
     </style>
   </template>
 }

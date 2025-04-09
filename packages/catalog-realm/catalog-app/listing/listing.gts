@@ -534,6 +534,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         padding-inline-start: 0;
       }
 
+      .app-listing-spec-breakdown :deep(.accordion) {
+        --accordion-border-radius: var(--boxel-border-radius);
+      }
+
       @container app-listing-embedded (inline-size <= 600px) {
         .app-listing-info {
           margin-left: 0;
