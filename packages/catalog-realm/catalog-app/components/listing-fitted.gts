@@ -148,6 +148,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         }
         .card-remix-button {
           --boxel-button-font: 600 var(--boxel-font-sm);
+          margin-left: auto;
         }
       }
 
@@ -196,6 +197,10 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         .card-title {
           -webkit-line-clamp: 2;
         }
+        .card-display-name,
+        .card-tags {
+          display: none;
+        }
       }
       /* Tall Tile (150 x 275) */
       @container fitted-card (aspect-ratio <= 1.0) and (150px <= width ) and (275px <= height) {
@@ -232,6 +237,9 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         .card-tags-action {
           flex-direction: row;
           justify-content: space-between;
+        }
+        .card-tags {
+          display: none;
         }
       }
       @container fitted-card (1.0 < aspect-ratio) and (height <= 65px) {
