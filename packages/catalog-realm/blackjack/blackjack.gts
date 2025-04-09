@@ -1122,30 +1122,30 @@ export class BlackjackGame extends CardDef {
           <@fields.dealerScore />
         </div>
 
-        <style scoped>
-          .edit-container {
-            font-family: sans-serif;
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 20px;
-          }
-          .field-row {
-            margin-bottom: 15px;
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-          }
-          h3 {
-            margin-top: 20px;
-            margin-bottom: 10px;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 5px;
-          }
-          label {
-            font-weight: bold;
-          }
-        </style>
       </div>
+      <style scoped>
+        .edit-container {
+          font-family: sans-serif;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .field-row {
+          margin-bottom: 15px;
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+        h3 {
+          margin-top: 20px;
+          margin-bottom: 10px;
+          border-bottom: 1px solid #eee;
+          padding-bottom: 5px;
+        }
+        label {
+          font-weight: bold;
+        }
+      </style>
     </template>
   };
 }
