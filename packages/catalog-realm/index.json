@@ -46,6 +46,11 @@
           "self": "./CardListing/e7fe0e9a-f6ce-40f7-bf63-02157530cae1"
         }
       },
+      "new.6": {
+        "links": {
+          "self": "./CardListing/a51b73a3-08c5-4dfd-b22a-8e66a0285801"
+        }
+      },
       "featured": {
         "links": {
           "self": null
