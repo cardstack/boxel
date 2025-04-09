@@ -143,6 +143,20 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     return query;
   });
 
+  // we want our realms to be reactive in a deepEqual sense vs a strict equal sense
+  @use private realms = resource(() => {
+    let realms = new TrackedObject<{ value: string[] | undefined }>({
+      value: undefined,
+    });
+    (async () => {
+      await Promise.resolve(); // buffer 1 microtask to prevent re-render cycles
+      if (!isEqual(this.args.realms, realms.value)) {
+        realms.value = this.args.realms;
+      }
+    })();
+    return realms;
+  });
+
   async searchPrerendered(
     query: Query,
     format: Format,
@@ -188,19 +202,21 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   }
 
   private runSearch = trackedFunction(this, async () => {
-    let { format, cardUrls, realms } = this.args;
-    let realmsChanged = !isEqual(realms, this._lastRealms);
+    let { format, cardUrls } = this.args;
+    let realmsChanged = !isEqual(this.realms.value, this._lastRealms);
     if (realmsChanged) {
       this._lastSearchResults = this._lastSearchResults?.filter((r) =>
-        realms.includes(r.realmUrl),
+        this.realms.value?.includes(r.realmUrl),
       );
-      this.realmsNeedingRefresh = new TrackedSet(realms);
+      this.realmsNeedingRefresh = new TrackedSet(this.realms.value ?? []);
     }
-    this._lastRealms = realms;
+    this._lastRealms = this.realms.value;
 
     if (
-      (this.query.value,
-      format && (realmsChanged || this.realmsNeedingRefresh.size > 0))
+      this.realms.value &&
+      this.query.value &&
+      format &&
+      (realmsChanged || this.realmsNeedingRefresh.size > 0)
     ) {
       try {
         await this.runSearchTask.perform(this.query.value, format, cardUrls);
