@@ -176,6 +176,8 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     let { query, format, cardUrls, realms } = this.args;
 
     let realmsChanged = !isEqual(realms, this._lastRealms);
+    // guard against a query that is deeply equal to the last query, but not strictly equal
+    let queryChanged = !isEqual(query, this._lastSearchQuery);
     if (realmsChanged) {
       this._lastSearchResults = this._lastSearchResults?.filter((r) =>
         realms.includes(r.realmUrl),
@@ -186,6 +188,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
 
     if (
       query &&
+      queryChanged &&
       format &&
       (realmsChanged || this.realmsNeedingRefresh.size > 0)
     ) {
