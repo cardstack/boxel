@@ -91,9 +91,15 @@ export function cleanWhiteSpace(text: string) {
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 
-export function getMonacoContent(): string {
-  let monacoService = lookupService('monaco-service') as MonacoService;
-  return monacoService.getMonacoContent()!;
+export function getMonacoContent(
+  editor: 'main' | 'firstAvailable' = 'main',
+): string {
+  if (editor === 'main') {
+    let monacoService = lookupService('monaco-service') as MonacoService;
+    return monacoService.getMonacoContent()!;
+  } else {
+    return (window as any).monaco.editor.getModels()[0].getValue();
+  }
 }
 
 export function setMonacoContent(content: string): string {
