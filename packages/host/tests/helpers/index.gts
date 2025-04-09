@@ -63,6 +63,7 @@ import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
+import MonacoService from '@cardstack/host/services/monaco-service';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
@@ -91,7 +92,8 @@ export function cleanWhiteSpace(text: string) {
 }
 
 export function getMonacoContent(): string {
-  return (window as any).monaco.editor.getModels()[0].getValue();
+  let monacoService = lookupService('monaco-service') as MonacoService;
+  return monacoService.getMonacoContent()!;
 }
 
 export function setMonacoContent(content: string): string {
