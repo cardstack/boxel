@@ -176,6 +176,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     let { query, format, cardUrls, realms } = this.args;
 
     let realmsChanged = !isEqual(realms, this._lastRealms);
+    let queryChanged = !isEqual(query, this._lastSearchQuery);
     if (realmsChanged) {
       this._lastSearchResults = this._lastSearchResults?.filter((r) =>
         realms.includes(r.realmUrl),
@@ -185,10 +186,20 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     this._lastRealms = realms;
 
     if (
-      query &&
-      format &&
-      (realmsChanged || this.realmsNeedingRefresh.size > 0)
+      // we want to only run the search when there is a deep equality
+      // difference, not a strict equality difference
+      (!realmsChanged && !queryChanged && !this.args.isLive) ||
+      (this.args.isLive && this.realmsNeedingRefresh.size === 0)
     ) {
+      return (
+        this.runSearchTask.lastSuccessful?.value ?? {
+          instances: [],
+          isLoading: true,
+        }
+      );
+    }
+
+    if (query && format) {
       try {
         await this.runSearchTask.perform(query, format, cardUrls);
       } catch (e) {

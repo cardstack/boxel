@@ -7,6 +7,7 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
+import isEqual from 'lodash/isEqual';
 
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -65,20 +66,24 @@ export class SearchResource extends Resource<Args> {
         ? this.realmServer.availableRealmURLs
         : realms;
 
+    if (
+      isEqual(query, this.#previousQuery) &&
+      isEqual(realms, this.#previousRealms)
+    ) {
+      // we want to only run the search when there is a deep equality
+      // difference, not a strict equality difference
+      return;
+    }
+    this.#previousQuery = query;
+    this.#previousRealms = realms;
+
     this.loaded = this.search.perform(query);
 
     if (isLive) {
       // need to unsubscribe the old query before subscribing the new query
-      if (
-        this.subscriptions &&
-        (this.#previousQuery !== query || this.#previousRealms !== realms)
-      ) {
-        for (let subscription of this.subscriptions) {
-          subscription.unsubscribe();
-        }
+      for (let subscription of this.subscriptions) {
+        subscription.unsubscribe();
       }
-      this.#previousQuery = query;
-      this.#previousRealms = realms;
       this.subscriptions = this.realmsToSearch.map((realm) => ({
         url: `${realm}_message`,
         unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
