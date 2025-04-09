@@ -10,7 +10,7 @@ import Modifier from 'ember-modifier';
 import { Resource } from 'ember-resources';
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { and, bool, eq, not } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
@@ -286,12 +286,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           {{/if}}
         {{/each}}
 
-        {{#if this.codePatchActions.length}}
-          {{! todo disable while it's still streaming }}
+        {{#if (and this.codePatchActions.length (not @isStreaming))}}
           <div class='code-patch-actions'>
             <ApplyButton
               {{on 'click' (perform this.applyAllCodePatchTasks)}}
               @state={{this.applyAllCodePatchTasksState}}
+              data-test-apply-all-code-patches-button
             >
               <:default>
                 Accept All
