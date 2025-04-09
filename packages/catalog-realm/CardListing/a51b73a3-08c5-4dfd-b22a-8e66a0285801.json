@@ -40,6 +40,21 @@
         "links": {
           "self": "../chess/Chess/d2841188-34a0-4a23-af83-cb9365431f8f"
         }
+      },
+      "examples.1": {
+        "links": {
+          "self": "../chess/Chess/immortal-game"
+        }
+      },
+      "examples.2": {
+        "links": {
+          "self": "../chess/Chess/game-of-century"
+        }
+      },
+      "examples.3": {
+        "links": {
+          "self": "../chess/Chess/opera-game"
+        }
       }
     },
     "meta": {
