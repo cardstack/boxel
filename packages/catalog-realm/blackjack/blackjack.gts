@@ -925,7 +925,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
               <span>Score: {{this.calculatedDealerScore}}</span>
             </div>
             <div class='card-area'>
-              {{#each this.dealerHand as |card _|}}
+              {{#each this.dealerHand as |card|}}
                 <div class='card {{if (not card.faceUp) "hidden"}}'>
                   {{#if card.faceUp}}
                     <div class='card-top'>
@@ -958,7 +958,7 @@ class IsolatedTemplate extends Component<typeof BlackjackGame> {
               <span>Score: {{this.calculatedPlayerScore}}</span>
             </div>
             <div class='card-area'>
-              {{#each this.playerHand as |card _|}}
+              {{#each this.playerHand as |card|}}
                 <div class='card'>
                   <div class='card-top'>
                     <div class='card-value'>{{card.value}}</div>
@@ -1122,7 +1122,7 @@ export class BlackjackGame extends CardDef {
           <@fields.dealerScore />
         </div>
 
-        <style>
+        <style scoped>
           .edit-container {
             font-family: sans-serif;
             max-width: 600px;
