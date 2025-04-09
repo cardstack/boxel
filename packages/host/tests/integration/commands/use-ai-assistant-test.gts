@@ -317,7 +317,6 @@ module('Integration | commands | ai-assistant', function (hooks) {
     );
   });
 
-  // ...existing code...
 
   test('sets active LLM model when llmModel is provided', async function (assert) {
     let roomId = createAndJoinRoom({
