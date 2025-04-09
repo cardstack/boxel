@@ -171,6 +171,10 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     return codePatchAction;
   };
 
+  private get isApplyAllButtonDisplayed() {
+    return this.codePatchActions.length > 0 && !this.args.isStreaming;
+  }
+
   private applyAllCodePatchTasks = dropTask(async () => {
     this.applyAllCodePatchTasksState = 'applying';
 
@@ -286,7 +290,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           {{/if}}
         {{/each}}
 
-        {{#if (and this.codePatchActions.length (not @isStreaming))}}
+        {{#if this.isApplyAllButtonDisplayed}}
           <div class='code-patch-actions'>
             <ApplyButton
               {{on 'click' (perform this.applyAllCodePatchTasks)}}
