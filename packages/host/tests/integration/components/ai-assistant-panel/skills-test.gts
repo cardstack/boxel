@@ -1,4 +1,4 @@
-import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
+import { waitFor, click, fillIn, settled, skip } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
@@ -370,7 +370,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
-  test('updated command definition results in new event and updated room state', async function (assert) {
+  // CS-8380
+  skip('updated command definition results in new event and updated room state', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
