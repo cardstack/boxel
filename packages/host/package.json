@@ -47,7 +47,7 @@
     "@ember/test-waiters": "^3.0.2",
     "@embroider/compat": "^3.6.5",
     "@embroider/core": "^3.4.19",
-    "@embroider/macros": "^1.16.9",
+    "@embroider/macros": "~1.16.13",
     "@embroider/webpack": "^4.0.8",
     "@floating-ui/dom": "^1.6.3",
     "@glimmer/component": "^1.1.2",

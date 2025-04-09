@@ -76,7 +76,7 @@
     "@babel/plugin-transform-typescript": "^7.22.15",
     "@babel/runtime": "^7.24.4",
     "@embroider/addon-dev": "7.1.2-unstable.a4178fb",
-    "@embroider/macros": "^1.16.9",
+    "@embroider/macros": "~1.16.13",
     "@rollup/plugin-babel": "^6.0.4",
     "@tsconfig/ember": "3.0.1",
     "@types/lodash": "^4.14.182",
