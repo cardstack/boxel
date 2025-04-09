@@ -4,9 +4,11 @@
     "attributes": {
       "name": "Map",
       "summary": "This is a Map component that displays Google Maps integration. Here are its key features:\n\nIt accepts an address as input and generates a Google Maps iframe URL\n\nThe component accepts the following properties:\naddress: A complete address object containing address details:\n- mapWidth: Width of the map (defaults to 600px)\n- mapHeight: Height of the map (defaults to 400px)",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/map-listing/screenshot_01.png "
+      ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/map-listing/thumbnail.png"
     },
     "relationships": {
       "specs.0": {
