@@ -1,0 +1,52 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "target": 800,
+      "startDate": "2024-06-01",
+      "endDate": "2024-07-15",
+      "unit": "KM",
+      "entries": [
+        {
+          "date": "2024-06-15",
+          "origin": "Briançon",
+          "destination": "Alpe d'Huez",
+          "distance": 71
+        },
+        {
+          "date": "2024-06-22",
+          "origin": "Grenoble",
+          "destination": "Col du Galibier",
+          "distance": 68
+        },
+        {
+          "date": "2024-06-28",
+          "origin": "Bourg-d'Oisans",
+          "destination": "Col de la Croix de Fer",
+          "distance": 55
+        },
+        {
+          "date": "2024-07-05",
+          "origin": "Saint-Jean-de-Maurienne",
+          "destination": "Col du Telegraphe",
+          "distance": 43
+        },
+        {
+          "date": "2024-07-12",
+          "origin": "Albertville",
+          "destination": "Col de la Madeleine",
+          "distance": 63
+        }
+      ],
+      "title": "Tour de France Alpine Classic",
+      "description": "Iconic alpine climbs from the Tour de France, featuring some of cycling's most legendary ascents including the famous 21 hairpins of Alpe d'Huez.",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cycling-mileage-log",
+        "name": "CyclingMileageLog"
+      }
+    }
+  }
+}
