@@ -741,8 +741,13 @@ module('Acceptance | Commands tests', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     let roomId = getRoomIds().pop()!;
 
-    let codeBlock =
-      '```\n// File url: http://test-realm/test/hello.txt \n<<<<<<< SEARCH\nHello, world!\n=======\nHi, world!\n>>>>>>> REPLACE\n```';
+    let codeBlock = `\`\`\`
+// File url: http://test-realm/test/hello.txt
+<<<<<<< SEARCH
+Hello, world!
+=======
+Hi, world!
+>>>>>>> REPLACE\n\`\`\``;
     await simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
       formatted_body: codeBlock,
@@ -768,8 +773,32 @@ module('Acceptance | Commands tests', function (hooks) {
     // 2. hi.txt: Hi, world! -> Greetings, world!
     // 3. hi.txt: How are you? -> We are one!
 
-    let codeBlock =
-      '```\n// File url: http://test-realm/test/hello.txt \n<<<<<<< SEARCH\nHello, world!\n=======\nHi, world!\n>>>>>>> REPLACE\n``` \n\n ```\n// File url: http://test-realm/test/hi.txt \n<<<<<<< SEARCH\nHi, world!\n=======\nGreetings, world!\n>>>>>>> REPLACE\n``` \n\n```\n// File url: http://test-realm/test/hi.txt \n<<<<<<< SEARCH\nHow are you?\n=======\nWe are one!\n>>>>>>> REPLACE\n```';
+    let codeBlock = `\`\`\`
+// File url: http://test-realm/test/hello.txt
+<<<<<<< SEARCH
+Hello, world!
+=======
+Hi, world!
+>>>>>>> REPLACE
+\`\`\`
+
+ \`\`\`
+// File url: http://test-realm/test/hi.txt
+<<<<<<< SEARCH
+Hi, world!
+=======
+Greetings, world!
+>>>>>>> REPLACE
+\`\`\`
+
+\`\`\`
+// File url: http://test-realm/test/hi.txt
+<<<<<<< SEARCH
+How are you?
+=======
+We are one!
+>>>>>>> REPLACE
+\`\`\``;
 
     await click('[data-test-open-ai-assistant]');
     let roomId = getRoomIds().pop()!;
