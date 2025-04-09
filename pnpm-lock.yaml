@@ -945,8 +945,8 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0(eslint-config-prettier@8.8.0)(eslint@8.57.0)(prettier@3.5.1)
       glimmer-scoped-css:
-        specifier: ^0.6.0
-        version: 0.6.0
+        specifier: ^0.8.0
+        version: 0.8.0
       prettier:
         specifier: ^3.5.1
         version: 3.5.1
@@ -17310,6 +17310,18 @@ packages:
       super-fast-md5: 1.0.1
     transitivePeerDependencies:
       - supports-color
+
+  /glimmer-scoped-css@0.8.0:
+    resolution: {integrity: sha512-HGbXeBU7Z0u2ND+W+LSM0yADnjTmeuK7I+KfFTu4v9tV7vWCyA1TNwcsveS/o/j9o4GDtXQDVP+AzN/LmOHZ+Q==}
+    dependencies:
+      '@embroider/addon-shim': 1.8.9
+      js-string-escape: 1.0.1
+      postcss: 8.4.31
+      postcss-selector-parser: 6.0.13
+      super-fast-md5: 1.0.1
+    transitivePeerDependencies:
+      - supports-color
+    dev: true
 
   /glob-parent@3.1.0:
     resolution: {integrity: sha512-E8Ak/2+dZY6fnzlR7+ueWvhsH1SjHr4jjss4YS/h4py44jY9MhK/VFdaZJAWDz6BbL21KeteKxFSFpq8OS5gVA==}
