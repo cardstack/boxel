@@ -130,6 +130,8 @@ export default class StoreService extends Service implements StoreInterface {
     this.subscriptions = new Map();
     this.onSaveSubscriber = undefined;
     this.remoteIdSubscribers = new Map();
+    this.localIdSubscribers = new Map();
+    this.localIds = new Map();
     this.autoSaveStates = new TrackedWeakMap();
     this.inflightCards = new Map();
     this.ready = this.setup();
