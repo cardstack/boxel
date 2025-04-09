@@ -3,11 +3,19 @@
     "type": "card",
     "attributes": {
       "name": "Cursor Coding",
-      "summary": null,
+      "summary": "CURSOR-powered AI pair programmer that supercharges your Boxel development! This skill leverages Cursor IDE's capabilities to help you create and modify Cards with expert guidance, navigating Glimmer templates, Ember components, and Boxel's card system with intelligent suggestions tailored to your codebase.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/cursor-coding-listing/thumbnail.png"
+      ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/cursor-coding-listing/thumbnail.png"
     },
     "relationships": {
+      "skills.0": {
+        "links": {
+          "self": "../SkillCard/cursor-coding"
+        }
+      },
       "specs": {
         "links": {
           "self": null
@@ -15,7 +23,7 @@
       },
       "publisher": {
         "links": {
-          "self": null
+          "self": "../Publisher/e26e2b30-8eaa-40e9-82e4-757b2ce21919"
         }
       },
       "categories": {
@@ -34,6 +42,11 @@
         }
       },
       "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples": {
         "links": {
           "self": null
         }

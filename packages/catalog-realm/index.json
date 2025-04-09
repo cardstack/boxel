@@ -28,32 +28,42 @@
       },
       "new.2": {
         "links": {
-          "self": "./Listing/8daf5817-bcd5-401c-8192-29597f72244a"
+          "self": "./CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9"
         }
       },
       "new.3": {
         "links": {
-          "self": "./CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9"
+          "self": "./CardListing/552da558-5642-4541-89b0-28622db3bc84"
         }
       },
       "new.4": {
         "links": {
-          "self": "./CardListing/552da558-5642-4541-89b0-28622db3bc84"
+          "self": "./CardListing/e7fe0e9a-f6ce-40f7-bf63-02157530cae1"
         }
       },
       "new.5": {
         "links": {
-          "self": "./CardListing/e7fe0e9a-f6ce-40f7-bf63-02157530cae1"
+          "self": "./CardListing/a51b73a3-08c5-4dfd-b22a-8e66a0285801"
         }
       },
       "new.6": {
         "links": {
-          "self": "./CardListing/a51b73a3-08c5-4dfd-b22a-8e66a0285801"
+          "self": "./SkillListing/cursor-coding"
         }
       },
-      "featured": {
+      "new.7": {
         "links": {
-          "self": null
+          "self": "./SkillListing/talk-like-a-pirate"
+        }
+      },
+      "featured.0": {
+        "links": {
+          "self": "./CardListing/10ff8743-4b8c-403e-95a6-90c36cbb98ca"
+        }
+      },
+      "featured.1": {
+        "links": {
+          "self": "./CardListing/a51b73a3-08c5-4dfd-b22a-8e66a0285801"
         }
       }
     },

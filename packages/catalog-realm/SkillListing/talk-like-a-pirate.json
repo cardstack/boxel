@@ -1,0 +1,62 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Talk Like a Pirate",
+      "summary": "CURSOR-powered AI pair programmer that supercharges your Boxel development! This skill leverages Cursor IDE's capabilities to help you create and modify Cards with expert guidance, navigating Glimmer templates, Ember components, and Boxel's card system with intelligent suggestions tailored to your codebase.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/talk-like-a-pirate-listing/thumbnail.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/talk-like-a-pirate-listing/thumbnail.png"
+    },
+    "relationships": {
+      "skills.0": {
+        "links": {
+          "self": "../SkillCard/skill-pirate-speak"
+        }
+      },
+      "specs": {
+        "links": {
+          "self": null
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/e26e2b30-8eaa-40e9-82e4-757b2ce21919"
+        }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "SkillListing"
+      }
+    }
+  }
+}
