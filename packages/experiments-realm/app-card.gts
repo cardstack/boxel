@@ -173,6 +173,7 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
           @query={{this.query}}
           @format='fitted'
           @realms={{@realms}}
+          @isLive={{true}}
         >
           <:loading>Loading...</:loading>
           <:response as |cards|>
