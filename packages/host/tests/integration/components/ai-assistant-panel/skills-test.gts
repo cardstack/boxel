@@ -1,7 +1,7 @@
-import { waitFor, click, fillIn, settled, skip } from '@ember/test-helpers';
+import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
