@@ -244,8 +244,12 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
   }
 
+  private get currentRealm() {
+    return this.operatorModeStateService.realmURL.href;
+  }
+
   private get canWriteRealm() {
-    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
+    return this.realm.canWrite(this.currentRealm);
   }
 
   @action handleClick(e: MouseEvent) {
@@ -361,7 +365,7 @@ export default class PlaygroundPanel extends Component<Signature> {
               ],
             },
             adoptsFrom: specRef,
-            realmURL: this.operatorModeStateService.realmURL.href,
+            realmURL: this.currentRealm,
           },
         },
       };
@@ -370,12 +374,16 @@ export default class PlaygroundPanel extends Component<Signature> {
         data: {
           meta: {
             adoptsFrom: this.args.codeRef,
-            realmURL: this.operatorModeStateService.realmURL.href,
+            realmURL: this.currentRealm,
           },
         },
       };
     }
-    let cardId = await this.store.create(newCardJSON, undefined);
+    let cardId = await this.store.create(
+      newCardJSON,
+      undefined,
+      this.currentRealm,
+    );
     if (typeof cardId === 'string') {
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
       this.persistSelections(
