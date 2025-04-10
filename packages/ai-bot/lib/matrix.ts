@@ -9,14 +9,12 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
-import { setCustomJsdom } from '@cardstack/runtime-common/dompurify-runtime';
 import { JSDOM } from 'jsdom';
 
 let log = logger('ai-bot');
 
 // Initialize jsdom for DOMPurify, will be used when sending messages to matrix
-const jsdom = new JSDOM('');
-setCustomJsdom(jsdom);
+(globalThis as any).jsdom = new JSDOM('');
 
 export interface MatrixClient {
   sendEvent(
