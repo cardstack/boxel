@@ -115,6 +115,10 @@ jobs:
       - name: Merge reports
         run: npx junit-report-merger host.xml "./all-host-reports/*.xml"
 
+      # host.xml has classname="Chrome 134.0", change to classname="Chrome" to prevent false test removal/addition warnings
+      - name: Remove Chrome version number
+        run: sed -i -E 's/classname="Chrome [^"]*"/classname="Chrome"/' host.xml
+
       - name: Upload merged report
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
