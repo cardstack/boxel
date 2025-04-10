@@ -1979,7 +1979,7 @@ export class Realm {
   }
 
   private async startFileWatcher() {
-    this.#adapter.subscribe((data) => {
+    await this.#adapter.subscribe((data) => {
       let tracked = this.getTrackedWrite(data);
       if (!tracked || tracked.isTracked) {
         return;
