@@ -48,7 +48,7 @@ export class Map extends CardDef {
           ></iframe></div>
       </div>
 
-      <style>
+      <style scoped>
         .map-container {
           display: flex;
           justify-content: center;
