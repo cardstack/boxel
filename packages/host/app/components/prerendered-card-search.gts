@@ -188,8 +188,10 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     if (
       // we want to only run the search when there is a deep equality
       // difference, not a strict equality difference
-      (!realmsChanged && !queryChanged && !this.args.isLive) ||
-      (this.args.isLive && this.realmsNeedingRefresh.size === 0)
+      !realmsChanged &&
+      !queryChanged &&
+      (!this.args.isLive ||
+        (this.args.isLive && this.realmsNeedingRefresh.size === 0))
     ) {
       return (
         this.runSearchTask.lastSuccessful?.value ?? {
