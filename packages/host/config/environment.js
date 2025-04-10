@@ -26,7 +26,7 @@ module.exports = function (environment) {
     'ember-cli-mirage': {
       enabled: false,
     },
-    logLevels: process.env.LOG_LEVELS || '*=info,current-run=error',
+    logLevels: process.env.LOG_LEVELS || '*=info,current-run=error,matrix=info',
     matrixURL: process.env.MATRIX_URL || 'http://localhost:8008',
     matrixServerName: process.env.MATRIX_SERVER_NAME || 'localhost',
     autoSaveDelayMs: 500,
