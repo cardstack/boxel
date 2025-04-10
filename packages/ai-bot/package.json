@@ -1,14 +1,15 @@
 {
   "name": "@cardstack/ai-bot",
   "dependencies": {
-    "@cardstack/runtime-common": "workspace:*",
-    "@cardstack/postgres": "workspace:*",
     "@cardstack/billing": "workspace:*",
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
     "@sentry/node": "^8.31.0",
     "@types/lodash": "^4.17.15",
     "@types/node": "^18.18.5",
     "@types/stream-chain": "^2.0.1",
     "@types/stream-json": "^1.7.3",
+    "jsdom": "^21.1.1",
     "lodash": "~4.17.21",
     "matrix-js-sdk": "^31.0.0",
     "openai": "4.86.1",

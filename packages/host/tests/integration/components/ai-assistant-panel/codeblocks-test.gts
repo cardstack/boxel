@@ -380,7 +380,7 @@ You can use these in your HTML documents to display formatted text, code snippet
     assert.equal(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
         .innerText,
-      '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
+      '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
     );
 
     assert.dom('ol li').exists({ count: 4 }, 'Should have 4 list items');

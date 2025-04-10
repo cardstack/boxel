@@ -1,11 +1,18 @@
 import DOMPurify from 'dompurify';
 
 let domPurify: DOMPurify.DOMPurifyI;
+let customJsdom: any = null;
+
+export function setCustomJsdom(jsdomInstance: any) {
+  customJsdom = jsdomInstance;
+  // Reset domPurify so it will be reinitialized with the new jsdom
+  domPurify = null;
+}
 
 function getDOMPurify() {
   if (!domPurify) {
-    //DOMPurify needs to be instantiated in the server-side rendering (using fastboot).
-    let jsdom = (globalThis as any).jsdom;
+    // Use custom jsdom if provided, otherwise try to get from globalThis
+    const jsdom = customJsdom || (globalThis as any).jsdom;
     domPurify = jsdom ? DOMPurify(jsdom.window) : DOMPurify;
   }
 

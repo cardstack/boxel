@@ -20,6 +20,10 @@ import {
   GetCardContextName,
   markdownToHtml,
 } from '@cardstack/runtime-common';
+import {
+  isHtml,
+  escapeHtmlOutsideCodeBlocks,
+} from '@cardstack/runtime-common/helpers/html';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
@@ -112,6 +116,16 @@ export default class RoomMessage extends Component<Signature> {
     return this.commandService.run.unlinked().perform(command);
   });
 
+  private get formattedMessage() {
+    if (isHtml(this.message.formattedMessage)) {
+      return this.message.formattedMessage;
+    }
+    return markdownToHtml(
+      escapeHtmlOutsideCodeBlocks(this.message.formattedMessage),
+      false,
+    );
+  }
+
   <template>
     {{consumeContext this.makeCardResources}}
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
@@ -124,7 +138,7 @@ export default class RoomMessage extends Component<Signature> {
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
-        @formattedMessage={{markdownToHtml this.message.formattedMessage false}}
+        @formattedMessage={{this.formattedMessage}}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}

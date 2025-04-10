@@ -1,5 +1,5 @@
 import { IContent } from 'matrix-js-sdk';
-import { logger } from '@cardstack/runtime-common';
+import { logger, markdownToHtml } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
@@ -9,8 +9,14 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
+import { setCustomJsdom } from '@cardstack/runtime-common/dompurify-runtime';
+import { JSDOM } from 'jsdom';
 
 let log = logger('ai-bot');
+
+// Initialize jsdom for DOMPurify, will be used when sending messages to matrix
+const jsdom = new JSDOM('');
+setCustomJsdom(jsdom);
 
 export interface MatrixClient {
   sendEvent(
