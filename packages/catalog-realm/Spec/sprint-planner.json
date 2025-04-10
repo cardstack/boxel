@@ -4,16 +4,22 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "User",
-        "module": "../user"
+        "name": "SprintPlanner",
+        "module": "../sprint-planner/sprint-planner"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "User",
-      "description": "Spec for User Card",
+      "title": "SprintPlanner",
+      "description": "Spec of Sprint Planner Card",
       "thumbnailURL": null
     },
-    "relationships": {},
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",

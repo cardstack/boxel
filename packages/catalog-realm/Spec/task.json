@@ -4,16 +4,22 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "User",
-        "module": "../user"
+        "name": "Task",
+        "module": "../task"
       },
       "specType": "card",
       "containedExamples": [],
-      "title": "User",
-      "description": "Spec for User Card",
+      "title": "Task",
+      "description": "Task",
       "thumbnailURL": null
     },
-    "relationships": {},
+    "relationships": {
+      "linkedExamples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",
