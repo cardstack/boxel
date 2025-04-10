@@ -9,7 +9,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../catalog-app/listing/tag",
+        "module": "../../catalog-app/listing/tag",
         "name": "Tag"
       }
     }

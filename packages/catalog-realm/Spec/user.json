@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "name": "User",
-        "module": "../user"
+        "module": "../user/user"
       },
       "specType": "card",
       "containedExamples": [],

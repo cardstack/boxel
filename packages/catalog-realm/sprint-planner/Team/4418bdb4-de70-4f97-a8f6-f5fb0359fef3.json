@@ -2,15 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Health and Fitness",
-      "color": "#1EDF67",
+      "name": "Ecosystem",
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../tag/tag",
-        "name": "Tag"
+        "module": "../sprint-task",
+        "name": "Team"
       }
     }
   }

@@ -2,14 +2,14 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Frontend",
-      "color": "#39B1FF",
+      "name": "Calculator",
+      "color": null,
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../catalog-app/listing/tag",
+        "module": "../../catalog-app/listing/tag",
         "name": "Tag"
       }
     }

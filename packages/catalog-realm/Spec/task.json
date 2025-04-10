@@ -5,12 +5,12 @@
       "readMe": null,
       "ref": {
         "name": "Task",
-        "module": "../task"
+        "module": "../task/task"
       },
       "specType": "card",
       "containedExamples": [],
       "title": "Task",
-      "description": "Task",
+      "description": "Spec of Task Card",
       "thumbnailURL": null
     },
     "relationships": {

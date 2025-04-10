@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 0,
+        "label": "Not Started",
+        "color": null,
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2025-04-10",
+        "end": "2025-04-19"
+      },
+      "priority": {
+        "index": 1,
+        "label": "Low"
+      },
+      "name": "Create Monopoly Game",
+      "details": "Create Monopoly Game via cursor",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/708a6bd1-ae9b-420e-b9b1-2c37e098048f"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/57a04ed3-80e2-4adc-969a-4e250feac1de"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../../Tag/e3625690-2231-428e-8f6d-d123d8f5cc6c"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

@@ -18,8 +18,8 @@ import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import UsersIcon from '@cardstack/boxel-icons/users';
 import UserIcon from '@cardstack/boxel-icons/user';
 import Calendar from '@cardstack/boxel-icons/calendar';
-import { User } from '../user';
-import { Task, TaskStatusField, getDueDateStatus } from '../task';
+import { User } from '../user/user';
+import { Task, TaskStatusField, getDueDateStatus } from '../task/task';
 
 export class Team extends CardDef {
   static displayName = 'Team';
@@ -126,19 +126,20 @@ export class Issues extends CardDef {
   static displayName = 'Issues';
 }
 
-function extractId(href: string): string {
-  const urlObj = new URL(href);
-  const pathname = urlObj.pathname;
-  const parts = pathname.split('/');
-  const lastPart = parts[parts.length - 1];
-  return lastPart.replace('.json', '');
-}
+// Todo: use this function after we solve computeVia API
+// function extractId(href: string): string {
+//   const urlObj = new URL(href);
+//   const pathname = urlObj.pathname;
+//   const parts = pathname.split('/');
+//   const lastPart = parts[parts.length - 1];
+//   return lastPart.replace('.json', '');
+// }
 
-function shortenId(id: string): string {
-  const shortUuid = id.slice(0, 8);
-  const decimal = parseInt(shortUuid, 16);
-  return decimal.toString(36).padStart(6, '0');
-}
+// function shortenId(id: string): string {
+//   const shortUuid = id.slice(0, 8);
+//   const decimal = parseInt(shortUuid, 16);
+//   return decimal.toString(36).padStart(6, '0');
+// }
 
 class TaskIsolated extends Component<typeof SprintTask> {
   get dueDate() {
@@ -503,7 +504,7 @@ export class SprintTask extends Task {
   static displayName = 'Sprint Task';
   static icon = CheckboxIcon;
   @field project = linksTo(() => Project);
-  @field team = linksTo(() => Team, { isUsed: true });
+  @field team = linksTo(() => Team);
   @field subtasks = linksToMany(() => SprintTask);
   @field status = contains(SprintTaskStatusField);
 
@@ -518,17 +519,17 @@ export class SprintTask extends Task {
 
   @field shortId = contains(StringField, {
     computeVia: function (this: SprintTask) {
-      if (this.id) {
-        let id = shortenId(extractId(this.id));
-        let _shortId: string;
-        if (this.team && this.team.shortName) {
-          // computeds are hard to debug -- the logs only appear on the server. We need to always include a check for links
-          _shortId = this.team.shortName + '-' + id;
-        } else {
-          _shortId = id;
-        }
-        return _shortId.toUpperCase();
-      }
+      // if (this.id) {
+      //   let id = shortenId(extractId(this.id));
+      //   let _shortId: string;
+      //   if (this.team && this.team.shortName) {
+      //     // computeds are hard to debug -- the logs only appear on the server. We need to always include a check for links
+      //     _shortId = this.team.shortName + '-' + id;
+      //   } else {
+      //     _shortId = id;
+      //   }
+      //   return _shortId.toUpperCase();
+      // }
       return;
     },
   });

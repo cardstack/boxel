@@ -28,7 +28,7 @@ import {
   BoxelSelect,
 } from '@cardstack/boxel-ui/components';
 import type { Query } from '@cardstack/runtime-common/query';
-import getKanbanResource from '../kanban-resource';
+import getKanbanResource from './kanban-resource';
 
 interface ColumnHeaderSignature {
   statusLabel: string;

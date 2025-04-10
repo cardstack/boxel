@@ -12,8 +12,8 @@ import BooleanField from 'https://cardstack.com/base/boolean';
 import DateRangeField from 'https://cardstack.com/base/date-range-field';
 import { ColorField } from 'https://cardstack.com/base/color';
 
-import { Tag } from './tag';
-import { User } from './user';
+import { Tag } from '../tag/tag';
+import { User } from '../user/user';
 import { BoxelSelect } from '@cardstack/boxel-ui/components';
 import { RadioInput } from '@cardstack/boxel-ui/components';
 
@@ -30,7 +30,7 @@ import GlimmerComponent from '@glimmer/component';
 import Calendar from '@cardstack/boxel-icons/calendar';
 import { Pill } from '@cardstack/boxel-ui/components';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
-import { Todo } from './todo';
+import { Todo } from '../todo/todo';
 
 export class TaskStatusEdit extends Component<typeof TaskStatusField> {
   @tracked label: string | undefined = this.args.model.label;

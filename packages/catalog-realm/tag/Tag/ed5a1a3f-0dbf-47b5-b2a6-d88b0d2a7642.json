@@ -2,14 +2,13 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Product",
-      "color": "#FA7F01",
+      "name": "Official",
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../catalog-app/listing/tag",
+        "module": "../../catalog-app/listing/tag",
         "name": "Tag"
       }
     }

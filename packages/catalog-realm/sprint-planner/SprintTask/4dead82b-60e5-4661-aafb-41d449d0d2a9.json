@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2025-04-12",
+        "end": "2025-04-14"
+      },
+      "priority": {
+        "index": 1,
+        "label": "Low"
+      },
+      "name": "Create monopoly dice",
+      "details": "create a different set of dice designs",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/708a6bd1-ae9b-420e-b9b1-2c37e098048f"
+        }
+      },
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": "../TeamMember/83d3889b-7dcb-48ac-8dba-b178f1d404d7"
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "SprintTask"
+      }
+    }
+  }
+}

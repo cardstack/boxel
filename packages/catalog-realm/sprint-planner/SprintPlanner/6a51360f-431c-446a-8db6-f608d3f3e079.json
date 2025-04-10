@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Cardstack Sprint Planner",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "project": {
+        "links": {
+          "self": "../Project/708a6bd1-ae9b-420e-b9b1-2c37e098048f"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-planner",
+        "name": "SprintPlanner"
+      }
+    }
+  }
+}

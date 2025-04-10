@@ -5,7 +5,7 @@
       "readMe": null,
       "ref": {
         "name": "Todo",
-        "module": "../todo"
+        "module": "../todo/todo"
       },
       "specType": "card",
       "containedExamples": [],

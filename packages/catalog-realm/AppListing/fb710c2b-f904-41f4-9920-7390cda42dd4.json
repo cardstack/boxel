@@ -54,21 +54,6 @@
           "self": "../Category/cd64ecea-186a-451b-9f66-4d9a1ce88a00"
         }
       },
-      "categories.2": {
-        "links": {
-          "self": "../Category/79a1c486-afb4-4c2a-b61f-a57c89797f55"
-        }
-      },
-      "categories.3": {
-        "links": {
-          "self": "../Category/d2287e5e-5d0d-44a8-87d5-ed99b0d2cdcd"
-        }
-      },
-      "categories.4": {
-        "links": {
-          "self": "../Category/63804627-cd61-472a-a1de-ad3928386dc2"
-        }
-      },
       "tags.0": {
         "links": {
           "self": "../Tag/afa54e32-26c3-40bb-849b-29bf7045a5f2"
@@ -94,16 +79,16 @@
           "self": null
         }
       },
-      "examples": {
+      "examples.0": {
         "links": {
-          "self": null
+          "self": "../sprint-planner/SprintPlanner/6a51360f-431c-446a-8db6-f608d3f3e079"
         }
       }
     },
     "meta": {
       "adoptsFrom": {
         "module": "../catalog-app/listing/listing",
-        "name": "CardListing"
+        "name": "AppListing"
       }
     }
   }
