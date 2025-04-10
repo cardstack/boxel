@@ -32,8 +32,8 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       data-test-apply-state={{@state}}
       ...attributes
     >
-      {{#if (has-block 'default')}}
-        {{yield to='default'}}
+      {{#if (has-block)}}
+        {{yield}}
       {{else}}
         Apply
       {{/if}}

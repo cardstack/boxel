@@ -128,7 +128,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   };
 
   private get isApplyAllButtonDisplayed() {
-    return this.codePatchActions.length > 0 && !this.args.isStreaming;
+    return this.codePatchActions.length > 1 && !this.args.isStreaming;
   }
 
   private applyAllCodePatchTasks = dropTask(async () => {
@@ -154,6 +154,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     );
 
     // TODO: Handle possible errors (fetching source, patching, saving source)
+    // Handle in CS-8369
     for (let fileUrl in codePatchActionsGroupedByFileUrl) {
       let source = await this.cardService.getSource(new URL(fileUrl));
       let patchedCode = source;
@@ -254,9 +255,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
               @state={{this.applyAllCodePatchTasksState}}
               data-test-apply-all-code-patches-button
             >
-              <:default>
-                Accept All
-              </:default>
+              Accept All
             </ApplyButton>
           </div>
         {{/if}}
