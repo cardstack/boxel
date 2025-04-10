@@ -144,6 +144,30 @@ module(basename(__filename), function () {
           assert.strictEqual(response.headers['location'], '/person-1.json');
         });
 
+        test('serves source of a card module that is in error state', async function (assert) {
+          let response = await request
+            .get('/person-with-error.gts')
+            .set('Accept', 'application/vnd.card+source');
+
+          assert.strictEqual(
+            response.headers['content-type'],
+            'text/plain;charset=UTF-8',
+            'content type is correct',
+          );
+          assert.strictEqual(
+            readFileSync(
+              join(__dirname, '../tests/cards', 'person-with-error.gts'),
+              {
+                encoding: 'utf8',
+              },
+            ),
+            response.text,
+            'the card source is correct',
+          );
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        });
+
         test('serves a card instance GET request with a .json extension and json accept header that results in redirect', async function (assert) {
           let response = await request
             .get('/person.json')

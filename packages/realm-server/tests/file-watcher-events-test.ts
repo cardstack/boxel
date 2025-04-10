@@ -105,7 +105,6 @@ module(basename(__filename), function () {
     test('file creation produces an added event', async function (assert) {
       realmEventTimestampStart = Date.now();
 
-      console.log('dir.name', dir.name);
       let newFilePath = join(
         dir.name,
         'realm_server_1',

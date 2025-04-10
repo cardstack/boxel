@@ -9,6 +9,8 @@ import type { Format } from 'https://cardstack.com/base/card-api';
 
 import { testRealmURL, visitOperatorMode } from './index';
 
+export type { Format, PlaygroundSelection };
+
 export const assertCardExists = (
   assert: Assert,
   cardId: string,
