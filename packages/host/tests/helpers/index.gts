@@ -41,6 +41,7 @@ import ENV from '@cardstack/host/config/environment';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import MonacoService from '@cardstack/host/services/monaco-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
@@ -63,8 +64,6 @@ import { renderComponent } from './render-component';
 import visitOperatorMode from './visit-operator-mode';
 
 import type { MockUtils } from './mock-matrix/_utils';
-
-import MonacoService from '@cardstack/host/services/monaco-service';
 
 export { visitOperatorMode, testRealmURL, testRealmInfo, percySnapshot };
 export * from '@cardstack/runtime-common/helpers';
