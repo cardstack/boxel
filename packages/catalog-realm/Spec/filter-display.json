@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Filter Display",
+        "module": "../components/kanban/filter-display"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Filter Display",
+      "description": "Spec for Kanban Filter Display component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

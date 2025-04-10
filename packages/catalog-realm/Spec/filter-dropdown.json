@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Filter Dropdown",
+        "module": "../components/kanban/filter-dropdown"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Filter Dropdown",
+      "description": "Spec for Kanban Filter Dropdown component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

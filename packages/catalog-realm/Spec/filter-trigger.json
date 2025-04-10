@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Filter Trigger",
+        "module": "../components/kanban/filter-trigger"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Filter Trigger",
+      "description": "Spec for Kanban Filter Trigger component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
