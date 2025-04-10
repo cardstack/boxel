@@ -9,7 +9,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../tag/tag",
+        "module": "../../tag/tag",
         "name": "Tag"
       }
     }

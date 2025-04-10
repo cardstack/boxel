@@ -42,9 +42,9 @@
           "self": "../TeamMember/83d3889b-7dcb-48ac-8dba-b178f1d404d7"
         }
       },
-      "tags": {
+      "tags.0": {
         "links": {
-          "self": null
+          "self": "../../Tag/e3625690-2231-428e-8f6d-d123d8f5cc6c"
         }
       }
     },
