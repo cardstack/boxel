@@ -438,6 +438,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     // The skill card will be auto-attached since it is open
     await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-message-idx]');
 
     console.log(getRoomEvents(roomId));
     const finalEvents = getRoomEvents(roomId);
