@@ -215,6 +215,7 @@ class _FileResource extends Resource<Args> {
         ? this.url.replace(/\.json$/, '')
         : this.url;
       if (invalidations.includes(normalizedURL)) {
+        console.log('read.perform in file resource because of invalidation');
         this.read.perform();
       }
     });
