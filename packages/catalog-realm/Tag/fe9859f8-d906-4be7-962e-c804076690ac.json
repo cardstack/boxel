@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Backend",
+      "color": "#DEA6FF",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/tag",
+        "name": "Tag"
+      }
+    }
+  }
+}

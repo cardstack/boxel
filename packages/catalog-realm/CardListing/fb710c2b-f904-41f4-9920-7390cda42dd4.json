@@ -1,0 +1,110 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Sprint Planner",
+      "summary": "Sprint Planner is a Kanban board task planner designed to organize and track the progress of tasks throughout a sprint.",
+      "images": [],
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/sprint-planner"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/sprint-task"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/task"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/todo"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/tag"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/user"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/8410bd6d-ecbe-4044-ad69-33211f396abf"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/49af3b96-eb8d-46d8-a193-497042b6bbf3"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../Category/cd64ecea-186a-451b-9f66-4d9a1ce88a00"
+        }
+      },
+      "categories.2": {
+        "links": {
+          "self": "../Category/79a1c486-afb4-4c2a-b61f-a57c89797f55"
+        }
+      },
+      "categories.3": {
+        "links": {
+          "self": "../Category/d2287e5e-5d0d-44a8-87d5-ed99b0d2cdcd"
+        }
+      },
+      "categories.4": {
+        "links": {
+          "self": "../Category/63804627-cd61-472a-a1de-ad3928386dc2"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/afa54e32-26c3-40bb-849b-29bf7045a5f2"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/d0b0a287-6b35-4e4d-ab14-d66dcff0f37d"
+        }
+      },
+      "tags.2": {
+        "links": {
+          "self": "../Tag/2f508e07-80ac-4df4-ba66-c8c551a42242"
+        }
+      },
+      "tags.3": {
+        "links": {
+          "self": "../Tag/fe9859f8-d906-4be7-962e-c804076690ac"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
