@@ -28,6 +28,7 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   aiBotUsername,
   baseRealm,
+  getLevelForLog,
   LooseCardResource,
   logger,
   markdownToHtml,
@@ -189,7 +190,9 @@ export default class MatrixService extends Service {
 
   private setLoggerLevelFromEnvironment() {
     // This will pick up the level if it’s in LOG_LEVELS
-    logger('matrix');
+    this.loggerService
+      .getLogger('matrix')
+      .setLevel(getLevelForLog('matrix', (globalThis as any)._logDefinitions));
   }
 
   private addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {

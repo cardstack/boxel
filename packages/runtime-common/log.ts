@@ -71,7 +71,7 @@ export function logger(
   return log;
 }
 
-function getLevelForLog(
+export function getLevelForLog(
   logName: string,
   logDefinitions: LogDefinitions,
 ): LogLevel.LogLevelDesc {
