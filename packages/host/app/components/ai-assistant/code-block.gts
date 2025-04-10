@@ -183,7 +183,7 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
         element.style.height = `${contentHeight}px`;
       }
 
-      editor.onDidContentSizeChange(() => {
+      editor.getModifiedEditor().onDidContentSizeChange(() => {
         const newHeight = editor.getModifiedEditor().getContentHeight();
         if (newHeight > 0) {
           element.style.height = `${newHeight}px`;
