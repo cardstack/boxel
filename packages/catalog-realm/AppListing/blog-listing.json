@@ -85,12 +85,12 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
+          "self": "../tag/Tag/140feda8-625b-4a24-9ddb-6f4da891aef2"
         }
       },
       "tags.1": {
         "links": {
-          "self": "../Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
+          "self": "../tag/Tag/ed5a1a3f-0dbf-47b5-b2a6-d88b0d2a7642"
         }
       },
       "license": {

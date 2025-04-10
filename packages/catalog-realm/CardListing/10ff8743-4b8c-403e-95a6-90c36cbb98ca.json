@@ -28,12 +28,12 @@
       },
       "tags.0": {
         "links": {
-          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+          "self": "../tag/Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
         }
       },
       "tags.1": {
         "links": {
-          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+          "self": "../tag/Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
         }
       },
       "license": {
