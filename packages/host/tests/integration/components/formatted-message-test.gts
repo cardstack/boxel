@@ -9,6 +9,7 @@ import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
 import { setupRenderingTest } from '../../helpers/setup';
+import { waitUntil } from '@ember/test-helpers';
 
 module('Integration | Component | FormattedMessage', function (hooks) {
   setupRenderingTest(hooks);
@@ -195,8 +196,12 @@ let a = 3;
 
     // monaco diff editor is rendered when the diff block is complete (i.e. code block streaming has finished)
     // the diff editor will have .line-delete and .line-insert classes to show the changes
-
-    await waitFor('.code-block-diff .cdr.line-delete');
+    await waitUntil(
+      () =>
+        document.querySelectorAll('.code-block-diff .cdr.line-delete').length >
+        1,
+    );
+    await waitFor('.code-block-diff .cdr.line-insert');
 
     assert.dom('.cdr.line-delete').exists({ count: 2 });
     assert.dom('.cdr.line-insert').exists({ count: 1 });
