@@ -34,7 +34,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   }
 
   get isDataLoaded() {
-    return !!this.originalCode || !!this.modifiedCode;
+    return this.originalCode != null && this.modifiedCode != null;
   }
 
   private load = restartableTask(async () => {
