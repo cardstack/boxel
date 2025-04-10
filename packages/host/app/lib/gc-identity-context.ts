@@ -11,11 +11,14 @@ const NOT_ELIGIBLE_FOR_GC = false;
 
 export type Subscriber = Map<string, { resources: unknown[] }>;
 
+type LocalId = string;
+type InstanceGraph = Map<LocalId, Set<LocalId>>;
+
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
   #cards = new Map<string, CardDef | null>();
-  #gcCandidates: Set<string> = new Set(); // this is a set of local id's
+  #gcCandidates: Set<LocalId> = new Set();
   #api: typeof CardAPI;
   #remoteIdSubscribers: Subscriber;
   #localIdSubscribers: Subscriber;
@@ -115,7 +118,13 @@ export default class IdentityContextWithGarbageCollection
         continue;
       }
       visited.add(instance);
-      if (this.gcVisit(instance[this.#api.localId], consumptionGraph, cache)) {
+      if (
+        this.isEligibleForGC(
+          instance[this.#api.localId],
+          consumptionGraph,
+          cache,
+        )
+      ) {
         if (this.#gcCandidates.has(instance[this.#api.localId])) {
           console.log(
             `garbage collecting instance ${instance[this.#api.localId]} (remote id: ${instance.id}) from store`,
@@ -137,11 +146,11 @@ export default class IdentityContextWithGarbageCollection
     }
   }
 
-  gcVisit(
+  isEligibleForGC(
     localId: string,
-    consumptionGraph: Map<string, Set<string>>,
-    cache: Map<string, boolean>,
-  ): boolean /* true = eligible for GC, false = not eligible for GC */ {
+    consumptionGraph: InstanceGraph,
+    cache: Map<LocalId, boolean>,
+  ): boolean {
     let remoteId = this.#localIds.get(localId);
     let cached = cache.get(localId);
     if (cached !== undefined) {
@@ -166,15 +175,14 @@ export default class IdentityContextWithGarbageCollection
 
     // you are eligible for GC if all your consumers are also eligible for GC
     let result = [...consumers]
-      .map((c) => this.gcVisit(c, consumptionGraph, cache))
+      .map((c) => this.isEligibleForGC(c, consumptionGraph, cache))
       .every((result) => result);
     cache.set(localId, result);
     return result;
   }
 
-  // this consumption graph uses local ID's
-  private makeConsumptionGraph(): Map<string, Set<string>> {
-    let consumptionGraph = new Map<string, Set<string>>();
+  private makeConsumptionGraph(): InstanceGraph {
+    let consumptionGraph: InstanceGraph = new Map();
     for (let instance of this.#cards.values()) {
       if (!instance) {
         continue;
