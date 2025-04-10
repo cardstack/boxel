@@ -621,6 +621,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       this,
       () => this.specQuery,
       () => this.realms,
+      { isLive: true },
     ) as ReturnType<getCards<Spec>>;
   };
 
