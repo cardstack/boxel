@@ -68,10 +68,6 @@ export default class MessageBuilder {
   @service declare private matrixService: MatrixService;
 
   private get coreMessageArgs() {
-    console.log(
-      'this.event.content.formatted_body',
-      this.event.content.formatted_body,
-    );
     return new Message({
       roomId: this.builderContext.roomId,
       author: this.builderContext.author,
