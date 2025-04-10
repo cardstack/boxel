@@ -429,6 +429,7 @@ export class Realm {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
+  // TODO update to write to multiple paths
   async write(
     path: LocalPath,
     contents: string,
@@ -1209,6 +1210,8 @@ export class Realm {
     );
     let localPath = this.paths.local(fileURL);
     let fileSerialization: LooseSingleCardDocument | undefined;
+    // TODO update to serialize and write any side loaded resources that need to
+    // be created
     try {
       fileSerialization = await this.fileSerialization(
         merge(json, { data: { meta: { realmURL: this.url } } }),
@@ -1341,6 +1344,8 @@ export class Realm {
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let fileSerialization: LooseSingleCardDocument | undefined;
+    // TODO update to serialize and write any side loaded resources that need to
+    // be created
     try {
       fileSerialization = await this.fileSerialization(
         merge(card, { data: { meta: { realmURL: this.url } } }),
