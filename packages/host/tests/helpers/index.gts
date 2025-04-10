@@ -78,9 +78,6 @@ const baseTestMatrix = {
   password: 'password',
 };
 
-// Ignoring this TS error (Cannot find module 'ember-provide-consume-context/test-support')
-// until https://github.com/customerio/ember-provide-consume-context/issues/24 is fixed
-// @ts-ignore
 export { provide as provideConsumeContext } from 'ember-provide-consume-context/test-support';
 
 export function cleanWhiteSpace(text: string) {
@@ -96,6 +93,18 @@ export function getMonacoContent(): string {
 
 export function setMonacoContent(content: string): string {
   return (window as any).monaco.editor.getModels()[0].setValue(content);
+}
+
+export function cleanupMonacoEditorModels() {
+  let diffEditors = (window as any).monaco.editor.getDiffEditors();
+  for (let editor of diffEditors) {
+    editor.dispose();
+  }
+
+  let models = (window as any).monaco.editor.getModels();
+  for (let model of models) {
+    model.dispose();
+  }
 }
 
 export async function waitForCodeEditor() {

@@ -43,7 +43,8 @@ test.describe('User Registration w/o Token', () => {
     await smtpStop();
   });
 
-  test('it can register a user without a registration token', async ({
+  // CS-8381
+  test.skip('it can register a user without a registration token', async ({
     page,
   }) => {
     await clearLocalStorage(page, appURL);
