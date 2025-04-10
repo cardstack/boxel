@@ -158,7 +158,6 @@ export class CyclingMileageLog extends CardDef {
           <h2 class='title'>Cycling Progress</h2>
         </div>
 
-        <!-- Stats section -->
         <div class='stats-container'>
           <div class='summary'>
             <div class='stat-block'>
@@ -184,7 +183,6 @@ export class CyclingMileageLog extends CardDef {
           </div>
         </div>
 
-        <!-- Chart section -->
         <div class='chart-container'>
           <canvas
             id='progress-chart'
