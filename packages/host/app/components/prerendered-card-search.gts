@@ -117,6 +117,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
+  _lastCardUrls: string[] | undefined;
   _lastSearchResults: PrerenderedCard[] | undefined;
   _lastRealms: string[] | undefined;
   realmsNeedingRefresh = new TrackedSet<string>();
@@ -177,6 +178,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
 
     let realmsChanged = !isEqual(realms, this._lastRealms);
     let queryChanged = !isEqual(query, this._lastSearchQuery);
+    let cardUrlsChanged = !isEqual(cardUrls, this._lastSearchQuery);
     if (realmsChanged) {
       this._lastSearchResults = this._lastSearchResults?.filter((r) =>
         realms.includes(r.realmUrl),
@@ -190,6 +192,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       // difference, not a strict equality difference
       !realmsChanged &&
       !queryChanged &&
+      !cardUrlsChanged &&
       (!this.args.isLive ||
         (this.args.isLive && this.realmsNeedingRefresh.size === 0))
     ) {
@@ -225,6 +228,10 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       this._lastSearchResults = undefined;
       this._lastSearchQuery = query;
     }
+    if (!isEqual(cardUrls, this._lastCardUrls)) {
+      this._lastCardUrls = cardUrls;
+    }
+
     let results = [...(this._lastSearchResults || [])];
     let realmsNeedingRefresh = Array.from(this.realmsNeedingRefresh);
     let token = waiter.beginAsync();
