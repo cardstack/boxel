@@ -503,9 +503,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   private async loadRoomCreateEvent(event: RoomCreateEvent) {
-    if (!this._createEvent) {
-      this._createEvent = event;
-    }
+    this._createEvent = event;
   }
 
   private upsertRoomMember({

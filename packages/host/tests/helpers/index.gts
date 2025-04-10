@@ -107,6 +107,18 @@ export function setMonacoContent(content: string): string {
   return (window as any).monaco.editor.getModels()[0].setValue(content);
 }
 
+export function cleanupMonacoEditorModels() {
+  let diffEditors = (window as any).monaco.editor.getDiffEditors();
+  for (let editor of diffEditors) {
+    editor.dispose();
+  }
+
+  let models = (window as any).monaco.editor.getModels();
+  for (let model of models) {
+    model.dispose();
+  }
+}
+
 export async function waitForCodeEditor() {
   // need a moment for the monaco SDK to load
   return await waitFor('[data-test-editor]', { timeout: 3000 });
