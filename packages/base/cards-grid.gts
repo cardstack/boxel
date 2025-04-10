@@ -184,9 +184,6 @@ class Isolated extends Component<typeof CardsGrid> {
     </div>
 
     <style scoped>
-      :global(:root) {
-        --cards-grid-padding-top: var(--boxel-sp-lg);
-      }
       .top-bar {
         display: grid;
         grid-template-columns: 1fr auto auto;
@@ -216,6 +213,7 @@ class Isolated extends Component<typeof CardsGrid> {
         letter-spacing: 0.21px;
       }
       .cards-grid {
+        --cards-grid-padding-top: var(--boxel-sp-lg);
         --grid-card-min-width: 10.625rem; /* 170px */
         --grid-card-max-width: 10.625rem; /* 170px */
         --grid-card-height: 15.625rem; /* 250px */
