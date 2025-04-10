@@ -7,6 +7,7 @@ import {
   IndexQueryEngine,
   fetcher,
   maybeHandleScopedCSSRequest,
+  catalogRealm,
 } from '@cardstack/runtime-common';
 
 import { runSharedTest } from '@cardstack/runtime-common/helpers';
@@ -27,7 +28,7 @@ let date: typeof import('https://cardstack.com/base/date');
 let number: typeof import('https://cardstack.com/base/number');
 let boolean: typeof import('https://cardstack.com/base/boolean');
 let codeRef: typeof import('https://cardstack.com/base/code-ref');
-let { resolvedBaseRealmURL } = ENV;
+let { resolvedBaseRealmURL, resolvedCatalogRealmURL } = ENV;
 
 module('Unit | query', function (hooks) {
   let dbAdapter: SQLiteAdapter;
@@ -44,6 +45,10 @@ module('Unit | query', function (hooks) {
     virtualNetwork.addURLMapping(
       new URL(baseRealm.url),
       new URL(resolvedBaseRealmURL),
+    );
+    virtualNetwork.addURLMapping(
+      new URL(catalogRealm.url),
+      new URL(resolvedCatalogRealmURL),
     );
     virtualNetwork.addImportMap('@cardstack/boxel-icons/', (rest) => {
       return `${ENV.iconsURL}/@cardstack/boxel-icons/v1/icons/${rest}.js`;

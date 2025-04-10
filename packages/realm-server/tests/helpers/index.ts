@@ -31,6 +31,7 @@ import {
   type QueuePublisher,
   type QueueRunner,
   type IndexRunner,
+  catalogRealm,
 } from '@cardstack/runtime-common';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
 import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
@@ -90,6 +91,7 @@ export * from '@cardstack/runtime-common/helpers/indexer';
 
 export const testRealm = 'http://test-realm/';
 export const localBaseRealm = 'http://localhost:4441/';
+export const localCatalogRealm = 'http://localhost:4201/catalog/';
 export const matrixURL = new URL('http://localhost:8008');
 const testMatrix: MatrixConfig = {
   url: matrixURL,
@@ -142,6 +144,10 @@ export function createVirtualNetwork() {
   let virtualNetwork = new VirtualNetwork();
   shimExternals(virtualNetwork);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), new URL(localBaseRealm));
+  virtualNetwork.addURLMapping(
+    new URL(catalogRealm.url),
+    new URL(localCatalogRealm),
+  );
   return virtualNetwork;
 }
 
@@ -339,7 +345,9 @@ export async function runBaseRealmServer(
   permissions: RealmPermissions = { '*': ['read'] },
 ) {
   let localBaseRealmURL = new URL(localBaseRealm);
+  let localCatalogRealmURL = new URL(localCatalogRealm);
   virtualNetwork.addURLMapping(new URL(baseRealm.url), localBaseRealmURL);
+  virtualNetwork.addURLMapping(new URL(catalogRealm.url), localCatalogRealmURL);
 
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({

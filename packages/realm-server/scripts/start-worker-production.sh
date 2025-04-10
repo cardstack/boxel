@@ -17,5 +17,5 @@ NODE_NO_WARNINGS=1 \
   --fromUrl='https://app.boxel.ai/seed/' \
   --toUrl='https://app.boxel.ai/seed/' \
   \
-  --fromUrl='https://app.boxel.ai/catalog/' \
+  --fromUrl='https://cardstack.com/catalog/' \
   --toUrl='https://app.boxel.ai/catalog/'

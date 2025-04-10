@@ -7,6 +7,7 @@ import {
   fetcher,
   RunnerOpts,
   authorizationMiddleware,
+  catalogRealm,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -81,6 +82,10 @@ export default class NetworkService extends Service {
       virtualNetwork.addURLMapping(
         new URL(baseRealm.url),
         new URL(config.resolvedBaseRealmURL),
+      );
+      virtualNetwork.addURLMapping(
+        new URL(catalogRealm.url),
+        new URL(config.resolvedCatalogRealmURL),
       );
     }
     shimExternals(virtualNetwork);

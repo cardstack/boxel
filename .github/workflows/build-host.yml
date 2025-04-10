@@ -26,11 +26,13 @@ jobs:
         run: |
           if [ "$INPUT_ENVIRONMENT" = "production" ]; then
             echo "RESOLVED_BASE_REALM_URL=https://app.boxel.ai/base/" >> $GITHUB_ENV
+            echo "RESOLVED_CATALOG_REALM_URL=https://app.boxel.ai/catalog/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix.boxel.ai" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=boxel.ai" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
           elif [ "$INPUT_ENVIRONMENT" = "staging" ]; then
             echo "RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/" >> $GITHUB_ENV
+            echo "RESOLVED_CATALOG_REALM_URL=https://realms-staging.stack.cards/catalog/" >> $GITHUB_ENV
             echo "MATRIX_URL=https://matrix-staging.stack.cards" >> $GITHUB_ENV
             echo "MATRIX_SERVER_NAME=stack.cards" >> $GITHUB_ENV
             echo "EXPERIMENTAL_AI_ENABLED=true" >> $GITHUB_ENV
