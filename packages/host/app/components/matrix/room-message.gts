@@ -117,7 +117,10 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   private get formattedMessage() {
-    if (isHtml(this.message.formattedMessage)) {
+    if (
+      !this.message.formattedMessage ||
+      isHtml(this.message.formattedMessage)
+    ) {
       return this.message.formattedMessage;
     }
     return markdownToHtml(

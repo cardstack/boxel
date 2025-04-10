@@ -6,7 +6,7 @@ let customJsdom: any = null;
 export function setCustomJsdom(jsdomInstance: any) {
   customJsdom = jsdomInstance;
   // Reset domPurify so it will be reinitialized with the new jsdom
-  domPurify = null;
+  domPurify = undefined;
 }
 
 function getDOMPurify() {
