@@ -27,7 +27,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 import {
   aiBotUsername,
-  baseRealm,
+  catalogRealm,
   LooseCardResource,
   logger,
   markdownToHtml,
@@ -874,11 +874,13 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
+    let interactModeDefaultSkills = [
+      `${catalogRealm.url}SkillCard/card-editing`,
+    ];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}SkillCard/boxel-coding`,
-      `${baseRealm.url}SkillCard/source-code-editing`,
+      `${catalogRealm.url}SkillCard/boxel-coding`,
+      `${catalogRealm.url}SkillCard/source-code-editing`,
     ];
 
     let defaultSkills;

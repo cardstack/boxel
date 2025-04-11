@@ -66,10 +66,10 @@ test.describe('Skills', () => {
     ).toHaveClass('switch checked');
   }
 
-  const defaultSkillCardForInteractMode = `https://cardstack.com/base/SkillCard/card-editing`;
+  const defaultSkillCardForInteractMode = `https://cardstack.com/catalog/SkillCard/card-editing`;
   const defaultSkillCardsForCodeMode = [
-    `https://cardstack.com/base/SkillCard/source-code-editing`,
-    `https://cardstack.com/base/SkillCard/boxel-coding`,
+    `https://cardstack.com/catalog/SkillCard/source-code-editing`,
+    `https://cardstack.com/catalog/SkillCard/boxel-coding`,
   ];
   const skillCard1 = `${appURL}/skill-pirate-speak`;
   const skillCard2 = `${appURL}/skill-seo`;

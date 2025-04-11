@@ -33,5 +33,5 @@ NODE_NO_WARNINGS=1 \
   \
   --path='/persistent/catalog' \
   --username='catalog_realm' \
-  --fromUrl='https://app.boxel.ai/catalog/' \
+  --fromUrl='https://cardstack.com/catalog/' \
   --toUrl='https://app.boxel.ai/catalog/'

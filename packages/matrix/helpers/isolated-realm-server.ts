@@ -53,6 +53,10 @@ export async function startServer(opts?: { includeSeedRealm: boolean }) {
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,
   ]);
+  workerArgs = workerArgs.concat([
+    `--fromUrl='https://cardstack.com/catalog/'`,
+    `--toUrl='http://localhost:4201/catalog/'`,
+  ]);
   let workerManager = spawn('ts-node', workerArgs, {
     cwd: realmServerDir,
     stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
@@ -98,6 +102,10 @@ export async function startServer(opts?: { includeSeedRealm: boolean }) {
   serverArgs = serverArgs.concat([
     `--fromUrl='https://cardstack.com/base/'`,
     `--toUrl='http://localhost:4201/base/'`,
+  ]);
+  serverArgs = serverArgs.concat([
+    `--fromUrl='https://cardstack.com/catalog/'`,
+    `--toUrl='http://localhost:4201/catalog/'`,
   ]);
   let realmServer = spawn('ts-node', serverArgs, {
     cwd: realmServerDir,

@@ -27,5 +27,5 @@ NODE_ENV=development \
   --fromUrl='http://localhost:4201/seed/' \
   --toUrl='http://localhost:4201/seed/' \
   \
-  --fromUrl='http://localhost:4201/catalog/' \
+  --fromUrl='https://cardstack.com/catalog/' \
   --toUrl='http://localhost:4201/catalog/'

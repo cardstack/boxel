@@ -777,7 +777,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     assert.dom(`[data-test-file="Pet/vangogh.json"]`).hasClass('selected');
     assert.dom('[data-test-recent-file]').exists({ count: 4 });
     assert
-      .dom(`[data-test-recent-file="http://localhost:4201/catalog/index.json"]`)
+      .dom(`[data-test-recent-file="https://cardstack.com/catalog/index.json"]`)
       .exists();
     assert
       .dom(`[data-test-recent-file="${testRealmURL}Pet/mango.json"]`)

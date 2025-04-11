@@ -46,5 +46,5 @@ NODE_ENV=development \
   \
   --path='../catalog-realm' \
   --username='catalog_realm' \
-  --fromUrl='http://localhost:4201/catalog/' \
+  --fromUrl='https://cardstack.com/catalog/' \
   --toUrl='http://localhost:4201/catalog/'

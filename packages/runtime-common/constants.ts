@@ -2,6 +2,9 @@ import { RealmPaths } from './paths';
 import type { ResolvedCodeRef } from './code-ref';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
+export const catalogRealm = new RealmPaths(
+  new URL('https://cardstack.com/catalog/'),
+);
 
 export const specRef: ResolvedCodeRef = {
   module: `${baseRealm.url}spec`,

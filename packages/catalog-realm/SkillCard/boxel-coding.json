@@ -10,7 +10,7 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../skill-card",
+        "module": "https://cardstack.com/base/skill-card",
         "name": "SkillCard"
       }
     }
