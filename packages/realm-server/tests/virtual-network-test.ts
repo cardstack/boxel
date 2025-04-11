@@ -13,6 +13,10 @@ module(basename(__filename), function () {
         new URL('https://cardstack.com/base/'),
         new URL('http://localhost:4201/base/'),
       );
+      virtualNetwork.addURLMapping(
+        new URL('https://cardstack.com/catalog/'),
+        new URL('http://localhost:4201/catalog/'),
+      );
       virtualNetwork.mount(async (_request: Request) => {
         // Normally there would be some redirection logic here, but for this test we just want to make sure that the redirect is handled correctly
         return new Response(null, {

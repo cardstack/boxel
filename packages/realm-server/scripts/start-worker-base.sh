@@ -16,4 +16,6 @@ NODE_ENV=development \
   --distURL="${HOST_URL:-http://localhost:4200}" \
   \
   --fromUrl='https://cardstack.com/base/' \
-  --toUrl='http://localhost:4201/base/'
+  --toUrl='http://localhost:4201/base/' \
+  --fromUrl='https://cardstack.com/catalog/' \
+  --toUrl='http://localhost:4201/catalog/'

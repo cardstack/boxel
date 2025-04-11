@@ -7,6 +7,7 @@ import {
   baseRealm,
   fetcher,
   maybeHandleScopedCSSRequest,
+  catalogRealm,
 } from '@cardstack/runtime-common';
 import { runSharedTest, p } from '@cardstack/runtime-common/helpers';
 import { testRealmURL } from '@cardstack/runtime-common/helpers/const';
@@ -112,6 +113,10 @@ module(basename(__filename), function () {
       virtualNetwork.addURLMapping(
         new URL(baseRealm.url),
         new URL('http://localhost:4201/base/'),
+      );
+      virtualNetwork.addURLMapping(
+        new URL(catalogRealm.url),
+        new URL('http://localhost:4201/catalog/'),
       );
       shimExternals(virtualNetwork);
       let fetch = fetcher(virtualNetwork.fetch, [

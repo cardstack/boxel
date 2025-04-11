@@ -7,7 +7,7 @@ import {
   MSC3575SlidingSyncResponse,
 } from 'matrix-js-sdk/lib/sliding-sync';
 
-import { baseRealm, unixTime } from '@cardstack/runtime-common';
+import { baseRealm, catalogRealm, unixTime } from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -35,7 +35,7 @@ type Plural<T> = {
   [K in keyof T]: T[K][];
 };
 
-const publicRealmURLs = [baseRealm.url, 'http://localhost:4201/catalog/'];
+const publicRealmURLs = [baseRealm.url, catalogRealm.url];
 
 export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
