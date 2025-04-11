@@ -42,7 +42,6 @@ export default class SpecSearch extends Component<Signature> {
       this,
       () => this.args.query,
       () => this.args.realms,
-      { isLive: true },
     );
   };
 

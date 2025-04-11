@@ -7,19 +7,17 @@ import Component from '@glimmer/component';
 
 import { task } from 'ember-concurrency';
 
-import { consume } from 'ember-provide-consume-context';
-
 import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
-  GetCardContextName,
-  type getCard,
   type Query,
   type ResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
+
+import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
@@ -49,6 +47,7 @@ export type SelectedInstance = {
 
 interface Signature {
   Args: {
+    makeCardResource: () => void;
     moduleId: string;
     codeRef: ResolvedCodeRef;
     createNew: () => void;
@@ -61,6 +60,7 @@ interface Signature {
 
 export default class PlaygroundContent extends Component<Signature> {
   <template>
+    {{consumeContext @makeCardResource}}
     <section class='playground-panel' data-test-playground-panel>
       <div class='playground-panel-content'>
         {{#let (if @isFieldDef @field @card) as |card|}}
@@ -141,8 +141,6 @@ export default class PlaygroundContent extends Component<Signature> {
       }
     </style>
   </template>
-
-  @consume(GetCardContextName) private declare getCard: getCard;
 
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;

@@ -38,13 +38,13 @@
     "patchedDependencies": {
       "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
-      "@types/eventsource@1.1.11": "patches/@types__eventsource@1.1.11.patch",
       "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
       "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
       "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch",
       "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch",
       "ember-source@5.4.1": "patches/ember-source@5.4.1.patch",
-      "monaco-editor@0.52.2": "patches/monaco-editor@0.52.2.patch"
+      "monaco-editor@0.52.2": "patches/monaco-editor@0.52.2.patch",
+      "monaco-editor-webpack-plugin@7.1.0": "patches/monaco-editor-webpack-plugin@7.1.0.patch"
     }
   },
   "devDependencies": {

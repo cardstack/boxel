@@ -35,6 +35,7 @@ import {
   maybeRelativeURL,
   CodeRef,
   CommandContext,
+  uuidv4,
   type Meta,
   type CardFields,
   type Relationship,
@@ -55,7 +56,7 @@ import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
 import DefaultCardDefTemplate from './default-templates/isolated-and-edit';
 import DefaultAtomViewTemplate from './default-templates/atom';
-import MissingEmbeddedTemplate from './default-templates/missing-embedded';
+import MissingTemplate from './default-templates/missing-template';
 import FieldDefEditTemplate from './default-templates/field-edit';
 import CaptionsIcon from '@cardstack/boxel-icons/captions';
 import RectangleEllipsisIcon from '@cardstack/boxel-icons/rectangle-ellipsis';
@@ -79,6 +80,7 @@ export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const realmURL = Symbol.for('cardstack-realm-url');
 export const meta = Symbol.for('cardstack-meta');
+export const localId = Symbol.for('cardstack-local-id');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
@@ -893,12 +895,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         },
       };
     }
+    // TODO add support for visited without an id
     visited.add(value.id);
 
     let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
       | (JSONAPIResource & { id: string; type: string })
       | null;
     if (serialized) {
+      // TODO this goes away
       if (!value[isSavedInstance]) {
         throw new Error(
           `the linksTo field '${this.name}' cannot be serialized with an unsaved card`,
@@ -907,6 +911,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       let resource: JSONAPIResource = {
         relationships: {
           [this.name]: {
+            // TODO add support for unsaved card
             links: {
               self: makeRelativeURL(value.id, opts),
             },
@@ -1248,10 +1253,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
         };
         return;
       }
+      // TODO add support for when value is unsaved and has no id
       visited.add(value.id);
       let serialized: JSONAPIResource & { id: string; type: string } =
         callSerializeHook(this.card, value, doc, visited, opts);
       if (!value[isSavedInstance]) {
+        // TODO this goes away
         throw new Error(
           `the linksToMany field '${this.name}' cannot be serialized with an unsaved card`,
         );
@@ -1266,6 +1273,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
         doc.included = doc.included ?? [];
         doc.included.push(serialized);
       }
+      // TODO add support for unsaved card
       relationships[`${this.name}\.${i}`] = {
         links: {
           self: makeRelativeURL(value.id, opts),
@@ -1842,9 +1850,10 @@ export class FieldDef extends BaseDef {
   static displayName = 'Field';
   static icon = RectangleEllipsisIcon;
 
-  static embedded: BaseDefComponent = MissingEmbeddedTemplate;
+  static embedded: BaseDefComponent = MissingTemplate;
   static edit: BaseDefComponent = FieldDefEditTemplate;
   static atom: BaseDefComponent = DefaultAtomViewTemplate;
+  static fitted: BaseDefComponent = MissingTemplate;
 }
 
 export class ReadOnlyField extends FieldDef {
@@ -1906,6 +1915,7 @@ export class MaybeBase64Field extends StringField {
 }
 
 export class CardDef extends BaseDef {
+  readonly [localId]: string = uuidv4();
   [isSavedInstance] = false;
   [meta]: CardResourceMeta | undefined = undefined;
   @field id = contains(ReadOnlyField);

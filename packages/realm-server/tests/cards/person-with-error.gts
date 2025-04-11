@@ -57,6 +57,7 @@ export class PersonCard extends CardDef {
           @query={{this.query}}
           @format='fitted'
           @realms={{this.realms}}
+          @isLive={{true}}
         >
 
           <:loading>

@@ -59,10 +59,11 @@ export interface RealmPrerenderedCards {
   realmInfo: RealmInfo;
   prerenderedCards: PrerenderedCard[];
 }
-
+export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
+export * from './cached-fetch';
 export * from './commands';
 export * from './constants';
 export * from './matrix-constants';
@@ -279,13 +280,13 @@ export type getCard<T extends CardDef = CardDef> = (
 {
   card: T | undefined;
   isLoaded: boolean;
-  url: string | undefined;
+  id: string | undefined;
   autoSaveState: AutoSaveState | undefined;
   cardError: CardErrorJSONAPI | undefined;
   api: typeof CardAPI;
 };
 
-export type getCards = (
+export type getCards<T extends CardDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
@@ -295,8 +296,8 @@ export type getCards = (
   },
 ) => // This is a duck type of the SearchResource
 {
-  instances: CardDef[];
-  instancesByRealm: { realm: string; cards: CardDef[] }[];
+  instances: T[];
+  instancesByRealm: { realm: string; cards: T[] }[];
   isLoading: boolean;
 };
 
