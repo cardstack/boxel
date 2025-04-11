@@ -464,7 +464,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     identityContext.sweep();
 
-    identityContext.addInstanceOrError(makeError(boris.id));
+    identityContext.addInstanceOrError(boris.id, makeError(boris.id));
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -500,7 +500,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       instances: { hassan },
     } = await setupTest(saveAll);
 
-    identityContext.addInstanceOrError(makeError(hassan.id));
+    identityContext.addInstanceOrError(hassan.id, makeError(hassan.id));
     identityContext.delete(hassan.id);
 
     assert.deepEqual(
@@ -576,7 +576,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       instances: { hassan, jade },
     } = await setupTest(saveAll);
 
-    identityContext.addInstanceOrError(makeError(hassan.id));
+    identityContext.addInstanceOrError(hassan.id, makeError(hassan.id));
     identityContext.reset();
 
     assert.deepEqual(
@@ -599,7 +599,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     } = await setupTest(saveAll);
 
     let error = makeError(hassan.id);
-    identityContext.addInstanceOrError(error);
+    identityContext.addInstanceOrError(hassan.id, error);
 
     assert.strictEqual(
       identityContext.get(hassan.id),
@@ -620,7 +620,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     } = await setupTest(saveAll);
 
     let error = makeError(hassan.id);
-    identityContext.addInstanceOrError(error);
+    identityContext.addInstanceOrError(hassan.id, error);
 
     assert.strictEqual(
       identityContext.get(hassan[localId]),

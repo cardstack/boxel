@@ -52,13 +52,8 @@ export default class IdentityContextWithGarbageCollection
     this.setItem(id, instance);
   }
 
-  addInstanceOrError(instanceOrError: CardDef | CardError) {
-    let id = isCardInstance(instanceOrError)
-      ? instanceOrError[this.#api.localId]
-      : instanceOrError.id;
-    if (id) {
-      this.setItem(id, instanceOrError);
-    }
+  addInstanceOrError(id: string, instanceOrError: CardDef | CardError) {
+    this.setItem(id, instanceOrError);
   }
 
   getInstanceOrError(id: string) {

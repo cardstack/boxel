@@ -396,6 +396,11 @@ export default class StoreService extends Service implements StoreInterface {
         }
         this.subscribeToRealm(new URL(url));
         await this.trackSavedInstance('start-tracking', instanceOrError);
+
+        if (!instanceOrError.id) {
+          // keep track of urls for cards that are missing
+          this.identityContext.addInstanceOrError(url, instanceOrError);
+        }
         deferred.fulfill();
       } catch (e) {
         console.error(
@@ -577,32 +582,36 @@ export default class StoreService extends Service implements StoreInterface {
     operation: 'start-tracking' | 'stop-tracking',
     instanceOrError: CardDef | CardError,
   ) {
+    if (!instanceOrError.id) {
+      return;
+    }
+
     await this.ready;
     let instance = isCardInstance(instanceOrError)
       ? instanceOrError
       : undefined;
     if (operation === 'start-tracking') {
-      this.identityContext.addInstanceOrError(instanceOrError);
+      this.identityContext.addInstanceOrError(
+        instanceOrError.id,
+        instanceOrError,
+      );
     }
-
-    if (instanceOrError?.id) {
-      // module updates will break the cached api. so don't hang on to this longer
-      // than necessary
-      this.cardApiCache = await this.cardService.getAPI();
-      let autoSaveState = instance
-        ? this.autoSaveStates.get(instance.id)
-        : undefined;
-      if (operation === 'stop-tracking' && instance) {
-        this.cardApiCache.unsubscribeFromChanges(
-          instance,
-          this.onInstanceUpdated,
-        );
-        this.autoSaveStates.delete(instance.id);
-      } else if (operation === 'start-tracking' && instance) {
-        this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
-        if (autoSaveState) {
-          this.autoSaveStates.set(instance.id, autoSaveState);
-        }
+    // module updates will break the cached api. so don't hang on to this longer
+    // than necessary
+    this.cardApiCache = await this.cardService.getAPI();
+    let autoSaveState = instance
+      ? this.autoSaveStates.get(instance.id)
+      : undefined;
+    if (operation === 'stop-tracking' && instance) {
+      this.cardApiCache.unsubscribeFromChanges(
+        instance,
+        this.onInstanceUpdated,
+      );
+      this.autoSaveStates.delete(instance.id);
+    } else if (operation === 'start-tracking' && instance) {
+      this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
+      if (autoSaveState) {
+        this.autoSaveStates.set(instance.id, autoSaveState);
       }
     }
   }
