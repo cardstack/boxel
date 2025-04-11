@@ -8,28 +8,26 @@ import {
 } from '../search-replace-block-parsing';
 
 export function extractCodeData(preElementString: string): CodeData {
-  let emptyCodeData: CodeData = {
-    language: null,
-    fileUrl: null,
-    searchReplaceBlock: null,
-    code: null,
-  };
+  let tempContainer = document.createElement('div');
+  tempContainer.innerHTML = preElementString;
+  let preElement = tempContainer.querySelector('pre');
 
-  if (!preElementString) {
-    return emptyCodeData;
+  if (!preElement) {
+    return {
+      fileUrl: null,
+      code: null,
+      language: null,
+      searchReplaceBlock: null,
+    };
   }
 
-  const languageMatch = preElementString.match(
-    new RegExp('data-code-language="([^"]+)"'),
-  );
-  const language = languageMatch ? languageMatch[1] : null;
-  const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-  let content = contentMatch ? contentMatch[1] : null;
+  let language = preElement.getAttribute('data-code-language') || 'text';
 
-  if (!content) {
-    return emptyCodeData;
-  }
-
+  let content = preElement.innerHTML;
+  // Decode HTML entities to handle special characters like < and >
+  let textarea = document.createElement('textarea');
+  textarea.innerHTML = content;
+  content = textarea.value;
   let parsedContent = parseSearchReplace(content);
 
   // Transform the incomplete search/replace block into a format for streaming,
@@ -109,4 +107,45 @@ export function wrapLastTextNodeInStreamingTextSpan(
     lastTextNode.replaceWith(span);
   }
   return htmlSafe(doc.body.innerHTML);
+}
+
+export interface HtmlTagGroup {
+  type: 'pre_tag' | 'non_pre_tag';
+  content: string;
+}
+
+export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
+  let result: HtmlTagGroup[] = [];
+
+  let doc = document.createElement('div');
+  doc.innerHTML = htmlString;
+
+  Array.from(doc.childNodes).forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      let textContent = node.textContent?.trim() || '';
+      if (textContent) {
+        result.push({
+          type: 'non_pre_tag',
+          content: textContent,
+        });
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      let element = node as HTMLElement;
+      let tagName = element.tagName.toLowerCase();
+
+      if (tagName === 'pre') {
+        result.push({
+          type: 'pre_tag',
+          content: element.outerHTML,
+        });
+      } else {
+        result.push({
+          type: 'non_pre_tag',
+          content: element.outerHTML,
+        });
+      }
+    }
+  });
+
+  return result;
 }

@@ -279,4 +279,291 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
 
     await percySnapshot(assert);
   });
+
+  test('handles nested pre tags', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let messageWithNestedPreTags = `I'll help you create an example with pre tags in HTML. Here's a useful example that demonstrates different ways to use the pre tag:
+\`\`\`html
+<!-- Basic pre tag example -->
+<pre>
+This is preformatted text
+    It preserves both spaces
+        and line breaks
+exactly as written
+</pre>
+
+<!-- Pre tag with code -->
+<pre>
+<code>
+function sayHello() {
+    console.log("Hello World!");
+}
+</code>
+</pre>
+
+<!-- Pre tag with styling -->
+<pre style="background-color: #f4f4f4; padding: 15px; border-radius: 5px;">
+const data = {
+    name: "John",
+    age: 30,
+    city: "New York"
+};
+</pre>
+
+<!-- Pre tag with HTML entities -->
+<pre>
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;title&gt;Sample Page&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;h1&gt;Hello World!&lt;/h1&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>
+\`\`\`
+
+\`\`\`typescript
+  <<<<<<< SEARCH
+    let a = 1;
+    let c = 3;
+  =======
+    let a = 2;
+\`\`\`
+
+These examples show different ways to use the \`<pre>\` tag:
+1. Basic preformatted text
+2. Code display with \`<pre>\` and \`<code>\` combined
+3. Styled \`<pre>\` block
+4. HTML code display using entities
+
+You can use these in your HTML documents to display formatted text, code snippets, or any content where you want to preserve spacing and line breaks exactly as written.`;
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: messageWithNestedPreTags,
+        formatted_body: messageWithNestedPreTags,
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+
+    assert
+      .dom('.monaco-editor')
+      .exists({ count: 2 }, 'Should have 2 monaco editors');
+
+    let monacoContent = getMonacoContent();
+    assert.ok(
+      monacoContent.includes('Basic pre tag example'),
+      'Monaco content includes the first comment',
+    );
+    assert.ok(
+      monacoContent.includes('This is preformatted text'),
+      'Monaco content includes the first nested pre content',
+    );
+    assert.ok(
+      monacoContent.includes('function sayHello()'),
+      'Monaco content includes the code block',
+    );
+    assert.ok(
+      monacoContent.includes('const data = {'),
+      'Monaco content includes the styled pre block',
+    );
+    assert.equal(
+      (document.getElementsByClassName('view-lines')[1] as HTMLElement)
+        .innerText,
+      '// existing code ... \nlet a = 1;\nlet c = 3;\n// new code ... \nlet a = 2;',
+    );
+
+    assert.dom('ol li').exists({ count: 4 }, 'Should have 4 list items');
+
+    await percySnapshot(assert);
+  });
+
+  test('handles HTML tags outside backticks', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let messageWithHtmlOutsideBackticks = `Here's some HTML outside of code blocks:
+
+<p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>
+
+<ul>
+  <li>List item 1</li>
+  <li>List item 2 with <a href="https://example.com">a link</a></li>
+</ul>
+
+<div class="container">
+  <h1>Heading 1</h1>
+  <p>Another paragraph with <code>inline code</code>.</p>
+</div>
+
+And here's a code block with HTML inside:
+
+\`\`\`html
+<div class="example">
+  <p>This HTML is inside a code block with language specified.</p>
+</div>
+\`\`\`
+
+And another code block without language specified:
+
+\`\`\`
+<div class="example">
+  <p>This HTML is inside a code block without language specified.</p>
+</div>
+\`\`\``;
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: messageWithHtmlOutsideBackticks,
+        formatted_body: messageWithHtmlOutsideBackticks,
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+
+    // Check that HTML outside backticks is displayed as actual HTML
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText(
+        '<p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>',
+        'HTML tags outside backticks should be displayed as actual HTML',
+      );
+
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText(
+        '<li>List item 1</li>',
+        'List items should be displayed correctly',
+      );
+
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText(
+        '<li>List item 2 with <a href="https://example.com">a link</a></li>',
+        'Links should be displayed correctly',
+      );
+
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText('Heading 1', 'Headings should be displayed correctly');
+
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText(
+        'Another paragraph with <code>inline code</code>.',
+        'Inline code should be displayed correctly',
+      );
+
+    // Check that code blocks are preserved
+    assert
+      .dom('.monaco-editor')
+      .exists({ count: 2 }, 'Should have 2 monaco editors');
+
+    // Check that HTML inside code blocks is preserved
+    let monacoContent = getMonacoContent();
+    assert.ok(
+      monacoContent.includes('<div class="example">'),
+      'HTML inside code block should be preserved',
+    );
+    assert.ok(
+      monacoContent.includes(
+        'This HTML is inside a code block with language specified',
+      ),
+      'Content inside code block should be preserved',
+    );
+
+    await percySnapshot(assert);
+  });
+
+  test('handles HTML inside backticks without language name', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let messageWithHtmlInBackticksNoLang = `Here's some HTML inside backticks without a language name:
+
+\`\`\`
+<div class="container">
+  <h1>Hello World</h1>
+  <p>This is a paragraph with <strong>bold text</strong>.</p>
+  <ul>
+    <li>Item 1</li>
+    <li>Item 2</li>
+  </ul>
+</div>
+\`\`\`
+
+And here's some inline code with HTML: \`<span>inline HTML</span>\`
+
+And some regular text with <b>HTML tags</b> that should be displayed as actual HTML.`;
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: messageWithHtmlInBackticksNoLang,
+        formatted_body: messageWithHtmlInBackticksNoLang,
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitFor('[data-test-message-idx="0"]');
+
+    // Check that HTML inside backticks is preserved in code blocks
+    assert
+      .dom('.monaco-editor')
+      .exists({ count: 1 }, 'Should have 1 monaco editor');
+
+    let monacoContent = getMonacoContent();
+    assert.ok(
+      monacoContent.includes('<div class="container">'),
+      'HTML inside code block should be preserved',
+    );
+    assert.ok(
+      monacoContent.includes('<h1>Hello World</h1>'),
+      'Nested HTML inside code block should be preserved',
+    );
+    assert.ok(
+      monacoContent.includes(
+        'This is a paragraph with <strong>bold text</strong>',
+      ),
+      'HTML with nested tags inside code block should be preserved',
+    );
+
+    // Check that inline code with HTML is preserved
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText(
+        '<span>inline HTML</span>',
+        'Inline code with HTML should be displayed correctly',
+      );
+
+    // Check that HTML outside backticks is displayed as actual HTML
+    assert
+      .dom('[data-test-ai-message-content]')
+      .containsText(
+        '<b>HTML tags</b>',
+        'HTML tags outside backticks should be displayed as actual HTML',
+      );
+
+    await percySnapshot(assert);
+  });
 });

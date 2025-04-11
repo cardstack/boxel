@@ -19,6 +19,8 @@ import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-searc
 import {
   extractCodeData,
   wrapLastTextNodeInStreamingTextSpan,
+  parseHtmlContent,
+  HtmlTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -40,11 +42,6 @@ interface FormattedMessageSignature {
   monacoSDK: MonacoSDK;
   renderCodeBlocks: boolean;
   isStreaming: boolean;
-}
-
-interface HtmlTagGroup {
-  type: 'pre_tag' | 'non_pre_tag';
-  content: string;
 }
 
 function sanitize(html: string): SafeString {
@@ -246,32 +243,6 @@ class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
   ) {
     onHtmlUpdate(html);
   }
-}
-
-function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
-  const result: HtmlTagGroup[] = [];
-
-  // Regular expression to match <pre> tags and their content
-  const regex = /(<pre[\s\S]*?<\/pre>)|([\s\S]+?)(?=<pre|$)/g;
-
-  let match;
-  while ((match = regex.exec(htmlString)) !== null) {
-    if (match[1]) {
-      // This is a code block (pre tag)
-      result.push({
-        type: 'pre_tag',
-        content: match[1],
-      });
-    } else if (match[2] && match[2].trim() !== '') {
-      // This is non <pre> tag HTML
-      result.push({
-        type: 'non_pre_tag',
-        content: match[2],
-      });
-    }
-  }
-
-  return result;
 }
 
 interface CodeDiffResourceArgs {
