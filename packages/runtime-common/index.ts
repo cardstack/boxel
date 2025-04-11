@@ -321,6 +321,7 @@ export interface Store {
   ): Promise<void>;
   search(query: Query, realmURL: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
+  isLoaded(id: string): boolean;
 }
 
 export interface CardCatalogQuery extends Query {

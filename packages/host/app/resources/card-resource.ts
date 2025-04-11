@@ -61,7 +61,7 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-    return Boolean(this.store.peek(this.#id));
+    return this.store.isLoaded(this.#id);
   }
 
   get autoSaveState() {
