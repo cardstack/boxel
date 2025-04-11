@@ -28,9 +28,12 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CreateAIAssistantRoomInput,
   ): Promise<BaseCommandModule.CreateAIAssistantRoomResult> {
+    console.time('CreateAIAssistantRoomCommand.run - Total');
     let { matrixService } = this;
     let userId = matrixService.userId;
     let aiBotFullId = matrixService.aiBotUserId;
+
+    console.time('CreateAIAssistantRoomCommand.run - createRoom');
     let { room_id: roomId } = await matrixService.createRoom({
       preset: matrixService.privateChatPreset,
       invite: [aiBotFullId],
@@ -41,19 +44,29 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
           "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
         )} - ${userId}`,
       ),
+      power_level_content_override: {
+        users: {
+          [userId]: 100,
+          [aiBotFullId]: matrixService.aiBotPowerLevel,
+        },
+      },
+      initial_state: [
+        {
+          type: APP_BOXEL_ACTIVE_LLM,
+          content: {
+            model: DEFAULT_LLM,
+          },
+        },
+      ],
     });
-    await Promise.all([
-      this.matrixService.setPowerLevel(
-        roomId,
-        aiBotFullId,
-        matrixService.aiBotPowerLevel,
-      ),
-      this.matrixService.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
-        model: DEFAULT_LLM,
-      }),
-    ]);
+    console.timeEnd('CreateAIAssistantRoomCommand.run - createRoom');
+
+    console.time('CreateAIAssistantRoomCommand.run - loadCommandModule');
     let commandModule = await this.loadCommandModule();
     const { CreateAIAssistantRoomResult } = commandModule;
+    console.timeEnd('CreateAIAssistantRoomCommand.run - loadCommandModule');
+
+    console.timeEnd('CreateAIAssistantRoomCommand.run - Total');
     return new CreateAIAssistantRoomResult({ roomId });
   }
 }
