@@ -281,7 +281,7 @@ export type getCard<T extends CardDef = CardDef> = (
   autoSaveState: AutoSaveState | undefined;
 };
 
-export type getCards = (
+export type getCards<T extends CardDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
   getRealms?: () => string[] | undefined,
@@ -291,8 +291,8 @@ export type getCards = (
   },
 ) => // This is a duck type of the SearchResource
 {
-  instances: CardDef[];
-  instancesByRealm: { realm: string; cards: CardDef[] }[];
+  instances: T[];
+  instancesByRealm: { realm: string; cards: T[] }[];
   isLoading: boolean;
 };
 

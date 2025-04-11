@@ -98,6 +98,7 @@ export default class Room extends Component<Signature> {
         )}}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
+        data-room-id={{@roomId}}
       >
         <AiAssistantConversation
           @registerConversationScroller={{this.registerConversationScroller}}

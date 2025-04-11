@@ -456,7 +456,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     assert.dom('.card-container .author').hasStyle({ color: 'rgb(0, 0, 255)' });
   });
 
-  test(`refreshes when a queried realm changes`, async function (assert) {
+  test(`refreshes when a queried realm changes when configured to perform live search`, async function (assert) {
     let query: Query = {
       filter: {
         on: {
@@ -480,6 +480,7 @@ module(`Integration | prerendered-card-search`, function (hooks) {
         @query={{query}}
         @format='fitted'
         @realms={{realms}}
+        @isLive={{true}}
       >
         <:loading>
           Loading...

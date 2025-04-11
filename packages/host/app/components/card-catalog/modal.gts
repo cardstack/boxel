@@ -9,7 +9,6 @@ import Component from '@glimmer/component';
 
 import { restartableTask, task, timeout } from 'ember-concurrency';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
-import { consume } from 'ember-provide-consume-context';
 
 import flatMap from 'lodash/flatMap';
 
@@ -21,8 +20,6 @@ import { eq, not } from '@cardstack/boxel-ui/helpers';
 import {
   type CodeRef,
   type CreateNewCard,
-  type getCards,
-  type getCard,
   createNewCard,
   baseRealm,
   Deferred,
@@ -31,8 +28,6 @@ import {
   realmURL,
   CardCatalogQuery,
   isCardInstance,
-  GetCardContextName,
-  GetCardsContextName,
 } from '@cardstack/runtime-common';
 
 import type {
@@ -76,7 +71,6 @@ interface Signature {
 }
 
 type Request = {
-  search: ReturnType<getCards>;
   deferred: Deferred<string | undefined>;
   opts?: {
     offerToCreate?: {
@@ -236,9 +230,6 @@ export default class CardCatalogModal extends Component<Signature> {
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard;
-  @consume(GetCardsContextName) private declare getCards: getCards;
-
   private stateStack: State[] = new TrackedArray<State>();
   private stateId = 0;
   @service private declare cardService: CardService;
@@ -367,7 +358,6 @@ export default class CardCatalogModal extends Component<Signature> {
         opts?.multiSelect,
       );
       let request = new TrackedObject<Request>({
-        search: this.getCards(this, () => query),
         deferred: new Deferred(),
         opts,
       });
