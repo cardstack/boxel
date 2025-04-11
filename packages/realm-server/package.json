@@ -85,6 +85,7 @@
     "setup:experiments-in-deployment": "mkdir -p /persistent/experiments && rsync --dry-run --itemize-changes --size-only --recursive ../experiments-realm/. /persistent/experiments/ && rsync --size-only --recursive ../experiments-realm/. /persistent/experiments/",
     "setup:seed-in-deployment": "mkdir -p /persistent/seed && rsync --dry-run --itemize-changes --size-only --recursive --delete ../seed-realm/. /persistent/seed/ && rsync --size-only --recursive --delete ../seed-realm/. /persistent/seed/",
     "setup:catalog-in-deployment": "mkdir -p /persistent/catalog && rsync --dry-run --itemize-changes --size-only --recursive --delete ../catalog-realm/. /persistent/catalog/ && rsync --size-only --recursive --delete ../catalog-realm/. /persistent/catalog/",
+    "setup:catalog-dev-in-deployment": "mkdir -p /persistent/catalog && rsync --dry-run --itemize-changes --size-only --recursive --delete ../catalog-realm-dev/. /persistent/catalog/ && rsync --size-only --recursive --delete ../catalog-realm-dev/. /persistent/catalog/",
     "start": "PGPORT=5435 NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:base": "./scripts/start-base.sh --workerManagerPort=4213",
     "start:test-realms": "./scripts/start-test-realms.sh --workerManagerPort=4211",
