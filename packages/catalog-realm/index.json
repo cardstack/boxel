@@ -56,6 +56,11 @@
           "self": "./SkillListing/talk-like-a-pirate"
         }
       },
+      "new.8": {
+        "links": {
+          "self": "./AppListing/fb710c2b-f904-41f4-9920-7390cda42dd4"
+        }
+      },
       "featured.0": {
         "links": {
           "self": "./CardListing/10ff8743-4b8c-403e-95a6-90c36cbb98ca"

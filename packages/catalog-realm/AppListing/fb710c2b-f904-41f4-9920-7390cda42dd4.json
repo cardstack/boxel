@@ -4,9 +4,11 @@
     "attributes": {
       "name": "Sprint Planner",
       "summary": "Sprint Planner is a Kanban board task planner designed to organize and track the progress of tasks throughout a sprint.",
-      "images": [],
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/screenshot_01.png"
+      ],
       "description": null,
-      "thumbnailURL": null
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/sprint-planner-listing/thumbnail.png"
     },
     "relationships": {
       "specs.0": {
