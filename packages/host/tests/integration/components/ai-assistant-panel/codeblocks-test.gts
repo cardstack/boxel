@@ -244,7 +244,8 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     );
 
     await waitFor('[data-test-message-idx="0"]');
-    let monacoContent = getMonacoContent();
+
+    let monacoContent = getMonacoContent('firstAvailable');
     assert.strictEqual(
       monacoContent,
       `console.log("hello world");`,
@@ -268,7 +269,7 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     );
     await settled();
 
-    monacoContent = getMonacoContent();
+    monacoContent = getMonacoContent('firstAvailable');
     assert.strictEqual(
       monacoContent,
       `console.log("hello world");`,

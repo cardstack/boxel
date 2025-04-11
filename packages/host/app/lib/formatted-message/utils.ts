@@ -110,3 +110,34 @@ export function wrapLastTextNodeInStreamingTextSpan(
   }
   return htmlSafe(doc.body.innerHTML);
 }
+
+export interface HtmlTagGroup {
+  type: 'pre_tag' | 'non_pre_tag';
+  content: string;
+}
+
+export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
+  const result: HtmlTagGroup[] = [];
+
+  // Regular expression to match <pre> tags and their content
+  const regex = /(<pre[\s\S]*?<\/pre>)|([\s\S]+?)(?=<pre|$)/g;
+
+  let match;
+  while ((match = regex.exec(htmlString)) !== null) {
+    if (match[1]) {
+      // This is a code block (pre tag)
+      result.push({
+        type: 'pre_tag',
+        content: match[1],
+      });
+    } else if (match[2] && match[2].trim() !== '') {
+      // This is non <pre> tag HTML
+      result.push({
+        type: 'non_pre_tag',
+        content: match[2],
+      });
+    }
+  }
+
+  return result;
+}

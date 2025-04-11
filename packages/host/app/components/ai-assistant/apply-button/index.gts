@@ -17,6 +17,9 @@ interface Signature {
   Args: {
     state: ApplyButtonState;
   };
+  Blocks: {
+    default: [];
+  };
 }
 
 const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
@@ -29,7 +32,11 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
       data-test-apply-state={{@state}}
       ...attributes
     >
-      Apply
+      {{#if (has-block)}}
+        {{yield}}
+      {{else}}
+        Apply
+      {{/if}}
     </BoxelButton>
   {{else}}
     <div class='state-indicator {{@state}}' data-test-apply-state={{@state}}>
@@ -58,11 +65,9 @@ const AiAssistantApplyButton: TemplateOnlyComponent<Signature> = <template>
   <style scoped>
     .apply-button {
       --boxel-button-font: 600 var(--boxel-font-xs);
-      --boxel-button-min-height: 1.5rem;
-      --boxel-button-padding: 0;
-      position: relative;
-      min-width: 58px;
-      max-height: 1.5rem;
+      padding: 3px 10px;
+      min-width: inherit;
+      min-height: inherit;
     }
     .apply-button:hover:not(:disabled),
     .apply-button:focus:not(:disabled) {
