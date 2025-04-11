@@ -61,6 +61,16 @@ export default class Monaco extends Modifier<Signature> {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
 
+      console.log(
+        'content differers from model: ' + (content !== this.model.getValue()),
+      );
+
+      console.log(
+        'date is later than lastmodified + debounce: ' +
+          (Date.now() <
+            this.lastModified + this.monacoService.serverEchoDebounceMs),
+      );
+
       if (
         content !== this.model.getValue() &&
         Date.now() < this.lastModified + this.monacoService.serverEchoDebounceMs
@@ -68,8 +78,6 @@ export default class Monaco extends Modifier<Signature> {
         console.log('ignoring realm event echo');
         console.log('date now', Date.now());
         console.log('last modified', this.lastModified);
-        console.log('update content', content);
-        console.log('model content', this.model.getValue());
       }
       if (
         content !== this.model.getValue() &&
@@ -79,6 +87,12 @@ export default class Monaco extends Modifier<Signature> {
           this.lastModified + this.monacoService.serverEchoDebounceMs
       ) {
         console.log('updating content as it is different and past debounce');
+        console.log(
+          `now (${Date.now()}) > last modified (${this.lastModified}) + debounce (${this.monacoService.serverEchoDebounceMs})`,
+        );
+        console.log(
+          `${Date.now() - (this.lastModified + this.monacoService.serverEchoDebounceMs)}ms difference`,
+        );
         this.lastContent = content;
         this.model.setValue(content);
       }
