@@ -463,23 +463,37 @@ export default class AiAssistantPanel extends Component<Signature> {
 
   private doCreateRoom = restartableTask(async (name: string) => {
     try {
+      console.time('Total room creation time');
+
+      console.time('CreateAiAssistantRoomCommand execution');
       let createRoomCommand = new CreateAiAssistantRoomCommand(
         this.commandService.commandContext,
       );
       let { roomId } = await createRoomCommand.execute({ name });
+      console.timeEnd('CreateAiAssistantRoomCommand execution');
 
+      console.time('Load default skills');
+      const defaultSkills = await this.matrixService.loadDefaultSkills(
+        this.operatorModeStateService.state.submode,
+      );
+      console.timeEnd('Load default skills');
+
+      console.time('AddSkillsToRoomCommand execution');
       let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
         this.commandService.commandContext,
       );
       await addSkillsToRoomCommand.execute({
         roomId,
-        skills: await this.matrixService.loadDefaultSkills(
-          this.operatorModeStateService.state.submode,
-        ),
+        skills: defaultSkills,
       });
+      console.timeEnd('AddSkillsToRoomCommand execution');
+
       window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
       this.enterRoom(roomId);
+
+      console.timeEnd('Total room creation time');
     } catch (e) {
+      console.timeEnd('Total room creation time');
       console.log(e);
       this.displayRoomError = true;
       this.matrixService.currentRoomId = undefined;

@@ -1609,6 +1609,99 @@ export default class MatrixService extends Service {
       [0, newEndRange],
     ]);
   }
+
+  // Add this method to initialize the template room
+  async initializeAiAssistantTemplateRoom() {
+    if (this.aiAssistantTemplateRoomId || this.isCreatingTemplateRoom) {
+      return;
+    }
+
+    this.isCreatingTemplateRoom = true;
+    try {
+      console.time('Creating AI Assistant template room');
+
+      // Create a template room with all the necessary state
+      const { room_id: templateRoomId } = await this.createRoom({
+        preset: this.privateChatPreset,
+        invite: [this.aiBotUserId],
+        name: 'AI Assistant Template',
+        room_alias_name: encodeURIComponent(
+          `AI Assistant Template - ${format(
+            new Date(),
+            "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
+          )} - ${this.userId}`,
+        ),
+        // Set power level for AI bot directly during room creation
+        power_level_content_override: {
+          users: {
+            [this.aiBotUserId]: this.aiBotPowerLevel,
+          },
+        },
+        // Set initial state for LLM directly during room creation
+        initial_state: [
+          {
+            type: APP_BOXEL_ACTIVE_LLM,
+            content: {
+              model: DEFAULT_LLM,
+            },
+          },
+        ],
+      });
+
+      // Store the template room ID
+      this.aiAssistantTemplateRoomId = templateRoomId;
+      console.timeEnd('Creating AI Assistant template room');
+    } catch (error) {
+      console.error('Failed to create AI Assistant template room:', error);
+    } finally {
+      this.isCreatingTemplateRoom = false;
+    }
+  }
+
+  // Add this method to clone the template room
+  async cloneAiAssistantTemplateRoom(name: string): Promise<string> {
+    // Make sure we have a template room
+    if (!this.aiAssistantTemplateRoomId) {
+      await this.initializeAiAssistantTemplateRoom();
+    }
+
+    if (!this.aiAssistantTemplateRoomId) {
+      throw new Error('Failed to create AI Assistant template room');
+    }
+
+    console.time('Cloning AI Assistant template room');
+
+    // Clone the room using Matrix API with power level and initial state set directly
+    const { room_id: newRoomId } = await this.createRoom({
+      preset: this.privateChatPreset,
+      invite: [this.aiBotUserId],
+      name: name,
+      room_alias_name: encodeURIComponent(
+        `${name} - ${format(
+          new Date(),
+          "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
+        )} - ${this.userId}`,
+      ),
+      // Set power level for AI bot directly during room creation
+      power_level_content_override: {
+        users: {
+          [this.aiBotUserId]: this.aiBotPowerLevel,
+        },
+      },
+      // Set initial state for LLM directly during room creation
+      initial_state: [
+        {
+          type: APP_BOXEL_ACTIVE_LLM,
+          content: {
+            model: DEFAULT_LLM,
+          },
+        },
+      ],
+    });
+
+    console.timeEnd('Cloning AI Assistant template room');
+    return newRoomId;
+  }
 }
 
 function saveAuth(auth: LoginResponse) {
