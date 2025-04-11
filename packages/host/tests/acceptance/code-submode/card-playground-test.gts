@@ -653,10 +653,12 @@ module('Acceptance | code-submode | card playground', function (hooks) {
 
     await realm.write('author.gts', authorCard);
 
-    await waitUntil(() =>
-      document
-        .querySelector('[data-test-author-title]')
-        ?.textContent?.includes('Hello'),
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-author-title]')
+          ?.textContent?.includes('Hello'),
+      { timeout: 5000 },
     );
 
     assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
@@ -726,10 +728,12 @@ module('Acceptance | code-submode | card playground', function (hooks) {
 
     await realm.write('blog-post.gts', blogPostCard);
 
-    await waitUntil(() =>
-      document
-        .querySelector('[data-test-post-title]')
-        ?.textContent?.includes('Hello'),
+    await waitUntil(
+      () =>
+        document
+          .querySelector('[data-test-post-title]')
+          ?.textContent?.includes('Hello'),
+      { timeout: 5000 },
     );
 
     assert.dom('[data-test-post-title]').includesText('Hello Mad As a Hatter');

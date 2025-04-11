@@ -3,6 +3,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import {
   isPrimitive,
   isCardInstance,
+  localId as localIdSymbol,
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
 
@@ -26,20 +27,16 @@ export default class IdentityContextWithGarbageCollection
   #cards = new TrackedMap<string, CardDef>();
   #cardErrors = new TrackedMap<string, CardError>();
   #gcCandidates: Set<LocalId> = new Set();
-  #api: typeof CardAPI;
   #referenceCount: ReferenceCount;
   #localIds: Map<string, string | null>;
 
   constructor({
-    api,
     referenceCount,
     localIds,
   }: {
-    api: typeof CardAPI;
     referenceCount: ReferenceCount;
     localIds: Map<string, string | null>;
   }) {
-    this.#api = api;
     this.#referenceCount = referenceCount;
     this.#localIds = localIds;
   }
@@ -84,8 +81,8 @@ export default class IdentityContextWithGarbageCollection
     return [...this.#gcCandidates];
   }
 
-  sweep() {
-    let consumptionGraph = this.makeConsumptionGraph();
+  sweep(api: typeof CardAPI) {
+    let consumptionGraph = this.makeConsumptionGraph(api);
     let cache = new Map<string, boolean>();
     let visited = new WeakSet<CardDef>();
     for (let instance of this.#cards.values()) {
@@ -97,29 +94,25 @@ export default class IdentityContextWithGarbageCollection
       }
       visited.add(instance);
       if (
-        this.isEligibleForGC(
-          instance[this.#api.localId],
-          consumptionGraph,
-          cache,
-        )
+        this.isEligibleForGC(instance[localIdSymbol], consumptionGraph, cache)
       ) {
-        if (this.#gcCandidates.has(instance[this.#api.localId])) {
+        if (this.#gcCandidates.has(instance[localIdSymbol])) {
           console.log(
-            `garbage collecting instance ${instance[this.#api.localId]} (remote id: ${instance.id}) from store`,
+            `garbage collecting instance ${instance[localIdSymbol]} (remote id: ${instance.id}) from store`,
           );
           // brand the instance to make it easier for debugging
           (instance as unknown as any)[
             Symbol.for('__instance_detached_from_store')
           ] = true;
-          this.delete(instance[this.#api.localId]);
+          this.delete(instance[localIdSymbol]);
           if (instance.id) {
             this.delete(instance.id);
           }
         } else {
-          this.#gcCandidates.add(instance[this.#api.localId]);
+          this.#gcCandidates.add(instance[localIdSymbol]);
         }
       } else {
-        this.#gcCandidates.delete(instance[this.#api.localId]);
+        this.#gcCandidates.delete(instance[localIdSymbol]);
       }
     }
   }
@@ -156,7 +149,7 @@ export default class IdentityContextWithGarbageCollection
     let localId: string | undefined;
 
     if (instance) {
-      localId = instance[this.#api.localId];
+      localId = instance[localIdSymbol];
     } else if (error) {
       localId = ([...this.#localIds.entries()].find(
         ([_local, remote]) => remote === id,
@@ -178,8 +171,8 @@ export default class IdentityContextWithGarbageCollection
         this.#cards.set(instance.id, instance);
         this.#cardErrors.delete(instance.id);
       } else if (instance && id === instance.id) {
-        this.#cards.set(instance[this.#api.localId], instance);
-        this.#cardErrors.delete(instance[this.#api.localId]);
+        this.#cards.set(instance[localIdSymbol], instance);
+        this.#cardErrors.delete(instance[localIdSymbol]);
       }
     }
 
@@ -229,20 +222,20 @@ export default class IdentityContextWithGarbageCollection
     return result;
   }
 
-  private makeConsumptionGraph(): InstanceGraph {
+  private makeConsumptionGraph(api: typeof CardAPI): InstanceGraph {
     let consumptionGraph: InstanceGraph = new Map();
     for (let instance of this.#cards.values()) {
       if (!instance) {
         continue;
       }
-      let deps = getDeps(this.#api, instance);
+      let deps = getDeps(api, instance);
       for (let dep of deps) {
-        let consumers = consumptionGraph.get(dep[this.#api.localId]);
+        let consumers = consumptionGraph.get(dep[localIdSymbol]);
         if (!consumers) {
           consumers = new Set();
-          consumptionGraph.set(dep[this.#api.localId], consumers);
+          consumptionGraph.set(dep[localIdSymbol], consumers);
         }
-        consumers.add(instance[this.#api.localId]);
+        consumers.add(instance[localIdSymbol]);
       }
     }
     return consumptionGraph;

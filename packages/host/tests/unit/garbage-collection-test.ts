@@ -4,6 +4,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  localId,
   type Loader,
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
@@ -33,12 +34,10 @@ module('Unit | identity-context garbage collection', function (hooks) {
   setupRenderingTest(hooks);
   setupBaseRealm(hooks);
   let api: typeof CardAPI;
-  let localId: (typeof CardAPI)['localId'];
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = lookupLoaderService().loader;
     api = await loader.import(`${baseRealm.url}card-api`);
-    localId = api.localId;
   });
 
   function makeError(id: string): CardError {
@@ -128,7 +127,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     let referenceCount: ReferenceCount = new Map();
     let identityContext = new IdentityContext({
-      api,
       localIds,
       referenceCount,
     });
@@ -156,7 +154,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -199,7 +197,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -242,8 +240,8 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep();
-    identityContext.sweep();
+    identityContext.sweep(api);
+    identityContext.sweep(api);
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -286,10 +284,10 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     germaine.friends = [boris];
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -312,10 +310,10 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     germaine.friends = [boris];
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -338,11 +336,11 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     referenceCount.set(hassan.id, 0);
 
-    identityContext.sweep(); // this sweep removed boris
+    identityContext.sweep(api); // this sweep removed boris
 
     assert.deepEqual(
       identityContext.gcCandidates.sort(),
@@ -365,11 +363,11 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     referenceCount.set(hassan[localId], 0);
 
-    identityContext.sweep(); // this sweep removed boris
+    identityContext.sweep(api); // this sweep removed boris
 
     assert.deepEqual(
       identityContext.gcCandidates.sort(),
@@ -392,7 +390,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     identityContext.get(boris.id);
 
@@ -402,7 +400,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       'the GC candidates are correct after getting by remote id',
     );
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -427,7 +425,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     identityContext.get(boris[localId]);
 
@@ -437,7 +435,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
       'the GC candidates are correct after getting by local id',
     );
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     assert.deepEqual(
       identityContext.gcCandidates,
@@ -462,7 +460,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     identityContext.addInstanceOrError(boris.id, makeError(boris.id));
 
@@ -519,7 +517,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     identityContext.delete(boris.id);
 
@@ -539,7 +537,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan[localId], 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     identityContext.delete(boris[localId]);
 
@@ -559,7 +557,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     referenceCount.set(hassan.id, 1);
 
-    identityContext.sweep();
+    identityContext.sweep(api);
 
     identityContext.reset();
 

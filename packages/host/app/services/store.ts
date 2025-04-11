@@ -6,7 +6,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 
 import { formatDistanceToNow } from 'date-fns';
-import { all, restartableTask, task, timeout } from 'ember-concurrency';
+import { task, timeout } from 'ember-concurrency';
 
 import { stringify } from 'qs';
 
@@ -20,6 +20,7 @@ import {
   isSingleCardDocument,
   isCardCollectionDocument,
   Deferred,
+  delay,
   realmURL as realmURLSymbol,
   type Store as StoreInterface,
   type Query,
@@ -68,7 +69,6 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
-  declare private identityContext: IdentityContext;
   private localIds: Map<string, string | null> = new Map(); // localId => remoteId
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private referenceCount: ReferenceCount = new Map();
@@ -79,6 +79,10 @@ export default class StoreService extends Service implements StoreInterface {
   private gcInterval: number | undefined;
   private ready: Promise<void>;
   private inflightCards: Map<string, Promise<CardDef | CardError>> = new Map();
+  private identityContext = new IdentityContext({
+    localIds: this.localIds,
+    referenceCount: this.referenceCount,
+  });
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
@@ -190,7 +194,6 @@ export default class StoreService extends Service implements StoreInterface {
     realm?: string,
   ): Promise<string | CardError> {
     return await this.withTestWaiters(async () => {
-      await this.ready;
       let cardOrError = await this.getInstance({
         urlOrDoc: doc,
         relativeTo,
@@ -222,7 +225,6 @@ export default class StoreService extends Service implements StoreInterface {
       doNotPersist?: true;
     },
   ) {
-    await this.ready;
     let instance: T;
     if (!isCardInstance(instanceOrDoc)) {
       instance = await this.createFromSerialized(
@@ -257,12 +259,10 @@ export default class StoreService extends Service implements StoreInterface {
   // means you MUST consume the instance IMMEDIATELY! it should not live in the
   // state of the consumer.
   async get<T extends CardDef>(id: string): Promise<T | CardError> {
-    await this.ready;
     return await this.getInstance<T>({ urlOrDoc: id });
   }
 
   async delete(id: string): Promise<void> {
-    await this.ready;
     if (!id) {
       // the card isn't actually saved yet, so do nothing
       return;
@@ -281,7 +281,6 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument,
     patchData: PatchData,
   ): Promise<void> {
-    await this.ready;
     this.guardAgainstUnknownInstances(instance);
     await this.assertLocalIdMapping(instance);
     let linkedCards = await this.loadPatchedInstances(
@@ -323,7 +322,6 @@ export default class StoreService extends Service implements StoreInterface {
   // means you MUST consume the instance IMMEDIATELY! they should not live in the
   // state of the consumer.
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
-    await this.ready;
     let json = await this.cardService.fetchJSON(
       `${realmURL}_search?${stringify(query, { strictNullHandling: true })}`,
     );
@@ -433,7 +431,6 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument | CardDocument,
     relativeTo?: URL | undefined,
   ): Promise<T> {
-    await this.ready;
     let api = await this.cardService.getAPI();
     let card = (await api.createFromSerialized(resource, doc, relativeTo, {
       identityContext: this.identityContext,
@@ -451,7 +448,6 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async guardAgainstUnknownInstances(instance: CardDef) {
-    await this.ready;
     if (instance.id && this.identityContext.get(instance.id) !== instance) {
       throw new Error(
         `tried to add ${instance.id} to the store, but the store already has a different instance with this id. Please obtain the instances that already exists from the store`,
@@ -472,13 +468,8 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async setup() {
     let api = await this.cardService.getAPI();
-    this.identityContext = new IdentityContext({
-      api,
-      localIds: this.localIds,
-      referenceCount: this.referenceCount,
-    });
     this.gcInterval = setInterval(
-      () => this.identityContext.sweep(),
+      () => this.identityContext.sweep(api),
       2 * 60_000,
     ) as unknown as number;
   }
@@ -533,12 +524,14 @@ export default class StoreService extends Service implements StoreInterface {
     }
   };
 
-  private loadInstanceTask = restartableTask(
+  private loadInstanceTask = task(
     async (urlOrDoc: string | LooseSingleCardDocument) => {
-      await this.ready;
       let url = asURL(urlOrDoc);
       let oldInstance = url ? this.identityContext.get(url) : undefined;
-      let instanceOrError = await this.getInstance({ urlOrDoc });
+      let instanceOrError = await this.getInstance({
+        urlOrDoc,
+        opts: { noCache: true },
+      });
       if (oldInstance) {
         await this.trackSavedInstance('stop-tracking', oldInstance);
       }
@@ -547,7 +540,6 @@ export default class StoreService extends Service implements StoreInterface {
   );
 
   private reloadTask = task(async (instance: CardDef) => {
-    await this.ready;
     let maybeReloadedInstance: CardDef | CardError | undefined;
     let isDelete = false;
     try {
@@ -586,7 +578,6 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
 
-    await this.ready;
     let instance = isCardInstance(instanceOrError)
       ? instanceOrError
       : undefined;
@@ -620,12 +611,13 @@ export default class StoreService extends Service implements StoreInterface {
     urlOrDoc,
     relativeTo,
     realm,
+    opts,
   }: {
     urlOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
+    opts?: { noCache?: true };
   }) {
-    await this.ready;
     let deferred: Deferred<CardDef | CardError> | undefined;
     let url = asURL(urlOrDoc);
     if (url) {
@@ -651,13 +643,14 @@ export default class StoreService extends Service implements StoreInterface {
         return newInstance as T;
       }
 
-      // createFromSerialized would also do this de-duplication, but we want to
-      // also avoid the fetchJSON when we already have the stable card.
-      let existingInstance = this.peek(url);
-      if (existingInstance) {
-        deferred?.fulfill(existingInstance);
-        return existingInstance as T;
+      if (!opts?.noCache) {
+        let existingInstance = this.peek(url);
+        if (existingInstance) {
+          deferred?.fulfill(existingInstance);
+          return existingInstance as T;
+        }
       }
+
       let doc = (typeof urlOrDoc !== 'string' ? urlOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
@@ -691,9 +684,8 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private initiateAutoSaveTask = restartableTask(
+  private initiateAutoSaveTask = task(
     async (id: string, opts?: { isImmediate?: true }) => {
-      await this.ready;
       let instance = this.identityContext.get(id);
       if (!instance) {
         return;
@@ -706,12 +698,10 @@ export default class StoreService extends Service implements StoreInterface {
       try {
         autoSaveState.isSaving = true;
         autoSaveState.lastSaveError = undefined;
-
         if (!opts?.isImmediate) {
           await timeout(25);
         }
-        await this.saveInstanceTask.perform(instance, opts);
-
+        await this.saveInstance(instance, opts);
         autoSaveState.hasUnsavedChanges = false;
         autoSaveState.lastSaved = Date.now();
         autoSaveState.lastSaveError = undefined;
@@ -741,18 +731,15 @@ export default class StoreService extends Service implements StoreInterface {
     return autoSaveState!;
   }
 
-  private saveInstanceTask = restartableTask(
-    async (card: CardDef, opts?: { isImmediate?: true }) => {
-      await this.ready;
-      if (opts?.isImmediate) {
-        await this.persistAndUpdate(card);
-      } else {
-        // these saves can happen so fast that we'll make sure to wait at
-        // least 500ms for human consumption
-        await all([this.persistAndUpdate(card), timeout(500)]);
-      }
-    },
-  );
+  private async saveInstance(card: CardDef, opts?: { isImmediate?: true }) {
+    if (opts?.isImmediate) {
+      await this.persistAndUpdate(card);
+    } else {
+      // these saves can happen so fast that we'll make sure to wait at
+      // least 500ms for human consumption
+      await Promise.all([this.persistAndUpdate(card), delay(500)]);
+    }
+  }
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
@@ -809,7 +796,6 @@ export default class StoreService extends Service implements StoreInterface {
       }
       let api: typeof CardAPI | undefined;
       try {
-        await this.ready;
         api = await this.cardService.getAPI();
         api.subscribeToChanges(instance, onCardChange);
         let doc = await this.cardService.serializeCard(instance, {
@@ -872,7 +858,6 @@ export default class StoreService extends Service implements StoreInterface {
     // we don't await this in the realm subscription callback, so this test
     // waiter should catch otherwise leaky async in the tests
     await this.withTestWaiters(async () => {
-      await this.ready;
       let api = await this.cardService.getAPI();
       let incomingDoc: SingleCardDocument = (await this.cardService.fetchJSON(
         instance.id,
@@ -919,7 +904,6 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<{
     [fieldName: string]: CardDef | CardDef[];
   }> {
-    await this.ready;
     if (!patchData?.relationships) {
       return {};
     }
@@ -949,7 +933,6 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async loadRelationshipInstance(rel: Relationship, relativeTo: URL) {
-    await this.ready;
     if (!rel.links.self) {
       return;
     }

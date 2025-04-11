@@ -37,6 +37,7 @@ import {
   CommandContext,
   uuidv4,
   realmURL,
+  localId,
   type Meta,
   type CardFields,
   type Relationship,
@@ -69,7 +70,7 @@ interface CardOrFieldTypeIconSignature {
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
-export { realmURL, primitive, isField, type BoxComponent };
+export { localId, realmURL, primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
@@ -80,7 +81,6 @@ export const formatQuery = Symbol.for('cardstack-format-query');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
 export const meta = Symbol.for('cardstack-meta');
-export const localId = Symbol.for('cardstack-local-id');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
