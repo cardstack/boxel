@@ -45,7 +45,7 @@ import BlogAppIcon from '@cardstack/boxel-icons/notebook';
 import AuthorIcon from '@cardstack/boxel-icons/square-user';
 
 import type { BlogPost } from './blog-post';
-import type { User } from '../user';
+import type { User } from '../user/user';
 
 type ViewOption = 'card' | 'strip' | 'grid';
 

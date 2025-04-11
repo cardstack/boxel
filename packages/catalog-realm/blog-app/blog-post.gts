@@ -20,7 +20,7 @@ import { setBackgroundImage } from '../components/layout';
 import { Author } from './author';
 import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { BlogCategory, categoryStyle } from './blog-category';
-import { User } from '../user';
+import { User } from '../user/user';
 import { markdownToHtml } from '@cardstack/runtime-common';
 import { FeaturedImageField } from '../fields/featured-image';
 
