@@ -13,6 +13,7 @@ import { TrackedArray } from 'tracked-built-ins';
 import {
   subscribeToRealm,
   isCardCollectionDocument,
+  isCardInstance,
 } from '@cardstack/runtime-common';
 
 import type { Query } from '@cardstack/runtime-common/query';
@@ -87,6 +88,9 @@ export class SearchResource extends Resource<Args> {
       }));
 
       registerDestructor(this, () => {
+        for (let instance of this._instances) {
+          this.store.dropReference(instance.id);
+        }
         for (let subscription of this.subscriptions) {
           subscription.unsubscribe();
         }
@@ -134,6 +138,9 @@ export class SearchResource extends Resource<Args> {
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
+    for (let instance of this._instances) {
+      this.store.dropReference(instance.id);
+    }
     try {
       let results = flatMap(
         await Promise.all(
@@ -152,26 +159,13 @@ export class SearchResource extends Resource<Args> {
               );
             }
             let collectionDoc = json;
-            return (
-              // use Promise.allSettled so that if one particular realm is
-              // misbehaving it doesn't effect results from other realms
-              (
-                (
-                  await Promise.allSettled(
-                    collectionDoc.data.map(async (jsonAPIResource) =>
-                      this.store.createSubscriber({
-                        resource: this,
-                        idOrDoc: { data: jsonAPIResource },
-                        isAutoSaved: this.isAutoSaved,
-                        isLive: this.isLive,
-                      }),
-                    ),
-                  )
-                ).filter(
-                  (p) => p.status === 'fulfilled',
-                ) as PromiseFulfilledResult<{ instance: CardDef }>[]
-              ).map((p) => p.value)
-            );
+            for (let data of collectionDoc.data) {
+              this.store.addReference({ data });
+            }
+            await this.store.flush();
+            return collectionDoc.data
+              .map((r) => this.store.peek(r.id))
+              .filter((i) => isCardInstance(i)) as CardDef[];
           }),
         ),
       );
@@ -190,7 +184,7 @@ export class SearchResource extends Resource<Args> {
       this._instances.splice(
         0,
         this._instances.length,
-        ...results.map(({ instance }) => instance),
+        ...results.map((instance) => instance),
       );
     } finally {
       waiter.endAsync(token);

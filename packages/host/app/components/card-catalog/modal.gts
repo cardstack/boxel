@@ -28,6 +28,7 @@ import {
   Deferred,
   Loader,
   RealmInfo,
+  realmURL,
   CardCatalogQuery,
   isCardInstance,
   GetCardContextName,
@@ -585,12 +586,11 @@ export default class CardCatalogModal extends Component<Signature> {
       if (!this.state) {
         return;
       }
-      let maybeCard = await this.store.peek(cardId);
+      let maybeCard = await this.store.get(cardId);
       if (!isCardInstance(maybeCard)) {
         return;
       }
-      let realmOfSelectedCard = (await this.cardService.getRealmURL(maybeCard))
-        ?.href;
+      let realmOfSelectedCard = maybeCard[realmURL]?.href;
       if (!realmOfSelectedCard) {
         throw new Error(`could not determine realm of selected card ${cardId}`);
       }

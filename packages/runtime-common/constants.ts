@@ -22,6 +22,7 @@ export const skillCardRef: ResolvedCodeRef = {
 
 export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
+export const realmURL = Symbol.for('cardstack-realm-url');
 
 export const aiBotUsername = 'aibot';
 

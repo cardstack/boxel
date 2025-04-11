@@ -172,7 +172,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
-    let card = await this.store.peek(id);
+    let card = await this.store.get(id);
     if (card && isCardInstance(card)) {
       let document = await this.cardService.serializeCard(card);
       if (patch.attributes) {
@@ -331,7 +331,7 @@ export default class OperatorModeStateService extends Service {
     if (!cardIds) {
       return;
     }
-    let cards = (await Promise.all(cardIds.map((id) => this.store.peek(id))))
+    let cards = (await Promise.all(cardIds.map((id) => this.store.get(id))))
       .filter(Boolean)
       .filter(isCardInstance);
     return cards;

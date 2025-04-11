@@ -407,7 +407,7 @@ class Isolated extends Component<typeof CardsGrid> {
       return;
     }
 
-    let spec = await this.args.context?.store.peek<Spec>(specId);
+    let spec = await this.args.context?.store.get<Spec>(specId);
 
     if (spec && isCardInstance<Spec>(spec)) {
       await this.args.context?.actions?.createCard?.(

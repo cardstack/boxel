@@ -1,4 +1,10 @@
-import { isPrimitive, isCardInstance } from '@cardstack/runtime-common';
+import { TrackedMap } from 'tracked-built-ins';
+
+import {
+  isPrimitive,
+  isCardInstance,
+  type CardErrorJSONAPI as CardError,
+} from '@cardstack/runtime-common';
 
 import {
   type CardDef,
@@ -9,7 +15,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 const ELIGIBLE_FOR_GC = true;
 const NOT_ELIGIBLE_FOR_GC = false;
 
-export type Subscriber = Map<string, { resources: unknown[] }>;
+export type ReferenceCount = Map<string, number>;
 
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
@@ -17,88 +23,65 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
-  #cards = new Map<string, CardDef | null>();
+  #cards = new TrackedMap<string, CardDef>();
+  #cardErrors = new TrackedMap<string, CardError>();
   #gcCandidates: Set<LocalId> = new Set();
   #api: typeof CardAPI;
-  #remoteIdSubscribers: Subscriber;
-  #localIdSubscribers: Subscriber;
+  #referenceCount: ReferenceCount;
   #localIds: Map<string, string | null>;
 
   constructor({
     api,
-    remoteIdSubscribers,
-    localIdSubscribers,
+    referenceCount,
     localIds,
   }: {
     api: typeof CardAPI;
-    remoteIdSubscribers: Subscriber;
-    localIdSubscribers: Subscriber;
+    referenceCount: ReferenceCount;
     localIds: Map<string, string | null>;
   }) {
     this.#api = api;
-    this.#remoteIdSubscribers = remoteIdSubscribers;
-    this.#localIdSubscribers = localIdSubscribers;
+    this.#referenceCount = referenceCount;
     this.#localIds = localIds;
   }
 
   get(id: string): CardDef | undefined {
-    let instance = this.#cards.get(id);
-    let remoteId = this.#localIds.get(id);
-    if (!instance && remoteId) {
-      instance = this.#cards.get(remoteId);
-    }
-
-    if (instance && id === instance[this.#api.localId]) {
-      this.#gcCandidates.delete(id);
-    } else if (instance && id === instance.id) {
-      let [localId] =
-        [...this.#localIds.entries()].find(
-          ([_local, remote]) => remote === id,
-        ) ?? [];
-      if (localId) {
-        this.#gcCandidates.delete(localId);
-      }
-    }
-    return instance ?? undefined;
+    return this.getItem('instance', id);
   }
 
-  set(id: string, instance: CardDef | null): void {
-    if (instance) {
-      this.#gcCandidates.delete(id);
-      this.#gcCandidates.delete(instance[this.#api.localId]);
+  set(id: string, instance: CardDef): void {
+    this.setItem(id, instance);
+  }
+
+  addInstanceOrError(instanceOrError: CardDef | CardError) {
+    let id = isCardInstance(instanceOrError)
+      ? instanceOrError[this.#api.localId]
+      : instanceOrError.id;
+    if (id) {
+      this.setItem(id, instanceOrError);
     }
-    // make entries for both the local ID and the remote ID in the identity map
-    this.#cards.set(id, instance);
-    if (instance && id === instance[this.#api.localId]) {
-      this.#cards.set(instance.id, instance);
-    } else if (instance && id === instance.id) {
-      this.#cards.set(instance[this.#api.localId], instance);
-    }
-    if (!instance) {
-      let [localId] =
-        [...this.#localIds.entries()].find(
-          ([_local, remote]) => remote === id,
-        ) ?? [];
-      if (localId) {
-        this.#cards.set(localId, instance);
-      }
-    }
+  }
+
+  getInstanceOrError(id: string) {
+    return this.getItem('instance', id) ?? this.getItem('error', id);
   }
 
   delete(id: string): void {
     this.#cards.delete(id);
+    this.#cardErrors.delete(id);
     this.#gcCandidates.delete(id);
     let [localId] =
       [...this.#localIds.entries()].find(([_local, remote]) => remote === id) ??
       [];
     if (localId) {
       this.#cards.delete(localId);
+      this.#cardErrors.delete(localId);
       this.#gcCandidates.delete(localId);
     }
   }
 
   reset() {
     this.#cards.clear();
+    this.#cardErrors.clear();
     this.#gcCandidates.clear();
   }
 
@@ -146,7 +129,80 @@ export default class IdentityContextWithGarbageCollection
     }
   }
 
-  isEligibleForGC(
+  private getItem(type: 'instance', id: string): CardDef | undefined;
+  private getItem(type: 'error', id: string): CardError | undefined;
+  private getItem(
+    type: 'instance' | 'error',
+    id: string,
+  ): CardDef | CardError | undefined {
+    let bucket = type === 'instance' ? this.#cards : this.#cardErrors;
+    let item = bucket.get(id);
+    let remoteId = this.#localIds.get(id);
+    if (!item && remoteId) {
+      item = bucket.get(remoteId);
+    }
+    if (item && isLocalId(id)) {
+      this.#gcCandidates.delete(id);
+    } else if (item && id === item.id) {
+      let [localId] =
+        [...this.#localIds.entries()].find(
+          ([_local, remote]) => remote === id,
+        ) ?? [];
+      if (localId) {
+        this.#gcCandidates.delete(localId);
+      }
+    }
+    return item ?? undefined;
+  }
+
+  private setItem(id: string, item: CardDef | CardError) {
+    let instance = isCardInstance(item) ? item : undefined;
+    let error = !isCardInstance(item) ? item : undefined;
+    let localId: string | undefined;
+
+    if (instance) {
+      localId = instance[this.#api.localId];
+    } else if (error) {
+      localId = ([...this.#localIds.entries()].find(
+        ([_local, remote]) => remote === id,
+      ) ?? [])[0];
+    }
+
+    if (item) {
+      this.#gcCandidates.delete(id);
+      if (localId) {
+        this.#gcCandidates.delete(localId);
+      }
+    }
+
+    // make entries for both the local ID and the remote ID in the identity map
+    if (instance) {
+      this.#cards.set(id, instance);
+      this.#cardErrors.delete(id);
+      if (item && id === localId) {
+        this.#cards.set(instance.id, instance);
+        this.#cardErrors.delete(instance.id);
+      } else if (instance && id === instance.id) {
+        this.#cards.set(instance[this.#api.localId], instance);
+        this.#cardErrors.delete(instance[this.#api.localId]);
+      }
+    }
+
+    if (error) {
+      this.#cardErrors.set(id, error);
+      this.#cards.delete(id);
+      let remoteId = this.#localIds.get(id);
+      if (isLocalId(id) && remoteId) {
+        this.#cardErrors.set(remoteId, error);
+        this.#cards.delete(remoteId);
+      } else if (!isLocalId(id) && localId) {
+        this.#cardErrors.set(localId, error);
+        this.#cards.delete(localId);
+      }
+    }
+  }
+
+  private isEligibleForGC(
     localId: string,
     consumptionGraph: InstanceGraph,
     cache: Map<LocalId, boolean>,
@@ -157,13 +213,10 @@ export default class IdentityContextWithGarbageCollection
       return cached;
     }
 
-    let subscribers = [
-      ...((remoteId
-        ? this.#remoteIdSubscribers.get(remoteId)?.resources
-        : undefined) ?? []),
-      ...(this.#localIdSubscribers.get(localId)?.resources ?? []),
-    ];
-    if (subscribers.length > 0) {
+    let referenceCount =
+      (remoteId ? (this.#referenceCount.get(remoteId) ?? 0) : 0) +
+      (localId ? (this.#referenceCount.get(localId) ?? 0) : 0);
+    if (referenceCount > 0) {
       cache.set(localId, NOT_ELIGIBLE_FOR_GC);
       return NOT_ELIGIBLE_FOR_GC;
     }
@@ -231,4 +284,8 @@ function findCardInstances(obj: object): CardDef[] {
     );
   }
   return [];
+}
+
+function isLocalId(id: string) {
+  return !id.startsWith('http');
 }

@@ -893,7 +893,7 @@ export default class MatrixService extends Service {
       await Promise.all(
         defaultSkills.map(async (skillCardURL) => {
           let maybeCard =
-            await this.store.peek<SkillCardModule.SkillCard>(skillCardURL);
+            await this.store.get<SkillCardModule.SkillCard>(skillCardURL);
           return isCardInstance(maybeCard) ? maybeCard : undefined;
         }),
       )
