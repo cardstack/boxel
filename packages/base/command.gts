@@ -118,8 +118,16 @@ export class SendAiAssistantMessageResult extends CardDef {
   @field eventId = contains(StringField);
 }
 
-export class GetBoxelUIStateResult extends CardDef {
+export class DefaultSkills extends CardDef {
   @field submode = contains(StringField);
+  @field skillIds = containsMany(StringField);
+}
+
+export class BoxelUISubmode extends CardDef {
+  @field submode = contains(StringField);
+}
+
+export class GetBoxelUIStateResult extends BoxelUISubmode {
   //TODO expand this to include more of the UI state:
   // - open cards
   // - current room ID

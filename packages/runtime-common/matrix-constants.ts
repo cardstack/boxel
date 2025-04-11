@@ -13,6 +13,7 @@ export const APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE =
 export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';
+export const APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE = 'app.boxel.default-skills';
 export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';

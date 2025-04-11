@@ -50,6 +50,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
@@ -122,6 +123,10 @@ const realmEventsLogger = logger('realm:events');
 export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
+};
+
+export type DefaultSkills = {
+  [key in Submode]: string[];
 };
 
 export default class MatrixService extends Service {
@@ -868,25 +873,56 @@ export default class MatrixService extends Service {
     }
   }
 
-  async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
+  async setDefaultSkillIDs(submode: Submode, skillIds: string[]) {
+    let userDefaultSkillIDs: DefaultSkills =
+      (await this.client.getAccountDataFromServer<DefaultSkills>(
+        APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE,
+      )) || { interact: [], code: [] };
+    console.log('userDefaultSkillIDs', userDefaultSkillIDs);
+    userDefaultSkillIDs[submode] = skillIds;
+    await this.client.setAccountData(
+      APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE,
+      userDefaultSkillIDs,
+    );
+    console.log('setDefaultSkillIDs', userDefaultSkillIDs);
+  }
 
-    let codeModeDefaultSkills = [
-      `${baseRealm.url}SkillCard/boxel-coding`,
-      `${baseRealm.url}SkillCard/source-code-editing`,
-    ];
-
-    let defaultSkills;
-
-    if (submode === 'code') {
-      defaultSkills = codeModeDefaultSkills;
-    } else {
-      defaultSkills = interactModeDefaultSkills;
+  async getDefaultSkillIDs(submode: Submode): Promise<string[]> {
+    // Check if the user has set default skills for this submode
+    let userDefaultSkillIDs =
+      await this.client.getAccountDataFromServer<DefaultSkills>(
+        APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE,
+      );
+    // If the user has set them, use only those skills
+    // If it's an empty array, use the system default skills
+    let userSubmodeDefaultSkillIDs = userDefaultSkillIDs?.[submode];
+    console.log('getDefaultSkillIDs', submode, userDefaultSkillIDs);
+    if (userSubmodeDefaultSkillIDs && userSubmodeDefaultSkillIDs.length > 0) {
+      return userSubmodeDefaultSkillIDs;
     }
 
+    switch (submode) {
+      case 'interact':
+        return [`${baseRealm.url}SkillCard/card-editing`];
+      case 'code':
+        return [
+          `${baseRealm.url}SkillCard/boxel-coding`,
+          `${baseRealm.url}SkillCard/source-code-editing`,
+        ];
+      default: {
+        // Type checking we never get here
+        const _unhandled: never = submode;
+        return _unhandled;
+      }
+    }
+  }
+
+  async loadDefaultSkills(submode: Submode) {
+    await this.getDefaultSkillIDs('code');
+    let defaultSkillIDs = await this.getDefaultSkillIDs(submode);
     return (
       await Promise.all(
-        defaultSkills.map(async (skillCardURL) => {
+        defaultSkillIDs.map(async (skillCardURL) => {
           let maybeCard =
             await this.store.peek<SkillCardModule.SkillCard>(skillCardURL);
           return isCardInstance(maybeCard) ? maybeCard : undefined;
