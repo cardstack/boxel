@@ -32,7 +32,7 @@ module.exports = function (environment) {
     autoSaveDelayMs: 500,
     monacoDebounceMs: 500,
     monacoCursorDebounceMs: 200,
-    serverEchoDebounceMs: 5000,
+    serverEchoDebounceMs: 7500,
     loginMessageTimeoutMs: 1000,
     minSaveTaskDurationMs: 1000,
     iconsURL: process.env.ICONS_URL || 'https://boxel-icons.boxel.ai',
