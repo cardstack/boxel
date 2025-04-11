@@ -45,6 +45,7 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import IdentityContext, {
   getDeps,
+  IDResolver,
   type ReferenceCount,
 } from '../lib/gc-identity-context';
 
@@ -69,7 +70,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
-  private localIds: Map<string, string | null> = new Map(); // localId => remoteId
+  private idResolver = new IDResolver();
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
@@ -80,7 +81,7 @@ export default class StoreService extends Service implements StoreInterface {
   private ready: Promise<void>;
   private inflightCards: Map<string, Promise<CardDef | CardError>> = new Map();
   private identityContext = new IdentityContext({
-    localIds: this.localIds,
+    idResolver: this.idResolver,
     referenceCount: this.referenceCount,
   });
 
@@ -114,10 +115,14 @@ export default class StoreService extends Service implements StoreInterface {
     this.onSaveSubscriber = undefined;
     this.referenceCount = new Map();
     this.newReferencePromises = [];
-    this.localIds = new Map();
+    this.idResolver = new IDResolver();
     this.isLoadedMap = new TrackedMap();
     this.autoSaveStates = new TrackedMap();
     this.inflightCards = new Map();
+    this.identityContext = new IdentityContext({
+      idResolver: this.idResolver,
+      referenceCount: this.referenceCount,
+    });
     this.ready = this.setup();
   }
 
@@ -417,13 +422,13 @@ export default class StoreService extends Service implements StoreInterface {
   private async assertLocalIdMapping(instance: CardDef, remoteId?: string) {
     let api = await this.cardService.getAPI();
     let localId = instance[api.localId];
-    let existingRemoteId = this.localIds.get(localId);
+    let existingRemoteId = this.idResolver.getRemoteId(localId);
     if (existingRemoteId && instance.id !== existingRemoteId) {
       throw new Error(
         `the instance ${instance.constructor.name} with local id ${localId} has conflicting remote id: ${instance.id} and ${existingRemoteId}`,
       );
     }
-    this.localIds.set(localId, instance.id ?? remoteId);
+    this.idResolver.addIdPair(localId, instance.id ?? remoteId);
   }
 
   private async createFromSerialized<T extends CardDef>(

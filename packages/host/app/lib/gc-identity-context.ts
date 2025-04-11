@@ -21,6 +21,28 @@ export type ReferenceCount = Map<string, number>;
 type LocalId = string;
 type InstanceGraph = Map<LocalId, Set<LocalId>>;
 
+// we use this 2 way mapping between local ID and remote ID because if we end up
+// trying to search thru all the entries in a single direction Map to find the
+// opposing id, it will trigger a glimmer invalidation on all the cards in the
+// identity map
+export class IDResolver {
+  #remoteIds = new Map<string, string>();
+  #localIds = new Map<string, string>();
+
+  addIdPair(localId: string, remoteId: string) {
+    this.#remoteIds.set(localId, remoteId);
+    this.#localIds.set(remoteId, localId);
+  }
+
+  getRemoteId(localId: string) {
+    return this.#remoteIds.get(localId);
+  }
+
+  getLocalId(remoteId: string) {
+    return this.#localIds.get(remoteId);
+  }
+}
+
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
@@ -28,17 +50,17 @@ export default class IdentityContextWithGarbageCollection
   #cardErrors = new TrackedMap<string, CardError>();
   #gcCandidates: Set<LocalId> = new Set();
   #referenceCount: ReferenceCount;
-  #localIds: Map<string, string | null>;
+  #idResolver: IDResolver;
 
   constructor({
     referenceCount,
-    localIds,
+    idResolver,
   }: {
     referenceCount: ReferenceCount;
-    localIds: Map<string, string | null>;
+    idResolver: IDResolver;
   }) {
     this.#referenceCount = referenceCount;
-    this.#localIds = localIds;
+    this.#idResolver = idResolver;
   }
 
   get(id: string): CardDef | undefined {
@@ -60,14 +82,25 @@ export default class IdentityContextWithGarbageCollection
   delete(id: string): void {
     this.#cards.delete(id);
     this.#cardErrors.delete(id);
-    this.#gcCandidates.delete(id);
-    let [localId] =
-      [...this.#localIds.entries()].find(([_local, remote]) => remote === id) ??
-      [];
+
+    let localId = isLocalId(id) ? id : undefined;
+    let remoteId = !isLocalId(id) ? id : undefined;
+
     if (localId) {
-      this.#cards.delete(localId);
-      this.#cardErrors.delete(localId);
       this.#gcCandidates.delete(localId);
+      remoteId = this.#idResolver.getRemoteId(localId);
+      if (remoteId) {
+        this.#cards.delete(remoteId);
+        this.#cardErrors.delete(remoteId);
+      }
+    }
+    if (remoteId) {
+      localId = this.#idResolver.getLocalId(remoteId);
+      if (localId) {
+        this.#cards.delete(remoteId);
+        this.#cardErrors.delete(remoteId);
+        this.#gcCandidates.delete(localId);
+      }
     }
   }
 
@@ -124,68 +157,60 @@ export default class IdentityContextWithGarbageCollection
     id: string,
   ): CardDef | CardError | undefined {
     let bucket = type === 'instance' ? this.#cards : this.#cardErrors;
-    let item = bucket.get(id);
-    let remoteId = this.#localIds.get(id);
-    if (!item && remoteId) {
-      item = bucket.get(remoteId);
+    let localId = isLocalId(id) ? id : undefined;
+    let remoteId = !isLocalId(id) ? id : undefined;
+    if (localId) {
+      remoteId = this.#idResolver.getRemoteId(localId);
     }
-    if (item && isLocalId(id)) {
-      this.#gcCandidates.delete(id);
-    } else if (item && id === item.id) {
-      let [localId] =
-        [...this.#localIds.entries()].find(
-          ([_local, remote]) => remote === id,
-        ) ?? [];
-      if (localId) {
-        this.#gcCandidates.delete(localId);
-      }
+    if (remoteId) {
+      localId = this.#idResolver.getLocalId(remoteId);
     }
-    return item ?? undefined;
+    let item =
+      (localId ? bucket.get(localId) : undefined) ??
+      (remoteId ? bucket.get(remoteId) : undefined);
+    if (localId) {
+      this.#gcCandidates.delete(localId);
+    }
+    return item;
   }
 
   private setItem(id: string, item: CardDef | CardError) {
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
-    let localId: string | undefined;
-
-    if (instance) {
-      localId = instance[localIdSymbol];
-    } else if (error) {
-      localId = ([...this.#localIds.entries()].find(
-        ([_local, remote]) => remote === id,
-      ) ?? [])[0];
+    let localId = isLocalId(id) ? id : undefined;
+    let remoteId = !isLocalId(id) ? id : undefined;
+    if (localId) {
+      remoteId = this.#idResolver.getRemoteId(localId);
+    }
+    if (remoteId) {
+      localId =
+        (instance ? instance[localIdSymbol] : undefined) ??
+        this.#idResolver.getLocalId(remoteId);
     }
 
-    if (item) {
-      this.#gcCandidates.delete(id);
-      if (localId) {
-        this.#gcCandidates.delete(localId);
-      }
+    if (localId) {
+      this.#gcCandidates.delete(localId);
     }
 
     // make entries for both the local ID and the remote ID in the identity map
     if (instance) {
-      this.#cards.set(id, instance);
-      this.#cardErrors.delete(id);
-      if (item && id === localId) {
-        this.#cards.set(instance.id, instance);
-        this.#cardErrors.delete(instance.id);
-      } else if (instance && id === instance.id) {
-        this.#cards.set(instance[localIdSymbol], instance);
-        this.#cardErrors.delete(instance[localIdSymbol]);
+      // instances always have a local ID
+      setIfDifferent(this.#cards, localId!, instance);
+      this.#cardErrors.delete(localId!);
+      if (remoteId) {
+        setIfDifferent(this.#cards, remoteId, instance);
+        this.#cardErrors.delete(remoteId);
       }
     }
 
     if (error) {
-      this.#cardErrors.set(id, error);
-      this.#cards.delete(id);
-      let remoteId = this.#localIds.get(id);
-      if (isLocalId(id) && remoteId) {
-        this.#cardErrors.set(remoteId, error);
-        this.#cards.delete(remoteId);
-      } else if (!isLocalId(id) && localId) {
-        this.#cardErrors.set(localId, error);
+      if (localId) {
+        setIfDifferent(this.#cardErrors, localId, error);
         this.#cards.delete(localId);
+      }
+      if (remoteId) {
+        setIfDifferent(this.#cardErrors, remoteId, error);
+        this.#cards.delete(remoteId);
       }
     }
   }
@@ -195,7 +220,7 @@ export default class IdentityContextWithGarbageCollection
     consumptionGraph: InstanceGraph,
     cache: Map<LocalId, boolean>,
   ): boolean {
-    let remoteId = this.#localIds.get(localId);
+    let remoteId = this.#idResolver.getRemoteId(localId);
     let cached = cache.get(localId);
     if (cached !== undefined) {
       return cached;
@@ -272,6 +297,14 @@ function findCardInstances(obj: object): CardDef[] {
     );
   }
   return [];
+}
+
+// only touch the entry in the tracked map if it's different so we don't trigger
+// an unnecessary glimmer invalidation
+function setIfDifferent(map: Map<string, unknown>, id: string, value: unknown) {
+  if (map.get(id) !== value) {
+    map.set(id, value);
+  }
 }
 
 function isLocalId(id: string) {
