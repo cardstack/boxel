@@ -1,0 +1,15 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Hello World From Catalog Dev",
+      "description": "This is a test card from the catalog-realm-dev"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/card-api",
+        "name": "CardDef"
+      }
+    }
+  }
+}
