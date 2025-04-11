@@ -7,6 +7,7 @@ import { tracked, cached } from '@glimmer/tracking';
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 import flatMap from 'lodash/flatMap';
+import isEqual from 'lodash/isEqual';
 
 import { TrackedArray } from 'tracked-built-ins';
 
@@ -50,6 +51,8 @@ export class SearchResource extends Resource<Args> {
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
   #isAutoSaved = false;
+  #previousQuery: Query | undefined;
+  #previousRealms: string[] | undefined;
 
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing, isAutoSaved } = named;
@@ -63,9 +66,24 @@ export class SearchResource extends Resource<Args> {
         ? this.realmServer.availableRealmURLs
         : realms;
 
+    if (
+      isEqual(query, this.#previousQuery) &&
+      isEqual(realms, this.#previousRealms)
+    ) {
+      // we want to only run the search when there is a deep equality
+      // difference, not a strict equality difference
+      return;
+    }
+    this.#previousQuery = query;
+    this.#previousRealms = realms;
+
     this.loaded = this.search.perform(query);
 
     if (isLive) {
+      // need to unsubscribe the old query before subscribing the new query
+      for (let subscription of this.subscriptions) {
+        subscription.unsubscribe();
+      }
       this.subscriptions = this.realmsToSearch.map((realm) => ({
         url: `${realm}_message`,
         unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
@@ -161,7 +179,7 @@ export class SearchResource extends Resource<Args> {
                     collectionDoc.data.map(async (jsonAPIResource) =>
                       this.store.createSubscriber({
                         resource: this,
-                        urlOrDoc: { data: jsonAPIResource },
+                        idOrDoc: { data: jsonAPIResource },
                         isAutoSaved: this.isAutoSaved,
                         isLive: this.isLive,
                       }),
@@ -169,7 +187,7 @@ export class SearchResource extends Resource<Args> {
                   )
                 ).filter(
                   (p) => p.status === 'fulfilled',
-                ) as PromiseFulfilledResult<{ card: CardDef }>[]
+                ) as PromiseFulfilledResult<{ instance: CardDef }>[]
               ).map((p) => p.value)
             );
           }),
@@ -190,7 +208,7 @@ export class SearchResource extends Resource<Args> {
       this._instances.splice(
         0,
         this._instances.length,
-        ...results.map(({ card }) => card),
+        ...results.map(({ instance }) => instance),
       );
     } finally {
       waiter.endAsync(token);
@@ -222,7 +240,7 @@ export function getSearch(
     named: {
       query: getQuery(),
       realms: getRealms ? getRealms() : undefined,
-      isLive: opts?.isLive != null ? opts.isLive : true,
+      isLive: opts?.isLive != null ? opts.isLive : false,
       isAutoSaved: opts?.isAutoSaved != null ? opts.isAutoSaved : false,
       // TODO refactor this out
       doWhileRefreshing: opts?.doWhileRefreshing,

@@ -66,6 +66,7 @@ export default class CardPrerender extends Component {
     );
   }
 
+  // TODO update to support multiple URLs
   private async incremental(
     url: URL,
     realmURL: URL,
@@ -116,6 +117,7 @@ export default class CardPrerender extends Component {
     return current;
   });
 
+  // TODO update to support multiple URLs
   private doIncremental = enqueueTask(
     async (
       url: URL,
