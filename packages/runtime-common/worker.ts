@@ -69,6 +69,7 @@ export interface WorkerArgs extends JSONTypes.Object {
   realmUsername: string;
 }
 
+// TODO update to support multiple urls
 export interface IncrementalArgs extends WorkerArgs {
   url: string;
   operation: 'update' | 'delete';
@@ -330,6 +331,7 @@ export class Worker {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
       }
+      // TODO update to support multiple URLs
       let { ignoreData, stats, invalidations } = await this.#incremental(
         new URL(args.url),
         new URL(args.realmURL),

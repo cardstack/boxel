@@ -624,10 +624,8 @@ export default class CreateFileModal extends Component<Signature> {
     }
 
     let spec: Spec | undefined;
-    if (this.selectedSpecResource?.url) {
-      let maybeSpec = await this.store.peek<Spec>(
-        this.selectedSpecResource.url,
-      );
+    if (this.selectedSpecResource?.id) {
+      let maybeSpec = await this.store.peek<Spec>(this.selectedSpecResource.id);
       if (maybeSpec && !isCardInstance(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
@@ -747,10 +745,8 @@ export class ${className} extends ${exportName} {
       );
     }
     let spec: Spec | undefined;
-    if (this.selectedSpecResource?.url) {
-      let maybeSpec = await this.store.peek<Spec>(
-        this.selectedSpecResource.url,
-      );
+    if (this.selectedSpecResource?.id) {
+      let maybeSpec = await this.store.peek<Spec>(this.selectedSpecResource.id);
       if (maybeSpec && !isCardInstance(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }

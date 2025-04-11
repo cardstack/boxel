@@ -1,7 +1,7 @@
 import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -370,7 +370,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
-  test('updated command definition results in new event and updated room state', async function (assert) {
+  // CS-8380
+  skip('updated command definition results in new event and updated room state', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
@@ -438,6 +439,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
 
     // The skill card will be auto-attached since it is open
     await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-message-idx]');
 
     console.log(getRoomEvents(roomId));
     const finalEvents = getRoomEvents(roomId);

@@ -129,6 +129,7 @@ export class RealmIndexUpdater {
     }
   }
 
+  // TODO update to support multiple url updates
   async update(
     url: URL,
     opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
