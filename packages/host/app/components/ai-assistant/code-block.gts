@@ -343,6 +343,9 @@ class CodeBlockEditor extends Component<Signature> {
     },
     fontSize: 10,
     scrollBeyondLastLine: false,
+    padding: {
+      bottom: 8,
+    },
   };
 
   <template>
@@ -385,6 +388,9 @@ class CodeBlockDiffEditor extends Component<Signature> {
     renderOverviewRuler: false,
     automaticLayout: true,
     scrollBeyondLastLine: false,
+    padding: {
+      bottom: 8,
+    },
   };
 
   <template>
