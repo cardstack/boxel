@@ -100,7 +100,7 @@ export default class CardService extends Service {
           'QUERY');
 
     if (!isReadOperation) {
-      let clientRequestId = uuidv4();
+      let clientRequestId = `instance:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
       headers = { ...headers, 'X-Boxel-Client-Request-Id': clientRequestId };
     }
@@ -157,14 +157,14 @@ export default class CardService extends Service {
   }
 
   async saveSource(url: URL, content: string) {
-    // let clientRequestId = uuidv4();
-    // this.clientRequestIds.add(clientRequestId);
+    let clientRequestId = `source:${uuidv4()}`;
+    this.clientRequestIds.add(clientRequestId);
 
     let response = await this.network.authedFetch(url, {
       method: 'POST',
       headers: {
         Accept: 'application/vnd.card+source',
-        // 'X-Boxel-Client-Request-Id': clientRequestId,
+        'X-Boxel-Client-Request-Id': clientRequestId,
       },
       body: content,
     });

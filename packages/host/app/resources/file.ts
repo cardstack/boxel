@@ -215,9 +215,27 @@ class _FileResource extends Resource<Args> {
         ? this.url.replace(/\.json$/, '')
         : this.url;
       if (invalidations.includes(normalizedURL)) {
-        console.log('read.perform in file resource because of invalidation');
+        console.log(
+          'maybe read.perform in file resource because of invalidation',
+        );
         console.log('this was the event', event);
-        this.read.perform();
+
+        if (
+          event.clientRequestId &&
+          event.clientRequestId.startsWith('source:')
+        ) {
+          if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
+            console.log(
+              'ignoring because request id is contained in known clientRequestIds',
+              event.clientRequestId,
+            );
+          } else {
+            console.log('read.perform happening');
+            this.read.perform();
+          }
+        } else {
+          console.log('ignoring because request id is ', event.clientRequestId);
+        }
       }
     });
   });

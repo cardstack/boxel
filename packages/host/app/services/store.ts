@@ -531,10 +531,16 @@ export default class StoreService extends Service implements StoreInterface {
             this.reloadTask.perform(liveInstance);
           } else {
             if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
-              console.debug(
-                'ignoring invalidation for card because clientRequestId is ours',
-                event,
-              );
+              if (event.clientRequestId.startsWith('source:')) {
+                console.debug(
+                  `store reloading ${invalidation} because of source clientRequestId ${event.clientRequestId}`,
+                );
+              } else {
+                console.debug(
+                  'ignoring invalidation for card because clientRequestId is ours',
+                  event,
+                );
+              }
             }
           }
         } else if (!this.identityContext.get(invalidation)) {
