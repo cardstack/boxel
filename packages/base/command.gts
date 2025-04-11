@@ -28,7 +28,7 @@ export class SaveCardInput extends CardDef {
 
 export class CopyCardInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
-  @field targetRealmUrl = contains(StringField);
+  @field targetUrl = contains(StringField);
   @field targetStackIndex = contains(NumberField);
 }
 

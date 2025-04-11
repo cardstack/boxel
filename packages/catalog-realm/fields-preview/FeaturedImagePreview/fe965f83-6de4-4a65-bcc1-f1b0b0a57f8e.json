@@ -1,0 +1,45 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "featuredImage": {
+        "imageUrl": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1479936343636-73cdc5aae0c3.jpeg",
+        "credit": "Photo by Unsplash",
+        "caption": "It's a new day, it's a new life.",
+        "altText": "Woman smiling with the glow of sun in the background",
+        "size": "actual",
+        "height": null,
+        "width": 300
+      },
+      "images": [
+        {
+          "imageUrl": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1521119989659-a83eee488004.jpeg",
+          "credit": "Photo by Unsplash - Ut velit modi sed aliquid molestiae in unde voluptas.",
+          "caption": "Nam voluptatem nostrum qui aperiam rerum non similique porro sed iusto placeat cum sequi dolore. ",
+          "altText": "Portrait of man on a rooftop",
+          "size": "actual",
+          "height": null,
+          "width": null
+        },
+        {
+          "imageUrl": "https://boxel-images.boxel.ai/app-assets/portraits/photo-1496345875659-11f7dd282d1d.jpeg",
+          "credit": "Photo by Unsplash - Quis quibusdam rem rerum maiores 33 galisum quidem.",
+          "caption": "Aut asperiores impedit nam aperiam dolore ex libero voluptate.",
+          "altText": "Man with dark sunglasses",
+          "size": "actual",
+          "height": null,
+          "width": null
+        }
+      ],
+      "title": "Featured Image Preview",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../fields-preview/featured-image",
+        "name": "FeaturedImagePreview"
+      }
+    }
+  }
+}

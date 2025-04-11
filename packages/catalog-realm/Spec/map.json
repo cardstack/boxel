@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": "",
+      "ref": {
+        "name": "Map",
+        "module": "../map/map"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Map",
+      "description": "Spec of Map",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../map/Map/livarska-ulica"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

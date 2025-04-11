@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "pgn": "",
+      "analysis": false,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../chess",
+        "name": "Chess"
+      }
+    }
+  }
+}

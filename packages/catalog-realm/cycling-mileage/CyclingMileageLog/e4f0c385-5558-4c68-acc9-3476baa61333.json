@@ -1,0 +1,58 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "target": 217,
+      "startDate": "2024-05-01",
+      "endDate": "2024-08-31",
+      "unit": "MI",
+      "entries": [
+        {
+          "date": "2024-05-12",
+          "origin": "Boston Common",
+          "destination": "Charles River Loop",
+          "distance": 17
+        },
+        {
+          "date": "2024-05-28",
+          "origin": "Harvard Square",
+          "destination": "Minuteman Bikeway to Bedford",
+          "distance": 25
+        },
+        {
+          "date": "2024-06-15",
+          "origin": "Copley Square",
+          "destination": "Emerald Necklace Loop",
+          "distance": 15
+        },
+        {
+          "date": "2024-07-04",
+          "origin": "Boston Harbor",
+          "destination": "Castle Island Loop",
+          "distance": 11
+        },
+        {
+          "date": "2024-07-21",
+          "origin": "Alewife Station",
+          "destination": "Battle Road Trail (Lexington/Concord)",
+          "distance": 28
+        },
+        {
+          "date": "2024-08-15",
+          "origin": "Jamaica Pond",
+          "destination": "Newton Hills Circuit",
+          "distance": 21
+        }
+      ],
+      "title": "Boston Metropolitan Discovery",
+      "description": "A collection of Boston's most scenic and historically significant cycling routes, featuring the iconic Charles River Path, historic Battle Road Trail, and the beautiful Emerald Necklace park system.",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cycling-mileage-log",
+        "name": "CyclingMileageLog"
+      }
+    }
+  }
+}

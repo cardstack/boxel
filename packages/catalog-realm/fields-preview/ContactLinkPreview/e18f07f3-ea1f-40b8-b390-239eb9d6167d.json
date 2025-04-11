@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "contactLink": {
+        "label": "Email",
+        "value": "hello@cardstack.com"
+      },
+      "contactLinks": [
+        {
+          "label": "Email",
+          "value": "hello@cardstack.com"
+        },
+        {
+          "label": "Phone",
+          "value": "+1 555 555 1234"
+        }
+      ],
+      "title": "Contact Link Preview",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../fields-preview/contact-link",
+        "name": "ContactLinkPreview"
+      }
+    }
+  }
+}

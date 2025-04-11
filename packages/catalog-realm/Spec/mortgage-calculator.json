@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "MortgageCalculator",
+        "module": "../mortgage-calculator/mortgage-calculator"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Mortgage Calculator",
+      "description": "Spec for Mortgage Calculator card",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../mortgage-calculator/MortgageCalculator/example"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

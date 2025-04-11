@@ -1,0 +1,27 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "longName": "Street Life",
+      "shortName": "Streets",
+      "slug": "street-life",
+      "pillColor": "#39B1FF",
+      "description": "Discovering the stories of streets and public spaces.",
+      "title": "Street Life",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "blog": {
+        "links": {
+          "self": "../BlogApp/ramped"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blog-category",
+        "name": "BlogCategory"
+      }
+    }
+  }
+}

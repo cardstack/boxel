@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Chess",
+        "module": "../chess/chess"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Chess",
+      "description": "Spec of Chess",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../chess/Chess/d2841188-34a0-4a23-af83-cb9365431f8f"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

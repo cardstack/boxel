@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "target": 1500,
+      "startDate": "2024-04-01",
+      "endDate": "2024-07-01",
+      "unit": "KM",
+      "entries": [
+        {
+          "date": "2024-05-03",
+          "origin": "Bandung Indah Plaza",
+          "destination": "Kamojang Mountain",
+          "distance": 65
+        },
+        {
+          "date": "2024-04-27",
+          "origin": "Cibiru Hilir",
+          "destination": "Lingkar Nagreg",
+          "distance": 60
+        },
+        {
+          "date": "2024-03-31",
+          "origin": "Cibiru Hilir",
+          "destination": "Sanona Gowes Cafe",
+          "distance": 75
+        }
+      ],
+      "title": "Cycling Route Indonesia",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../cycling-mileage-log",
+        "name": "CyclingMileageLog"
+      }
+    }
+  }
+}

@@ -11,7 +11,7 @@ import {
 } from '../../icons.gts';
 import RadioInput from '../radio-input/index.gts';
 
-interface ViewItem {
+export interface ViewItem {
   icon: ComponentLike;
   id: string;
 }

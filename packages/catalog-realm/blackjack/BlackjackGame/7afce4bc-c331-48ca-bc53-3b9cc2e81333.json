@@ -1,0 +1,53 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "playerName": "Jack Black",
+      "playerChips": 4740,
+      "currentBet": 100,
+      "gameState": "playerTurn",
+      "gameMessage": "Your turn. Hit or Stand?",
+      "statistics": {
+        "wins": 1,
+        "losses": 2,
+        "earnings": -260
+      },
+      "playerScore": null,
+      "dealerScore": null,
+      "dealerHand": [
+        {
+          "suit": "diamonds",
+          "value": "Q",
+          "faceUp": true
+        },
+        {
+          "suit": "diamonds",
+          "value": "A",
+          "faceUp": false
+        }
+      ],
+      "playerHand": [
+        {
+          "suit": "diamonds",
+          "value": "6",
+          "faceUp": true
+        },
+        {
+          "suit": "hearts",
+          "value": "J",
+          "faceUp": true
+        }
+      ],
+      "casinoName": "Casino de Monte-Carlo",
+      "title": "Blackjack Game",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../blackjack",
+        "name": "BlackjackGame"
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "BlogCategory",
+        "module": "../blog-app/blog-category"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Blog Category",
+      "description": "Spec for Blog Category card",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../blog-app/BlogCategory/city-design"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
