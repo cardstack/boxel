@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "User",
-        "module": "../user/user"
+        "name": "Task Planner",
+        "module": "../components/kanban/task-planner"
       },
-      "specType": "card",
+      "specType": "component",
       "containedExamples": [],
-      "title": "User",
-      "description": "Spec for User Card",
+      "title": "Task Planner",
+      "description": "Spec for Kanban Task Planner component",
       "thumbnailURL": null
     },
     "relationships": {},

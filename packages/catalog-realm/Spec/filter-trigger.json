@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "User",
-        "module": "../user/user"
+        "name": "Filter Trigger",
+        "module": "../components/kanban/filter-trigger"
       },
-      "specType": "card",
+      "specType": "component",
       "containedExamples": [],
-      "title": "User",
-      "description": "Spec for User Card",
+      "title": "Filter Trigger",
+      "description": "Spec for Kanban Filter Trigger component",
       "thumbnailURL": null
     },
     "relationships": {},

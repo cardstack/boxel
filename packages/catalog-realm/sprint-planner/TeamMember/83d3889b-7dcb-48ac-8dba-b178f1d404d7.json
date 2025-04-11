@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Justin",
+      "email": "justin.thong@cardstack.com",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "team": {
+        "links": {
+          "self": "../Team/4418bdb4-de70-4f97-a8f6-f5fb0359fef3"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../sprint-task",
+        "name": "TeamMember"
+      }
+    }
+  }
+}

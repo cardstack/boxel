@@ -8,7 +8,7 @@
     "relationships": {
       "startHere.0": {
         "links": {
-          "self": "./Listing/blog-listing"
+          "self": "./AppListing/blog-listing"
         }
       },
       "startHere.1": {
@@ -54,6 +54,11 @@
       "new.7": {
         "links": {
           "self": "./SkillListing/talk-like-a-pirate"
+        }
+      },
+      "new.8": {
+        "links": {
+          "self": "./AppListing/fb710c2b-f904-41f4-9920-7390cda42dd4"
         }
       },
       "featured.0": {

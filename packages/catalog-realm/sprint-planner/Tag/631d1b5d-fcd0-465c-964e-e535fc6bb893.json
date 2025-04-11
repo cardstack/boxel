@@ -2,14 +2,15 @@
   "data": {
     "type": "card",
     "attributes": {
-      "name": "Health and Fitness",
+      "name": "Ai",
+      "color": null,
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../catalog-app/listing/category",
-        "name": "Category"
+        "module": "../../tag/tag",
+        "name": "Tag"
       }
     }
   }

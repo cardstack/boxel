@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "User",
-        "module": "../user/user"
+        "name": "Filter Dropdown Item",
+        "module": "../components/kanban/filter-dropdown-item"
       },
-      "specType": "card",
+      "specType": "component",
       "containedExamples": [],
-      "title": "User",
-      "description": "Spec for User Card",
+      "title": "Filter Dropdown Item",
+      "description": "Spec for Kanban Filter Dropdown Item component",
       "thumbnailURL": null
     },
     "relationships": {},
