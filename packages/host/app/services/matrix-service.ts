@@ -759,24 +759,22 @@ export default class MatrixService extends Service {
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
-    if (submode === 'interact') {
-      let mappings = await basicMappings(this.loaderService.loader);
-      // Open cards are attached automatically
-      // If they are not attached, the user is not allowing us to
-      // modify them
-      attachedOpenCards = attachedCards.filter((c) =>
-        (context?.openCardIds ?? []).includes(c.id),
+    let mappings = await basicMappings(this.loaderService.loader);
+    // Open cards are attached automatically
+    // If they are not attached, the user is not allowing us to
+    // modify them
+    attachedOpenCards = attachedCards.filter((c) =>
+      (context?.openCardIds ?? []).includes(c.id),
+    );
+    // Generate tool calls for patching currently open cards permitted for modification
+    for (let attachedOpenCard of attachedOpenCards) {
+      let patchSpec = generateJsonSchemaForCardType(
+        attachedOpenCard.constructor as typeof CardDef,
+        this.cardAPI,
+        mappings,
       );
-      // Generate tool calls for patching currently open cards permitted for modification
-      for (let attachedOpenCard of attachedOpenCards) {
-        let patchSpec = generateJsonSchemaForCardType(
-          attachedOpenCard.constructor as typeof CardDef,
-          this.cardAPI,
-          mappings,
-        );
-        if (this.realm.canWrite(attachedOpenCard.id)) {
-          tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
-        }
+      if (this.realm.canWrite(attachedOpenCard.id)) {
+        tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
       }
     }
 
