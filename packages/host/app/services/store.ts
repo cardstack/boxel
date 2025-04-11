@@ -22,6 +22,7 @@ import {
   Deferred,
   delay,
   realmURL as realmURLSymbol,
+  localId,
   type Store as StoreInterface,
   type Query,
   type PatchData,
@@ -242,7 +243,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.guardAgainstUnknownInstances(instance);
     }
     await this.assertLocalIdMapping(instance);
-    this.identityContext.set(instance.id, instance);
+    this.identityContext.set(instance.id ?? instance[localId], instance);
 
     if (!opts?.doNotPersist) {
       if (instance.id) {

@@ -112,6 +112,18 @@ module('Unit | identity-context garbage collection', function (hooks) {
     });
 
     let idResolver = new IDResolver();
+    let referenceCount: ReferenceCount = new Map();
+    let identityContext = new IdentityContext({
+      idResolver,
+      referenceCount,
+    });
+
+    identityContext.set(jade[localId], jade);
+    identityContext.set(germaine[localId], germaine);
+    identityContext.set(queenzy[localId], queenzy);
+    identityContext.set(boris[localId], boris);
+    identityContext.set(hassan[localId], hassan);
+
     await doSave?.({
       idResolver,
       jade,
@@ -120,18 +132,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
       boris,
       hassan,
     });
-
-    let referenceCount: ReferenceCount = new Map();
-    let identityContext = new IdentityContext({
-      idResolver,
-      referenceCount,
-    });
-
-    identityContext.set(jade.id, jade);
-    identityContext.set(germaine.id, germaine);
-    identityContext.set(queenzy.id, queenzy);
-    identityContext.set(boris.id, boris);
-    identityContext.set(hassan.id, hassan);
 
     return {
       idResolver,

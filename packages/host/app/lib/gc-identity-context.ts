@@ -97,8 +97,8 @@ export default class IdentityContextWithGarbageCollection
     if (remoteId) {
       localId = this.#idResolver.getLocalId(remoteId);
       if (localId) {
-        this.#cards.delete(remoteId);
-        this.#cardErrors.delete(remoteId);
+        this.#cards.delete(localId);
+        this.#cardErrors.delete(localId);
         this.#gcCandidates.delete(localId);
       }
     }
