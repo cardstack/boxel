@@ -137,6 +137,7 @@ class Isolated extends Component<typeof CardsGrid> {
               @query={{this.query}}
               @format='fitted'
               @realms={{this.realms}}
+              @isLive={{true}}
             >
 
               <:loading>

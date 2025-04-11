@@ -6,44 +6,99 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+const ELIGIBLE_FOR_GC = true;
+const NOT_ELIGIBLE_FOR_GC = false;
+
+export type Subscriber = Map<string, { resources: unknown[] }>;
+
+type LocalId = string;
+type InstanceGraph = Map<LocalId, Set<LocalId>>;
+
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
-  #cards = new Map<
-    string,
-    {
-      card: CardDef | undefined;
-    }
-  >();
-  #gcCandidates: Set<string> = new Set();
+  #cards = new Map<string, CardDef | null>();
+  #gcCandidates: Set<LocalId> = new Set();
+  #api: typeof CardAPI;
+  #remoteIdSubscribers: Subscriber;
+  #localIdSubscribers: Subscriber;
+  #localIds: Map<string, string | null>;
 
-  constructor(
-    private api: typeof CardAPI,
-    private subscribers: Map<string, { resources: unknown[] }>,
-  ) {}
-
-  get(url: string): CardDef | undefined {
-    let instance = this.#cards.get(url)?.card;
-    this.#gcCandidates.delete(url);
-    return instance;
+  constructor({
+    api,
+    remoteIdSubscribers,
+    localIdSubscribers,
+    localIds,
+  }: {
+    api: typeof CardAPI;
+    remoteIdSubscribers: Subscriber;
+    localIdSubscribers: Subscriber;
+    localIds: Map<string, string | null>;
+  }) {
+    this.#api = api;
+    this.#remoteIdSubscribers = remoteIdSubscribers;
+    this.#localIdSubscribers = localIdSubscribers;
+    this.#localIds = localIds;
   }
 
-  set(url: string, instance: CardDef | undefined): void {
+  get(id: string): CardDef | undefined {
+    let instance = this.#cards.get(id);
+    let remoteId = this.#localIds.get(id);
+    if (!instance && remoteId) {
+      instance = this.#cards.get(remoteId);
+    }
+
+    if (instance && id === instance[this.#api.localId]) {
+      this.#gcCandidates.delete(id);
+    } else if (instance && id === instance.id) {
+      let [localId] =
+        [...this.#localIds.entries()].find(
+          ([_local, remote]) => remote === id,
+        ) ?? [];
+      if (localId) {
+        this.#gcCandidates.delete(localId);
+      }
+    }
+    return instance ?? undefined;
+  }
+
+  set(id: string, instance: CardDef | null): void {
     if (instance) {
-      this.#gcCandidates.delete(url);
+      this.#gcCandidates.delete(id);
+      this.#gcCandidates.delete(instance[this.#api.localId]);
     }
-    this.#cards.set(url, { card: instance });
+    // make entries for both the local ID and the remote ID in the identity map
+    this.#cards.set(id, instance);
+    if (instance && id === instance[this.#api.localId]) {
+      this.#cards.set(instance.id, instance);
+    } else if (instance && id === instance.id) {
+      this.#cards.set(instance[this.#api.localId], instance);
+    }
+    if (!instance) {
+      let [localId] =
+        [...this.#localIds.entries()].find(
+          ([_local, remote]) => remote === id,
+        ) ?? [];
+      if (localId) {
+        this.#cards.set(localId, instance);
+      }
+    }
   }
 
-  delete(url: string): void {
-    this.#cards.delete(url);
-    this.#gcCandidates.delete(url);
+  delete(id: string): void {
+    this.#cards.delete(id);
+    this.#gcCandidates.delete(id);
+    let [localId] =
+      [...this.#localIds.entries()].find(([_local, remote]) => remote === id) ??
+      [];
+    if (localId) {
+      this.#cards.delete(localId);
+      this.#gcCandidates.delete(localId);
+    }
   }
 
   reset() {
-    for (let url of this.#cards.keys()) {
-      this.#cards.set(url, { card: undefined });
-    }
+    this.#cards.clear();
     this.#gcCandidates.clear();
   }
 
@@ -53,69 +108,93 @@ export default class IdentityContextWithGarbageCollection
 
   sweep() {
     let consumptionGraph = this.makeConsumptionGraph();
-    for (let { card: instance } of this.#cards.values()) {
+    let cache = new Map<string, boolean>();
+    let visited = new WeakSet<CardDef>();
+    for (let instance of this.#cards.values()) {
       if (!instance) {
         continue;
       }
-      if (this.gcVisit(instance.id, consumptionGraph)) {
-        if (this.#gcCandidates.has(instance.id)) {
-          console.log(`garbage collecting instance ${instance.id} from store`);
+      if (visited.has(instance)) {
+        continue;
+      }
+      visited.add(instance);
+      if (
+        this.isEligibleForGC(
+          instance[this.#api.localId],
+          consumptionGraph,
+          cache,
+        )
+      ) {
+        if (this.#gcCandidates.has(instance[this.#api.localId])) {
+          console.log(
+            `garbage collecting instance ${instance[this.#api.localId]} (remote id: ${instance.id}) from store`,
+          );
           // brand the instance to make it easier for debugging
           (instance as unknown as any)[
             Symbol.for('__instance_detached_from_store')
           ] = true;
-          this.delete(instance.id);
+          this.delete(instance[this.#api.localId]);
+          if (instance.id) {
+            this.delete(instance.id);
+          }
         } else {
-          this.#gcCandidates.add(instance.id);
+          this.#gcCandidates.add(instance[this.#api.localId]);
         }
       } else {
-        this.#gcCandidates.delete(instance.id);
+        this.#gcCandidates.delete(instance[this.#api.localId]);
       }
     }
   }
 
-  gcVisit(
-    id: string,
-    consumptionGraph: Map<string, string[]>,
-    hasSubscribers = new Map<string, boolean>(),
+  isEligibleForGC(
+    localId: string,
+    consumptionGraph: InstanceGraph,
+    cache: Map<LocalId, boolean>,
   ): boolean {
-    let cached = hasSubscribers.get(id);
+    let remoteId = this.#localIds.get(localId);
+    let cached = cache.get(localId);
     if (cached !== undefined) {
       return cached;
     }
 
-    let subscribers = this.subscribers.get(id);
-    if (subscribers && subscribers.resources.length > 0) {
-      hasSubscribers.set(id, true);
-      return false;
+    let subscribers = [
+      ...((remoteId
+        ? this.#remoteIdSubscribers.get(remoteId)?.resources
+        : undefined) ?? []),
+      ...(this.#localIdSubscribers.get(localId)?.resources ?? []),
+    ];
+    if (subscribers.length > 0) {
+      cache.set(localId, NOT_ELIGIBLE_FOR_GC);
+      return NOT_ELIGIBLE_FOR_GC;
     }
-    let consumers = consumptionGraph.get(id);
-    if (!consumers || consumers.length === 0) {
-      hasSubscribers.set(id, false);
-      return true;
+    let consumers = consumptionGraph.get(localId);
+    if (!consumers || consumers.size === 0) {
+      cache.set(localId, ELIGIBLE_FOR_GC);
+      return ELIGIBLE_FOR_GC;
     }
 
-    let result = consumers
-      .map((c) => this.gcVisit(c, consumptionGraph, hasSubscribers))
-      .some((result) => result);
-    hasSubscribers.set(id, result);
+    // you are eligible for GC if all your consumers are also eligible for GC
+    let result = [...consumers]
+      .map((c) => this.isEligibleForGC(c, consumptionGraph, cache))
+      .every((result) => result);
+    cache.set(localId, result);
     return result;
   }
 
-  private makeConsumptionGraph(): Map<string, string[]> {
-    let consumptionGraph = new Map<string, string[]>();
-    for (let { card: instance } of this.#cards.values()) {
+  private makeConsumptionGraph(): InstanceGraph {
+    let consumptionGraph: InstanceGraph = new Map();
+    for (let instance of this.#cards.values()) {
       if (!instance) {
         continue;
       }
-      let deps = getDeps(this.api, instance);
+      let deps = getDeps(this.#api, instance);
       for (let dep of deps) {
-        let consumers = consumptionGraph.get(dep.id);
+        let consumers = consumptionGraph.get(dep[this.#api.localId]);
         if (!consumers) {
-          consumers = [];
-          consumptionGraph.set(dep.id, consumers);
+          consumers = new Set();
+          consumptionGraph.set(dep[this.#api.localId], consumers);
         }
-        consumers.push(instance.id);
+        consumers.add(instance[this.#api.localId]);
       }
     }
     return consumptionGraph;
