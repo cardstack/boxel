@@ -142,8 +142,7 @@ puts "💎"
 </pre>`,
       isStreaming: false,
     });
-
-    await waitFor('.view-lines');
+    await waitUntil(() => document.querySelectorAll('.view-line').length > 3);
 
     assert.equal(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
@@ -168,7 +167,7 @@ puts "💎"
       isStreaming: false,
     });
 
-    await waitFor('.view-lines');
+    await waitUntil(() => document.querySelectorAll('.view-line').length > 4);
 
     assert.equal(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
