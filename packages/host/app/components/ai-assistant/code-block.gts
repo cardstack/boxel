@@ -178,6 +178,18 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
 
       editor.setModel({ original: originalModel, modified: modifiedModel });
 
+      const contentHeight = editor.getModifiedEditor().getContentHeight();
+      if (contentHeight > 0) {
+        element.style.height = `${contentHeight}px`;
+      }
+
+      editor.getModifiedEditor().onDidContentSizeChange(() => {
+        const newHeight = editor.getModifiedEditor().getContentHeight();
+        if (newHeight > 0) {
+          element.style.height = `${newHeight}px`;
+        }
+      });
+
       this.monacoState = {
         editor,
       };
@@ -286,6 +298,18 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
 
       model.setValue(code);
 
+      const contentHeight = editor.getContentHeight();
+      if (contentHeight > 0) {
+        element.style.height = `${contentHeight}px`;
+      }
+
+      editor.onDidContentSizeChange(() => {
+        const newHeight = editor.getContentHeight();
+        if (newHeight > 0) {
+          element.style.height = `${newHeight}px`;
+        }
+      });
+
       this.monacoState = {
         editor,
       };
@@ -318,6 +342,10 @@ class CodeBlockEditor extends Component<Signature> {
       enabled: false,
     },
     fontSize: 10,
+    scrollBeyondLastLine: false,
+    padding: {
+      bottom: 8,
+    },
   };
 
   <template>
@@ -326,7 +354,7 @@ class CodeBlockEditor extends Component<Signature> {
         margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
         margin-left: calc(-1 * var(--boxel-sp));
-        height: 120px;
+        max-height: 250px;
       }
     </style>
     <div
@@ -359,6 +387,10 @@ class CodeBlockDiffEditor extends Component<Signature> {
     fontSize: 10,
     renderOverviewRuler: false,
     automaticLayout: true,
+    scrollBeyondLastLine: false,
+    padding: {
+      bottom: 8,
+    },
   };
 
   <template>
@@ -367,7 +399,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
         margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
         margin-left: calc(-1 * var(--boxel-sp));
-        height: 120px;
+        max-height: 250px;
       }
 
       :deep(.line-insert) {
