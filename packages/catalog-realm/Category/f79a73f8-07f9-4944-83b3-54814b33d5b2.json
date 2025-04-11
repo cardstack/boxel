@@ -3,14 +3,13 @@
     "type": "card",
     "attributes": {
       "name": "Health and Fitness",
-      "color": "#1EDF67",
       "description": null,
       "thumbnailURL": null
     },
     "meta": {
       "adoptsFrom": {
-        "module": "../tag/tag",
-        "name": "Tag"
+        "module": "../catalog-app/listing/category",
+        "name": "Category"
       }
     }
   }
