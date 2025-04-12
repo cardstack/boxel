@@ -179,7 +179,7 @@ export class SearchResource extends Resource<Args> {
                     collectionDoc.data.map(async (jsonAPIResource) =>
                       this.store.createSubscriber({
                         resource: this,
-                        urlOrDoc: { data: jsonAPIResource },
+                        idOrDoc: { data: jsonAPIResource },
                         isAutoSaved: this.isAutoSaved,
                         isLive: this.isLive,
                       }),
@@ -187,7 +187,7 @@ export class SearchResource extends Resource<Args> {
                   )
                 ).filter(
                   (p) => p.status === 'fulfilled',
-                ) as PromiseFulfilledResult<{ card: CardDef }>[]
+                ) as PromiseFulfilledResult<{ instance: CardDef }>[]
               ).map((p) => p.value)
             );
           }),
@@ -208,7 +208,7 @@ export class SearchResource extends Resource<Args> {
       this._instances.splice(
         0,
         this._instances.length,
-        ...results.map(({ card }) => card),
+        ...results.map(({ instance }) => instance),
       );
     } finally {
       waiter.endAsync(token);

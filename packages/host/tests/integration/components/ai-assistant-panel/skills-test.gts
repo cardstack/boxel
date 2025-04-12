@@ -379,7 +379,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
 
-    console.log(getRoomEvents(roomId));
     const initialCardFragmentEvents = getRoomEvents(roomId).filter(
       (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
     );
@@ -440,6 +439,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     // The skill card will be auto-attached since it is open
     await click('[data-test-send-message-btn]');
     await waitFor('[data-test-message-idx]');
+
+    console.log(getRoomEvents(roomId));
     const finalEvents = getRoomEvents(roomId);
     const finalCommandDefEvents = finalEvents.filter(
       (e) => e.content?.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,

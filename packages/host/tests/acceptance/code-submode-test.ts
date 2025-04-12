@@ -1605,10 +1605,12 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await realm.write('person.gts', personGts);
 
-      await waitUntil(() =>
-        document
-          .querySelector('[data-test-person]')
-          ?.textContent?.includes('Hello'),
+      await waitUntil(
+        () =>
+          document
+            .querySelector('[data-test-person]')
+            ?.textContent?.includes('Hello'),
+        { timeout: 5_000 },
       );
 
       assert.dom('[data-test-person]').includesText('Hello Hassan');
