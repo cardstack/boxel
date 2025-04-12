@@ -80,7 +80,7 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       @field firstName = contains(StringField);
       @field firstLetterOfTheName = contains(StringField, {
         computeVia: function (this: Person) {
-          return this.firstName?.[0];
+          return this.firstName[0];
         },
       });
       @field title = contains(StringField, {

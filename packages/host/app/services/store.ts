@@ -461,11 +461,6 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async guardAgainstUnknownInstances(instance: CardDef) {
-    if (instance.id && this.identityContext.get(instance.id) !== instance) {
-      throw new Error(
-        `tried to add ${instance.id} to the store, but the store already has a different instance with this id. Please obtain the instances that already exists from the store`,
-      );
-    }
     let api = await this.cardService.getAPI();
     let deps = getDeps(api, instance);
     for (let dep of deps) {
@@ -505,6 +500,7 @@ export default class StoreService extends Service implements StoreInterface {
       // the code changes have destabilized our identity context so we
       // need to rebuild it
       this.identityContext.reset();
+      this.idResolver.reset();
     }
 
     for (let invalidation of invalidations) {
@@ -698,6 +694,10 @@ export default class StoreService extends Service implements StoreInterface {
       let errorResponse = processCardError(url, error);
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
+      console.error(
+        `error getting instance ${JSON.stringify(urlOrDoc, null, 2)}`,
+        error,
+      );
       return cardError;
     } finally {
       if (url) {

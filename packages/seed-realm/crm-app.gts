@@ -9,6 +9,7 @@ import {
 import { SearchInput } from './components/search-input';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import { tracked } from '@glimmer/tracking';
 import { TrackedMap } from 'tracked-built-ins';
 import { restartableTask } from 'ember-concurrency';
@@ -22,7 +23,6 @@ import {
   realmURL,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import afterFirstRender from 'https://cardstack.com/base/after-first-render';
 
 import { not, eq } from '@cardstack/boxel-ui/helpers';
 import {
@@ -269,11 +269,12 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
 
   @tracked private searchKey = '';
 
-  private loadAllFilters = () => {
-    this.loadAllFiltersTask.perform();
-  };
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.loadAllFilters.perform();
+  }
 
-  private loadAllFiltersTask = restartableTask(async () => {
+  private loadAllFilters = restartableTask(async () => {
     let url = `${this.realms[0]}_types`;
     let response = await fetch(url, {
       headers: {
@@ -387,9 +388,9 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
 
   //query for tabs and filters
   get query() {
-    const { loadAllFiltersTask, activeFilter, activeTabId } = this;
+    const { loadAllFilters, activeFilter, activeTabId } = this;
 
-    if (!loadAllFiltersTask.isIdle || !activeFilter?.query) return;
+    if (!loadAllFilters.isIdle || !activeFilter?.query) return;
 
     const defaultFilter = [
       {
@@ -546,7 +547,6 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
   }
 
   <template>
-    {{afterFirstRender this.loadAllFilters}}
     <TabbedHeader
       class='crm-app-header'
       @tabs={{TABS}}

@@ -157,7 +157,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
           @field friends = linksToMany(Pet);
           @field firstLetterOfTheName = contains(StringCard, {
             computeVia: function (this: Chain) {
-              return this.firstName?.[0];
+              return this.firstName[0];
             },
           });
           @field title = contains(StringCard, {

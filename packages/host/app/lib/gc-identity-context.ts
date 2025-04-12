@@ -46,6 +46,11 @@ export class IDResolver {
   getLocalId(remoteId: string) {
     return this.#localIds.get(remoteId);
   }
+
+  reset() {
+    this.#localIds = new Map();
+    this.#remoteIds = new Map();
+  }
 }
 
 export default class IdentityContextWithGarbageCollection
