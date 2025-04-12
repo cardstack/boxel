@@ -230,7 +230,7 @@ module('Integration | operator-mode', function (hooks) {
       @field friends = linksToMany(Pet);
       @field firstLetterOfTheName = contains(StringField, {
         computeVia: function (this: Person) {
-          return this.firstName[0];
+          return this.firstName?.[0];
         },
       });
       @field title = contains(StringField, {

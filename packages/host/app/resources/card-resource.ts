@@ -41,15 +41,14 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-    // prevent a card from being available too early. because our identity map
-    // is tracked, intermediate card deserialization work is visible to the
-    // outside word which can result in rendering cards before they are ready
-    // (have not had property values0 assigned yet).
-    if (!this.isLoaded) {
-      return undefined;
-    }
+    // use this.isLoaded to prevent a card from being available too early.
+    // because our identity map is tracked, intermediate card deserialization
+    // work is visible to the outside word which can result in rendering cards
+    // before they are ready and have not had property values assigned yet.
     let maybeCard = this.store.peek(this.#id);
-    return maybeCard && isCardInstance(maybeCard) ? maybeCard : undefined;
+    return this.isLoaded && maybeCard && isCardInstance(maybeCard)
+      ? maybeCard
+      : undefined;
   }
 
   get cardError() {
@@ -65,10 +64,7 @@ export class CardResource extends Resource<Args> {
   }
 
   get isLoaded() {
-    if (!this.#id) {
-      return undefined;
-    }
-    return this.store.isLoaded(this.#id);
+    return !!this.#id && this.store.isLoaded(this.#id);
   }
 
   get autoSaveState() {
