@@ -22,7 +22,7 @@ import {
   Deferred,
   delay,
   realmURL as realmURLSymbol,
-  localId,
+  localId as localIdSymbol,
   type Store as StoreInterface,
   type Query,
   type PatchData,
@@ -242,8 +242,8 @@ export default class StoreService extends Service implements StoreInterface {
       instance = instanceOrDoc;
       this.guardAgainstUnknownInstances(instance);
     }
-    await this.assertLocalIdMapping(instance);
-    this.identityContext.set(instance.id ?? instance[localId], instance);
+    this.assertLocalIdMapping(instance);
+    this.identityContext.set(instance.id ?? instance[localIdSymbol], instance);
 
     if (!opts?.doNotPersist) {
       if (instance.id) {
@@ -288,7 +288,7 @@ export default class StoreService extends Service implements StoreInterface {
     patchData: PatchData,
   ): Promise<void> {
     this.guardAgainstUnknownInstances(instance);
-    await this.assertLocalIdMapping(instance);
+    this.assertLocalIdMapping(instance);
     let linkedCards = await this.loadPatchedInstances(
       patchData,
       new URL(instance.id),
@@ -420,16 +420,23 @@ export default class StoreService extends Service implements StoreInterface {
     });
   }
 
-  private async assertLocalIdMapping(instance: CardDef, remoteId?: string) {
-    let api = await this.cardService.getAPI();
-    let localId = instance[api.localId];
-    let existingRemoteId = this.idResolver.getRemoteId(localId);
-    if (existingRemoteId && instance.id !== existingRemoteId) {
-      throw new Error(
-        `the instance ${instance.constructor.name} with local id ${localId} has conflicting remote id: ${instance.id} and ${existingRemoteId}`,
-      );
+  private assertLocalIdMapping(instance: CardDef, remoteId?: string) {
+    let localId = instance[localIdSymbol];
+    if (instance.id) {
+      let existingLocalId = this.idResolver.getLocalId(instance.id);
+      if (existingLocalId && localId !== existingLocalId) {
+        throw new Error(
+          `the instance ${instance.constructor.name} with [remote id: ${instance.id} local id: ${localId}] has conflicting instance id in store: [remote id: ${instance.id} local id: ${existingLocalId}]`,
+        );
+      }
     }
-    this.idResolver.addIdPair(localId, instance.id ?? remoteId);
+
+    if (instance.id) {
+      this.idResolver.addIdPair(localId, instance.id);
+    }
+    if (remoteId) {
+      this.idResolver.addIdPair(localId, remoteId);
+    }
   }
 
   private async createFromSerialized<T extends CardDef>(
@@ -571,7 +578,13 @@ export default class StoreService extends Service implements StoreInterface {
   });
 
   private onInstanceUpdated = (instance: BaseDef) => {
-    if ('id' in instance && typeof instance.id === 'string') {
+    if (
+      isCardInstance(instance) &&
+      'id' in instance &&
+      typeof instance.id === 'string'
+    ) {
+      let autoSaveState = this.initOrGetAutoSaveState(instance.id);
+      autoSaveState.hasUnsavedChanges = true;
       this.initiateAutoSaveTask.perform(instance.id);
     }
   };
@@ -675,7 +688,10 @@ export default class StoreService extends Service implements StoreInterface {
         doc,
         new URL(doc.data.id),
       );
-      await this.assertLocalIdMapping(instance);
+      // in case the url is an alias for the id (like index card without the
+      // "/index") we also add this
+      this.identityContext.set(url, instance);
+      this.assertLocalIdMapping(instance, url);
       deferred?.fulfill(instance);
       return instance as T;
     } catch (error: any) {
@@ -697,7 +713,6 @@ export default class StoreService extends Service implements StoreInterface {
         return;
       }
       let autoSaveState = this.initOrGetAutoSaveState(id);
-      autoSaveState.hasUnsavedChanges = true;
       if (!opts?.isImmediate) {
         await timeout(this.environmentService.autoSaveDelayMs);
       }
@@ -825,7 +840,7 @@ export default class StoreService extends Service implements StoreInterface {
           realmURL = new URL(defaultRealmHref);
         }
         let json = await this.saveCardDocument(doc, realmURL);
-        await this.assertLocalIdMapping(instance, json.data.id);
+        this.assertLocalIdMapping(instance, json.data.id);
         let isNew = !instance.id;
 
         // if the card changed while the save was in flight then don't load the

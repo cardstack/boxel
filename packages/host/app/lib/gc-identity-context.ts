@@ -26,16 +26,21 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 // opposing id, it will trigger a glimmer invalidation on all the cards in the
 // identity map
 export class IDResolver {
-  #remoteIds = new Map<string, string>();
-  #localIds = new Map<string, string>();
+  #remoteIds = new Map<string, string[]>(); // localId => remoteId[]
+  #localIds = new Map<string, string>(); // remoteId => localId
 
   addIdPair(localId: string, remoteId: string) {
-    this.#remoteIds.set(localId, remoteId);
+    let remoteIds = this.#remoteIds.get(localId);
+    if (!remoteIds) {
+      remoteIds = [];
+      this.#remoteIds.set(localId, remoteIds);
+    }
+    remoteIds.push(remoteId);
     this.#localIds.set(remoteId, localId);
   }
 
-  getRemoteId(localId: string) {
-    return this.#remoteIds.get(localId);
+  getRemoteIds(localId: string) {
+    return this.#remoteIds.get(localId) ?? [];
   }
 
   getLocalId(remoteId: string) {
@@ -88,10 +93,12 @@ export default class IdentityContextWithGarbageCollection
 
     if (localId) {
       this.#gcCandidates.delete(localId);
-      remoteId = this.#idResolver.getRemoteId(localId);
-      if (remoteId) {
-        this.#cards.delete(remoteId);
-        this.#cardErrors.delete(remoteId);
+      let remoteIds = this.#idResolver.getRemoteIds(localId);
+      if (remoteIds.length) {
+        for (let id of remoteIds) {
+          this.#cards.delete(id);
+          this.#cardErrors.delete(id);
+        }
       }
     }
     if (remoteId) {
@@ -100,6 +107,13 @@ export default class IdentityContextWithGarbageCollection
         this.#cards.delete(localId);
         this.#cardErrors.delete(localId);
         this.#gcCandidates.delete(localId);
+        let otherRemoteIds = this.#idResolver
+          .getRemoteIds(localId)
+          .filter((i) => i !== remoteId);
+        for (let id of otherRemoteIds) {
+          this.#cards.delete(id);
+          this.#cardErrors.delete(id);
+        }
       }
     }
   }
@@ -160,7 +174,7 @@ export default class IdentityContextWithGarbageCollection
     let localId = isLocalId(id) ? id : undefined;
     let remoteId = !isLocalId(id) ? id : undefined;
     if (localId) {
-      remoteId = this.#idResolver.getRemoteId(localId);
+      remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
     }
     if (remoteId) {
       localId = this.#idResolver.getLocalId(remoteId);
@@ -178,14 +192,14 @@ export default class IdentityContextWithGarbageCollection
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
     let localId = isLocalId(id) ? id : undefined;
-    let remoteId = !isLocalId(id) ? id : undefined;
+    let remoteIds = !isLocalId(id) ? [id] : [];
     if (localId) {
-      remoteId = this.#idResolver.getRemoteId(localId);
+      remoteIds = this.#idResolver.getRemoteIds(localId);
     }
-    if (remoteId) {
+    if (remoteIds.length > 0) {
       localId =
         (instance ? instance[localIdSymbol] : undefined) ??
-        this.#idResolver.getLocalId(remoteId);
+        this.#idResolver.getLocalId(remoteIds[0]);
     }
 
     if (localId) {
@@ -197,9 +211,11 @@ export default class IdentityContextWithGarbageCollection
       // instances always have a local ID
       setIfDifferent(this.#cards, localId!, instance);
       this.#cardErrors.delete(localId!);
-      if (remoteId) {
-        setIfDifferent(this.#cards, remoteId, instance);
-        this.#cardErrors.delete(remoteId);
+      if (remoteIds.length > 0) {
+        for (let remoteId of remoteIds) {
+          setIfDifferent(this.#cards, remoteId, instance);
+          this.#cardErrors.delete(remoteId);
+        }
       }
     }
 
@@ -208,9 +224,11 @@ export default class IdentityContextWithGarbageCollection
         setIfDifferent(this.#cardErrors, localId, error);
         this.#cards.delete(localId);
       }
-      if (remoteId) {
-        setIfDifferent(this.#cardErrors, remoteId, error);
-        this.#cards.delete(remoteId);
+      if (remoteIds.length > 0) {
+        for (let remoteId of remoteIds) {
+          setIfDifferent(this.#cardErrors, remoteId, error);
+          this.#cards.delete(remoteId);
+        }
       }
     }
   }
@@ -220,15 +238,17 @@ export default class IdentityContextWithGarbageCollection
     consumptionGraph: InstanceGraph,
     cache: Map<LocalId, boolean>,
   ): boolean {
-    let remoteId = this.#idResolver.getRemoteId(localId);
+    let remoteIds = this.#idResolver.getRemoteIds(localId);
     let cached = cache.get(localId);
     if (cached !== undefined) {
       return cached;
     }
 
     let referenceCount =
-      (remoteId ? (this.#referenceCount.get(remoteId) ?? 0) : 0) +
-      (localId ? (this.#referenceCount.get(localId) ?? 0) : 0);
+      remoteIds.reduce(
+        (sum, id) => sum + (this.#referenceCount.get(id) ?? 0),
+        0,
+      ) + (localId ? (this.#referenceCount.get(localId) ?? 0) : 0);
     if (referenceCount > 0) {
       cache.set(localId, NOT_ELIGIBLE_FOR_GC);
       return NOT_ELIGIBLE_FOR_GC;

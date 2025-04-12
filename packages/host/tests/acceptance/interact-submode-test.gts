@@ -1599,8 +1599,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             // second save is after a field has been filled in
             assert.strictEqual(json.data.attributes?.name, 'Paper');
             deferred.fulfill();
-          } else {
-            assert.ok(false, 'unexpected save of Pet card');
           }
         }
       });

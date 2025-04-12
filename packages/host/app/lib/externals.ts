@@ -1,10 +1,12 @@
 import * as emberComponent from '@ember/component';
+import * as emberComponentHelper from '@ember/component/helper';
 import * as emberComponentTemplateOnly from '@ember/component/template-only';
 import * as emberDestroyable from '@ember/destroyable';
 import * as emberHelper from '@ember/helper';
 import * as emberModifier from '@ember/modifier';
 import * as emberObject from '@ember/object';
 import * as emberObjectInternals from '@ember/object/internals';
+import * as emberRunloop from '@ember/runloop';
 import * as emberTemplate from '@ember/template';
 import * as emberTemplateFactory from '@ember/template-factory';
 import * as glimmerComponent from '@glimmer/component';
@@ -45,6 +47,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/boxel-ui/modifiers', boxelUiModifiers);
   virtualNetwork.shimModule('@glimmer/component', glimmerComponent);
   virtualNetwork.shimModule('@ember/component', emberComponent);
+  virtualNetwork.shimModule('@ember/component/helper', emberComponentHelper);
   virtualNetwork.shimModule(
     '@ember/component/template-only',
     emberComponentTemplateOnly,
@@ -57,6 +60,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@ember/object/internals', emberObjectInternals);
   virtualNetwork.shimModule('@ember/helper', emberHelper);
   virtualNetwork.shimModule('@ember/modifier', emberModifier);
+  virtualNetwork.shimModule('@ember/runloop', emberRunloop);
   virtualNetwork.shimModule('ember-resources', emberResources);
   virtualNetwork.shimModule('ember-concurrency', emberConcurrency);
   virtualNetwork.shimModule(

@@ -38,6 +38,7 @@ import { DropdownArrowDown } from '@cardstack/boxel-ui/icons';
 import cssUrl from 'ember-css-url';
 import { Spec } from './spec';
 import StringField from './string';
+import afterFirstRender from './after-first-render';
 import { TrackedArray } from 'tracked-built-ins';
 import { MenuItem } from '@cardstack/boxel-ui/helpers';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
@@ -89,6 +90,7 @@ let availableSortOptions: SortOption[] = [
 
 class Isolated extends Component<typeof CardsGrid> {
   <template>
+    {{afterFirstRender this.loadFilterList}}
     <div class={{cn 'cards-grid' strip-view=(eq this.viewSize 'strip')}}>
       <div class='sidebar'>
         <FilterList
@@ -336,7 +338,6 @@ class Isolated extends Component<typeof CardsGrid> {
 
   constructor(owner: any, args: any) {
     super(owner, args);
-    this.loadFilterList.perform();
     let unsubscribe = subscribeToRealm(this.realms[0], this.refreshFilterList);
 
     registerDestructor(this, unsubscribe);
@@ -421,7 +422,11 @@ class Isolated extends Component<typeof CardsGrid> {
     }
   });
 
-  private loadFilterList = restartableTask(async () => {
+  private loadFilterList = () => {
+    this.loadFilterListTask.perform();
+  };
+
+  private loadFilterListTask = restartableTask(async () => {
     let response = await fetch(`${this.realms[0]}_types`, {
       headers: {
         Accept: SupportedMimeType.CardTypeSummary,
@@ -482,7 +487,7 @@ class Isolated extends Component<typeof CardsGrid> {
 
   private refreshFilterList = (ev: RealmEventContent) => {
     if (ev.eventName === 'index' && ev.indexType === 'incremental') {
-      this.loadFilterList.perform();
+      this.loadFilterListTask.perform();
     }
   };
 }
