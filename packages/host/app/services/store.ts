@@ -422,11 +422,11 @@ export default class StoreService extends Service implements StoreInterface {
 
   private assertLocalIdMapping(instance: CardDef, remoteId?: string) {
     let localId = instance[localIdSymbol];
-    if (instance.id) {
-      let existingLocalId = this.idResolver.getLocalId(instance.id);
+    for (let id of [instance.id, remoteId].filter(Boolean) as string[]) {
+      let existingLocalId = this.idResolver.getLocalId(id);
       if (existingLocalId && localId !== existingLocalId) {
         throw new Error(
-          `the instance ${instance.constructor.name} with [remote id: ${instance.id} local id: ${localId}] has conflicting instance id in store: [remote id: ${instance.id} local id: ${existingLocalId}]`,
+          `the instance ${instance.constructor.name} with [remote id: ${id} local id: ${localId}] has conflicting instance id in store: [remote id: ${id} local id: ${existingLocalId}]`,
         );
       }
     }
