@@ -67,6 +67,8 @@ export class IDResolver {
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
+  #silentCards = new Map<string, CardDef>();
+  #silentCardErrors = new Map<string, CardError>();
   #cards = new TrackedMap<string, CardDef>();
   #cardErrors = new TrackedMap<string, CardError>();
   #gcCandidates: Set<LocalId> = new Set();
@@ -90,6 +92,10 @@ export default class IdentityContextWithGarbageCollection
 
   set(id: string, instance: CardDef): void {
     this.setItem(id, instance);
+  }
+
+  setSilently(id: string, instance: CardDef): void {
+    this.setItem(id, instance, true);
   }
 
   addInstanceOrError(id: string, instanceOrError: CardDef | CardError) {
@@ -180,6 +186,20 @@ export default class IdentityContextWithGarbageCollection
     }
   }
 
+  makeVisible(remoteId: string) {
+    let instance = this.#silentCards.get(remoteId);
+    if (instance) {
+      this.set(remoteId, instance);
+    }
+    this.#silentCards.delete(remoteId);
+
+    let error = this.#silentCardErrors.get(remoteId);
+    if (error) {
+      this.addInstanceOrError(remoteId, error);
+    }
+    this.#silentCardErrors.delete(remoteId);
+  }
+
   private getItem(type: 'instance', id: string): CardDef | undefined;
   private getItem(type: 'error', id: string): CardError | undefined;
   private getItem(
@@ -204,7 +224,7 @@ export default class IdentityContextWithGarbageCollection
     return item;
   }
 
-  private setItem(id: string, item: CardDef | CardError) {
+  private setItem(id: string, item: CardDef | CardError, isSilent?: true) {
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
     let localId = isLocalId(id) ? id : undefined;
@@ -222,28 +242,30 @@ export default class IdentityContextWithGarbageCollection
       this.#gcCandidates.delete(localId);
     }
 
+    let cardBucket = isSilent ? this.#silentCards : this.#cards;
+    let errorBucket = isSilent ? this.#silentCardErrors : this.#cardErrors;
     // make entries for both the local ID and the remote ID in the identity map
     if (instance) {
       // instances always have a local ID
-      setIfDifferent(this.#cards, localId!, instance);
-      this.#cardErrors.delete(localId!);
+      setIfDifferent(cardBucket, localId!, instance);
+      errorBucket.delete(localId!);
       if (remoteIds.length > 0) {
         for (let remoteId of remoteIds) {
-          setIfDifferent(this.#cards, remoteId, instance);
-          this.#cardErrors.delete(remoteId);
+          setIfDifferent(cardBucket, remoteId, instance);
+          errorBucket.delete(remoteId);
         }
       }
     }
 
     if (error) {
       if (localId) {
-        setIfDifferent(this.#cardErrors, localId, error);
-        this.#cards.delete(localId);
+        setIfDifferent(errorBucket, localId, error);
+        cardBucket.delete(localId);
       }
       if (remoteIds.length > 0) {
         for (let remoteId of remoteIds) {
-          setIfDifferent(this.#cardErrors, remoteId, error);
-          this.#cards.delete(remoteId);
+          setIfDifferent(errorBucket, remoteId, error);
+          cardBucket.delete(remoteId);
         }
       }
     }

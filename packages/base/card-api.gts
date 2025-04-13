@@ -278,6 +278,8 @@ export async function flushLogs() {
 export interface IdentityContext {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
+  setSilently(id: string, instance: CardDef): void;
+  makeVisible(id: string): void;
 }
 
 type JSONAPIResource =
@@ -1021,7 +1023,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let identityContext =
-      identityContexts.get(instance as BaseDef) ?? new Map();
+      identityContexts.get(instance as BaseDef) ?? new SimpleIdentityContext();
     // taking advantage of the identityMap regardless of whether loadFields is set
     let fieldValue = identityContext.get(e.reference as string);
 
@@ -1433,7 +1435,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
   ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
-    let identityContext = identityContexts.get(instance) ?? new Map();
+    let identityContext =
+      identityContexts.get(instance) ?? new SimpleIdentityContext();
 
     for (let ref of e.reference) {
       // taking advantage of the identityMap regardless of whether loadFields is set
@@ -2419,7 +2422,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   relativeTo: URL | undefined,
   opts?: { identityContext?: IdentityContext },
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = opts?.identityContext ?? new Map();
+  let identityContext = opts?.identityContext ?? new SimpleIdentityContext();
   let {
     meta: { adoptsFrom },
   } = resource;
@@ -2439,10 +2442,11 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   ) as BaseInstanceType<T>;
 }
 
+// TODO we should not need this any more now that we have a store
 // Crawls all fields for cards and populates the identityContext
 function buildIdentityContext(
   instance: CardDef | FieldDef,
-  identityContext: IdentityContext = new Map(),
+  identityContext: IdentityContext = new SimpleIdentityContext(),
   visited: WeakSet<CardDef | FieldDef> = new WeakSet(),
 ) {
   if (instance == null || visited.has(instance)) {
@@ -2510,7 +2514,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
   _relativeTo: URL | undefined,
-  identityContext: IdentityContext = new Map(),
+  identityContext: IdentityContext = new SimpleIdentityContext(),
 ): Promise<BaseInstanceType<T>> {
   let resource: LooseCardResource | undefined;
   if (isCardResource(data)) {
@@ -2549,6 +2553,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   doc: LooseSingleCardDocument | CardDocument,
   identityContext: IdentityContext,
 ): Promise<BaseInstanceType<T>> {
+  // because our store uses a tracked map for its identity map all the assembly
+  // work that we are doing to deserialize the instance below is "live". so we
+  // add the actual instance silently in a non-tracked way and only track it at
+  // the very end.
+  if (resource.id != null) {
+    identityContext.setSilently(resource.id, instance as CardDef);
+  }
   let deferred = new Deferred<BaseDef>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
   let nonNestedRelationships = Object.fromEntries(
@@ -2651,12 +2662,9 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
     }
   }
 
-  // because our store uses a tracked map for its identity map all the assembly
-  // work that we are doing to deserialize the instance above is "live". so make
-  // sure not to add the actual instance we are building to the identity map until
-  // the very end.
+  // now we make the instance "live" after it's all constructed
   if (resource.id != null) {
-    identityContext.set(resource.id, instance as CardDef);
+    identityContext.makeVisible(resource.id);
   }
 
   deferred.fulfill(instance);
@@ -3206,4 +3214,18 @@ export function getCardMeta<K extends keyof CardResourceMeta>(
   metaKey: K,
 ): CardResourceMeta[K] | undefined {
   return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
+}
+
+class SimpleIdentityContext {
+  #instances: Map<string, CardDef> = new Map();
+  get(id: string) {
+    return this.#instances.get(id);
+  }
+  set(id: string, instance: CardDef) {
+    return this.#instances.set(id, instance);
+  }
+  setSilently(id: string, instance: CardDef) {
+    return this.#instances.set(id, instance);
+  }
+  makeVisible(_id: string) {}
 }
