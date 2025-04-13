@@ -127,13 +127,6 @@ export default class StoreService extends Service implements StoreInterface {
     this.ready = this.setup();
   }
 
-  // this needs to happen whenever the store is reset because code changes have
-  // destabilized our identity context so we need to rebuild it
-  resetIdentityContext() {
-    this.identityContext.reset();
-    this.idResolver.reset();
-  }
-
   dropReference(id: string | undefined) {
     if (!id) {
       return;
@@ -507,6 +500,8 @@ export default class StoreService extends Service implements StoreInterface {
       // need to flush the loader so that we can pick up any updated
       // code before re-running the card
       this.loaderService.resetLoader();
+      this.identityContext.reset();
+      this.idResolver.reset();
     }
 
     for (let invalidation of invalidations) {
@@ -570,11 +565,14 @@ export default class StoreService extends Service implements StoreInterface {
         maybeReloadedInstance = errorResponse.errors[0];
       }
     }
-    await this.trackSavedInstance('stop-tracking', instance);
+    if (!isCardInstance(maybeReloadedInstance)) {
+      await this.trackSavedInstance('stop-tracking', instance);
+    }
     if (maybeReloadedInstance) {
       await this.trackSavedInstance('start-tracking', maybeReloadedInstance);
     }
     if (isDelete) {
+      await this.trackSavedInstance('stop-tracking', instance);
       this.identityContext.delete(instance.id);
     }
   });

@@ -41,14 +41,8 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-    // use this.isLoaded to prevent a card from being available too early.
-    // because our identity map is tracked, intermediate card deserialization
-    // work is visible to the outside word which can result in rendering cards
-    // before they are ready and have not had property values assigned yet.
     let maybeCard = this.store.peek(this.#id);
-    return this.isLoaded && maybeCard && isCardInstance(maybeCard)
-      ? maybeCard
-      : undefined;
+    return maybeCard && isCardInstance(maybeCard) ? maybeCard : undefined;
   }
 
   get cardError() {

@@ -119,7 +119,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
           if (!this.firstName) {
             return;
           }
-          return this.firstName?.[0];
+          return this.firstName[0];
         },
       });
       @field title = contains(StringField, {

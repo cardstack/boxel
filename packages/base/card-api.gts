@@ -2549,9 +2549,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   doc: LooseSingleCardDocument | CardDocument,
   identityContext: IdentityContext,
 ): Promise<BaseInstanceType<T>> {
-  if (resource.id != null) {
-    identityContext.set(resource.id, instance as CardDef); // the instance must be a composite card since we are updating it from a resource
-  }
   let deferred = new Deferred<BaseDef>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
   let nonNestedRelationships = Object.fromEntries(
@@ -2652,6 +2649,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       instance[isSavedInstance] = true;
       (instance as any)[meta] = resource.meta;
     }
+  }
+
+  // because our store uses a tracked map for its identity map all the assembly
+  // work that we are doing to deserialize the instance above is "live". so make
+  // sure not to add the actual instance we are building to the identity map until
+  // the very end.
+  if (resource.id != null) {
+    identityContext.set(resource.id, instance as CardDef);
   }
 
   deferred.fulfill(instance);
