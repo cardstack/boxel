@@ -43,17 +43,20 @@ module('Unit | marked-sync', function () {
   });
 
   test('markdownToHtml with normal input and default sanitize', function (assert) {
-    const markdown = '# Hello';
+    const markdown = '# Hello <script>alert("XSS")</script>';
     const result = markdownToHtml(markdown);
 
-    assert.true(result.includes('<h1>Hello</h1>'), 'heading was preserved');
+    assert.true(result.includes('<h1>Hello </h1>'), 'heading was preserved');
   });
 
   test('markdownToHtml with sanitize=false', function (assert) {
-    const markdown = '# Hello';
-    const result = markdownToHtml(markdown, false);
+    const markdown = '# Hello <script>alert("XSS")</script>';
+    const result = markdownToHtml(markdown, { sanitize: false });
 
-    assert.true(result.includes('<h1>Hello</h1>'), 'returns unsanitized HTML');
+    assert.true(
+      result.includes('<h1>Hello <script>alert("XSS")</script></h1>'),
+      'returns unsanitized HTML',
+    );
   });
 
   test('markdownToHtml with null input', function (assert) {
@@ -152,13 +155,23 @@ module('Unit | marked-sync', function () {
     );
   });
 
-  test('markedSync escapes HTML tags that appear within PRE tags', function (assert) {
+  test('markedSync escapes HTML tags that appear within code fences with default options', function (assert) {
     const markdown = '```\n<code>\n```';
     const result = markedSync(markdown);
 
     assert.true(
       result.includes('&lt;code&gt;'),
-      'escapes HTML tags within PRE tags',
+      'escapes HTML tags within code fences tags',
+    );
+  });
+
+  test('markedSync does not escape HTML tags that appear within code fences when escapeHtmlInCodeBlocks option is false', function (assert) {
+    const markdown = '```\n<code>\n```';
+    const result = markedSync(markdown, { escapeHtmlInCodeBlocks: false });
+
+    assert.true(
+      result.includes('<code>'),
+      'escapes HTML tags within code fences tags',
     );
   });
 });
