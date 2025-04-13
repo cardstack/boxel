@@ -47,6 +47,17 @@ export class IDResolver {
     return this.#localIds.get(remoteId);
   }
 
+  removeByRemoteId(remoteId: string) {
+    let localId = this.getLocalId(remoteId);
+    if (localId) {
+      for (let id of this.getRemoteIds(localId)) {
+        this.#localIds.delete(id);
+      }
+      this.#remoteIds.delete(localId);
+    }
+    this.#localIds.delete(remoteId);
+  }
+
   reset() {
     this.#localIds = new Map();
     this.#remoteIds = new Map();

@@ -19,6 +19,7 @@ import RealmInfoService from '@cardstack/host/services/realm-info-service';
 import ResetService from '@cardstack/host/services/reset';
 
 import type RealmService from './realm';
+import type StoreService from './store';
 
 export default class LoaderService extends Service {
   @service declare private fastboot: { isFastBoot: boolean };
@@ -26,6 +27,7 @@ export default class LoaderService extends Service {
   @service declare private realm: RealmService;
   @service declare private network: NetworkService;
   @service declare private reset: ResetService;
+  @service declare private store: StoreService;
 
   @tracked public loader = this.makeInstance();
   private resetTime: number | undefined;
@@ -62,6 +64,7 @@ export default class LoaderService extends Service {
       } else {
         this.loader = this.makeInstance();
       }
+      this.store.resetIdentityContext();
     }
   }
 

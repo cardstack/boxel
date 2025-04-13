@@ -127,6 +127,13 @@ export default class StoreService extends Service implements StoreInterface {
     this.ready = this.setup();
   }
 
+  // this needs to happen whenever the store is reset because code changes have
+  // destabilized our identity context so we need to rebuild it
+  resetIdentityContext() {
+    this.identityContext.reset();
+    this.idResolver.reset();
+  }
+
   dropReference(id: string | undefined) {
     if (!id) {
       return;
@@ -404,6 +411,9 @@ export default class StoreService extends Service implements StoreInterface {
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
           this.identityContext.addInstanceOrError(url, instanceOrError);
+          if (!isCardInstance(instanceOrError)) {
+            this.idResolver.removeByRemoteId(url);
+          }
         }
         deferred.fulfill();
       } catch (e) {
@@ -497,10 +507,6 @@ export default class StoreService extends Service implements StoreInterface {
       // need to flush the loader so that we can pick up any updated
       // code before re-running the card
       this.loaderService.resetLoader();
-      // the code changes have destabilized our identity context so we
-      // need to rebuild it
-      this.identityContext.reset();
-      this.idResolver.reset();
     }
 
     for (let invalidation of invalidations) {
@@ -596,11 +602,15 @@ export default class StoreService extends Service implements StoreInterface {
     let instance = isCardInstance(instanceOrError)
       ? instanceOrError
       : undefined;
+    let error = !instance ? instanceOrError : undefined;
     if (operation === 'start-tracking') {
       this.identityContext.addInstanceOrError(
         instanceOrError.id,
         instanceOrError,
       );
+      if (error?.id) {
+        this.idResolver.removeByRemoteId(error.id);
+      }
     }
     // module updates will break the cached api. so don't hang on to this longer
     // than necessary
