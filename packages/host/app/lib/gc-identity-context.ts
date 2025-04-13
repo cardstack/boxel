@@ -67,8 +67,12 @@ export class IDResolver {
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
+  // importantly these "silent" properties are not tracked so that we are able
+  // to deserialize an instance without glimmer rendering the inner workings of
+  // the deserialization process.
   #silentCards = new Map<string, CardDef>();
   #silentCardErrors = new Map<string, CardError>();
+
   #cards = new TrackedMap<string, CardDef>();
   #cardErrors = new TrackedMap<string, CardError>();
   #gcCandidates: Set<LocalId> = new Set();
@@ -207,6 +211,8 @@ export default class IdentityContextWithGarbageCollection
     id: string,
   ): CardDef | CardError | undefined {
     let bucket = type === 'instance' ? this.#cards : this.#cardErrors;
+    let silentBucket =
+      type === 'instance' ? this.#silentCards : this.#silentCardErrors;
     let localId = isLocalId(id) ? id : undefined;
     let remoteId = !isLocalId(id) ? id : undefined;
     if (localId) {
@@ -216,8 +222,12 @@ export default class IdentityContextWithGarbageCollection
       localId = this.#idResolver.getLocalId(remoteId);
     }
     let item =
-      (localId ? bucket.get(localId) : undefined) ??
-      (remoteId ? bucket.get(remoteId) : undefined);
+      (localId
+        ? (bucket.get(localId) ?? silentBucket.get(localId))
+        : undefined) ??
+      (remoteId
+        ? (bucket.get(remoteId) ?? silentBucket.get(remoteId))
+        : undefined);
     if (localId) {
       this.#gcCandidates.delete(localId);
     }
