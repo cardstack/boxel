@@ -140,6 +140,7 @@ export default class IdentityContextWithGarbageCollection
           this.#cards.delete(id);
           this.#cardErrors.delete(id);
         }
+        this.#idResolver.removeByRemoteId(remoteId);
       }
     }
   }
