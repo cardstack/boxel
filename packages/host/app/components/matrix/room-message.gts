@@ -117,6 +117,10 @@ export default class RoomMessage extends Component<Signature> {
   });
 
   private get formattedMessage() {
+    // formattedMessage will be sent in two different formats: markdown and html
+    // the formatted message that is sent by ai bot will be in markdown format 
+    // and the formatted message that is sent by the user will be in html format
+    // so we need to convert the markdown to html when the message is sent by the ai bot
     if (
       !this.message.formattedMessage ||
       isHtml(this.message.formattedMessage)

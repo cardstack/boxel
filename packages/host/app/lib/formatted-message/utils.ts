@@ -13,6 +13,7 @@ export function extractCodeData(preElementString: string): CodeData {
   let preElement = tempContainer.querySelector('pre');
 
   if (!preElement) {
+    tempContainer.remove();
     return {
       fileUrl: null,
       code: null,
@@ -28,6 +29,7 @@ export function extractCodeData(preElementString: string): CodeData {
   let textarea = document.createElement('textarea');
   textarea.innerHTML = content;
   content = textarea.value;
+  textarea.remove();
   let parsedContent = parseSearchReplace(content);
 
   // Transform the incomplete search/replace block into a format for streaming,
@@ -70,6 +72,7 @@ export function extractCodeData(preElementString: string): CodeData {
     contentWithoutFileUrl = lines.slice(fileUrlIndex + 1).join('\n');
   }
 
+  tempContainer.remove();
   return {
     language: language ?? '',
     code: adjustedContentForStreamedContentInMonacoEditor || content,
@@ -147,5 +150,6 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
     }
   });
 
+  doc.remove();
   return result;
 }

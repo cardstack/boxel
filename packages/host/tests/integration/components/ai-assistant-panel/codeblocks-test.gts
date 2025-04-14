@@ -1,4 +1,4 @@
-import { waitFor, click } from '@ember/test-helpers';
+import { waitFor, waitUntil, click } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -377,6 +377,7 @@ You can use these in your HTML documents to display formatted text, code snippet
       monacoContent.includes('const data = {'),
       'Monaco content includes the styled pre block',
     );
+    await waitUntil(() => document.getElementsByClassName('view-lines')[1]);
     assert.equal(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
         .innerText,
@@ -440,34 +441,9 @@ And another code block without language specified:
     // Check that HTML outside backticks is displayed as actual HTML
     assert
       .dom('[data-test-ai-message-content]')
-      .containsText(
-        '<p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p>',
-        'HTML tags outside backticks should be displayed as actual HTML',
-      );
-
-    assert
-      .dom('[data-test-ai-message-content]')
-      .containsText(
-        '<li>List item 1</li>',
-        'List items should be displayed correctly',
-      );
-
-    assert
-      .dom('[data-test-ai-message-content]')
-      .containsText(
-        '<li>List item 2 with <a href="https://example.com">a link</a></li>',
-        'Links should be displayed correctly',
-      );
-
-    assert
-      .dom('[data-test-ai-message-content]')
-      .containsText('Heading 1', 'Headings should be displayed correctly');
-
-    assert
-      .dom('[data-test-ai-message-content]')
-      .containsText(
-        'Another paragraph with <code>inline code</code>.',
-        'Inline code should be displayed correctly',
+      .hasText(
+        'Here\'s some HTML outside of code blocks: <p>This is a paragraph with <strong>bold text</strong> and <em>italic text</em>.</p> <ul> <li>List item 1</li> <li>List item 2 with <a href="https://example.com">a link</a></li> </ul> <div class="container"> <h1>Heading 1</h1> <p>Another paragraph with <code>inline code</code>.</p> </div> And here\'s a code block with HTML inside: Copy <div class="example"> And another code block without language specified: Copy <div class="example">',
+        'HTML content should be displayed correctly with proper formatting',
       );
 
     // Check that code blocks are preserved
@@ -551,17 +527,9 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
     // Check that inline code with HTML is preserved
     assert
       .dom('[data-test-ai-message-content]')
-      .containsText(
-        '<span>inline HTML</span>',
-        'Inline code with HTML should be displayed correctly',
-      );
-
-    // Check that HTML outside backticks is displayed as actual HTML
-    assert
-      .dom('[data-test-ai-message-content]')
-      .containsText(
-        '<b>HTML tags</b>',
-        'HTML tags outside backticks should be displayed as actual HTML',
+      .hasText(
+        'Here\'s some HTML inside backticks without a language name: Copy <div class="container"> And here\'s some inline code with HTML: <span>inline HTML</span> And some regular text with <b>HTML tags</b> that should be displayed as actual HTML.',
+        'HTML content should be displayed correctly with proper formatting',
       );
 
     await percySnapshot(assert);
