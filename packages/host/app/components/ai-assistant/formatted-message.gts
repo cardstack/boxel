@@ -133,12 +133,20 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
   private applyAllCodePatchTasks = dropTask(async () => {
     this.applyAllCodePatchTasksState = 'applying';
+    let unappliedCodePatchActions = this.codePatchActions.filter(
+      (codePatchAction) => codePatchAction.patchCodeTaskState !== 'applied',
+    );
 
-    this.codePatchActions.forEach((codePatchAction) => {
+    if (unappliedCodePatchActions.length === 0) {
+      this.applyAllCodePatchTasksState = 'applied';
+      return;
+    }
+
+    unappliedCodePatchActions.forEach((codePatchAction) => {
       codePatchAction.patchCodeTaskState = 'applying';
     });
 
-    let codePatchActionsGroupedByFileUrl = this.codePatchActions.reduce(
+    let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions.reduce(
       (acc, codePatchAction) => {
         acc[codePatchAction.fileUrl] = [
           ...(acc[codePatchAction.fileUrl] || []),
