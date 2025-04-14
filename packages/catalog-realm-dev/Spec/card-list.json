@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "CardList",
+        "module": "../components/card-list"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Card List",
+      "description": "Spec for Card List component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

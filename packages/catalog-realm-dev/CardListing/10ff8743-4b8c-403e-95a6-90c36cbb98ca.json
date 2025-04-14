@@ -1,0 +1,57 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Blackjack Game",
+      "summary": "Classic casino Blackjack with authentic rules - hit, stand, or double down as you play against the dealer's AI. Features dynamic card scoring, 3:2 blackjack payouts, flexible betting options, and persistent statistics tracking.",
+      "images": [
+        "https://boxel-images.boxel.ai/app-assets/catalog/blackjack-listing/screenshot_02.png"
+      ],
+      "description": null,
+      "thumbnailURL": "https://boxel-images.boxel.ai/app-assets/catalog/blackjack-listing/thumbnail.png"
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/5cef210f-cb2d-43d5-83ee-d5144deb3671"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": "../Publisher/ae15f401-5340-4098-ba7f-ab23a3058dff"
+        }
+      },
+      "categories.0": {
+        "links": {
+          "self": "../Category/f6a67357-ba77-4e38-a5de-03e20fa46193"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../Tag/631d1b5d-fcd0-465c-964e-e535fc6bb893"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../Tag/4d0f9ae2-048e-4ce0-b263-7006602ce6a4"
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples.0": {
+        "links": {
+          "self": "../blackjack/BlackjackGame/7afce4bc-c331-48ca-bc53-3b9cc2e81333"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "CardListing"
+      }
+    }
+  }
+}
