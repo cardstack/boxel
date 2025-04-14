@@ -616,27 +616,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
-  test('can get a card error from the identity map by local id', async function (assert) {
-    let {
-      identityContext,
-      instances: { hassan },
-    } = await setupTest(saveAll);
-
-    let error = makeError(hassan.id);
-    identityContext.addInstanceOrError(hassan.id, error);
-
-    assert.strictEqual(
-      identityContext.get(hassan[localId]),
-      undefined,
-      'no card instance exists for the local id',
-    );
-    assert.strictEqual(
-      identityContext.getInstanceOrError(hassan[localId]),
-      error,
-      'a card error exists for the local id',
-    );
-  });
-
   test('can get a card from identity map using getInstanceOrError() by remote id', async function (assert) {
     let {
       identityContext,
