@@ -230,11 +230,18 @@ class _FileResource extends Resource<Args> {
               event.clientRequestId,
             );
           } else {
-            console.log('read.perform happening');
+            console.log(
+              'read.perform happening because request id is',
+              event.clientRequestId,
+            );
             this.read.perform();
           }
         } else {
-          console.log('ignoring because request id is ', event.clientRequestId);
+          console.log(
+            'read.perform happening because request id is',
+            event.clientRequestId,
+          );
+          this.read.perform();
         }
       }
     });
