@@ -43,7 +43,8 @@
       "matrix-js-sdk@31.0.0": "patches/matrix-js-sdk@31.0.0.patch",
       "ember-basic-dropdown@8.0.4": "patches/ember-basic-dropdown@8.0.4.patch",
       "ember-source@5.4.1": "patches/ember-source@5.4.1.patch",
-      "monaco-editor@0.52.2": "patches/monaco-editor@0.52.2.patch"
+      "monaco-editor@0.52.2": "patches/monaco-editor@0.52.2.patch",
+      "monaco-editor-webpack-plugin@7.1.0": "patches/monaco-editor-webpack-plugin@7.1.0.patch"
     }
   },
   "devDependencies": {

@@ -98,6 +98,7 @@ export default class Room extends Component<Signature> {
         )}}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
+        data-room-id={{@roomId}}
       >
         <AiAssistantConversation
           @registerConversationScroller={{this.registerConversationScroller}}
@@ -761,7 +762,7 @@ export default class Room extends Component<Signature> {
           .filter(Boolean) as string[],
       };
       try {
-        if (files) {
+        if (files?.length) {
           files = await this.matrixService.uploadFiles(files);
         }
         let cards: CardDef[] | undefined;

@@ -184,6 +184,7 @@ export class CurrentRun {
     };
   }
 
+  // TODO update to support multiple URLS
   static async incremental(
     current: CurrentRun,
     {
