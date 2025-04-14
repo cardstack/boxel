@@ -572,6 +572,8 @@ export default class StoreService extends Service implements StoreInterface {
                 console.debug(
                   `store reloading ${invalidation} because of source clientRequestId ${event.clientRequestId}`,
                 );
+
+                this.reloadTask.perform(liveInstance);
               } else {
                 console.debug(
                   'ignoring invalidation for card because clientRequestId is ours',
