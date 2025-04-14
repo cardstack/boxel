@@ -52,7 +52,9 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
     let { commandService, loaderService, matrixService } = this;
     let roomId = input.roomId;
-    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(input.prompt));
+    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(input.prompt), {
+      escapeHtmlInCodeBlocks: false,
+    });
     let mappings = await basicMappings(loaderService.loader);
     let tools = [];
     let requireToolCall = input.requireCommandCall ?? false;
