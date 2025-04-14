@@ -104,6 +104,9 @@ export default class IdentityContextWithGarbageCollection
 
   addInstanceOrError(id: string, instanceOrError: CardDef | CardError) {
     this.setItem(id, instanceOrError);
+    if (!isCardInstance(instanceOrError)) {
+      this.#idResolver.removeByRemoteId(id);
+    }
   }
 
   getInstanceOrError(id: string) {
@@ -149,6 +152,7 @@ export default class IdentityContextWithGarbageCollection
     this.#cards.clear();
     this.#cardErrors.clear();
     this.#gcCandidates.clear();
+    this.#idResolver.reset();
   }
 
   get gcCandidates() {
