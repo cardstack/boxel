@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "User",
-        "module": "../user/user"
+        "name": "Filter Display",
+        "module": "../components/kanban/filter-display"
       },
-      "specType": "card",
+      "specType": "component",
       "containedExamples": [],
-      "title": "User",
-      "description": "Spec for User Card",
+      "title": "Filter Display",
+      "description": "Spec for Kanban Filter Display component",
       "thumbnailURL": null
     },
     "relationships": {},

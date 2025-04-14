@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "User",
-        "module": "../user/user"
+        "name": "Kanban Resource",
+        "module": "../components/kanban/kanban-resource"
       },
-      "specType": "card",
+      "specType": "component",
       "containedExamples": [],
-      "title": "User",
-      "description": "Spec for User Card",
+      "title": "kanban Resource",
+      "description": "Spec for Kanban Resource component",
       "thumbnailURL": null
     },
     "relationships": {},
