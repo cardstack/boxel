@@ -10,6 +10,15 @@ import LogLevel, { type LogLevelDesc } from 'loglevel';
  *    app:index running dependency
  *    dependency Woah this isn't linux, don't you believe in free software?!
  *    app:index all done
+ *
+ * in host, you can dynamically set log levels; with a handle on the
+ * container (easily obtained via Ember Inspector), in the Javascript console:
+ *
+ *  $E.lookup('service:logger-service').getLogger('realm:events').setLevel('info')
+ *
+ * You can also see what named loggers are known:
+ *
+ *  $E.lookup('service:logger-service').getLoggers()
  */
 
 const DEFAULT_LOG_LEVEL = 'info';

@@ -99,6 +99,7 @@ import { type SerializedState as OperatorModeSerializedState } from './operator-
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
+import type LoggerService from './logger-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
 import type MessageService from './message-service';
@@ -126,6 +127,7 @@ export type OperatorModeContext = {
 
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
+  @service declare private loggerService: LoggerService;
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
   @service declare private realm: RealmService;
@@ -181,7 +183,13 @@ export default class MatrixService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
+    this.setLoggerLevelFromEnvironment();
     this.#ready = this.loadState.perform();
+  }
+
+  private setLoggerLevelFromEnvironment() {
+    // This will pick up the level if it’s in LOG_LEVELS
+    logger('matrix');
   }
 
   private addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
