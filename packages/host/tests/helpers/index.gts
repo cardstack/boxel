@@ -79,9 +79,6 @@ const baseTestMatrix = {
   password: 'password',
 };
 
-// Ignoring this TS error (Cannot find module 'ember-provide-consume-context/test-support')
-// until https://github.com/customerio/ember-provide-consume-context/issues/24 is fixed
-// @ts-ignore
 export { provide as provideConsumeContext } from 'ember-provide-consume-context/test-support';
 
 export function cleanWhiteSpace(text: string) {

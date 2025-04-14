@@ -37,6 +37,7 @@
         "../experiments-realm/**",
         "../seed-realm/**",
         "../catalog-realm/**/*",
+        "../catalog-realm-dev/**/*",
         "../base/**",
         "app/**",
         "tests/**",
