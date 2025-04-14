@@ -518,6 +518,6 @@ let ApplyCodePatchButton: TemplateOnlyComponent<ApplyCodePatchButtonSignature> =
       @state={{@codePatchAction.patchCodeTaskState}}
       {{on 'click' (perform @codePatchAction.patchCodeTask)}}
     >
-      Accept
+      Apply
     </ApplyButton>
   </template>;
