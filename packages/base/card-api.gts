@@ -278,8 +278,8 @@ export async function flushLogs() {
 export interface IdentityContext {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
-  setSilently(id: string, instance: CardDef): void;
-  makeVisible(id: string): void;
+  setNonTracked(id: string, instance: CardDef): void;
+  makeTracked(id: string): void;
 }
 
 type JSONAPIResource =
@@ -2442,55 +2442,11 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   ) as BaseInstanceType<T>;
 }
 
-// TODO we should not need this any more now that we have a store
-// Crawls all fields for cards and populates the identityContext
-function buildIdentityContext(
-  instance: CardDef | FieldDef,
-  identityContext: IdentityContext = new SimpleIdentityContext(),
-  visited: WeakSet<CardDef | FieldDef> = new WeakSet(),
-) {
-  if (instance == null || visited.has(instance)) {
-    return identityContext;
-  }
-  visited.add(instance);
-  let fields = getFields(instance);
-  for (let fieldName of Object.keys(fields)) {
-    let value = peekAtField(instance, fieldName);
-    if (value == null) {
-      continue;
-    }
-    if (Array.isArray(value)) {
-      for (let item of value) {
-        if (value == null) {
-          continue;
-        }
-        if (isCard(item)) {
-          identityContext.set(item.id, item);
-        }
-        if (isCardOrField(item)) {
-          buildIdentityContext(item, identityContext, visited);
-        }
-      }
-    } else {
-      if (isCard(value) && value.id) {
-        identityContext.set(value.id, value);
-      }
-      if (isCardOrField(value)) {
-        buildIdentityContext(value, identityContext, visited);
-      }
-    }
-  }
-  return identityContext;
-}
-
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
-  identityContext?: IdentityContext,
+  identityContext: IdentityContext = new SimpleIdentityContext(),
 ): Promise<BaseInstanceType<T>> {
-  if (!identityContext) {
-    identityContext = buildIdentityContext(instance);
-  }
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
@@ -2558,7 +2514,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   // add the actual instance silently in a non-tracked way and only track it at
   // the very end.
   if (resource.id != null) {
-    identityContext.setSilently(resource.id, instance as CardDef);
+    identityContext.setNonTracked(resource.id, instance as CardDef);
   }
   let deferred = new Deferred<BaseDef>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
@@ -2664,7 +2620,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
   // now we make the instance "live" after it's all constructed
   if (resource.id != null) {
-    identityContext.makeVisible(resource.id);
+    identityContext.makeTracked(resource.id);
   }
 
   deferred.fulfill(instance);
@@ -3216,7 +3172,7 @@ export function getCardMeta<K extends keyof CardResourceMeta>(
   return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
 }
 
-class SimpleIdentityContext {
+class SimpleIdentityContext implements IdentityContext {
   #instances: Map<string, CardDef> = new Map();
   get(id: string) {
     return this.#instances.get(id);
@@ -3224,8 +3180,8 @@ class SimpleIdentityContext {
   set(id: string, instance: CardDef) {
     return this.#instances.set(id, instance);
   }
-  setSilently(id: string, instance: CardDef) {
+  setNonTracked(id: string, instance: CardDef) {
     return this.#instances.set(id, instance);
   }
-  makeVisible(_id: string) {}
+  makeTracked(_id: string) {}
 }

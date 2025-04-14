@@ -98,7 +98,7 @@ export default class IdentityContextWithGarbageCollection
     this.setItem(id, instance);
   }
 
-  setSilently(id: string, instance: CardDef): void {
+  setNonTracked(id: string, instance: CardDef): void {
     this.setItem(id, instance, true);
   }
 
@@ -191,7 +191,7 @@ export default class IdentityContextWithGarbageCollection
     }
   }
 
-  makeVisible(remoteId: string) {
+  makeTracked(remoteId: string) {
     let instance = this.#silentCards.get(remoteId);
     if (instance) {
       this.set(remoteId, instance);
