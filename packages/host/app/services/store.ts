@@ -76,7 +76,6 @@ export default class StoreService extends Service implements StoreInterface {
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
   private autoSaveStates: TrackedMap<string, AutoSaveState> = new TrackedMap();
-  private isLoadedMap: TrackedMap<string, true> = new TrackedMap();
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
@@ -117,7 +116,6 @@ export default class StoreService extends Service implements StoreInterface {
     this.referenceCount = new Map();
     this.newReferencePromises = [];
     this.idResolver = new IDResolver();
-    this.isLoadedMap = new TrackedMap();
     this.autoSaveStates = new TrackedMap();
     this.inflightCards = new Map();
     this.identityContext = new IdentityContext({
@@ -142,7 +140,6 @@ export default class StoreService extends Service implements StoreInterface {
         this.initiateAutoSaveTask.perform(id, { isImmediate: true });
       }
       this.autoSaveStates.delete(id);
-      this.isLoadedMap.delete(id);
       let instance = this.identityContext.get(id);
       if (instance) {
         if (this.cardApiCache && instance) {
@@ -364,10 +361,6 @@ export default class StoreService extends Service implements StoreInterface {
     ).filter(Boolean) as CardDef[];
   }
 
-  isLoaded(id: string) {
-    return Boolean(this.isLoadedMap.get(id));
-  }
-
   getSaveState(id: string): AutoSaveState | undefined {
     return this.autoSaveStates.get(id);
   }
@@ -415,10 +408,6 @@ export default class StoreService extends Service implements StoreInterface {
           e,
         );
         deferred.reject(e);
-      } finally {
-        if (maybeUrl) {
-          this.isLoadedMap.set(maybeUrl, true);
-        }
       }
     });
   }

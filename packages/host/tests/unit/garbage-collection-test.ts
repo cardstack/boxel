@@ -58,6 +58,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
   }
 
   async function saveAll({
+    identityContext,
     idResolver,
     jade,
     queenzy,
@@ -65,6 +66,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     boris,
     hassan,
   }: {
+    identityContext: IdentityContext;
     idResolver: IDResolver;
     jade: CardInstance;
     queenzy: CardInstance;
@@ -72,20 +74,26 @@ module('Unit | identity-context garbage collection', function (hooks) {
     boris: CardInstance;
     hassan: CardInstance;
   }) {
-    await saveCard(jade, `${testRealmURL}jade`, loader);
+    await saveCard(jade, `${testRealmURL}jade`, loader, identityContext);
     idResolver.addIdPair(jade[localId], jade.id);
-    await saveCard(queenzy, `${testRealmURL}queenzy`, loader);
+    await saveCard(queenzy, `${testRealmURL}queenzy`, loader, identityContext);
     idResolver.addIdPair(queenzy[localId], queenzy.id);
-    await saveCard(germaine, `${testRealmURL}germaine`, loader);
+    await saveCard(
+      germaine,
+      `${testRealmURL}germaine`,
+      loader,
+      identityContext,
+    );
     idResolver.addIdPair(germaine[localId], germaine.id);
-    await saveCard(boris, `${testRealmURL}boris`, loader);
+    await saveCard(boris, `${testRealmURL}boris`, loader, identityContext);
     idResolver.addIdPair(boris[localId], boris.id);
-    await saveCard(hassan, `${testRealmURL}hassan`, loader);
+    await saveCard(hassan, `${testRealmURL}hassan`, loader, identityContext);
     idResolver.addIdPair(hassan[localId], hassan.id);
   }
 
   async function setupTest(
     doSave?: (args: {
+      identityContext: IdentityContext;
       idResolver: IDResolver;
       jade: CardInstance;
       queenzy: CardInstance;
@@ -125,6 +133,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     identityContext.set(hassan[localId], hassan);
 
     await doSave?.({
+      identityContext,
       idResolver,
       jade,
       queenzy,
