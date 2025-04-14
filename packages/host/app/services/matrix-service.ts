@@ -754,7 +754,9 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
+    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body), {
+      escapeHtmlInCodeBlocks: false,
+    });
 
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
