@@ -129,7 +129,10 @@ export default class RoomMessage extends Component<Signature> {
     }
     return markdownToHtml(
       escapeHtmlOutsideCodeBlocks(this.message.formattedMessage),
-      false,
+      {
+        sanitize: false,
+        escapeHtmlInCodeBlocks: false,
+      },
     );
   }
 
