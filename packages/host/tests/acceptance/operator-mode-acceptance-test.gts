@@ -641,7 +641,7 @@ module('Acceptance | operator mode tests', function (hooks) {
     await percySnapshot(assert);
     assert
       .dom(
-        '[data-test-address-with-no-embedded] [data-test-missing-embedded-template-text]',
+        '[data-test-address-with-no-embedded] [data-test-missing-template-text]',
       )
       .hasText('Missing embedded component for FieldDef: Address');
     assert

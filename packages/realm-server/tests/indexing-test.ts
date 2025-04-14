@@ -917,8 +917,8 @@ module(basename(__filename), function () {
         },
         {
           pattern:
-            /cardstack.com\/base\/default-templates\/missing-embedded\.gts.*\.glimmer-scoped\.css$/,
-          fileName: 'default-templates/missing-embedded.gts',
+            /cardstack.com\/base\/default-templates\/missing-template\.gts.*\.glimmer-scoped\.css$/,
+          fileName: 'default-templates/missing-template.gts',
         },
         {
           pattern:

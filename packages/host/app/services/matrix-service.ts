@@ -720,19 +720,24 @@ export default class MatrixService extends Service {
         if (!file.sourceUrl) {
           throw new Error('File needs a realm server source URL to upload');
         }
+
         let response = await this.network.authedFetch(file.sourceUrl, {
           headers: {
             Accept: 'application/vnd.card+source',
           },
         });
 
-        let blob = await response.blob();
+        // We only support uploading text files (code) for now.
+        // When we start supporting other file types (pdfs, images, etc)
+        // we will need to update this to support those file types.
+        let text = await response.text();
         let contentType = response.headers.get('content-type');
 
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        let uploadResponse = await this.client.uploadContent(blob, {
+
+        let uploadResponse = await this.client.uploadContent(text, {
           type: contentType,
         });
 
@@ -754,7 +759,9 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
+    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body), {
+      escapeHtmlInCodeBlocks: false,
+    });
 
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
@@ -1528,7 +1535,7 @@ export default class MatrixService extends Service {
         );
       } else {
         (event.content as any).origin_server_ts = event.origin_server_ts;
-        this.messageService.relayMatrixSSE(
+        this.messageService.relayRealmEvent(
           realmResourceForEvent.url,
           event.content as RealmEventContent,
         );

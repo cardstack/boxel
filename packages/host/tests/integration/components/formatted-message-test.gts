@@ -1,5 +1,7 @@
 import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
 
+import { waitUntil } from '@ember/test-helpers';
+
 import percySnapshot from '@percy/ember';
 import { module, test } from 'qunit';
 
@@ -140,8 +142,7 @@ puts "💎"
 </pre>`,
       isStreaming: false,
     });
-
-    await waitFor('.view-lines');
+    await waitUntil(() => document.querySelectorAll('.view-line').length > 3);
 
     assert.equal(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
@@ -166,7 +167,7 @@ puts "💎"
       isStreaming: false,
     });
 
-    await waitFor('.view-lines');
+    await waitUntil(() => document.querySelectorAll('.view-line').length > 4);
 
     assert.equal(
       (document.getElementsByClassName('view-lines')[0] as HTMLElement)
@@ -195,8 +196,12 @@ let a = 3;
 
     // monaco diff editor is rendered when the diff block is complete (i.e. code block streaming has finished)
     // the diff editor will have .line-delete and .line-insert classes to show the changes
-
-    await waitFor('.code-block-diff .cdr.line-delete');
+    await waitUntil(
+      () =>
+        document.querySelectorAll('.code-block-diff .cdr.line-delete').length >
+        1,
+    );
+    await waitFor('.code-block-diff .cdr.line-insert');
 
     assert.dom('.cdr.line-delete').exists({ count: 2 });
     assert.dom('.cdr.line-insert').exists({ count: 1 });
@@ -235,5 +240,61 @@ let c = 3;
     assert.dom('.code-block-diff').exists({ count: 1 });
 
     await percySnapshot(assert);
+  });
+
+  test('it will render "Accept All" button when there are code patch actions and it is not streaming', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `<p>We need to fix this:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+=======
+let a = 2;
+>>>>>>> REPLACE
+</pre>
+<p>We need to fix this too:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let c = 1;
+=======
+let c = 2;
+>>>>>>> REPLACE
+</pre>
+`,
+      isStreaming: false,
+    });
+
+    assert.dom('[data-test-apply-all-code-patches-button]').exists();
+  });
+
+  test('it will not render "Accept All" button when there are code patch actions and it is streaming', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `<p>We need to fix this:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+=======
+let a = 2;
+>>>>>>> REPLACE
+</pre>
+<p>We need to fix this too:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let c = 1;
+=======
+let c = 2;
+>>>>>>> REPLACE
+</pre>
+`,
+      isStreaming: true,
+    });
+
+    assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
   });
 });

@@ -41,6 +41,7 @@ import ENV from '@cardstack/host/config/environment';
 import SQLiteAdapter from '@cardstack/host/lib/sqlite-adapter';
 
 import type LoaderService from '@cardstack/host/services/loader-service';
+import MonacoService from '@cardstack/host/services/monaco-service';
 import type NetworkService from '@cardstack/host/services/network';
 
 import type QueueService from '@cardstack/host/services/queue';
@@ -78,9 +79,6 @@ const baseTestMatrix = {
   password: 'password',
 };
 
-// Ignoring this TS error (Cannot find module 'ember-provide-consume-context/test-support')
-// until https://github.com/customerio/ember-provide-consume-context/issues/24 is fixed
-// @ts-ignore
 export { provide as provideConsumeContext } from 'ember-provide-consume-context/test-support';
 
 export function cleanWhiteSpace(text: string) {
@@ -90,12 +88,31 @@ export function cleanWhiteSpace(text: string) {
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 
-export function getMonacoContent(): string {
-  return (window as any).monaco.editor.getModels()[0].getValue();
+export function getMonacoContent(
+  editor: 'main' | 'firstAvailable' = 'main',
+): string {
+  if (editor === 'main') {
+    let monacoService = lookupService('monaco-service') as MonacoService;
+    return monacoService.getMonacoContent()!;
+  } else {
+    return (window as any).monaco.editor.getModels()[0].getValue();
+  }
 }
 
 export function setMonacoContent(content: string): string {
   return (window as any).monaco.editor.getModels()[0].setValue(content);
+}
+
+export function cleanupMonacoEditorModels() {
+  let diffEditors = (window as any).monaco.editor.getDiffEditors();
+  for (let editor of diffEditors) {
+    editor.dispose();
+  }
+
+  let models = (window as any).monaco.editor.getModels();
+  for (let model of models) {
+    model.dispose();
+  }
 }
 
 export async function waitForCodeEditor() {

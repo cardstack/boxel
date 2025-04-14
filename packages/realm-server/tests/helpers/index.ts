@@ -6,7 +6,6 @@ import {
   ensureDirSync,
   copySync,
 } from 'fs-extra';
-import eventSource from 'eventsource';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import {
@@ -762,7 +761,6 @@ export function setupPermissionedRealm(
   },
 ) {
   let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
-  let testRealmEventSource: eventSource;
 
   setGracefulCleanup();
 
@@ -796,18 +794,6 @@ export function setupPermissionedRealm(
 
       let request = supertest(testRealmServer.testRealmHttpServer);
 
-      if (subscribeToRealmEvents) {
-        testRealmEventSource = new eventSource(
-          `${testRealmHref}_message?testFileWatcher=node`,
-        );
-
-        await new Promise<void>((resolve) => {
-          testRealmEventSource.onopen = () => {
-            resolve();
-          };
-        });
-      }
-
       onRealmSetup?.({
         dbAdapter,
         testRealm: testRealmServer.testRealm,
@@ -820,10 +806,7 @@ export function setupPermissionedRealm(
   });
 
   hooks.afterEach(async function () {
-    if (testRealmEventSource) {
-      testRealmEventSource.close();
-    }
-
+    testRealmServer.testRealm.unsubscribe();
     await closeServer(testRealmServer.testRealmHttpServer);
     resetCatalogRealms();
   });

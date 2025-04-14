@@ -124,7 +124,11 @@ export default class RoomMessage extends Component<Signature> {
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
-        @formattedMessage={{markdownToHtml this.message.formattedMessage false}}
+        @formattedMessage={{markdownToHtml
+          this.message.formattedMessage
+          sanitize=false
+          escapeHtmlInCodeBlocks=false
+        }}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}

@@ -100,6 +100,21 @@ export class UpdateSkillActivationInput extends CardDef {
   @field isActive = contains(BooleanField);
 }
 
+export class UseAiAssistantInput extends CardDef {
+  @field roomId = contains(StringField); // pass 'new' or leave blank to create a new room
+  @field roomName = contains(StringField); // only used when creating a new room
+  @field llmModel = contains(StringField);
+  @field openRoom = contains(BooleanField);
+  @field skillCards = linksToMany(SkillCard);
+  @field skillCardIds = containsMany(StringField);
+  @field attachedCards = linksToMany(CardDef);
+  @field attachedCardIds = containsMany(StringField);
+  @field attachedFileURLs = containsMany(StringField);
+  @field prompt = contains(StringField);
+  @field clientGeneratedId = contains(StringField);
+  @field openCardIds = containsMany(StringField);
+}
+
 export class SendAiAssistantMessageInput extends CardDef {
   @field roomId = contains(StringField);
   @field prompt = contains(StringField);
@@ -115,6 +130,7 @@ export class SendAiAssistantMessageInput extends CardDef {
 }
 
 export class SendAiAssistantMessageResult extends CardDef {
+  @field roomId = contains(StringField);
   @field eventId = contains(StringField);
 }
 

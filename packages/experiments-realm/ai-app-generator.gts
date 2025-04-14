@@ -140,6 +140,7 @@ class CardListSidebar extends GlimmerComponent<{
         @query={{@query}}
         @format='fitted'
         @realms={{@realms}}
+        @isLive={{true}}
       >
         <:loading>Loading...</:loading>
         <:response as |cards|>
@@ -412,6 +413,7 @@ class RequirementsTab extends GlimmerComponent<{
           @query={{getCardTypeQuery this.cardRef}}
           @format='fitted'
           @realms={{@realms}}
+          @isLive={{true}}
         >
           <:loading>Loading...</:loading>
           <:response as |cards|>

@@ -3,21 +3,19 @@ import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask, timeout, task } from 'ember-concurrency';
+import { restartableTask, timeout } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
-import type CardService from '@cardstack/host/services/card-service';
-import CommandService from '@cardstack/host/services/command-service';
-import LoaderService from '@cardstack/host/services/loader-service';
+
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
@@ -26,6 +24,7 @@ import { CodeData } from './formatted-message';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
+
 interface CopyCodeButtonSignature {
   Args: {
     code?: string | null;
@@ -34,8 +33,7 @@ interface CopyCodeButtonSignature {
 
 interface ApplyCodePatchButtonSignature {
   Args: {
-    codePatch?: string | null;
-    fileUrl?: string | null;
+    codePatchAction: CodePatchAction;
   };
 }
 
@@ -178,6 +176,18 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
 
       editor.setModel({ original: originalModel, modified: modifiedModel });
 
+      const contentHeight = editor.getModifiedEditor().getContentHeight();
+      if (contentHeight > 0) {
+        element.style.height = `${contentHeight}px`;
+      }
+
+      editor.getModifiedEditor().onDidContentSizeChange(() => {
+        const newHeight = editor.getModifiedEditor().getContentHeight();
+        if (newHeight > 0) {
+          element.style.height = `${newHeight}px`;
+        }
+      });
+
       this.monacoState = {
         editor,
       };
@@ -286,6 +296,18 @@ class MonacoEditor extends Modifier<MonacoEditorSignature> {
 
       model.setValue(code);
 
+      const contentHeight = editor.getContentHeight();
+      if (contentHeight > 0) {
+        element.style.height = `${contentHeight}px`;
+      }
+
+      editor.onDidContentSizeChange(() => {
+        const newHeight = editor.getContentHeight();
+        if (newHeight > 0) {
+          element.style.height = `${newHeight}px`;
+        }
+      });
+
       this.monacoState = {
         editor,
       };
@@ -318,6 +340,10 @@ class CodeBlockEditor extends Component<Signature> {
       enabled: false,
     },
     fontSize: 10,
+    scrollBeyondLastLine: false,
+    padding: {
+      bottom: 8,
+    },
   };
 
   <template>
@@ -326,7 +352,7 @@ class CodeBlockEditor extends Component<Signature> {
         margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
         margin-left: calc(-1 * var(--boxel-sp));
-        height: 120px;
+        max-height: 250px;
       }
     </style>
     <div
@@ -359,6 +385,10 @@ class CodeBlockDiffEditor extends Component<Signature> {
     fontSize: 10,
     renderOverviewRuler: false,
     automaticLayout: true,
+    scrollBeyondLastLine: false,
+    padding: {
+      bottom: 8,
+    },
   };
 
   <template>
@@ -367,7 +397,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
         margin-bottom: 15px;
         width: calc(100% + 2 * var(--boxel-sp));
         margin-left: calc(-1 * var(--boxel-sp));
-        height: 120px;
+        max-height: 250px;
       }
 
       :deep(.line-insert) {
@@ -481,43 +511,13 @@ class CopyCodeButton extends Component<CopyCodeButtonSignature> {
   </template>
 }
 
-class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
-  @service private declare loaderService: LoaderService;
-  @service private declare commandService: CommandService;
-  @service private declare cardService: CardService;
-  @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
-    'ready';
-
-  private patchCodeTask = task(async (codePatch: string, fileUrl: string) => {
-    this.patchCodeTaskState = 'applying';
-    try {
-      let source = await this.cardService.getSource(new URL(fileUrl));
-
-      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
-        this.commandService.commandContext,
-      );
-
-      let { resultContent: patchedCode } =
-        await applySearchReplaceBlockCommand.execute({
-          fileContent: source,
-          codeBlock: codePatch,
-        });
-
-      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
-      this.loaderService.reset();
-
-      this.patchCodeTaskState = 'applied';
-    } catch (error) {
-      console.error(error);
-      this.patchCodeTaskState = 'failed';
-    }
-  });
-
+let ApplyCodePatchButton: TemplateOnlyComponent<ApplyCodePatchButtonSignature> =
   <template>
     <ApplyButton
       data-test-apply-code-button
-      @state={{this.patchCodeTaskState}}
-      {{on 'click' (fn (perform this.patchCodeTask) @codePatch @fileUrl)}}
-    />
-  </template>
-}
+      @state={{@codePatchAction.patchCodeTaskState}}
+      {{on 'click' (perform @codePatchAction.patchCodeTask)}}
+    >
+      Apply
+    </ApplyButton>
+  </template>;
