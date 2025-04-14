@@ -116,9 +116,9 @@ export default class RoomMessage extends Component<Signature> {
     return this.commandService.run.unlinked().perform(command);
   });
 
-  private get formattedMessage() {
+  private get messageInHtmlFormat() {
     // formattedMessage will be sent in two different formats: markdown and html
-    // the formatted message that is sent by ai bot will be in markdown format 
+    // the formatted message that is sent by ai bot will be in markdown format
     // and the formatted message that is sent by the user will be in html format
     // so we need to convert the markdown to html when the message is sent by the ai bot
     if (
@@ -145,7 +145,7 @@ export default class RoomMessage extends Component<Signature> {
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
-        @formattedMessage={{this.formattedMessage}}
+        @formattedMessage={{this.messageInHtmlFormat}}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
