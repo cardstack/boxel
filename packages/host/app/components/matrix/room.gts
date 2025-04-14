@@ -818,7 +818,7 @@ export default class Room extends Component<Signature> {
       // also get the card ids of the cards that are open in code mode
       let cardIds = new TrackedSet<string>();
       if (this.autoAttachedFileUrl?.endsWith('.json')) {
-        // remove the json extension, reverse
+        // remove the json extension. TODO: is there a way of getting the actual card id
         let cardId = this.autoAttachedFileUrl.replace(/\.json$/, '');
         cardIds.add(cardId);
       }
