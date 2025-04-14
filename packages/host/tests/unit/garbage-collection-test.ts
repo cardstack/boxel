@@ -10,7 +10,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import IdentityContext, {
-  IDResolver,
   type ReferenceCount,
 } from '@cardstack/host/lib/gc-identity-context';
 
@@ -59,7 +58,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
   async function saveAll({
     identityContext,
-    idResolver,
     jade,
     queenzy,
     germaine,
@@ -67,7 +65,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
     hassan,
   }: {
     identityContext: IdentityContext;
-    idResolver: IDResolver;
     jade: CardInstance;
     queenzy: CardInstance;
     germaine: CardInstance;
@@ -75,26 +72,20 @@ module('Unit | identity-context garbage collection', function (hooks) {
     hassan: CardInstance;
   }) {
     await saveCard(jade, `${testRealmURL}jade`, loader, identityContext);
-    idResolver.addIdPair(jade[localId], jade.id);
     await saveCard(queenzy, `${testRealmURL}queenzy`, loader, identityContext);
-    idResolver.addIdPair(queenzy[localId], queenzy.id);
     await saveCard(
       germaine,
       `${testRealmURL}germaine`,
       loader,
       identityContext,
     );
-    idResolver.addIdPair(germaine[localId], germaine.id);
     await saveCard(boris, `${testRealmURL}boris`, loader, identityContext);
-    idResolver.addIdPair(boris[localId], boris.id);
     await saveCard(hassan, `${testRealmURL}hassan`, loader, identityContext);
-    idResolver.addIdPair(hassan[localId], hassan.id);
   }
 
   async function setupTest(
     doSave?: (args: {
       identityContext: IdentityContext;
-      idResolver: IDResolver;
       jade: CardInstance;
       queenzy: CardInstance;
       germaine: CardInstance;
@@ -119,12 +110,8 @@ module('Unit | identity-context garbage collection', function (hooks) {
       friends: [germaine],
     });
 
-    let idResolver = new IDResolver();
     let referenceCount: ReferenceCount = new Map();
-    let identityContext = new IdentityContext({
-      idResolver,
-      referenceCount,
-    });
+    let identityContext = new IdentityContext(referenceCount);
 
     identityContext.set(jade[localId], jade);
     identityContext.set(germaine[localId], germaine);
@@ -134,7 +121,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     await doSave?.({
       identityContext,
-      idResolver,
       jade,
       queenzy,
       germaine,
@@ -143,7 +129,6 @@ module('Unit | identity-context garbage collection', function (hooks) {
     });
 
     return {
-      idResolver,
       referenceCount,
       identityContext,
       instances: { jade, queenzy, germaine, boris, hassan },

@@ -25,11 +25,17 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 // trying to search thru all the entries in a single direction Map to find the
 // opposing id, it will trigger a glimmer invalidation on all the cards in the
 // identity map
-export class IDResolver {
+class IDResolver {
   #remoteIds = new Map<string, string[]>(); // localId => remoteId[]
   #localIds = new Map<string, string>(); // remoteId => localId
 
   addIdPair(localId: string, remoteId: string) {
+    let existingLocalId = this.getLocalId(remoteId);
+    if (existingLocalId && localId !== existingLocalId) {
+      throw new Error(
+        `the instance with [remote id: ${remoteId} local id: ${localId}] has conflicting instance id in store: [remote id: ${remoteId} local id: ${existingLocalId}]`,
+      );
+    }
     let remoteIds = this.#remoteIds.get(localId);
     if (!remoteIds) {
       remoteIds = [];
@@ -77,17 +83,10 @@ export default class IdentityContextWithGarbageCollection
   #cardErrors = new TrackedMap<string, CardError>();
   #gcCandidates: Set<LocalId> = new Set();
   #referenceCount: ReferenceCount;
-  #idResolver: IDResolver;
+  #idResolver = new IDResolver();
 
-  constructor({
-    referenceCount,
-    idResolver,
-  }: {
-    referenceCount: ReferenceCount;
-    idResolver: IDResolver;
-  }) {
+  constructor(referenceCount: ReferenceCount) {
     this.#referenceCount = referenceCount;
-    this.#idResolver = idResolver;
   }
 
   get(id: string): CardDef | undefined {
@@ -95,6 +94,9 @@ export default class IdentityContextWithGarbageCollection
   }
 
   set(id: string, instance: CardDef): void {
+    if (!isLocalId(id)) {
+      this.#idResolver.addIdPair(instance[localIdSymbol], id);
+    }
     this.setItem(id, instance);
   }
 

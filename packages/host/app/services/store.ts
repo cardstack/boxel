@@ -46,7 +46,6 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import IdentityContext, {
   getDeps,
-  IDResolver,
   type ReferenceCount,
 } from '../lib/gc-identity-context';
 
@@ -71,7 +70,6 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
-  private idResolver = new IDResolver();
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
@@ -80,10 +78,7 @@ export default class StoreService extends Service implements StoreInterface {
   private gcInterval: number | undefined;
   private ready: Promise<void>;
   private inflightCards: Map<string, Promise<CardDef | CardError>> = new Map();
-  private identityContext = new IdentityContext({
-    idResolver: this.idResolver,
-    referenceCount: this.referenceCount,
-  });
+  private identityContext = new IdentityContext(this.referenceCount);
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
@@ -115,13 +110,9 @@ export default class StoreService extends Service implements StoreInterface {
     this.onSaveSubscriber = undefined;
     this.referenceCount = new Map();
     this.newReferencePromises = [];
-    this.idResolver = new IDResolver();
     this.autoSaveStates = new TrackedMap();
     this.inflightCards = new Map();
-    this.identityContext = new IdentityContext({
-      idResolver: this.idResolver,
-      referenceCount: this.referenceCount,
-    });
+    this.identityContext = new IdentityContext(this.referenceCount);
     this.ready = this.setup();
   }
 
@@ -239,7 +230,6 @@ export default class StoreService extends Service implements StoreInterface {
       instance = instanceOrDoc;
       this.guardAgainstUnknownInstances(instance);
     }
-    this.assertLocalIdMapping(instance);
     this.identityContext.set(instance.id ?? instance[localIdSymbol], instance);
 
     if (!opts?.doNotPersist) {
@@ -285,7 +275,6 @@ export default class StoreService extends Service implements StoreInterface {
     patchData: PatchData,
   ): Promise<void> {
     this.guardAgainstUnknownInstances(instance);
-    this.assertLocalIdMapping(instance);
     let linkedCards = await this.loadPatchedInstances(
       patchData,
       new URL(instance.id),
@@ -407,25 +396,6 @@ export default class StoreService extends Service implements StoreInterface {
         deferred.reject(e);
       }
     });
-  }
-
-  private assertLocalIdMapping(instance: CardDef, remoteId?: string) {
-    let localId = instance[localIdSymbol];
-    for (let id of [instance.id, remoteId].filter(Boolean) as string[]) {
-      let existingLocalId = this.idResolver.getLocalId(id);
-      if (existingLocalId && localId !== existingLocalId) {
-        throw new Error(
-          `the instance ${instance.constructor.name} with [remote id: ${id} local id: ${localId}] has conflicting instance id in store: [remote id: ${id} local id: ${existingLocalId}]`,
-        );
-      }
-    }
-
-    if (instance.id) {
-      this.idResolver.addIdPair(localId, instance.id);
-    }
-    if (remoteId) {
-      this.idResolver.addIdPair(localId, remoteId);
-    }
   }
 
   private async createFromSerialized<T extends CardDef>(
@@ -676,7 +646,6 @@ export default class StoreService extends Service implements StoreInterface {
       // in case the url is an alias for the id (like index card without the
       // "/index") we also add this
       this.identityContext.set(url, instance);
-      this.assertLocalIdMapping(instance, url);
       deferred?.fulfill(instance);
       return instance as T;
     } catch (error: any) {
@@ -829,7 +798,6 @@ export default class StoreService extends Service implements StoreInterface {
           realmURL = new URL(defaultRealmHref);
         }
         let json = await this.saveCardDocument(doc, realmURL);
-        this.assertLocalIdMapping(instance, json.data.id);
         let isNew = !instance.id;
 
         // if the card changed while the save was in flight then don't load the
