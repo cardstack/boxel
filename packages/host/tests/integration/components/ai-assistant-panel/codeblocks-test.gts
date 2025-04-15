@@ -266,7 +266,8 @@ export default class MyComponent extends Component {
     );
 
     await waitFor('[data-test-message-idx="0"]');
-    let monacoContent = getMonacoContent();
+
+    let monacoContent = getMonacoContent('firstAvailable');
     assert.strictEqual(
       monacoContent,
       `console.log("hello world");`,
@@ -290,7 +291,7 @@ export default class MyComponent extends Component {
     );
     await settled();
 
-    monacoContent = getMonacoContent();
+    monacoContent = getMonacoContent('firstAvailable');
     assert.strictEqual(
       monacoContent,
       `console.log("hello world");`,
@@ -334,14 +335,14 @@ const data = {
 
 <!-- Pre tag with HTML entities -->
 <pre>
-&lt;html&gt;
-    &lt;head&gt;
-        &lt;title&gt;Sample Page&lt;/title&gt;
-    &lt;/head&gt;
-    &lt;body&gt;
-        &lt;h1&gt;Hello World!&lt;/h1&gt;
-    &lt;/body&gt;
-&lt;/html&gt;
+<html>
+    <head>
+        <title>Sample Page</title>
+    </head>
+    <body>
+        <h1>Hello World!</h1>
+    </body>
+</html>
 </pre>
 \`\`\`
 
@@ -382,7 +383,7 @@ You can use these in your HTML documents to display formatted text, code snippet
       .dom('.monaco-editor')
       .exists({ count: 2 }, 'Should have 2 monaco editors');
 
-    let monacoContent = getMonacoContent();
+    let monacoContent = getMonacoContent('firstAvailable');
     assert.strictEqual(
       monacoContent,
       `<!-- Basic pre tag example -->
@@ -413,14 +414,14 @@ const data = {
 
 <!-- Pre tag with HTML entities -->
 <pre>
-&lt;html&gt;
-    &lt;head&gt;
-        &lt;title&gt;Sample Page&lt;/title&gt;
-    &lt;/head&gt;
-    &lt;body&gt;
-        &lt;h1&gt;Hello World!&lt;/h1&gt;
-    &lt;/body&gt;
-&lt;/html&gt;
+<html>
+    <head>
+        <title>Sample Page</title>
+    </head>
+    <body>
+        <h1>Hello World!</h1>
+    </body>
+</html>
 </pre>`,
       'Monaco content should exactly match the HTML code block',
     );
@@ -500,7 +501,7 @@ And another code block without language specified:
       .exists({ count: 2 }, 'Should have 2 monaco editors');
 
     // Check that HTML inside code blocks is preserved
-    let monacoContent = getMonacoContent();
+    let monacoContent = getMonacoContent('firstAvailable');
     assert.strictEqual(
       monacoContent,
       `<div class="example">
@@ -553,7 +554,7 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
       .dom('.monaco-editor')
       .exists({ count: 1 }, 'Should have 1 monaco editor');
 
-    let monacoContent = getMonacoContent();
+    let monacoContent = getMonacoContent('firstAvailable');
     assert.strictEqual(
       monacoContent,
       `<div class="container">
