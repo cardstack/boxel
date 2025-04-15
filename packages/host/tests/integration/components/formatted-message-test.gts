@@ -241,4 +241,60 @@ let c = 3;
 
     await percySnapshot(assert);
   });
+
+  test('it will render "Accept All" button when there are code patch actions and it is not streaming', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `<p>We need to fix this:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+=======
+let a = 2;
+>>>>>>> REPLACE
+</pre>
+<p>We need to fix this too:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let c = 1;
+=======
+let c = 2;
+>>>>>>> REPLACE
+</pre>
+`,
+      isStreaming: false,
+    });
+
+    assert.dom('[data-test-apply-all-code-patches-button]').exists();
+  });
+
+  test('it will not render "Accept All" button when there are code patch actions and it is streaming', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `<p>We need to fix this:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+=======
+let a = 2;
+>>>>>>> REPLACE
+</pre>
+<p>We need to fix this too:</p>
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let c = 1;
+=======
+let c = 2;
+>>>>>>> REPLACE
+</pre>
+`,
+      isStreaming: true,
+    });
+
+    assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
+  });
 });
