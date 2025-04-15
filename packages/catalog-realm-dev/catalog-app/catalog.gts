@@ -149,7 +149,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
         gap: var(--boxel-sp-sm);
       }
       .intro-title h2 {
-        font: 700 var(--boxel-font-xl);
+        font: 600 var(--boxel-font-xl);
       }
       .intro-title p {
         font: var(--boxel-font-lg);
