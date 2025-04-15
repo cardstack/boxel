@@ -33,6 +33,7 @@ import {
   markdownToHtml,
   ResolvedCodeRef,
   isCardInstance,
+  CardResource,
 } from '@cardstack/runtime-common';
 
 import {
@@ -50,7 +51,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-  APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE,
+  APP_BOXEL_AI_SETTINGS_EVENT_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
@@ -86,6 +87,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
+import type { AiSettingsCard } from 'https://cardstack.com/base/ai-settings-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import CardEventPublisher from '../lib/card-event-publisher';
@@ -184,6 +186,8 @@ export default class MatrixService extends Service {
   private aiRoomIds: Set<string> = new Set();
   @tracked private _isLoadingMoreAIRooms = false;
 
+  private aiSettingsCardId: string | undefined;
+
   constructor(owner: Owner) {
     super(owner);
     this.#ready = this.loadState.perform();
@@ -247,6 +251,10 @@ export default class MatrixService extends Service {
       [
         this.matrixSDK.ClientEvent.AccountData,
         async (e) => {
+          // listen for changes to the active settings
+          if (e.event.type == APP_BOXEL_AI_SETTINGS_EVENT_TYPE) {
+            this.aiSettingsCardId = e.event.content.id;
+          }
           if (e.event.type == APP_BOXEL_REALMS_EVENT_TYPE) {
             await this.realmServer.setAvailableRealmURLs(
               e.event.content.realms,
@@ -880,62 +888,65 @@ export default class MatrixService extends Service {
     }
   }
 
-  async setDefaultSkillIDs(submode: Submode, skillIds: string[]) {
-    let userDefaultSkillIDs: DefaultSkills =
-      (await this.client.getAccountDataFromServer<DefaultSkills>(
-        APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE,
-      )) || { interact: [], code: [] };
-    console.log('userDefaultSkillIDs', userDefaultSkillIDs);
-    userDefaultSkillIDs[submode] = skillIds;
-    await this.client.setAccountData(
-      APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE,
-      userDefaultSkillIDs,
-    );
-    console.log('setDefaultSkillIDs', userDefaultSkillIDs);
+  async setAiSettings(aiSettings: AiSettingsCard) {
+    await this.client.setAccountData(APP_BOXEL_AI_SETTINGS_EVENT_TYPE, {
+      id: aiSettings.id,
+    });
   }
 
-  async getDefaultSkillIDs(submode: Submode): Promise<string[]> {
+  private async getAiSettings(): Promise<AiSettingsCard | undefined> {
     // Check if the user has set default skills for this submode
-    let userDefaultSkillIDs =
-      await this.client.getAccountDataFromServer<DefaultSkills>(
-        APP_BOXEL_DEFAULT_SKILLS_EVENT_TYPE,
+    if (this.aiSettingsCardId) {
+      let aiSettings = await this.store.peek<AiSettingsCard>(
+        this.aiSettingsCardId,
       );
-    // If the user has set them, use only those skills
-    // If it's an empty array, use the system default skills
-    let userSubmodeDefaultSkillIDs = userDefaultSkillIDs?.[submode];
-    console.log('getDefaultSkillIDs', submode, userDefaultSkillIDs);
-    if (userSubmodeDefaultSkillIDs && userSubmodeDefaultSkillIDs.length > 0) {
-      return userSubmodeDefaultSkillIDs;
-    }
-
-    switch (submode) {
-      case 'interact':
-        return [`${baseRealm.url}SkillCard/card-editing`];
-      case 'code':
-        return [
-          `${baseRealm.url}SkillCard/boxel-coding`,
-          `${baseRealm.url}SkillCard/source-code-editing`,
-        ];
-      default: {
-        // Type checking we never get here
-        const _unhandled: never = submode;
-        return _unhandled;
+      if (aiSettings) {
+        return aiSettings;
+      } else {
+        console.log('cannot load ai settings', this.aiSettingsCardId);
       }
     }
+    let { id: useraiSettingsCardId } =
+      (await this.client.getAccountDataFromServer<{
+        id: string;
+      }>(APP_BOXEL_AI_SETTINGS_EVENT_TYPE)) || { id: undefined };
+    if (!useraiSettingsCardId) {
+      // load the default
+      console.log('no user ai settings, loading default');
+      return undefined;
+    }
+    let aiSettings =
+      await this.store.peek<AiSettingsCard>(useraiSettingsCardId);
+    if (!aiSettings) {
+      console.log('cannot load ai settings', useraiSettingsCardId);
+      return undefined;
+    }
+    this.aiSettingsCardId = useraiSettingsCardId;
+    return aiSettings;
   }
 
   async loadDefaultSkills(submode: Submode) {
-    await this.getDefaultSkillIDs('code');
-    let defaultSkillIDs = await this.getDefaultSkillIDs(submode);
-    return (
-      await Promise.all(
-        defaultSkillIDs.map(async (skillCardURL) => {
-          let maybeCard =
-            await this.store.peek<SkillCardModule.SkillCard>(skillCardURL);
-          return isCardInstance(maybeCard) ? maybeCard : undefined;
-        }),
-      )
-    ).filter(Boolean) as SkillCardModule.SkillCard[];
+    let aiSettings = await this.getAiSettings();
+    if (!aiSettings) {
+      return [];
+    }
+    // should have these directly on the card
+    if (submode === 'code') {
+      console.log(
+        'loading default code skills',
+        aiSettings,
+        aiSettings.codeSkills,
+      );
+      return aiSettings.codeSkills;
+    } else if (submode === 'interact') {
+      console.log(
+        'loading default code skills',
+        aiSettings,
+        aiSettings.interactSkills,
+      );
+      return aiSettings.interactSkills;
+    }
+    throw new Error(`Unknown submode: ${submode}`);
   }
 
   @cached
