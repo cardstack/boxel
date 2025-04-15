@@ -1030,4 +1030,79 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
     });
   });
+
+  module('indexing error', function (hooks) {
+    setupApplicationTest(hooks);
+    setupLocalIndexing(hooks);
+    setupOnSave(hooks);
+
+    let mockMatrixUtils = setupMockMatrix(hooks, {
+      loggedInAs: '@testuser:localhost',
+      activeRealms: [testRealmURL],
+    });
+    let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
+      mockMatrixUtils;
+
+    const boomPet = `import { contains, field, CardDef, Component, FieldDef, StringField, serialize } from 'https://cardstack.com/base/card-api';
+      // this field explodes when serialized (saved)
+      export class BoomField extends FieldDef {
+        @field title = contains(StringField);
+        static [serialize](_boom: any) {
+          throw new Error('Boom!');
+        }
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <@fields.title />
+          </template>
+        };
+      }
+      export class BoomPet extends CardDef {
+        static displayName = 'Boom Pet';
+        @field boom = contains(BoomField);
+      }
+    `;
+
+    hooks.beforeEach(async function () {
+      matrixRoomId = createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'room-test',
+      });
+      setupUserSubscription(matrixRoomId);
+      setActiveRealms([testRealmURL]);
+      setRealmPermissions({
+        [testRealmURL]: ['read', 'write'],
+      });
+      await setupAcceptanceTestRealm({
+        mockMatrixUtils,
+        realmURL: testRealmURL,
+        contents: {
+          'boom-pet.gts': boomPet,
+          'BoomPet/cassidy.json': {
+            data: {
+              attributes: {
+                title: 'Cassidy Cat',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}boom-pet`,
+                  name: 'BoomPet',
+                },
+              },
+            },
+          },
+        },
+      });
+    });
+
+    test('it renders a playground instance with an error that has does not have a last known good state', async function (assert) {
+      setPlaygroundSelections({
+        [`${testRealmURL}boom-pet/BoomPet`]: {
+          cardId: `${testRealmURL}BoomPet/cassidy`,
+          format: 'isolated',
+        },
+      });
+      await openFileInPlayground('boom-pet.gts', testRealmURL, 'BoomPet');
+      assert.dom('[data-test-card-error]').exists();
+    });
+  });
 });
