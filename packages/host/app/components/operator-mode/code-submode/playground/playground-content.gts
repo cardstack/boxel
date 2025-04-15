@@ -4,16 +4,21 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
+import {
+  CardContainer,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Query,
   type ResolvedCodeRef,
+  type CardErrorJSONAPI,
   specRef,
 } from '@cardstack/runtime-common';
 
@@ -29,8 +34,10 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import { CardDef, FieldDef, Format } from 'https://cardstack.com/base/card-api';
 
+import { htmlComponent } from '../../../../lib/html-component';
+import CardError from '../../card-error';
+import CardErrorDetail from '../../card-error-detail';
 import FormatChooser from '../format-chooser';
-
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
 
@@ -55,6 +62,7 @@ interface Signature {
     isFieldDef?: boolean;
     card?: CardDef;
     field?: FieldDef;
+    cardError?: CardErrorJSONAPI;
   };
 }
 
@@ -63,6 +71,21 @@ export default class PlaygroundContent extends Component<Signature> {
     {{consumeContext @makeCardResource}}
     <section class='playground-panel' data-test-playground-panel>
       <div class='playground-panel-content'>
+        {{#if @cardError}}
+          <CardContainer class='error-container' @displayBoundaries={{true}}>
+            {{#if this.lastKnownGoodHtml}}
+              <div data-test-card-error>
+                <this.lastKnownGoodHtml />
+              </div>
+            {{else}}
+              <CardError />
+            {{/if}}
+            <CardErrorDetail
+              @error={{@cardError}}
+              @title={{this.cardErrorSummary}}
+            />
+          </CardContainer>
+        {{/if}}
         {{#let (if @isFieldDef @field @card) as |card|}}
           {{#if card}}
             <div
@@ -138,6 +161,10 @@ export default class PlaygroundContent extends Component<Signature> {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         overflow: auto;
+      }
+      .error-container {
+        flex-grow: 1;
+        display: grid;
       }
     </style>
   </template>
@@ -271,4 +298,37 @@ export default class PlaygroundContent extends Component<Signature> {
   private get canWriteRealm() {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
+
+  @cached
+  private get lastKnownGoodHtml() {
+    let lastKnownGoodHtml = this.args.cardError?.meta.lastKnownGoodHtml;
+    if (lastKnownGoodHtml) {
+      this.loadScopedCSS.perform();
+      return htmlComponent(lastKnownGoodHtml);
+    }
+    return undefined;
+  }
+
+  @cached
+  private get cardErrorSummary() {
+    if (!this.args.cardError) {
+      return undefined;
+    }
+    return this.args.cardError.status === 404 &&
+      // a missing link error looks a lot like a missing card error
+      this.args.cardError.message?.includes('missing')
+      ? `Link Not Found`
+      : this.args.cardError.title;
+  }
+
+  private loadScopedCSS = task(async () => {
+    let scopedCssUrls = this.args.cardError?.meta.scopedCssUrls;
+    if (scopedCssUrls) {
+      await Promise.all(
+        scopedCssUrls.map((cssModuleUrl) =>
+          this.loaderService.loader.import(cssModuleUrl),
+        ),
+      );
+    }
+  });
 }

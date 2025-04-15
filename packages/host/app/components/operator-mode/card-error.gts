@@ -3,7 +3,7 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import FileAlert from '@cardstack/boxel-icons/file-alert';
 
 const CardErrorComponent: TemplateOnlyComponent = <template>
-  <div class='card-error'>
+  <div class='card-error' data-test-card-error>
     <FileAlert class='icon' />
     <div class='message'>This card contains an error.</div>
   </div>

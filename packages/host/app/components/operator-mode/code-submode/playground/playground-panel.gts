@@ -18,6 +18,7 @@ import {
   specRef,
   type Query,
   type LooseSingleCardDocument,
+  type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -123,6 +124,12 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private get card(): CardDef | undefined {
     return this.cardResource?.card;
+  }
+
+  private get cardError(): CardErrorJSONAPI | undefined {
+    return this.cardResource?.cardError?.meta
+      ? this.cardResource?.cardError
+      : undefined;
   }
 
   private get specCard(): Spec | undefined {
@@ -445,6 +452,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           createNew=this.createNew
           createNewIsRunning=this.createNewIsRunning
           isFieldDef=@isFieldDef
+          cardError=this.cardError
         )
       )
     }}

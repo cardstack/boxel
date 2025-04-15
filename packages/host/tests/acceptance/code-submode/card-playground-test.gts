@@ -1103,6 +1103,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
       await openFileInPlayground('boom-pet.gts', testRealmURL, 'BoomPet');
       assert.dom('[data-test-card-error]').exists();
+
+      await click('[data-test-error-detail-toggle] button');
+      assert.dom('[data-test-error-detail]').hasText('Boom!');
     });
   });
 });
