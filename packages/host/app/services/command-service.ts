@@ -237,7 +237,7 @@ export default class CommandService extends Service {
           : e instanceof Error
             ? e
             : new Error('Command failed.');
-      console.warn(error);
+      console.error(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(commandRequestId!, error);
     } finally {

@@ -271,19 +271,14 @@ export type AutoSaveState = {
 };
 export type getCard<T extends CardDef = CardDef> = (
   parent: object,
-  url: () => string | undefined,
-  opts?: {
-    isLive?: boolean;
-    isAutoSaved?: boolean;
-  },
+  id: () => string | undefined,
 ) => // This is a duck type of the CardResource
 {
-  card: T | undefined;
-  isLoaded: boolean;
   id: string | undefined;
-  autoSaveState: AutoSaveState | undefined;
+  card: T | undefined;
   cardError: CardErrorJSONAPI | undefined;
-  api: typeof CardAPI;
+  isLoaded: boolean;
+  autoSaveState: AutoSaveState | undefined;
 };
 
 export type getCards<T extends CardDef = CardDef> = (
@@ -316,7 +311,8 @@ export interface Store {
       doNotPersist?: true;
     },
   ): Promise<T>;
-  peek<T extends CardDef>(url: string): Promise<T | CardErrorJSONAPI>;
+  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch(
     instance: CardDef,
@@ -324,7 +320,7 @@ export interface Store {
     patchData: PatchData,
   ): Promise<void>;
   search(query: Query, realmURL: URL): Promise<CardDef[]>;
-  getSaveState(instance: CardDef): AutoSaveState | undefined;
+  getSaveState(id: string): AutoSaveState | undefined;
 }
 
 export interface CardCatalogQuery extends Query {

@@ -777,7 +777,7 @@ export default class Room extends Component<Signature> {
           // elsewhere in our app.
           cards = (
             await Promise.all(
-              (cardsOrIds as string[]).map((id) => this.store.peek(id)),
+              (cardsOrIds as string[]).map((id) => this.store.get(id)),
             )
           )
             .filter(Boolean)
@@ -871,7 +871,7 @@ export default class Room extends Component<Signature> {
       this.commandService.commandContext,
     );
 
-    let skillCard = await this.store.peek<SkillCard>(cardId);
+    let skillCard = await this.store.get<SkillCard>(cardId);
     if (skillCard && isCardInstance(skillCard)) {
       await addSkillsToRoomCommand.execute({
         roomId: this.args.roomId,

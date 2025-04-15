@@ -16,7 +16,11 @@ import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 import { ArrowLeft, ArrowRight } from '@cardstack/boxel-ui/icons';
 
-import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
+import {
+  type getCard,
+  GetCardContextName,
+  realmURL as realmURLSymbol,
+} from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -166,7 +170,7 @@ export default class CopyButton extends Component<Signature> {
         if (!item?.card) {
           return indexCards;
         }
-        let realmURL = item.card[item.api.realmURL];
+        let realmURL = item.card[realmURLSymbol];
         if (!realmURL) {
           throw new Error(
             `could not determine realm URL for card ${item.card.id}`,
