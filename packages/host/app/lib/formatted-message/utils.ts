@@ -121,8 +121,7 @@ export interface HtmlTagGroup {
 export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   let result: HtmlTagGroup[] = [];
 
-  // Using dom manipulation to find pre and non-pre tags
-  // because we need to avoid the nested html tags issue.
+  // We are creating a new element in the dom so that we can easily parse the content of the top level <pre> tags. Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that it's trivial to get its contents, compared to parsing the htmlString. 
   let doc = document.createElement('div');
   doc.innerHTML = htmlString;
 
