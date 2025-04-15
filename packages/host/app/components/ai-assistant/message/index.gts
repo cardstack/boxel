@@ -5,7 +5,6 @@ import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { cached } from '@glimmer/tracking';
 
 import { format as formatDate, formatISO } from 'date-fns';
 import Modifier from 'ember-modifier';
@@ -15,7 +14,10 @@ import { Button } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
-import { type getCard, markdownToHtml } from '@cardstack/runtime-common';
+import {
+  type getCardCollection,
+  markdownToHtml,
+} from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
@@ -39,7 +41,7 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     profileAvatar?: ComponentLike;
-    resources?: ReturnType<getCard>[];
+    resources?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
     index: number;
     eventId: string;
@@ -267,24 +269,13 @@ export default class AiAssistantMessage extends Component<Signature> {
           {{#if this.items.length}}
             <div class='items' data-test-message-items>
               {{#each this.items as |item|}}
-                {{#if (isCardResource item)}}
-                  {{#if item.card}}
-                    <CardPill @cardId={{item.card.id}} />
-                  {{/if}}
+                {{#if (isCardCollectionResource item)}}
+                  {{#each item.cards as |card|}}
+                    <CardPill @cardId={{card.id}} />
+                  {{/each}}
                 {{else}}
                   <FilePill @file={{item}} />
                 {{/if}}
-              {{/each}}
-            </div>
-          {{/if}}
-
-          {{#if this.errors.length}}
-            <div class='error-container error-footer'>
-              {{#each this.errors as |resourceError|}}
-                <FailureBordered class='error-icon' />
-                <div class='error-message' data-test-card-error>
-                  <div>Cannot render {{resourceError.id}}</div>
-                </div>
               {{/each}}
             </div>
           {{/if}}
@@ -482,32 +473,11 @@ export default class AiAssistantMessage extends Component<Signature> {
     return this.args.isStreaming && !this.args.errorMessage;
   }
 
-  @cached
-  private get errors() {
-    let resourcesWithErrors = (this.args.resources ?? []).filter(
-      (r) => r.cardError,
-    );
-    return resourcesWithErrors.flatMap(({ cardError }) => {
-      let {
-        id,
-        message,
-        title: name,
-        meta: { stack },
-      } = cardError!; // we just filtered only resources that have card errors above
-      if (id) {
-        return [
-          {
-            id,
-            error: { name, message, stack: stack ?? undefined },
-          },
-        ];
-      }
-      return [];
-    });
-  }
-
   private get items() {
-    return [...(this.args.resources ?? []), ...(this.args.files ?? [])];
+    return [
+      ...(this.args.resources ? [this.args.resources] : []),
+      ...(this.args.files ?? []),
+    ];
   }
 }
 
@@ -547,7 +517,9 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
     </style>
   </template>;
 
-function isCardResource(obj: any): obj is ReturnType<getCard> {
+function isCardCollectionResource(
+  obj: any,
+): obj is ReturnType<getCardCollection> {
   return 'value' in obj;
 }
 

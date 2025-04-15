@@ -50,6 +50,7 @@ import {
   type ResolvedCodeRef,
   type getCard,
   type getCards,
+  type getCardCollection,
   type Store,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -152,6 +153,7 @@ export interface CardContext<T extends CardDef = CardDef> {
   prerenderedCardSearchComponent: any;
   getCard: getCard<T>;
   getCards: getCards;
+  getCardCollection: getCardCollection;
   store: Store;
 }
 

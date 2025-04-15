@@ -121,10 +121,13 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
-    currentReferenceCount--;
+    currentReferenceCount -= 1;
     this.referenceCount.set(id, currentReferenceCount);
 
-    if (currentReferenceCount === 0) {
+    console.debug(
+      `dropping reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
+    );
+    if (currentReferenceCount <= 0) {
       this.referenceCount.delete(id);
       let autoSaveState = this.autoSaveStates.get(id);
       if (autoSaveState?.hasUnsavedChanges) {
@@ -174,7 +177,11 @@ export default class StoreService extends Service implements StoreInterface {
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
-    this.referenceCount.set(id, currentReferenceCount++);
+    currentReferenceCount += 1;
+    this.referenceCount.set(id, currentReferenceCount);
+    console.debug(
+      `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
+    );
 
     // intentionally not awaiting this. we keep track of the promise in
     // this.newReferencePromises
@@ -437,7 +444,8 @@ export default class StoreService extends Service implements StoreInterface {
     let api = await this.cardService.getAPI();
     this.gcInterval = setInterval(
       () => this.identityContext.sweep(api),
-      2 * 60_000,
+      // 2 * 60_000,
+      10_000,
     ) as unknown as number;
   }
 

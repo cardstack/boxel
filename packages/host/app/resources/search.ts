@@ -78,6 +78,9 @@ export class SearchResource extends Resource<Args> {
     this.#previousQuery = query;
     this.#previousRealms = realms;
 
+    for (let instance of this._instances) {
+      this.store.dropReference(instance.id);
+    }
     this.loaded = this.search.perform(query);
 
     if (isLive) {
@@ -156,9 +159,6 @@ export class SearchResource extends Resource<Args> {
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
-    for (let instance of this._instances) {
-      this.store.dropReference(instance.id);
-    }
     try {
       let results = flatMap(
         await Promise.all(

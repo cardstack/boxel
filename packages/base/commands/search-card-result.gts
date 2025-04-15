@@ -1,5 +1,5 @@
 import GlimmerComponent from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { Button, FieldContainer } from '@cardstack/boxel-ui/components';
@@ -9,7 +9,7 @@ import {
   IconPlus,
   IconSearchThick,
 } from '@cardstack/boxel-ui/icons';
-import { type getCard, type Query, primitive } from '@cardstack/runtime-common';
+import { type Query, primitive } from '@cardstack/runtime-common';
 import {
   BaseDef,
   CardDef,
@@ -24,14 +24,12 @@ import {
 } from '../card-api';
 import CodeRefField from '../code-ref';
 
-type AttachedCardResource = ReturnType<getCard>;
-
 function getComponent(cardOrField: BaseDef) {
   return cardOrField.constructor.getComponent(cardOrField);
 }
 
-interface ResourceListSignature {
-  resources: AttachedCardResource[];
+interface CardListSignature {
+  cardIds: string[];
   format: Format;
   context?: CardContext;
 }
@@ -58,38 +56,27 @@ export class SearchCardsByTypeAndTitleInput extends CardDef {
   @field cardType = contains(StringField);
 }
 
-class ResourceList extends GlimmerComponent<ResourceListSignature> {
+class CardList extends GlimmerComponent<CardListSignature> {
   <template>
     <ol class='result-list {{@format}}' data-test-result-list>
-      {{#each @resources as |cardResource|}}
-        {{#if cardResource.cardError}}
-          <li
-            class='result-list-item'
-            data-test-card-error={{cardResource.cardError.id}}
-          >
-            Error: cannot render card
-            {{cardResource.cardError.id}}:
-            {{cardResource.cardError.message}}
-          </li>
-        {{else if cardResource.card}}
-          <li
-            class='result-list-item {{@format}}'
-            data-test-result-card={{cardResource.card.id}}
-            {{@context.cardComponentModifier
-              card=cardResource.card
-              format='data'
-              fieldType=undefined
-              fieldName=undefined
-            }}
-          >
-            {{#let (getComponent cardResource.card) as |Component|}}
-              <Component
-                @format={{@format}}
-                @displayContainer={{eq @format 'fitted'}}
-              />
-            {{/let}}
-          </li>
-        {{/if}}
+      {{#each this.cardList.cards as |card|}}
+        <li
+          class='result-list-item {{@format}}'
+          data-test-result-card={{card.id}}
+          {{@context.cardComponentModifier
+            card=card
+            format='data'
+            fieldType=undefined
+            fieldName=undefined
+          }}
+        >
+          {{#let (getComponent card) as |Component|}}
+            <Component
+              @format={{@format}}
+              @displayContainer={{eq @format 'fitted'}}
+            />
+          {{/let}}
+        </li>
       {{else}}
         No cards were found.
       {{/each}}
@@ -125,23 +112,17 @@ class ResourceList extends GlimmerComponent<ResourceListSignature> {
       }
     </style>
   </template>
+
+  @tracked cardList = this.args.context?.getCardCollection(
+    this,
+    () => this.args.cardIds,
+  );
 }
 
 class SearchCardsResultEmbeddedView extends Component<
   typeof SearchCardsResult
 > {
   @tracked showAllResults = false;
-
-  @cached
-  get attachedResources(): AttachedCardResource[] {
-    if (!this.cardIdsToDisplay.length) {
-      return [];
-    }
-    let cards = this.cardIdsToDisplay
-      .map((id) => this.args.context?.getCard(this, () => id))
-      .filter(Boolean) as AttachedCardResource[];
-    return cards;
-  }
 
   get cardIdsToDisplay() {
     if (!this.args.model.cardIds?.length) {
@@ -184,7 +165,7 @@ class SearchCardsResultEmbeddedView extends Component<
 
   <template>
     <div class='command-result'>
-      <ResourceList @resources={{this.attachedResources}} @format='atom' />
+      <CardList @cardIds={{this.cardIdsToDisplay}} @format='atom' />
       <div class='footer'>
         {{#if this.numberOfCardsGreaterThanPaginateSize}}
           <Button
@@ -262,8 +243,8 @@ class SearchCardsResultIsolatedView extends SearchCardsResultEmbeddedView {
           {{@model.description}}
         </FieldContainer>
         <FieldContainer @label='Results' class='results'>
-          <ResourceList
-            @resources={{this.attachedResources}}
+          <CardList
+            @cardIds={{this.cardIdsToDisplay}}
             @format='fitted'
             @context={{@context}}
           />

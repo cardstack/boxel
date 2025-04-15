@@ -189,6 +189,9 @@ export default class IdentityContextWithGarbageCollection
             this.delete(instance.id);
           }
         } else {
+          console.debug(
+            `instance [local id:${instance[localIdSymbol]} remote id: ${instance.id}] is now eligible for garbage collection`,
+          );
           this.#gcCandidates.add(instance[localIdSymbol]);
         }
       } else {
