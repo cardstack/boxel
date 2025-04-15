@@ -182,7 +182,7 @@ export default class EditFieldModal extends Component<Signature> {
     });
 
     if (specId) {
-      let spec = await this.store.peek<Spec>(specId);
+      let spec = await this.store.get<Spec>(specId);
       if (spec && isCardInstance<Spec>(spec)) {
         this.fieldCard = await loadCard(spec.ref, {
           loader: this.loaderService.loader,

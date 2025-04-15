@@ -228,11 +228,6 @@ export default class CardService extends Service {
     return card[api.realmInfo];
   }
 
-  async getRealmURL(card: CardDef): Promise<URL | undefined> {
-    let api = await this.getAPI();
-    return card[api.realmURL];
-  }
-
   async cardsSettled() {
     let api = await this.getAPI();
     await api.flushLogs();

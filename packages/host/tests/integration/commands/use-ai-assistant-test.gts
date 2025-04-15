@@ -213,8 +213,8 @@ module('Integration | commands | ai-assistant', function (hooks) {
     let store = lookupService<StoreService>('store');
 
     // Attach simple cards
-    const card1 = (await store.peek(`${testRealmURL}empty1.json`)) as CardDef;
-    const card2 = (await store.peek(`${testRealmURL}empty2.json`)) as CardDef;
+    const card1 = (await store.get(`${testRealmURL}empty1.json`)) as CardDef;
+    const card2 = (await store.get(`${testRealmURL}empty2.json`)) as CardDef;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
       commandService.commandContext,
@@ -351,10 +351,10 @@ module('Integration | commands | ai-assistant', function (hooks) {
     let store = lookupService<StoreService>('store');
 
     // Load skill cards
-    const skillCard1 = (await store.peek(
+    const skillCard1 = (await store.get(
       `${testRealmURL}skill1.json`,
     )) as SkillCard;
-    const skillCard2 = (await store.peek(
+    const skillCard2 = (await store.get(
       `${testRealmURL}skill2.json`,
     )) as SkillCard;
 
@@ -517,8 +517,8 @@ module('Integration | commands | ai-assistant', function (hooks) {
     let store = lookupService<StoreService>('store');
 
     // Attach simple cards
-    const card1 = (await store.peek(`${testRealmURL}empty1.json`)) as CardDef;
-    const card2 = (await store.peek(`${testRealmURL}empty2.json`)) as CardDef;
+    const card1 = (await store.get(`${testRealmURL}empty1.json`)) as CardDef;
+    const card2 = (await store.get(`${testRealmURL}empty2.json`)) as CardDef;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
       commandService.commandContext,

@@ -54,6 +54,7 @@ import type StoreService from '@cardstack/host/services/store';
 import type { CardSaveSubscriber } from '@cardstack/host/services/store';
 
 import {
+  type IdentityContext,
   type CardDef,
   type FieldDef,
 } from 'https://cardstack.com/base/card-api';
@@ -526,11 +527,16 @@ export function setupUserSubscription(matrixRoomId: string) {
   );
 }
 
-export async function saveCard(instance: CardDef, id: string, loader: Loader) {
+export async function saveCard(
+  instance: CardDef,
+  id: string,
+  loader: Loader,
+  identityContext?: IdentityContext,
+) {
   let api = await loader.import<CardAPI>(`${baseRealm.url}card-api`);
   let doc = api.serializeCard(instance);
   doc.data.id = id;
-  await api.updateFromSerialized(instance, doc);
+  await api.updateFromSerialized(instance, doc, identityContext);
   return doc;
 }
 

@@ -172,7 +172,7 @@ export default class OperatorModeStateService extends Service {
   }
 
   patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
-    let card = await this.store.peek(id);
+    let card = await this.store.get(id);
     if (card && isCardInstance(card)) {
       let document = await this.cardService.serializeCard(card);
       if (patch.attributes) {
@@ -312,10 +312,23 @@ export default class OperatorModeStateService extends Service {
   }
 
   getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] | undefined {
-    // selectedCardRef is only needed for determining open playground card id in code submode
-    if (this.state.submode === Submodes.Code && selectedCardRef) {
-      let moduleId = internalKeyFor(selectedCardRef, undefined);
-      return [this.playgroundPanelService.getSelection(moduleId)?.cardId];
+    if (this.state.submode === Submodes.Code) {
+      let openCardsInCodeMode = [];
+      // selectedCardRef is only needed for determining open playground card id in code submode
+      if (selectedCardRef) {
+        let moduleId = internalKeyFor(selectedCardRef, undefined);
+        openCardsInCodeMode.push(
+          this.playgroundPanelService.getSelection(moduleId)?.cardId,
+        );
+      }
+      // Alternatively we may simply be looking at a card in code mode
+      if (this.state.codePath?.href.endsWith('.json')) {
+        let cardId = this.state.codePath.href.replace(/\.json$/, '');
+        if (!openCardsInCodeMode.includes(cardId)) {
+          openCardsInCodeMode.push(cardId);
+        }
+      }
+      return openCardsInCodeMode;
     }
     if (this.state.submode === Submodes.Interact) {
       return this.topMostStackItems()
@@ -331,7 +344,7 @@ export default class OperatorModeStateService extends Service {
     if (!cardIds) {
       return;
     }
-    let cards = (await Promise.all(cardIds.map((id) => this.store.peek(id))))
+    let cards = (await Promise.all(cardIds.map((id) => this.store.get(id))))
       .filter(Boolean)
       .filter(isCardInstance);
     return cards;

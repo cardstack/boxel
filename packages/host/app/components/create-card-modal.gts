@@ -111,9 +111,7 @@ export default class CreateCardModal extends Component {
       let maybeUrl = await this.store.create(doc, relativeTo);
       if (typeof maybeUrl === 'string') {
         let url = maybeUrl;
-        let cardResource = this.getCard(this, () => url, {
-          isAutoSaved: true,
-        });
+        let cardResource = this.getCard(this, () => url);
         this.currentRequest = {
           cardResource,
           deferred: new Deferred(),
