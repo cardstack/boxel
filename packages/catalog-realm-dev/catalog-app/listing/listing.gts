@@ -252,7 +252,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           <:action>
             <div class='action-buttons'>
               {{#if this.hasExamples}}
-                <BoxelButton class='action-button' {{on 'click' this.preview}}>
+                <BoxelButton
+                  class='action-button'
+                  data-test-catalog-listing-preview-button
+                  {{on 'click' this.preview}}
+                >
                   Preview
                 </BoxelButton>
               {{/if}}
@@ -260,6 +264,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <:trigger as |bindings|>
                   <BoxelButton
                     class='action-button'
+                    data-test-catalog-listing-use-button
                     @disabled={{this.useButtonDisabled}}
                     {{bindings}}
                   >
@@ -283,6 +288,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 <:trigger as |bindings|>
                   <BoxelButton
                     class='action-button'
+                    data-test-catalog-listing-install-button
                     @disabled={{this.installButtonDisabled}}
                     {{bindings}}
                   >
