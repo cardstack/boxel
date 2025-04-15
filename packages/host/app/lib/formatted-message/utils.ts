@@ -10,8 +10,10 @@ import {
 } from '../search-replace-block-parsing';
 
 export function extractCodeData(preElementString: string): CodeData {
-  // Using DOM manipulation to parse the pre element string
-  // because we need to handle HTML entities and nested tags properly
+  // We are creating a new element in the dom
+  // so that we can easily parse the content of the top level <pre> tags.
+  // Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that
+  // it's trivial to get its contents, compared to parsing the htmlString.
   let tempContainer = document.createElement('div');
   tempContainer.innerHTML = preElementString;
   let preElement = tempContainer.querySelector('pre');
@@ -121,7 +123,11 @@ export interface HtmlTagGroup {
 export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   let result: HtmlTagGroup[] = [];
 
-  // We are creating a new element in the dom so that we can easily parse the content of the top level <pre> tags. Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that it's trivial to get its contents, compared to parsing the htmlString. 
+  // Create a temporary DOM element to parse the HTML string.
+  // This approach allows us to:
+  // 1. Properly identify and separate pre and non-pre tags
+  // 2. Handle nested HTML structures correctly
+  // 3. Preserve the original HTML structure of each tag
   let doc = document.createElement('div');
   doc.innerHTML = htmlString;
 
