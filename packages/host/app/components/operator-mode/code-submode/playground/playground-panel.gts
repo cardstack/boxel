@@ -7,6 +7,7 @@ import { restartableTask, task } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 
 import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { bool } from '@cardstack/boxel-ui/helpers';
 
 import {
   internalKeyFor,
@@ -102,6 +103,7 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
+  @tracked private cardCreationError: CardErrorJSONAPI | undefined;
 
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
@@ -127,6 +129,9 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
+    if (this.cardCreationError) {
+      return this.cardCreationError;
+    }
     return this.cardResource?.cardError?.meta
       ? this.cardResource?.cardError
       : undefined;
@@ -385,20 +390,24 @@ export default class PlaygroundPanel extends Component<Signature> {
         },
       };
     }
-    let cardId = await this.store.create(
+    let maybeId: string | CardErrorJSONAPI = await this.store.create(
       newCardJSON,
       undefined,
       this.currentRealm,
     );
-    if (typeof cardId === 'string') {
+    if (typeof maybeId !== 'string') {
+      let error = maybeId;
+      this.cardCreationError = error;
+    } else {
+      let cardId = maybeId;
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
       this.persistSelections(
         cardId,
         'edit',
         this.args.isFieldDef ? 0 : undefined,
       ); // open new instance in playground in edit format
-      this.closeInstanceChooser();
     }
+    this.closeInstanceChooser();
   });
 
   private createNewField = restartableTask(async (specCard: Spec) => {
@@ -453,6 +462,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           createNewIsRunning=this.createNewIsRunning
           isFieldDef=@isFieldDef
           cardError=this.cardError
+          cardCreationError=(bool this.cardCreationError)
         )
       )
     }}

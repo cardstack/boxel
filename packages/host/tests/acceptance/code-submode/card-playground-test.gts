@@ -1031,7 +1031,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
   });
 
-  module('indexing error', function (hooks) {
+  module('error handling', function (hooks) {
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
     setupOnSave(hooks);
@@ -1106,6 +1106,20 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').hasText('Boom!');
+    });
+
+    test('it renders error info when creating new instance causes error', async function (assert) {
+      await openFileInPlayground('boom-pet.gts', testRealmURL, 'BoomPet');
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert.dom('[data-test-card-error]').doesNotExist();
+
+      await createNewInstance();
+      assert
+        .dom('[data-test-card-error]')
+        .containsText('Failed to create card');
+
+      await click('[data-test-error-detail-toggle] button');
+      assert.dom('[data-test-error-detail]').containsText('Boom!');
     });
   });
 });

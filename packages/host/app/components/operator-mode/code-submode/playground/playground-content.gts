@@ -63,6 +63,7 @@ interface Signature {
     card?: CardDef;
     field?: FieldDef;
     cardError?: CardErrorJSONAPI;
+    cardCreationError?: boolean;
   };
 }
 
@@ -78,7 +79,7 @@ export default class PlaygroundContent extends Component<Signature> {
                 <this.lastKnownGoodHtml />
               </div>
             {{else}}
-              <CardError />
+              <CardError @cardCreationError={{@cardCreationError}} />
             {{/if}}
             <CardErrorDetail
               @error={{@cardError}}
