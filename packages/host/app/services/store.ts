@@ -485,7 +485,7 @@ export default class StoreService extends Service implements StoreInterface {
             );
           }
 
-          this.reloadTask.perform(liveInstance);
+          this.reloadTask.perform(instance);
         } else {
           if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
             if (event.clientRequestId.startsWith('source:')) {
@@ -493,7 +493,7 @@ export default class StoreService extends Service implements StoreInterface {
                 `store reloading ${invalidation} because of source clientRequestId ${event.clientRequestId}`,
               );
 
-              this.reloadTask.perform(liveInstance);
+              this.reloadTask.perform(instance);
             } else {
               console.debug(
                 'ignoring invalidation for card because clientRequestId is ours',
