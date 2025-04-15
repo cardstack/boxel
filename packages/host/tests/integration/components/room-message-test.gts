@@ -1,15 +1,47 @@
-import { waitUntil } from '@ember/test-helpers';
+import { waitUntil, render } from '@ember/test-helpers';
 
-import { render } from '@ember/test-helpers';
+import GlimmerComponent from '@glimmer/component';
+
+import { provide } from 'ember-provide-consume-context';
 
 import { module, test } from 'qunit';
 
+import {
+  GetCardsContextName,
+  GetCardContextName,
+  GetCardCollectionContextName,
+} from '@cardstack/runtime-common';
+
 import RoomMessage from '@cardstack/host/components/matrix/room-message';
 
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
+import { getCard } from '@cardstack/host/resources/card-resource';
 import { type RoomResource } from '@cardstack/host/resources/room';
+import { getSearch } from '@cardstack/host/resources/search';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+
+class GetCardsContextProvider extends GlimmerComponent<{
+  Args: {};
+  Blocks: { default: [] };
+}> {
+  @provide(GetCardContextName)
+  // @ts-ignore "getCard" is declared but not used
+  private get getCard() {
+    return getCard;
+  }
+  @provide(GetCardsContextName)
+  // @ts-ignore "getCards" is declared but not used
+  private get getCards() {
+    return getSearch;
+  }
+  @provide(GetCardCollectionContextName)
+  // @ts-ignore "getCardCollection" is declared but not used
+  private get getCardCollection() {
+    return getCardCollection;
+  }
+}
 
 module('Integration | Component | RoomMessage', function (hooks) {
   setupRenderingTest(hooks);
@@ -59,16 +91,18 @@ module('Integration | Component | RoomMessage', function (hooks) {
 
     await render(<template>
       {{! @glint-ignore }}
-      <RoomMessage
-        @roomId={{testScenario.roomId}}
-        @roomResource={{testScenario}}
-        @monacoSDK={{testScenario.monacoSDK}}
-        @isStreaming={{testScenario.isStreaming}}
-        @registerScroller={{noop}}
-        @index={{0}}
-        @retryAction={{testScenario.maybeRetryAction}}
-        data-test-message-idx='1'
-      />
+      <GetCardsContextProvider>
+        <RoomMessage
+          @roomId={{testScenario.roomId}}
+          @roomResource={{testScenario}}
+          @monacoSDK={{testScenario.monacoSDK}}
+          @isStreaming={{testScenario.isStreaming}}
+          @registerScroller={{noop}}
+          @index={{0}}
+          @retryAction={{testScenario.maybeRetryAction}}
+          data-test-message-idx='1'
+        />
+      </GetCardsContextProvider>
     </template>);
   }
 

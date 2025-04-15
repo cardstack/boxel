@@ -136,7 +136,7 @@ export default class RoomMessage extends Component<Signature> {
           userId=this.message.author.userId
           displayName=this.message.author.displayName
         }}
-        @resources={{this.attachedCardCollection}}
+        @collectionResource={{this.attachedCardCollection}}
         @files={{this.message.attachedFiles}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
@@ -180,6 +180,9 @@ export default class RoomMessage extends Component<Signature> {
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';
     }
-    return undefined;
+    if (this.attachedCardCollection?.cardErrors.length === 0) {
+      return undefined;
+    }
+    return 'Error rendering attached cards.';
   }
 }

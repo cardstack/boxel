@@ -77,9 +77,17 @@ class CardList extends GlimmerComponent<CardListSignature> {
             />
           {{/let}}
         </li>
-      {{else}}
-        No cards were found.
       {{/each}}
+      {{#each this.cardList.cardErrors as |error|}}
+        <li class='result-list-item' data-test-card-error={{error.id}}>
+          Error: cannot render card
+          {{error.id}}:
+          {{error.message}}
+        </li>
+      {{/each}}
+      {{#if this.hasNoResults}}
+        No cards were found.
+      {{/if}}
     </ol>
     <style scoped>
       .result-list {
@@ -117,6 +125,14 @@ class CardList extends GlimmerComponent<CardListSignature> {
     this,
     () => this.args.cardIds,
   );
+
+  get hasNoResults() {
+    return (
+      !this.cardList ||
+      (this.cardList.cards.length === 0 &&
+        this.cardList.cardErrors.length === 0)
+    );
+  }
 }
 
 class SearchCardsResultEmbeddedView extends Component<
@@ -165,7 +181,11 @@ class SearchCardsResultEmbeddedView extends Component<
 
   <template>
     <div class='command-result'>
-      <CardList @cardIds={{this.cardIdsToDisplay}} @format='atom' />
+      <CardList
+        @cardIds={{this.cardIdsToDisplay}}
+        @format='atom'
+        @context={{@context}}
+      />
       <div class='footer'>
         {{#if this.numberOfCardsGreaterThanPaginateSize}}
           <Button

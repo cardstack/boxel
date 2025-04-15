@@ -41,7 +41,7 @@ interface Signature {
     isFromAssistant: boolean;
     isStreaming: boolean;
     profileAvatar?: ComponentLike;
-    resources?: ReturnType<getCardCollection>;
+    collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
     index: number;
     eventId: string;
@@ -279,6 +279,17 @@ export default class AiAssistantMessage extends Component<Signature> {
               {{/each}}
             </div>
           {{/if}}
+
+          {{#if @collectionResource.cardErrors.length}}
+            <div class='error-container error-footer'>
+              {{#each @collectionResource.cardErrors as |error|}}
+                <FailureBordered class='error-icon' />
+                <div class='error-message' data-test-card-error>
+                  <div>Cannot render {{error.id}}</div>
+                </div>
+              {{/each}}
+            </div>
+          {{/if}}
         </div>
       </div>
     </div>
@@ -475,7 +486,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   private get items() {
     return [
-      ...(this.args.resources ? [this.args.resources] : []),
+      ...(this.args.collectionResource ? [this.args.collectionResource] : []),
       ...(this.args.files ?? []),
     ];
   }
