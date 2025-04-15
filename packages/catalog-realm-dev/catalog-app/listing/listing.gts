@@ -7,7 +7,14 @@ import {
   StringField,
   linksTo,
   Component,
+  updateFromSerialized,
+  meta,
+  relativeTo,
 } from 'https://cardstack.com/base/card-api';
+import {
+  codeRefWithAbsoluteURL,
+  ResolvedCodeRef,
+} from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
@@ -37,6 +44,11 @@ import { Publisher } from './publisher';
 import { Category } from './category';
 import { License } from './license';
 import { Tag } from './tag';
+
+interface CopyMeta {
+  sourceCodeRef: ResolvedCodeRef;
+  targetCodeRef: ResolvedCodeRef;
+}
 
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
@@ -118,6 +130,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   _install = task(async (realmUrl: string) => {
     const specsToCopy: Spec[] = this.args.model?.specs ?? [];
+    const copyMeta: CopyMeta[] = [];
 
     // Copy the gts file based on the attached spec's moduleHref
     await Promise.all(
@@ -129,12 +142,55 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         const targetUrl = new URL(normalizedPath, realmUrl).href;
         const targetFilePath = targetUrl.concat('.gts');
 
-        return this.args.context?.actions?.copySource?.(
+        this.args.context?.actions?.copySource?.(
           absoluteModulePath,
           targetFilePath,
         );
+        copyMeta.push({
+          sourceCodeRef: {
+            module: absoluteModulePath,
+            name: spec.ref.name,
+          },
+          targetCodeRef: {
+            module: targetUrl,
+            name: spec.ref.name,
+          },
+        });
       }),
     );
+
+    if (this.args.model.examples) {
+      // Create serialized objects for each example with modified adoptsFrom
+      const examplesToCopy = [];
+      await Promise.all(
+        this.args.model.examples.map(async (instance) => {
+          let adoptsFrom = instance[meta].adoptsFrom;
+          let exampleCodeRef = codeRefWithAbsoluteURL(adoptsFrom, instance.id);
+
+          let maybeCopyMeta = copyMeta.find(
+            (meta) =>
+              meta.sourceCodeRef.module === exampleCodeRef.module &&
+              meta.sourceCodeRef.name === exampleCodeRef.name,
+          );
+
+          if (maybeCopyMeta) {
+            instance[meta].adoptsFrom = maybeCopyMeta.targetCodeRef; //mutating adoptsFrom. Check if this is ok
+            examplesToCopy.push(instance);
+          }
+        }),
+      );
+      examplesToCopy.forEach((instance) => {
+        console.log();
+        console.log(instance[meta].adoptsFrom);
+      });
+      await this.args.context?.actions?.copyCards?.(
+        examplesToCopy,
+        realmUrl,
+        this.args.model.name
+          ? camelCase(`${this.args.model.name}NewerExamples`)
+          : 'ListingExamples',
+      );
+    }
 
     if (this.args.model instanceof SkillListing) {
       await Promise.all(
@@ -143,6 +199,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         }),
       );
     }
+
     this.installedListing = true;
   });
 
