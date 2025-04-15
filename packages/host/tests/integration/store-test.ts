@@ -117,7 +117,6 @@ module('Integration | Store', function (hooks) {
   // search
   // getSaveState
   // save
-  // dropReference
   // receive realm index event updates instance
   // receive realm index event with code changes updates instance and reloads the identity map (local ID's are different after reloading identity map)
   // receive realm index event can move a card into an error state
@@ -129,10 +128,10 @@ module('Integration | Store', function (hooks) {
     let instance = store.peek(`${testRealmURL}hassan`);
     assert.strictEqual(instance, undefined, 'instance is not in store yet');
 
-    store.addReference(`${testRealmURL}hassan`);
+    store.addReference(`${testRealmURL}Person/hassan`);
 
     await store.flush();
-    instance = store.peek(`${testRealmURL}hassan`);
+    instance = store.peek(`${testRealmURL}Person/hassan`);
     if (isCardInstance(instance)) {
       assert.strictEqual(
         (instance as any).name,
@@ -148,7 +147,7 @@ module('Integration | Store', function (hooks) {
 
     forceGC();
 
-    instance = store.peek(`${testRealmURL}hassan`);
+    instance = store.peek(`${testRealmURL}Person/hassan`);
     if (isCardInstance(instance)) {
       assert.strictEqual(
         (instance as any).name,
@@ -164,16 +163,16 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can drop reference to a card url', async function (assert) {
-    let instance = store.peek(`${testRealmURL}hassan`);
-
-    store.addReference(`${testRealmURL}hassan`);
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+    let instance = store.peek(`${testRealmURL}Person/hassan`);
     assert.ok(instance, 'instance is in store');
-    store.dropReference(`${testRealmURL}hassan`);
+    store.dropReference(`${testRealmURL}Person/hassan`);
 
     forceGC();
 
     assert.strictEqual(
-      store.peek(`${testRealmURL}hassan`),
+      store.peek(`${testRealmURL}Person/hassan`),
       undefined,
       'instance has been garbage collected from the store',
     );

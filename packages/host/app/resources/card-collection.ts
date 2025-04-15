@@ -67,6 +67,7 @@ export class CardCollectionResource<
       this._isLoaded = false;
       if (!this.#ids || this.#ids.length === 0) {
         this.cards.splice(0);
+        this.cardErrors.splice(0);
       }
       await this.store.flush();
       this.cards.splice(

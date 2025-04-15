@@ -451,8 +451,7 @@ export default class StoreService extends Service implements StoreInterface {
     let api = await this.cardService.getAPI();
     this.gcInterval = setInterval(
       () => this.identityContext.sweep(api),
-      // 2 * 60_000,
-      10_000,
+      2 * 60_000,
     ) as unknown as number;
   }
 
