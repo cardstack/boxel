@@ -1078,6 +1078,121 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
     });
   });
 
+  test('Adds the "unable to edit cards" only if there are attached cards and no tools', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          data: {
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              tools: [],
+              submode: 'code',
+            },
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Alice',
+                    lastName: 'Enwunder',
+                    photo: null,
+                    body: 'Alice is a software engineer at Google.',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4201/drafts/author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        room_id: 'room1',
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+          transaction_id: '1',
+        },
+        event_id: '1',
+        status: EventStatus.SENT,
+      },
+    ];
+
+    let historyWithStringifiedData = (history: DiscreteMatrixEvent[]) => {
+      return history.map((event) => ({
+        ...event,
+        content: {
+          ...event.content,
+          data: JSON.stringify(event.content.data),
+        },
+      }));
+    };
+
+    const { messages } = await getPromptParts(
+      historyWithStringifiedData(history),
+      '@aibot:localhost',
+    );
+
+    let nonEditableCardsMessage =
+      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+
+    assert.ok(
+      messages[0].content.includes(nonEditableCardsMessage),
+      'System message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files',
+    );
+
+    // Now add a tool
+    history[0].content.data.context.tools = [
+      getPatchTool('http://localhost:4201/drafts/Author/1', {
+        attributes: { firstName: { type: 'string' } },
+      }),
+    ];
+
+    const { messages: messages2 } = await getPromptParts(
+      historyWithStringifiedData(history),
+      '@aibot:localhost',
+    );
+
+    assert.ok(
+      !messages2[0].content.includes(nonEditableCardsMessage),
+      'System message should not include the "unable to edit cards" message when there are attached cards and a tool',
+    );
+
+    // Now remove cards, tools, and add an attached file
+    history[0].content.data.context.openCardIds = [];
+    history[0].content.data.context.tools = [];
+    history[0].content.data.attachedFiles = [
+      {
+        url: 'https://example.com/file.txt',
+        sourceUrl: 'https://example.com/file.txt',
+        name: 'file.txt',
+        contentType: 'text/plain',
+        content: 'Hello, world!',
+      },
+    ];
+
+    const { messages: messages3 } = await getPromptParts(
+      historyWithStringifiedData(history),
+      '@aibot:localhost',
+    );
+
+    assert.ok(
+      !messages3[0].content.includes(nonEditableCardsMessage),
+      'System message should not include the "unable to edit cards" message when there is an attached file',
+    );
+  });
+
   test('Gets only the latest functions', () => {
     const history: DiscreteMatrixEvent[] = [
       {
