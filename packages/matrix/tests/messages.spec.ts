@@ -396,7 +396,7 @@ test.describe('Room messages', () => {
 
     await expect(
       page.locator(`[data-test-attached-card="${appURL}/hassan"]`),
-    ).toHaveCount(0);
+    ).toHaveCount(1);
     await expect(page.locator(`[data-test-attached-file]`)).toHaveCount(1);
     await expect(
       page.locator(`[data-test-attached-file="${appURL}/hassan.json"]`),
