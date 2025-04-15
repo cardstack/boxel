@@ -106,6 +106,10 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/catalog-realm
+      - name: Lint Catalog Realm Dev
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/catalog-realm-dev
       - name: Lint Experiments Realm
         if: always()
         run: pnpm run lint
