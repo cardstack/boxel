@@ -48,6 +48,7 @@ import {
   Deferred,
   cardTypeIcon,
   CommandContext,
+  realmURL,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
@@ -143,8 +144,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @provide(RealmURLContextName)
   get realmURL() {
-    let api = this.cardResource?.api;
-    return api && this.card ? this.card[api.realmURL] : undefined;
+    return this.card ? this.card[realmURL] : undefined;
   }
 
   cardTracker = new ElementTracker();
@@ -160,9 +160,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.item.url, {
-      isAutoSaved: true,
-    });
+    this.cardResource = this.getCard(this, () => this.args.item.url);
   };
 
   private get url() {

@@ -106,7 +106,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     let skillCards = new Set<SkillCard>(input.skillCards ?? []);
     let skillCardIds = input.skillCardIds ?? [];
     let loadSkillCardPromises = skillCardIds.map(async (skillCardId) => {
-      return this.store.peek<SkillCard>(skillCardId);
+      return this.store.get<SkillCard>(skillCardId);
     });
 
     let loadedSkillCardOrErrors = await Promise.all(loadSkillCardPromises);
@@ -140,7 +140,7 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     let attachedCardIds = input.attachedCardIds ?? [];
     let loadAttachedCardPromises = attachedCardIds.map(
       async (attachedCardId) => {
-        return this.store.peek<CardAPI.CardDef>(attachedCardId);
+        return this.store.get<CardAPI.CardDef>(attachedCardId);
       },
     );
     let loadedAttachedCardOrErrors = await Promise.all(

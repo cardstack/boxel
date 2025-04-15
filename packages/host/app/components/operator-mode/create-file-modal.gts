@@ -432,9 +432,6 @@ export default class CreateFileModal extends Component<Signature> {
         this.defaultSpecResource = this.getCard(
           this,
           () => `${baseRealm.url}${specEntryPath}`,
-          {
-            isLive: false,
-          },
         );
       }
       let url = await this.currentRequest.newFileDeferred.promise;
@@ -625,7 +622,7 @@ export default class CreateFileModal extends Component<Signature> {
 
     let spec: Spec | undefined;
     if (this.selectedSpecResource?.id) {
-      let maybeSpec = await this.store.peek<Spec>(this.selectedSpecResource.id);
+      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
       if (maybeSpec && !isCardInstance(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
@@ -746,7 +743,7 @@ export class ${className} extends ${exportName} {
     }
     let spec: Spec | undefined;
     if (this.selectedSpecResource?.id) {
-      let maybeSpec = await this.store.peek<Spec>(this.selectedSpecResource.id);
+      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
       if (maybeSpec && !isCardInstance(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
