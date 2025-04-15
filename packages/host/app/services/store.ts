@@ -133,7 +133,14 @@ export default class StoreService extends Service implements StoreInterface {
       if (autoSaveState?.hasUnsavedChanges) {
         this.initiateAutoSaveTask.perform(id, { isImmediate: true });
       }
-      this.autoSaveStates.delete(id);
+      // await for a microtask to prevent rerender dirty tag error so we don't
+      // get in trouble because we read this.autosaveStates in the same frame as
+      // we mutate this.autosaveStates
+      (async () => {
+        await Promise.resolve();
+        this.autoSaveStates.delete(id);
+      })();
+
       let instance = this.identityContext.get(id);
       if (instance) {
         if (this.cardApiCache && instance) {
@@ -679,12 +686,12 @@ export default class StoreService extends Service implements StoreInterface {
         return;
       }
       let autoSaveState = this.initOrGetAutoSaveState(id);
-      if (!opts?.isImmediate) {
-        await timeout(this.environmentService.autoSaveDelayMs);
-      }
       try {
         autoSaveState.isSaving = true;
         autoSaveState.lastSaveError = undefined;
+        if (!opts?.isImmediate) {
+          await timeout(this.environmentService.autoSaveDelayMs);
+        }
         if (!opts?.isImmediate) {
           await timeout(25);
         }
