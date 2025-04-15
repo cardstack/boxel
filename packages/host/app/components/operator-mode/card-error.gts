@@ -9,7 +9,7 @@ interface Signature {
 }
 
 const CardErrorComponent: TemplateOnlyComponent<Signature> = <template>
-  <div class='card-error' data-test-card-error>
+  <div class='card-error'>
     <FileAlert class='icon' />
     <div class='message'>
       {{#if @cardCreationError}}

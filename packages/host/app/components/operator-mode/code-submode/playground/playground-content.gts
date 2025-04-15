@@ -6,10 +6,12 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
+import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
 import { task } from 'ember-concurrency';
 
 import {
   CardContainer,
+  CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -38,6 +40,7 @@ import { htmlComponent } from '../../../../lib/html-component';
 import CardError from '../../card-error';
 import CardErrorDetail from '../../card-error-detail';
 import FormatChooser from '../format-chooser';
+
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
 
@@ -72,23 +75,31 @@ export default class PlaygroundContent extends Component<Signature> {
     {{consumeContext @makeCardResource}}
     <section class='playground-panel' data-test-playground-panel>
       <div class='playground-panel-content'>
-        {{#if @cardError}}
-          <CardContainer class='error-container' @displayBoundaries={{true}}>
-            {{#if this.lastKnownGoodHtml}}
-              <div data-test-card-error>
-                <this.lastKnownGoodHtml />
-              </div>
-            {{else}}
-              <CardError @cardCreationError={{@cardCreationError}} />
-            {{/if}}
-            <CardErrorDetail
-              @error={{@cardError}}
-              @title={{this.cardErrorSummary}}
-            />
-          </CardContainer>
-        {{/if}}
         {{#let (if @isFieldDef @field @card) as |card|}}
-          {{#if card}}
+          {{#if @cardError}}
+            <CardContainer
+              class='error-container'
+              @displayBoundaries={{true}}
+              data-test-error-container
+            >
+              <CardHeader
+                class='error-header'
+                @cardTypeDisplayName={{this.cardErrorTitle}}
+                @cardTypeIcon={{ExclamationCircle}}
+              />
+              <div class='card-error' data-test-card-error>
+                {{#if this.lastKnownGoodHtml}}
+                  <this.lastKnownGoodHtml />
+                {{else}}
+                  <CardError @cardCreationError={{@cardCreationError}} />
+                {{/if}}
+              </div>
+              <CardErrorDetail
+                @error={{@cardError}}
+                @title={{this.cardErrorSummary}}
+              />
+            </CardContainer>
+          {{else if card}}
             <div
               class='preview-area'
               data-test-field-preview-card={{@isFieldDef}}
@@ -166,6 +177,18 @@ export default class PlaygroundContent extends Component<Signature> {
       .error-container {
         flex-grow: 1;
         display: grid;
+        grid-template-rows: max-content;
+        margin-left: calc(-1 * var(--boxel-sp));
+        width: calc(100% + calc(2 * var(--boxel-sp)));
+      }
+      .card-error {
+        opacity: 0.4;
+      }
+      .error-header {
+        color: var(--boxel-error-300);
+        min-height: var(--boxel-form-control-height);
+        background-color: var(--boxel-100);
+        box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
       }
     </style>
   </template>
@@ -332,4 +355,13 @@ export default class PlaygroundContent extends Component<Signature> {
       );
     }
   });
+
+  private get cardErrorTitle() {
+    if (!this.args.cardError) {
+      return undefined;
+    }
+    return this.cardErrorSummary
+      ? `Card Error: ${this.cardErrorSummary}`
+      : 'Card Error';
+  }
 }

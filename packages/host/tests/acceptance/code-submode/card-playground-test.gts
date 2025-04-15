@@ -1,4 +1,10 @@
-import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
 
@@ -1032,6 +1038,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
   });
 
   module('error handling', function (hooks) {
+    let realm: Realm;
     setupApplicationTest(hooks);
     setupLocalIndexing(hooks);
     setupOnSave(hooks);
@@ -1061,6 +1068,15 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         @field boom = contains(BoomField);
       }
     `;
+    const person = `import { field, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
+      export class Pet extends CardDef {
+        static displayName = 'Pet';
+      }
+      export class Person extends CardDef {
+        static displayName = 'Person';
+        @field pet = linksTo(Pet);
+      }
+    `;
 
     hooks.beforeEach(async function () {
       matrixRoomId = createAndJoinRoom({
@@ -1072,11 +1088,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       setRealmPermissions({
         [testRealmURL]: ['read', 'write'],
       });
-      await setupAcceptanceTestRealm({
+      ({ realm } = await setupAcceptanceTestRealm({
         mockMatrixUtils,
         realmURL: testRealmURL,
         contents: {
           'boom-pet.gts': boomPet,
+          'person.gts': person,
           'BoomPet/cassidy.json': {
             data: {
               attributes: {
@@ -1090,8 +1107,19 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
               },
             },
           },
+          'Person/delilah.json': {
+            data: {
+              attributes: { title: 'Delilah' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Person',
+                },
+              },
+            },
+          },
         },
-      });
+      }));
     });
 
     test('it renders a playground instance with an error that has does not have a last known good state', async function (assert) {
@@ -1120,6 +1148,52 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').containsText('Boom!');
+    });
+
+    test('it can render the last known good state for card with error', async function (assert) {
+      const cardId = `${testRealmURL}Person/delilah`;
+      setRecentFiles([[testRealmURL, 'Person/delilah.json']]);
+      setPlaygroundSelections({
+        [`${testRealmURL}person/Person`]: {
+          cardId,
+          format: 'isolated',
+        },
+      });
+
+      await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      assertCardExists(assert, cardId);
+      assert.dom('[data-test-format-chooser]').exists();
+      assert.dom('[data-test-error-container]').doesNotExist();
+
+      const boomPerson = {
+        data: {
+          attributes: { title: 'Lila' },
+          relationships: {
+            pet: {
+              links: {
+                self: './missing-link',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      };
+      await realm.write('Person/delilah.json', JSON.stringify(boomPerson));
+      await settled();
+      assert
+        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .containsText('Delilah');
+      assert.dom('[data-test-card-error]').exists();
+      assert.dom('[data-test-error-title]').hasText('Link Not Found');
+
+      await click('[data-test-error-detail-toggle] button');
+      assert.dom('[data-test-error-detail]').containsText('missing file');
+      assert.dom('[data-test-error-stack]').exists();
     });
   });
 });
