@@ -312,10 +312,23 @@ export default class OperatorModeStateService extends Service {
   }
 
   getOpenCardIds(selectedCardRef?: ResolvedCodeRef): string[] | undefined {
-    // selectedCardRef is only needed for determining open playground card id in code submode
-    if (this.state.submode === Submodes.Code && selectedCardRef) {
-      let moduleId = internalKeyFor(selectedCardRef, undefined);
-      return [this.playgroundPanelService.getSelection(moduleId)?.cardId];
+    if (this.state.submode === Submodes.Code) {
+      let openCardsInCodeMode = [];
+      // selectedCardRef is only needed for determining open playground card id in code submode
+      if (selectedCardRef) {
+        let moduleId = internalKeyFor(selectedCardRef, undefined);
+        openCardsInCodeMode.push(
+          this.playgroundPanelService.getSelection(moduleId)?.cardId,
+        );
+      }
+      // Alternatively we may simply be looking at a card in code mode
+      if (this.state.codePath?.href.endsWith('.json')) {
+        let cardId = this.state.codePath.href.replace(/\.json$/, '');
+        if (!openCardsInCodeMode.includes(cardId)) {
+          openCardsInCodeMode.push(cardId);
+        }
+      }
+      return openCardsInCodeMode;
     }
     if (this.state.submode === Submodes.Interact) {
       return this.topMostStackItems()
