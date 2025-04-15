@@ -121,7 +121,7 @@ class LinksToManyEditor extends GlimmerComponent<Signature> {
       },
     );
     if (cardId) {
-      let card = await this.cardContext.store.peek(cardId);
+      let card = await this.cardContext.store.get(cardId);
       if (isCardInstance(card)) {
         selectedCards = [...selectedCards, card];
         (this.args.model.value as any)[this.args.field.name] = selectedCards;

@@ -114,7 +114,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     this.cardResource = this.getCard(
       this,
       () => this.playgroundSelection?.cardId,
-      { isAutoSaved: true },
     );
   };
 
