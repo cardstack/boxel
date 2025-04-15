@@ -748,9 +748,11 @@ ${attachedFilesToPrompt(attachedFiles)}
     systemMessage += '\n';
   }
 
-  if (tools.length == 0) {
+  let cardPatchTool = tools.find((tool) => tool.function.name === 'patchCard');
+
+  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
     systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached.';
+      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
   }
 
   let messages: OpenAIPromptMessage[] = [
