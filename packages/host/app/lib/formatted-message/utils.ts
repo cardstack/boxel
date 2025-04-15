@@ -1,5 +1,7 @@
 import { SafeString, htmlSafe } from '@ember/template';
 
+import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
+
 import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
 
 import {
@@ -28,10 +30,7 @@ export function extractCodeData(preElementString: string): CodeData {
 
   let content = preElement.innerHTML;
   // Decode HTML entities to handle special characters like < and >
-  let textarea = document.createElement('textarea');
-  textarea.innerHTML = content;
-  content = textarea.value;
-  textarea.remove();
+  content = unescapeHtml(content);
   let parsedContent = parseSearchReplace(content);
 
   // Transform the incomplete search/replace block into a format for streaming,
