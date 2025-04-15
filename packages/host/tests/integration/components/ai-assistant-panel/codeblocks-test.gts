@@ -10,6 +10,7 @@ import { Loader } from '@cardstack/runtime-common/loader';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
+import type CardService from '@cardstack/host/services/card-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
@@ -74,6 +75,27 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
+
+    // Add cardService mock for example.com/component.gts
+    let cardService = this.owner.lookup('service:card-service') as CardService;
+    cardService.getSource = async (url: URL) => {
+      if (url.toString() === 'https://example.com/component.gts') {
+        return Promise.resolve(`import Component from '@glimmer/component';
+
+export default class MyComponent extends Component {
+  a = 1;
+  b = 2;
+
+  <template>
+    <div>
+      <p>Value of a: {{this.a}}</p>
+      <p>Value of b: {{this.b}}</p>
+    </div>
+  </template>
+}`);
+      }
+      return Promise.resolve('');
+    };
 
     class Address extends FieldDef {
       static displayName = 'Address';
@@ -361,22 +383,48 @@ You can use these in your HTML documents to display formatted text, code snippet
       .exists({ count: 2 }, 'Should have 2 monaco editors');
 
     let monacoContent = getMonacoContent();
-    assert.ok(
-      monacoContent.includes('Basic pre tag example'),
-      'Monaco content includes the first comment',
+    assert.strictEqual(
+      monacoContent,
+      `<!-- Basic pre tag example -->
+<pre>
+This is preformatted text
+    It preserves both spaces
+        and line breaks
+exactly as written
+</pre>
+
+<!-- Pre tag with code -->
+<pre>
+<code>
+function sayHello() {
+    console.log("Hello World!");
+}
+</code>
+</pre>
+
+<!-- Pre tag with styling -->
+<pre style="background-color: #f4f4f4; padding: 15px; border-radius: 5px;">
+const data = {
+    name: "John",
+    age: 30,
+    city: "New York"
+};
+</pre>
+
+<!-- Pre tag with HTML entities -->
+<pre>
+&lt;html&gt;
+    &lt;head&gt;
+        &lt;title&gt;Sample Page&lt;/title&gt;
+    &lt;/head&gt;
+    &lt;body&gt;
+        &lt;h1&gt;Hello World!&lt;/h1&gt;
+    &lt;/body&gt;
+&lt;/html&gt;
+</pre>`,
+      'Monaco content should exactly match the HTML code block',
     );
-    assert.ok(
-      monacoContent.includes('This is preformatted text'),
-      'Monaco content includes the first nested pre content',
-    );
-    assert.ok(
-      monacoContent.includes('function sayHello()'),
-      'Monaco content includes the code block',
-    );
-    assert.ok(
-      monacoContent.includes('const data = {'),
-      'Monaco content includes the styled pre block',
-    );
+
     await waitUntil(() => document.getElementsByClassName('view-lines')[1]);
     assert.equal(
       (document.getElementsByClassName('view-lines')[1] as HTMLElement)
@@ -453,15 +501,12 @@ And another code block without language specified:
 
     // Check that HTML inside code blocks is preserved
     let monacoContent = getMonacoContent();
-    assert.ok(
-      monacoContent.includes('<div class="example">'),
-      'HTML inside code block should be preserved',
-    );
-    assert.ok(
-      monacoContent.includes(
-        'This HTML is inside a code block with language specified',
-      ),
-      'Content inside code block should be preserved',
+    assert.strictEqual(
+      monacoContent,
+      `<div class="example">
+  <p>This HTML is inside a code block with language specified.</p>
+</div>`,
+      'Monaco content should exactly match the HTML code block',
     );
 
     await percySnapshot(assert);
@@ -509,19 +554,17 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
       .exists({ count: 1 }, 'Should have 1 monaco editor');
 
     let monacoContent = getMonacoContent();
-    assert.ok(
-      monacoContent.includes('<div class="container">'),
-      'HTML inside code block should be preserved',
-    );
-    assert.ok(
-      monacoContent.includes('<h1>Hello World</h1>'),
-      'Nested HTML inside code block should be preserved',
-    );
-    assert.ok(
-      monacoContent.includes(
-        'This is a paragraph with <strong>bold text</strong>',
-      ),
-      'HTML with nested tags inside code block should be preserved',
+    assert.strictEqual(
+      monacoContent,
+      `<div class="container">
+  <h1>Hello World</h1>
+  <p>This is a paragraph with <strong>bold text</strong>.</p>
+  <ul>
+    <li>Item 1</li>
+    <li>Item 2</li>
+  </ul>
+</div>`,
+      'Monaco content should exactly match the HTML code block',
     );
 
     // Check that inline code with HTML is preserved
@@ -531,6 +574,75 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
         'Here\'s some HTML inside backticks without a language name: Copy <div class="container"> And here\'s some inline code with HTML: <span>inline HTML</span> And some regular text with <b>HTML tags</b> that should be displayed as actual HTML.',
         'HTML content should be displayed correctly with proper formatting',
       );
+
+    await percySnapshot(assert);
+  });
+
+  test('it will render diff editor', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
+
+\`\`\`gts
+// File url: https://example.com/component.gts
+  <<<<<<< SEARCH
+import Component from '@glimmer/component';
+
+export default class MyComponent extends Component {
+  a = 1;
+  b = 2;
+
+  <template>
+    <div>
+      <p>Value of a: {{this.a}}</p>
+      <p>Value of b: {{this.b}}</p>
+    </div>
+  </template>
+}
+=======
+import Component from '@glimmer/component';
+
+export default class MyComponent extends Component {
+  a = 3;
+  b = 4;
+
+  <template>
+    <div>
+      <h1>Updated Component</h1>
+      <p>New value of a: {{this.a}}</p>
+      <p>New value of b: {{this.b}}</p>
+    </div>
+  </template>
+}
+>>>>>>> REPLACE
+\`\`\`
+
+Above code blocks are now complete`;
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: messageWithSearchAndReplaceBlock,
+        formatted_body: messageWithSearchAndReplaceBlock,
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelectorAll('.code-block-diff .cdr.line-delete').length >
+        1,
+    );
+    await waitFor('.code-block-diff .cdr.line-insert');
+
+    assert.dom('.cdr.line-delete').exists({ count: 4 });
+    assert.dom('.cdr.line-insert').exists({ count: 5 });
+    assert.dom('[data-test-apply-code-button]').exists();
 
     await percySnapshot(assert);
   });

@@ -131,7 +131,7 @@ export default class RoomMessage extends Component<Signature> {
       escapeHtmlOutsideCodeBlocks(this.message.formattedMessage),
       {
         sanitize: false,
-        escapeHtmlInCodeBlocks: false,
+        escapeHtmlInCodeBlocks: true,
       },
     );
   }

@@ -8,6 +8,8 @@ import {
 } from '../search-replace-block-parsing';
 
 export function extractCodeData(preElementString: string): CodeData {
+  // Using DOM manipulation to parse the pre element string
+  // because we need to handle HTML entities and nested tags properly
   let tempContainer = document.createElement('div');
   tempContainer.innerHTML = preElementString;
   let preElement = tempContainer.querySelector('pre');
@@ -120,6 +122,8 @@ export interface HtmlTagGroup {
 export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   let result: HtmlTagGroup[] = [];
 
+  // Using dom manipulation to find pre and non-pre tags
+  // because we need to avoid the nested html tags issue.
   let doc = document.createElement('div');
   doc.innerHTML = htmlString;
 
