@@ -134,7 +134,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
     // Copy the gts file based on the attached spec's moduleHref
     await Promise.all(
-      specsToCopy.map((spec: Spec) => {
+      specsToCopy.map(async (spec: Spec) => {
         const absoluteModulePath = spec.moduleHref;
         const relativeModulePath = spec.ref.module;
         const normalizedPath = relativeModulePath.split('/').slice(1).join('/');
@@ -142,7 +142,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         const targetUrl = new URL(normalizedPath, realmUrl).href;
         const targetFilePath = targetUrl.concat('.gts');
 
-        this.args.context?.actions?.copySource?.(
+        await this.args.context?.actions?.copySource?.(
           absoluteModulePath,
           targetFilePath,
         );
