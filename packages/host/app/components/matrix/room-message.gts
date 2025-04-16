@@ -20,6 +20,10 @@ import {
   GetCardContextName,
   markdownToHtml,
 } from '@cardstack/runtime-common';
+import {
+  isHtml,
+  escapeHtmlOutsideCodeBlocks,
+} from '@cardstack/runtime-common/helpers/html';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
@@ -112,6 +116,26 @@ export default class RoomMessage extends Component<Signature> {
     return this.commandService.run.unlinked().perform(command);
   });
 
+  private get messageInHtmlFormat() {
+    // formattedMessage will be sent in two different formats: markdown and html
+    // the formatted message that is sent by ai bot will be in markdown format
+    // and the formatted message that is sent by the user will be in html format
+    // so we need to convert the markdown to html when the message is sent by the ai bot
+    if (
+      !this.message.formattedMessage ||
+      isHtml(this.message.formattedMessage)
+    ) {
+      return this.message.formattedMessage;
+    }
+    return markdownToHtml(
+      escapeHtmlOutsideCodeBlocks(this.message.formattedMessage),
+      {
+        sanitize: false,
+        escapeHtmlInCodeBlocks: true,
+      },
+    );
+  }
+
   <template>
     {{consumeContext this.makeCardResources}}
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
@@ -124,11 +148,7 @@ export default class RoomMessage extends Component<Signature> {
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
-        @formattedMessage={{markdownToHtml
-          this.message.formattedMessage
-          sanitize=false
-          escapeHtmlInCodeBlocks=false
-        }}
+        @formattedMessage={{this.messageInHtmlFormat}}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
