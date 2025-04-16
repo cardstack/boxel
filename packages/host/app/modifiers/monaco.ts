@@ -15,7 +15,7 @@ interface Signature {
   Args: {
     Named: {
       content: string;
-      contentChanged: ((text: string) => void) | undefined;
+      contentChanged: (text: string) => void;
       initialCursorPosition?: MonacoSDK.Position;
       onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
@@ -112,7 +112,7 @@ export default class Monaco extends Modifier<Signature> {
       this.model = this.editor.getModel()!;
 
       this.model.onDidChangeContent(() =>
-        contentChanged ? this.onContentChanged.perform(contentChanged) : null,
+        this.onContentChanged.perform(contentChanged),
       );
       this.editor.onDidChangeCursorSelection((event) => {
         if (
