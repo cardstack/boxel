@@ -266,7 +266,7 @@ export default class AiAssistantMessage extends Component<Signature> {
 
           {{yield}}
 
-          {{#if this.items.length}}
+          {{#if this.hasItems}}
             <div class='items' data-test-message-items>
               {{#each this.items as |item|}}
                 {{#if (isCardCollectionResource item)}}
@@ -482,6 +482,15 @@ export default class AiAssistantMessage extends Component<Signature> {
 
   private get isAvatarAnimated() {
     return this.args.isStreaming && !this.args.errorMessage;
+  }
+
+  private get hasItems() {
+    return (
+      (this.args.files && this.args.files.length > 0) ||
+      (this.args.collectionResource &&
+        (this.args.collectionResource.cards.length > 0 ||
+          this.args.collectionResource.cardErrors.length > 0))
+    );
   }
 
   private get items() {

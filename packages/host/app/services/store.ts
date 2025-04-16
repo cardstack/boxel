@@ -378,6 +378,7 @@ export default class StoreService extends Service implements StoreInterface {
     await this.withTestWaiters(async () => {
       this.newReferencePromises.push(deferred.promise);
       let maybeUrl: string | undefined;
+      let isDoc = typeof idOrDoc !== 'string';
       try {
         await this.ready;
         maybeUrl = asURL(idOrDoc);
@@ -391,8 +392,11 @@ export default class StoreService extends Service implements StoreInterface {
         let url = maybeUrl;
         let urlOrDoc = idOrDoc;
         let instanceOrError = this.peek(url);
-        if (!instanceOrError) {
-          instanceOrError = await this.getInstance({ urlOrDoc });
+        if (!instanceOrError || isDoc) {
+          instanceOrError = await this.getInstance({
+            urlOrDoc,
+            opts: { noCache: isDoc },
+          });
         }
         this.subscribeToRealm(new URL(url));
         await this.trackSavedInstance('start-tracking', instanceOrError);
@@ -604,7 +608,7 @@ export default class StoreService extends Service implements StoreInterface {
     urlOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
-    opts?: { noCache?: true };
+    opts?: { noCache?: boolean };
   }) {
     let deferred: Deferred<CardDef | CardError> | undefined;
     let url = asURL(urlOrDoc);
