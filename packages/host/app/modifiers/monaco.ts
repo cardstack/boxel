@@ -71,62 +71,16 @@ export default class Monaco extends Modifier<Signature> {
         this.model.setValue(content);
       }
     } else {
-      // The light theme editor is used for the main editor in code mode,
-      // but we also have a dark themed editor for the preview editor in AI panel.
-      // The latter is themed using a CSS filter as opposed to defining a new monaco theme
-      // because monaco does not support multiple themes on the same page (check the comment in
-      // room-message-command.gts for more details)
-      monacoSDK.editor.defineTheme('boxel-monaco-light-theme', {
-        base: 'vs',
-        inherit: true,
-        rules: [],
-        colors: {
-          'editor.background': '#FFFFFF',
-        },
-      });
-
-      let editorOptions: MonacoEditorOptions = {
-        readOnly,
-        value: content,
+      this.setupEditor({
+        element,
+        content,
         language,
-        scrollBeyondLastLine: false,
-        automaticLayout: true,
-        minimap: {
-          enabled: false,
-        },
-        theme: 'boxel-monaco-light-theme',
-        ...editorDisplayOptions,
-      };
-
-      // Code rendering is inconsistently wrapped without this, producing spurious visual diffs
-      if (isTesting()) {
-        editorOptions.wordWrap = 'on';
-      }
-
-      this.editor = monacoSDK.editor.create(element, editorOptions);
-
-      onSetup?.(this.editor);
-
-      registerDestructor(this, () => this.editor!.dispose());
-
-      this.model = this.editor.getModel()!;
-
-      this.model.onDidChangeContent(() =>
-        this.onContentChanged.perform(contentChanged),
-      );
-      this.editor.onDidChangeCursorSelection((event) => {
-        if (
-          this.editor &&
-          event.source !== 'model' &&
-          event.selection.startLineNumber === event.selection.endLineNumber &&
-          event.selection.startColumn === event.selection.endColumn
-        ) {
-          let position = this.editor.getPosition();
-          if (position) {
-            onCursorPositionChange?.(position);
-            this.lastCursorPosition = position;
-          }
-        }
+        readOnly,
+        editorDisplayOptions,
+        monacoSDK,
+        contentChanged,
+        onCursorPositionChange,
+        onSetup,
       });
     }
     this.lastLanguage = language;
@@ -134,6 +88,78 @@ export default class Monaco extends Modifier<Signature> {
     if (initialCursorPosition != null) {
       this.initializeCursorPosition.perform(initialCursorPosition);
     }
+  }
+
+  private setupEditor({
+    element,
+    content,
+    language,
+    readOnly,
+    editorDisplayOptions,
+    monacoSDK,
+    contentChanged,
+    onCursorPositionChange,
+    onSetup,
+  }: Omit<Signature['Args']['Named'], 'initialCursorPosition'> & {
+    element: HTMLElement;
+  }) {
+    // The light theme editor is used for the main editor in code mode,
+    // but we also have a dark themed editor for the preview editor in AI panel.
+    // The latter is themed using a CSS filter as opposed to defining a new monaco theme
+    // because monaco does not support multiple themes on the same page (check the comment in
+    // room-message-command.gts for more details)
+    monacoSDK.editor.defineTheme('boxel-monaco-light-theme', {
+      base: 'vs',
+      inherit: true,
+      rules: [],
+      colors: {
+        'editor.background': '#FFFFFF',
+      },
+    });
+
+    let editorOptions: MonacoEditorOptions = {
+      readOnly,
+      value: content,
+      language,
+      scrollBeyondLastLine: false,
+      automaticLayout: true,
+      minimap: {
+        enabled: false,
+      },
+      theme: 'boxel-monaco-light-theme',
+      ...editorDisplayOptions,
+    };
+
+    // Code rendering is inconsistently wrapped without this, producing spurious visual diffs
+    if (isTesting()) {
+      editorOptions.wordWrap = 'on';
+    }
+
+    this.editor = monacoSDK.editor.create(element, editorOptions);
+
+    onSetup?.(this.editor);
+
+    registerDestructor(this, () => this.editor!.dispose());
+
+    this.model = this.editor.getModel()!;
+
+    this.model.onDidChangeContent(() =>
+      this.onContentChanged.perform(contentChanged),
+    );
+    this.editor.onDidChangeCursorSelection((event) => {
+      if (
+        this.editor &&
+        event.source !== 'model' &&
+        event.selection.startLineNumber === event.selection.endLineNumber &&
+        event.selection.startColumn === event.selection.endColumn
+      ) {
+        let position = this.editor.getPosition();
+        if (position) {
+          onCursorPositionChange?.(position);
+          this.lastCursorPosition = position;
+        }
+      }
+    });
   }
 
   private onContentChanged = restartableTask(
