@@ -19,7 +19,12 @@ export type PatchData = {
 };
 
 export { Deferred } from './deferred';
-export { CardError } from './error';
+export {
+  CardError,
+  isCardError,
+  type CardErrorJSONAPI,
+  type CardErrorsJSONAPI,
+} from './error';
 
 export interface ResourceObject {
   type: string;
@@ -246,22 +251,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   return await chooser.chooseFile<T>();
 }
 
-export interface CardErrorsJSONAPI {
-  errors: {
-    id?: string; // 404 errors won't necessarily have an id
-    status: number;
-    title: string;
-    message: string;
-    realm: string | undefined;
-    meta: {
-      lastKnownGoodHtml: string | null;
-      cardTitle: string | null;
-      scopedCssUrls: string[];
-      stack: string | null;
-    };
-  }[];
-}
-export type CardErrorJSONAPI = CardErrorsJSONAPI['errors'][0];
+import { type CardErrorJSONAPI } from './error';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;

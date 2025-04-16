@@ -129,12 +129,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
-    if (this.cardCreationError) {
-      return this.cardCreationError;
-    }
-    return this.cardResource?.cardError?.meta
-      ? this.cardResource?.cardError
-      : undefined;
+    return this.cardCreationError ?? this.cardResource?.cardError;
   }
 
   private get specCard(): Spec | undefined {

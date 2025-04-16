@@ -96,7 +96,7 @@ export default class PlaygroundContent extends Component<Signature> {
               </div>
               <CardErrorDetail
                 @error={{@cardError}}
-                @title={{this.cardErrorSummary}}
+                @title={{this.cardErrorTitle}}
               />
             </CardContainer>
           {{else if card}}
@@ -334,15 +334,12 @@ export default class PlaygroundContent extends Component<Signature> {
   }
 
   @cached
-  private get cardErrorSummary() {
-    if (!this.args.cardError) {
+  private get cardErrorTitle() {
+    let error = this.args.cardError;
+    if (!error) {
       return undefined;
     }
-    return this.args.cardError.status === 404 &&
-      // a missing link error looks a lot like a missing card error
-      this.args.cardError.message?.includes('missing')
-      ? `Link Not Found`
-      : this.args.cardError.title;
+    return `Card Error: ${error.status} - ${error.title}`;
   }
 
   private loadScopedCSS = task(async () => {
@@ -355,13 +352,4 @@ export default class PlaygroundContent extends Component<Signature> {
       );
     }
   });
-
-  private get cardErrorTitle() {
-    if (!this.args.cardError) {
-      return undefined;
-    }
-    return this.cardErrorSummary
-      ? `Card Error: ${this.cardErrorSummary}`
-      : 'Card Error';
-  }
 }

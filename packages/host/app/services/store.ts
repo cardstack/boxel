@@ -23,6 +23,7 @@ import {
   delay,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
+  isCardError,
   type Store as StoreInterface,
   type Query,
   type PatchData,
@@ -32,8 +33,9 @@ import {
   type SingleCardDocument,
   type LooseSingleCardDocument,
   type LooseCardResource,
-  type CardErrorJSONAPI as CardError,
-  type CardErrorsJSONAPI as CardErrors,
+  type CardError,
+  type CardErrorJSONAPI,
+  type CardErrorsJSONAPI,
 } from '@cardstack/runtime-common';
 
 import {
@@ -59,7 +61,7 @@ import type MessageService from './message-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
-export { CardError, CardSaveSubscriber };
+export { CardErrorJSONAPI, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
 
@@ -77,7 +79,8 @@ export default class StoreService extends Service implements StoreInterface {
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
-  private inflightCards: Map<string, Promise<CardDef | CardError>> = new Map();
+  private inflightCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
+    new Map();
   private identityContext = new IdentityContext(this.referenceCount);
 
   // This is used for tests
@@ -186,7 +189,7 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
     realm?: string,
-  ): Promise<string | CardError> {
+  ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let cardOrError = await this.getInstance({
         urlOrDoc: doc,
@@ -242,7 +245,7 @@ export default class StoreService extends Service implements StoreInterface {
     return instance;
   }
 
-  peek<T extends CardDef>(id: string): T | CardError | undefined {
+  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
     return this.identityContext.getInstanceOrError(id) as T | undefined;
   }
 
@@ -251,7 +254,7 @@ export default class StoreService extends Service implements StoreInterface {
   // garbage collection--meaning that it will be detached from the store. This
   // means you MUST consume the instance IMMEDIATELY! it should not live in the
   // state of the consumer.
-  async get<T extends CardDef>(id: string): Promise<T | CardError> {
+  async get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI> {
     return await this.getInstance<T>({ urlOrDoc: id });
   }
 
@@ -505,7 +508,7 @@ export default class StoreService extends Service implements StoreInterface {
   );
 
   private reloadTask = task(async (instance: CardDef) => {
-    let maybeReloadedInstance: CardDef | CardError | undefined;
+    let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
     let isDelete = false;
     try {
       await this.reloadInstance(instance);
@@ -546,7 +549,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async trackSavedInstance(
     operation: 'start-tracking' | 'stop-tracking',
-    instanceOrError: CardDef | CardError,
+    instanceOrError: CardDef | CardErrorJSONAPI,
   ) {
     if (!instanceOrError.id) {
       return;
@@ -592,14 +595,14 @@ export default class StoreService extends Service implements StoreInterface {
     realm?: string; // used for new cards
     opts?: { noCache?: true };
   }) {
-    let deferred: Deferred<CardDef | CardError> | undefined;
+    let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
     let url = asURL(urlOrDoc);
     if (url) {
       let working = this.inflightCards.get(url);
       if (working) {
         return working as Promise<T>;
       }
-      deferred = new Deferred<CardDef | CardError>();
+      deferred = new Deferred<CardDef | CardErrorJSONAPI>();
       this.inflightCards.set(url, deferred.promise);
     }
     try {
@@ -937,9 +940,45 @@ export default class StoreService extends Service implements StoreInterface {
   }
 }
 
-function processCardError(url: string | undefined, error: any): CardErrors {
+function formatError(err: CardError, realm?: string): CardErrorsJSONAPI {
+  if (err.additionalErrors?.length && isCardError(err.additionalErrors[0])) {
+    err = err.additionalErrors[0];
+  }
+  let title: string;
+  if (err.status === 404 && err.message?.includes('missing')) {
+    // a missing link error looks a lot like a missing card error
+    title = 'Link Not Found';
+  } else {
+    title = err.title ?? status.message[err.status] ?? err.name;
+  }
+  let formattedError = {
+    message: err.message,
+    status: err.status,
+    title,
+    realm,
+    meta: {
+      lastKnownGoodHtml: null,
+      scopedCssUrls: [],
+      stack: err.stack ?? null,
+      cardTitle: null,
+    },
+    additionalErrors: err.additionalErrors,
+  };
+  return { errors: [formattedError] };
+}
+
+function processCardError(
+  url: string | undefined,
+  error: any,
+): CardErrorsJSONAPI {
   try {
-    let errorResponse = JSON.parse(error.responseText) as CardErrors;
+    let response: CardErrorsJSONAPI | { errors: CardError[] } = JSON.parse(
+      error.responseText,
+    );
+    let err = response.errors[0];
+    let errorResponse = isCardError(err)
+      ? formatError(err, error.responseHeaders?.get('X-Boxel-Realm-Url'))
+      : (response as CardErrorsJSONAPI);
     return errorResponse;
   } catch (parseError) {
     switch (error.status) {
