@@ -1,4 +1,5 @@
 import { getOwner, setOwner } from '@ember/owner';
+import { debounce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
@@ -16,6 +17,7 @@ import {
   CommandContextStamp,
   getClass,
   identifyCard,
+  delay,
 } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -27,8 +29,8 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
-import CardService from './card-service';
 import RealmServerService from './realm-server';
+import StoreService from './store';
 
 import type LoaderService from './loader-service';
 
@@ -42,12 +44,13 @@ type GenericCommand = Command<
 export default class CommandService extends Service {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
-  @service declare private cardService: CardService;
+  @service declare private store: StoreService;
   @service declare private loaderService: LoaderService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
+  private flushCommandProcessingQueue: Promise<void> | undefined;
 
   private commands: Map<
     string,
@@ -63,7 +66,7 @@ export default class CommandService extends Service {
     return name;
   }
 
-  public async queueEventForCommandProcessing(event: Partial<IEvent>) {
+  public queueEventForCommandProcessing(event: Partial<IEvent>) {
     let eventId = event.event_id;
     if (event.content?.['m.relates_to']?.rel_type === 'm.replace') {
       eventId = event.content?.['m.relates_to']!.event_id;
@@ -85,17 +88,23 @@ export default class CommandService extends Service {
     }
 
     this.commandProcessingEventQueue.push(compoundKey);
-    let roomResource = this.matrixService.roomResources.get(event.room_id!);
-    await roomResource?.loading;
 
-    this.drainCommandProcessingQueue();
+    debounce(this, this.drainCommandProcessingQueue, 100);
   }
 
   private async drainCommandProcessingQueue() {
-    while (this.commandProcessingEventQueue.length > 0) {
-      let [roomId, eventId] = this.commandProcessingEventQueue
-        .shift()!
-        .split('|');
+    await this.flushCommandProcessingQueue;
+
+    let finishedProcessingCommands: () => void;
+    this.flushCommandProcessingQueue = new Promise(
+      (res) => (finishedProcessingCommands = res),
+    );
+
+    let commandSpecs = [...this.commandProcessingEventQueue];
+    this.commandProcessingEventQueue = [];
+
+    while (commandSpecs.length > 0) {
+      let [roomId, eventId] = commandSpecs.shift()!.split('|');
 
       let roomResource = this.matrixService.roomResources.get(roomId!);
       if (!roomResource) {
@@ -103,6 +112,28 @@ export default class CommandService extends Service {
           `Room resource not found for room id ${roomId}, this should not happen`,
         );
       }
+      let timeout = Date.now() + 60_000; // reset the timer to avoid a long wait if the room resource is processing
+      let currentRoomProcessingTimestamp = roomResource.processingLastStartedAt;
+      while (
+        roomResource.isProcessing &&
+        currentRoomProcessingTimestamp ===
+          roomResource.processingLastStartedAt &&
+        Date.now() < timeout
+      ) {
+        // wait for the room resource to finish processing
+        await delay(100);
+      }
+      if (
+        roomResource.isProcessing &&
+        currentRoomProcessingTimestamp === roomResource.processingLastStartedAt
+      ) {
+        // room seems to be stuck processing, so we will log and skip this event
+        console.error(
+          `Room resource for room ${roomId} seems to be stuck processing, skipping event ${eventId}`,
+        );
+        continue;
+      }
+
       let message = roomResource.messages.find((m) => m.eventId === eventId);
       if (!message) {
         continue;
@@ -127,6 +158,7 @@ export default class CommandService extends Service {
         }
       }
     }
+    finishedProcessingCommands!();
   }
 
   get commandContext(): CommandContext {
@@ -205,7 +237,7 @@ export default class CommandService extends Service {
           : e instanceof Error
             ? e
             : new Error('Command failed.');
-      console.warn(error);
+      console.error(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(commandRequestId!, error);
     } finally {
@@ -236,10 +268,7 @@ export default class CommandService extends Service {
             relationships: relationships ?? {},
           },
         };
-        typedInput = await this.cardService.createFromSerialized(
-          inputDoc.data,
-          inputDoc,
-        );
+        typedInput = await this.store.add(inputDoc, { doNotPersist: true });
       } else {
         // identifyCard can fail in some circumstances where the input type is not exported
         // in that case, we'll fall back to this less reliable method of constructing the input type

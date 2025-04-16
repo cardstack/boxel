@@ -170,6 +170,6 @@ export default class Workspace extends Component<Signature> {
   }
 
   @action openWorkspace() {
-    this.operatorModeStateService.openWorkspace.perform(this.args.realmURL);
+    this.operatorModeStateService.openWorkspace(this.args.realmURL);
   }
 }

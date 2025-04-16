@@ -40,7 +40,11 @@ interface Signature {
 
 export default class PastSessionItem extends Component<Signature> {
   <template>
-    <li class='session' data-test-joined-room={{@session.roomId}}>
+    <li
+      class='session'
+      data-test-joined-room={{@session.roomId}}
+      data-room-id={{@session.roomId}}
+    >
       <button
         class='view-session-button'
         {{on 'click' (fn @actions.open @session.roomId)}}
@@ -206,10 +210,7 @@ export default class PastSessionItem extends Component<Signature> {
   }
 
   get isStreaming() {
-    if (!this.args.session.lastMessage) {
-      return false;
-    }
-    return !this.args.session.lastMessage.isStreamingFinished;
+    return this.args.session.lastMessage?.isStreamingFinished === false;
   }
 
   get hasUnseenMessage() {

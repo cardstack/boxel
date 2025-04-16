@@ -69,11 +69,11 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   });
 
   // TODO: extract test helper
-  async function setCardInOperatorModeState(
+  function setCardInOperatorModeState(
     cardURL?: string,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
-    await operatorModeStateService.restore({
+    operatorModeStateService.restore({
       stacks: cardURL ? [[{ id: cardURL, format }]] : [[]],
     });
   }
@@ -92,7 +92,7 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   }
 
   async function renderAiAssistantPanel(id?: string) {
-    await setCardInOperatorModeState(id);
+    setCardInOperatorModeState(id);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>

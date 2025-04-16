@@ -3,7 +3,6 @@ import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { buildWaiter } from '@ember/test-waiters';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -12,6 +11,7 @@ import { restartableTask, enqueueTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import onKeyMod from 'ember-keyboard/modifiers/on-key';
+import { consume } from 'ember-provide-consume-context';
 
 import {
   FieldContainer,
@@ -21,7 +21,7 @@ import {
   Pill,
   RealmIcon,
 } from '@cardstack/boxel-ui/components';
-import { eq, or } from '@cardstack/boxel-ui/helpers';
+import { not, eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
   specRef,
@@ -31,13 +31,16 @@ import {
   Deferred,
   SupportedMimeType,
   maybeRelativeURL,
+  GetCardContextName,
+  isCardInstance,
+  type getCard,
   type LocalPath,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import CopyCardCommand from '@cardstack/host/commands/copy-card';
 
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -53,7 +56,9 @@ import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
 
 import type CardService from '../../services/card-service';
+import type CommandService from '../../services/command-service';
 import type NetworkService from '../../services/network';
+import type StoreService from '../../services/store';
 
 export type NewFileType =
   | 'duplicate-instance'
@@ -69,7 +74,6 @@ export const newFileTypes: NewFileType[] = [
   'field-definition',
   'spec-instance',
 ];
-const waiter = buildWaiter('create-file-modal:on-setup-waiter');
 
 export interface FileType {
   id: NewFileType;
@@ -78,6 +82,7 @@ export interface FileType {
 
 interface Signature {
   Args: {
+    owner: object;
     onCreate: (instance: CreateFileModal) => void;
   };
 }
@@ -98,17 +103,17 @@ export default class CreateFileModal extends Component<Signature> {
           @isOpen={{this.isModalOpen}}
           @onClose={{this.onCancel}}
           {{focusTrap
-            isActive=this.onSetup.isIdle
+            isActive=this.isReady
             focusTrapOptions=(hash
               initialFocus=this.initialFocusSelector allowOutsideClick=true
             )
           }}
-          data-test-ready={{this.onSetup.isIdle}}
+          data-test-ready={{this.isReady}}
           data-test-create-file-modal
         >
           <:content>
             {{#if this.isModalOpen}}
-              {{#if this.onSetup.isRunning}}
+              {{#if (not this.isReady)}}
                 <LoadingIndicator />
               {{else}}
                 <FieldContainer @label='Create In' @tag='label' class='field'>
@@ -131,10 +136,10 @@ export default class CreateFileModal extends Component<Signature> {
                           @id={{this.definitionClass.ref.module}}
                         />
                       {{else}}
-                        {{#if this.selectedSpec}}
+                        {{#if this.selectedSpecResource.card}}
                           <SelectedTypePill
-                            @title={{this.selectedSpec.title}}
-                            @id={{this.selectedSpec.id}}
+                            @title={{this.selectedSpecResource.card.title}}
+                            @id={{this.selectedSpecResource.card.id}}
                           />
                         {{/if}}
                         <Button
@@ -144,7 +149,7 @@ export default class CreateFileModal extends Component<Signature> {
                           {{on 'click' (perform this.chooseType)}}
                           data-test-select-card-type
                         >
-                          {{if this.selectedSpec 'Change' 'Select'}}
+                          {{if this.selectedSpecResource 'Change' 'Select'}}
                         </Button>
                       {{/if}}
                     </div>
@@ -201,7 +206,7 @@ export default class CreateFileModal extends Component<Signature> {
           </:content>
           <:footer>
             {{#if this.isModalOpen}}
-              {{#unless this.onSetup.isRunning}}
+              {{#if this.isReady}}
                 <div class='footer-buttons'>
                   <Button
                     {{on 'click' this.onCancel}}
@@ -254,7 +259,7 @@ export default class CreateFileModal extends Component<Signature> {
                     </Button>
                   {{/if}}
                 </div>
-              {{/unless}}
+              {{/if}}
             {{/if}}
           </:footer>
         </ModalContainer>
@@ -327,10 +332,15 @@ export default class CreateFileModal extends Component<Signature> {
     </style>
   </template>
 
-  @service private declare cardService: CardService;
-  @service private declare network: NetworkService;
+  @consume(GetCardContextName) private declare getCard: getCard<Spec>;
 
-  @tracked private selectedSpec: Spec | undefined = undefined;
+  @service private declare cardService: CardService;
+  @service private declare commandService: CommandService;
+  @service private declare network: NetworkService;
+  @service private declare store: StoreService;
+
+  @tracked private defaultSpecResource: ReturnType<getCard<Spec>> | undefined;
+  @tracked private chosenSpecResource: ReturnType<getCard<Spec>> | undefined;
   @tracked private displayName = '';
   @tracked private fileName = '';
   @tracked private hasUserEditedFileName = false;
@@ -374,7 +384,7 @@ export default class CreateFileModal extends Component<Signature> {
     },
     sourceInstance?: CardDef,
   ) {
-    return await this.makeCreateFileRequst.perform(
+    return await this.makeCreateFileRequest.perform(
       fileType,
       realmURL,
       definitionClass,
@@ -386,7 +396,17 @@ export default class CreateFileModal extends Component<Signature> {
     return !!this.currentRequest;
   }
 
-  private makeCreateFileRequst = enqueueTask(
+  private get isReady() {
+    return this.definitionClass
+      ? true
+      : Boolean(this.defaultSpecResource?.isLoaded);
+  }
+
+  private get selectedSpecResource() {
+    return this.chosenSpecResource || this.defaultSpecResource;
+  }
+
+  private makeCreateFileRequest = enqueueTask(
     async (
       fileType: FileType,
       realmURL?: URL,
@@ -404,7 +424,16 @@ export default class CreateFileModal extends Component<Signature> {
         definitionClass,
         sourceInstance,
       };
-      await this.onSetup.perform();
+      if (!this.definitionClass) {
+        let specEntryPath =
+          this.fileType.id === 'field-definition'
+            ? 'fields/field'
+            : 'types/card';
+        this.defaultSpecResource = this.getCard(
+          this,
+          () => `${baseRealm.url}${specEntryPath}`,
+        );
+      }
       let url = await this.currentRequest.newFileDeferred.promise;
       this.clearState();
       return url;
@@ -412,7 +441,8 @@ export default class CreateFileModal extends Component<Signature> {
   );
 
   private clearState() {
-    this.selectedSpec = undefined;
+    this.defaultSpecResource = undefined;
+    this.chosenSpecResource = undefined;
     this.currentRequest = undefined;
     this.fileNameError = undefined;
     this.displayName = '';
@@ -505,7 +535,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateCardInstanceButtonDisabled() {
     return (
-      (!this.selectedSpec && !this.definitionClass) ||
+      (!this.selectedSpecResource && !this.definitionClass) ||
       !this.selectedRealmURL ||
       this.createCardInstance.isRunning
     );
@@ -517,7 +547,7 @@ export default class CreateFileModal extends Component<Signature> {
 
   private get isCreateDefinitionButtonDisabled() {
     return (
-      (!this.selectedSpec && !this.definitionClass) ||
+      (!this.selectedSpecResource && !this.definitionClass) ||
       !this.selectedRealmURL ||
       !this.fileName ||
       !this.displayName ||
@@ -529,36 +559,17 @@ export default class CreateFileModal extends Component<Signature> {
     return this.createCardInstance.isRunning || this.createDefinition.isRunning;
   }
 
-  private onSetup = restartableTask(async () => {
-    let token = waiter.beginAsync();
-    try {
-      if (!this.definitionClass) {
-        let specEntryPath =
-          this.fileType.id === 'field-definition'
-            ? 'fields/field'
-            : 'types/card';
-        let resource = getCard(this, () => `${baseRealm.url}${specEntryPath}`, {
-          isLive: () => false,
-        });
-        await resource.loaded;
-        this.selectedSpec = resource.card as Spec;
-      }
-    } finally {
-      waiter.endAsync(token);
-    }
-  });
-
   private chooseType = restartableTask(async () => {
     this.clearSaveError();
     let isField = this.fileType.id === 'field-definition';
 
-    this.selectedSpec = await chooseCard({
+    let specId = await chooseCard({
       filter: {
         on: specRef,
-        // REMEMBER ME
         every: [{ eq: { specType: isField ? 'field' : 'card' } }],
       },
     });
+    this.chosenSpecResource = this.getCard(this, () => specId);
   });
 
   // this can be used for CardDefs or FieldDefs
@@ -573,7 +584,7 @@ export default class CreateFileModal extends Component<Signature> {
         `bug: cannot call createDefinition without a selected realm URL`,
       );
     }
-    if (!this.selectedSpec && !this.definitionClass) {
+    if (!this.selectedSpecResource && !this.definitionClass) {
       throw new Error(
         `bug: cannot call createDefinition without a selected spec or definitionClass `,
       );
@@ -609,11 +620,20 @@ export default class CreateFileModal extends Component<Signature> {
       // we expect a 404 here
     }
 
+    let spec: Spec | undefined;
+    if (this.selectedSpecResource?.id) {
+      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
+      if (maybeSpec && !isCardInstance(maybeSpec)) {
+        throw new Error(`Failed to load spec ${maybeSpec.id}`);
+      }
+      spec = maybeSpec;
+    }
+
     let {
       ref: { name: exportName, module },
-    } = (this.definitionClass ?? this.selectedSpec)!; // we just checked above to make sure one of these exists
+    } = (this.definitionClass ?? spec)!; // we just checked above to make sure one of these exists
     let className = convertToClassName(this.displayName);
-    let absoluteModule = new URL(module, this.selectedSpec?.id);
+    let absoluteModule = new URL(module, spec?.id);
     let moduleURL = maybeRelativeURL(
       absoluteModule,
       url,
@@ -651,33 +671,6 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName} {
   static displayName = "${this.displayName}";`);
     }
-    src.push(`\n  /*`);
-    if (this.fileType.id === 'card-definition') {
-      src.push(
-        `  static isolated = class Isolated extends Component<typeof this> {
-    <template></template>
-  }
-`,
-      );
-    }
-    src.push(
-      `  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-
-  static fitted = class Fitted extends Component<typeof this> {
-    <template></template>
-  }`,
-    );
-    src.push(`  */`);
     src.push(`}`);
 
     try {
@@ -706,15 +699,13 @@ export class ${className} extends ${exportName} {
         `Cannot duplicateCardInstance where where is no selected realm URL`,
       );
     }
-    let duplicate = await this.cardService.copyCard(
-      this.currentRequest.sourceInstance,
-      this.selectedRealmURL,
-    );
-    let saved = await this.cardService.saveModel(duplicate);
-    if (!saved) {
-      throw new Error(`unable to save duplicated card instance`);
-    }
-    this.currentRequest.newFileDeferred.fulfill(new URL(`${saved.id}.json`));
+    let { newCard } = await new CopyCardCommand(
+      this.commandService.commandContext,
+    ).execute({
+      sourceCard: this.currentRequest.sourceInstance,
+      targetRealmUrl: this.selectedRealmURL.href,
+    });
+    this.currentRequest.newFileDeferred.fulfill(new URL(`${newCard.id}.json`));
   });
 
   private createCardInstance = restartableTask(async () => {
@@ -723,21 +714,25 @@ export class ${className} extends ${exportName} {
         `Cannot createCardInstance when there is no this.currentRequest`,
       );
     }
-    if (
-      (!this.selectedSpec?.ref && !this.definitionClass) ||
-      !this.selectedRealmURL
-    ) {
+    let spec: Spec | undefined;
+    if (this.selectedSpecResource?.id) {
+      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
+      if (maybeSpec && !isCardInstance(maybeSpec)) {
+        throw new Error(`Failed to load spec ${maybeSpec.id}`);
+      }
+      spec = maybeSpec;
+    }
+
+    if ((!spec?.ref && !this.definitionClass) || !this.selectedRealmURL) {
       throw new Error(
         `bug: cannot create card instance with out adoptsFrom ref and selected realm URL`,
       );
     }
 
-    let { ref } = (
-      this.definitionClass ? this.definitionClass : this.selectedSpec
-    )!; // we just checked above to make sure one of these exist
+    let { ref } = (this.definitionClass ? this.definitionClass : spec)!; // we just checked above to make sure one of these exist
 
-    let relativeTo = this.selectedSpec
-      ? new URL(this.selectedSpec.id)
+    let relativeTo = spec
+      ? new URL(spec.id!) // only new cards are missing urls
       : undefined;
     // we make the code ref use an absolute URL for safety in
     // the case it's being created in a different realm than where the card
@@ -757,15 +752,15 @@ export class ${className} extends ${exportName} {
     };
 
     try {
-      let card = await this.cardService.createFromSerialized(doc.data, doc);
-
-      if (!card) {
-        throw new Error(
-          `Failed to create card from ref "${ref.name}" from "${ref.module}"`,
-        );
+      let maybeId = await this.store.create(
+        doc,
+        relativeTo,
+        this.selectedRealmURL.href,
+      );
+      if (typeof maybeId !== 'string') {
+        throw new Error(maybeId.message);
       }
-      await this.cardService.saveModel(card);
-      this.currentRequest.newFileDeferred.fulfill(new URL(`${card.id}.json`));
+      this.currentRequest.newFileDeferred.fulfill(new URL(`${maybeId}.json`));
     } catch (e: any) {
       console.log('Error saving', e);
       this.saveError = `Error creating card instance: ${e.message}`;

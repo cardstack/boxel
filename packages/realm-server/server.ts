@@ -75,6 +75,7 @@ export class RealmServer {
   private getRegistrationSecret:
     | (() => Promise<string | undefined>)
     | undefined;
+  private enableFileWatcher: boolean;
 
   constructor({
     serverURL,
@@ -92,6 +93,7 @@ export class RealmServer {
     getRegistrationSecret,
     seedPath,
     seedRealmURL,
+    enableFileWatcher,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -108,6 +110,7 @@ export class RealmServer {
     seedRealmURL?: URL;
     matrixRegistrationSecret?: string;
     getRegistrationSecret?: () => Promise<string | undefined>;
+    enableFileWatcher?: boolean;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -131,6 +134,7 @@ export class RealmServer {
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.getRegistrationSecret = getRegistrationSecret;
+    this.enableFileWatcher = enableFileWatcher ?? false;
     this.realms = [...realms, ...this.loadRealms()];
   }
 
@@ -143,7 +147,7 @@ export class RealmServer {
         cors({
           origin: '*',
           allowHeaders:
-            'Authorization, Content-Type, If-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index',
+            'Authorization, Content-Type, If-Match, If-None-Match, X-Requested-With, X-Boxel-Client-Request-Id, X-Boxel-Building-Index, X-HTTP-Method-Override',
         }),
       )
       .use(async (ctx, next) => {
@@ -154,9 +158,11 @@ export class RealmServer {
         );
 
         if (
-          Object.values(SupportedMimeType).includes(
-            mimeType as SupportedMimeType,
-          )
+          Object.values(SupportedMimeType)
+            // Actually, we want to use HTTP caching for executable modules which
+            // are requested with the "*/*" accept header
+            .filter((m) => m === '*/*')
+            .includes(mimeType as SupportedMimeType)
         ) {
           ctx.set('Cache-Control', 'no-store, no-cache, must-revalidate');
         }
@@ -326,7 +332,10 @@ export class RealmServer {
 
     let realmPath = resolve(join(this.realmsRootPath, ownerUsername, endpoint));
     ensureDirSync(realmPath);
-    let adapter = new NodeAdapter(resolve(String(realmPath)));
+    let adapter = new NodeAdapter(
+      resolve(String(realmPath)),
+      this.enableFileWatcher,
+    );
 
     let username = `realm/${ownerUsername}_${endpoint}`;
     let { userId } = await registerUser({
@@ -432,7 +441,7 @@ export class RealmServer {
             )}/${owner}/${realmName}/`,
             this.serverURL,
           ).href;
-          let adapter = new NodeAdapter(realmPath);
+          let adapter = new NodeAdapter(realmPath, this.enableFileWatcher);
           let username = `realm/${owner}_${realmName}`;
           let realm = new Realm({
             url,
@@ -456,7 +465,7 @@ export class RealmServer {
 
   private sendEvent = async (user: string, eventType: string) => {
     let dmRooms =
-      (await this.matrixClient.getAccountData<Record<string, string>>(
+      (await this.matrixClient.getAccountDataFromServer<Record<string, string>>(
         'boxel.session-rooms',
       )) ?? {};
     let roomId = dmRooms[user];

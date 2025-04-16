@@ -11,8 +11,8 @@ jobs:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2.4.0
-      - uses: ibiqlik/action-yamllint@v3.1
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+      - uses: ibiqlik/action-yamllint@2576378a8e339169678f9939646ee3ee325e845c # 3.1.1
         with:
           config_file: ".github/.yamllint.yml"
           file_or_dir: ".github"

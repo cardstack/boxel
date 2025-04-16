@@ -1,69 +1,307 @@
+import { on } from '@ember/modifier';
+import { getOwner } from '@ember/owner';
+import { scheduleOnce } from '@ember/runloop';
+import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
-import CodeBlock from '@cardstack/host/modifiers/code-block';
-import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
+import { dropTask } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
+import Modifier from 'ember-modifier';
 
+import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+
+import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+
+import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
+
+import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+
+import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
+import {
+  type HtmlTagGroup,
+  extractCodeData,
+  parseHtmlContent,
+  wrapLastTextNodeInStreamingTextSpan,
+} from '@cardstack/host/lib/formatted-message/utils';
+
+import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
+import type CardService from '@cardstack/host/services/card-service';
+import CommandService from '@cardstack/host/services/command-service';
+import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
+import ApplyButton from './apply-button';
+import CodeBlock from './code-block';
+
+export interface CodeData {
+  fileUrl: string | null;
+  code: string | null;
+  language: string | null;
+  searchReplaceBlock?: string | null;
+}
+
 interface FormattedMessageSignature {
-  sanitizedHtml: SafeString;
+  html: string;
   monacoSDK: MonacoSDK;
   renderCodeBlocks: boolean;
+  isStreaming: boolean;
+}
+
+function sanitize(html: string): SafeString {
+  return htmlSafe(sanitizeHtml(html));
 }
 
 export default class FormattedMessage extends Component<FormattedMessageSignature> {
+  @service private declare cardService: CardService;
+  @service private declare loaderService: LoaderService;
+  @service private declare commandService: CommandService;
+  @tracked htmlGroups: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
+
+  @tracked codePatchActions: TrackedArray<CodePatchAction> = new TrackedArray(
+    [],
+  );
+
+  @tracked applyAllCodePatchTasksState:
+    | 'ready'
+    | 'applying'
+    | 'applied'
+    | 'failed' = 'ready';
+  // When html is streamed, we need to update htmlParts accordingly,
+  // but only the parts that have changed so that we don't needlesly re-render
+  // parts of the message that haven't changed. Parts are: <pre> html code, and
+  // non-<pre> html. <pre> gets special treatment because we will render it as a
+  // (readonly) Monaco editor
+  private updateHtmlGroups = (html: string) => {
+    let htmlGroups = parseHtmlContent(html);
+    if (!this.htmlGroups.length) {
+      this.htmlGroups = new TrackedArray(
+        htmlGroups.map((part) => {
+          return new TrackedObject({
+            type: part.type,
+            content: part.content,
+          });
+        }),
+      );
+    } else {
+      this.htmlGroups.forEach((oldPart, index) => {
+        let newPart = htmlGroups[index];
+        if (oldPart.content !== newPart.content) {
+          oldPart.content = newPart.content;
+        }
+      });
+      if (htmlGroups.length > this.htmlGroups.length) {
+        this.htmlGroups.push(
+          ...htmlGroups.slice(this.htmlGroups.length).map((part) => {
+            return new TrackedObject({
+              type: part.type,
+              content: part.content,
+            });
+          }),
+        );
+      }
+    }
+  };
+
+  private onHtmlUpdate = (html: string) => {
+    // The reason why reacting to html argument this way is because we want to
+    // have full control of when the @html argument changes so that we can
+    // properly fragment it into htmlParts, and in our reactive structure, only update
+    // the parts that have changed.
+
+    // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
+    scheduleOnce('afterRender', () => {
+      this.updateHtmlGroups(html);
+    });
+  };
+
+  private isLastHtmlGroup = (index: number) => {
+    return index === this.htmlGroups.length - 1;
+  };
+
+  private createCodePatchAction = (codeData: CodeData) => {
+    let codePatchAction = new CodePatchAction(getOwner(this)!, codeData);
+    this.codePatchActions.push(codePatchAction);
+    return codePatchAction;
+  };
+
+  private get isApplyAllButtonDisplayed() {
+    return this.codePatchActions.length > 1 && !this.args.isStreaming;
+  }
+
+  private applyAllCodePatchTasks = dropTask(async () => {
+    this.applyAllCodePatchTasksState = 'applying';
+    let unappliedCodePatchActions = this.codePatchActions.filter(
+      (codePatchAction) => codePatchAction.patchCodeTaskState !== 'applied',
+    );
+
+    if (unappliedCodePatchActions.length === 0) {
+      this.applyAllCodePatchTasksState = 'applied';
+      return;
+    }
+
+    unappliedCodePatchActions.forEach((codePatchAction) => {
+      codePatchAction.patchCodeTaskState = 'applying';
+    });
+
+    let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions.reduce(
+      (acc, codePatchAction) => {
+        acc[codePatchAction.fileUrl] = [
+          ...(acc[codePatchAction.fileUrl] || []),
+          codePatchAction,
+        ];
+        return acc;
+      },
+      {} as Record<string, CodePatchAction[]>,
+    );
+
+    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+      this.commandService.commandContext,
+    );
+
+    // TODO: Handle possible errors (fetching source, patching, saving source)
+    // Handle in CS-8369
+    for (let fileUrl in codePatchActionsGroupedByFileUrl) {
+      let source = await this.cardService.getSource(new URL(fileUrl));
+      let patchedCode = source;
+      for (let codePatchAction of codePatchActionsGroupedByFileUrl[fileUrl]) {
+        let { resultContent: patchedCodeResult } =
+          await applySearchReplaceBlockCommand.execute({
+            fileContent: patchedCode,
+            codeBlock: codePatchAction.searchReplaceBlock,
+          });
+        patchedCode = patchedCodeResult;
+      }
+      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
+      codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
+        codePatchAction.patchCodeTaskState = 'applied';
+      });
+    }
+
+    this.applyAllCodePatchTasksState = 'applied';
+  });
+
   <template>
     {{#if @renderCodeBlocks}}
       <div
         class='message'
-        {{CodeBlock
-          codeBlockSelector='pre[data-codeblock]'
-          languageAttr='data-codeblock'
-          monacoSDK=@monacoSDK
-          editorDisplayOptions=this.editorDisplayOptions
-        }}
+        {{HtmlDidUpdate html=@html onHtmlUpdate=this.onHtmlUpdate}}
       >
-        {{@sanitizedHtml}}
+        {{! We are splitting the html into parts so that we can target the
+        code blocks (<pre> tags) and apply Monaco editor to them. Here is an
+        example of the html argument:
+
+        <p>Here is some code for you.</p>
+        <pre data-codeblock="javascript">const x = 1;</pre>
+        <p>I hope you like this code. But here is some more!</p>
+        <pre data-codeblock="javascript">const y = 2;</pre>
+        <p>Feel free to use it in your project.</p>
+
+        A drawback of this approach is that we can't render monaco editors for
+        code blocks that are nested inside other elements. We should make sure
+        our skills teach the model to respond with code blocks that are not nested
+        inside other elements.
+        }}
+        {{#each this.htmlGroups as |htmlGroup index|}}
+          {{#if (eq htmlGroup.type 'pre_tag')}}
+            {{#let (extractCodeData htmlGroup.content) as |codeData|}}
+              <CodeBlock
+                @monacoSDK={{@monacoSDK}}
+                @codeData={{codeData}}
+                as |codeBlock|
+              >
+                {{#if (bool codeData.searchReplaceBlock)}}
+                  {{#let
+                    (getCodeDiffResultResource
+                      this codeData.fileUrl codeData.searchReplaceBlock
+                    )
+                    as |codeDiffResource|
+                  }}
+                    {{#if codeDiffResource.isDataLoaded}}
+                      <codeBlock.actions as |actions|>
+                        <actions.copyCode
+                          @code={{codeDiffResource.modifiedCode}}
+                        />
+                        <actions.applyCodePatch
+                          @codePatchAction={{this.createCodePatchAction
+                            codeData
+                          }}
+                        />
+                      </codeBlock.actions>
+                      <codeBlock.diffEditor
+                        @originalCode={{codeDiffResource.originalCode}}
+                        @modifiedCode={{codeDiffResource.modifiedCode}}
+                        @language={{codeData.language}}
+                      />
+                    {{/if}}
+                  {{/let}}
+                {{else}}
+                  <codeBlock.actions as |actions|>
+                    <actions.copyCode @code={{codeData.code}} />
+                  </codeBlock.actions>
+                  <codeBlock.editor />
+                {{/if}}
+              </CodeBlock>
+            {{/let}}
+          {{else}}
+            {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
+              {{wrapLastTextNodeInStreamingTextSpan
+                (sanitize htmlGroup.content)
+              }}
+            {{else}}
+              {{sanitize htmlGroup.content}}
+            {{/if}}
+          {{/if}}
+        {{/each}}
+
+        {{#if this.isApplyAllButtonDisplayed}}
+          <div class='code-patch-actions'>
+            <ApplyButton
+              {{on 'click' (perform this.applyAllCodePatchTasks)}}
+              @state={{this.applyAllCodePatchTasksState}}
+              data-test-apply-all-code-patches-button
+            >
+              Accept All
+            </ApplyButton>
+          </div>
+        {{/if}}
       </div>
     {{else}}
       <div class='message'>
-        {{@sanitizedHtml}}
+        {{sanitize @html}}
       </div>
     {{/if}}
 
     <style scoped>
-      /* code blocks can be rendered inline and as blocks, 
-         this is the styling for when it is rendered as a block */
-      .message > :deep(.preview-code.code-block) {
-        width: calc(100% + 2 * var(--boxel-sp));
+      .code-patch-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp);
+      }
+      .message {
+        position: relative;
       }
 
       .message > :deep(*) {
         margin-top: 0;
-        margin-bottom: 0;
       }
 
-      .message > :deep(* + *) {
-        margin-top: var(--boxel-sp);
+      .message > :deep(.code-block + :not(.code-block)) {
+        margin-top: 25px;
       }
 
-      :deep(.preview-code) {
-        --spacing: var(--boxel-sp-sm);
-        --fill-container-spacing: calc(
-          -1 * var(--ai-assistant-message-padding)
-        );
-        margin: var(--boxel-sp) var(--fill-container-spacing) 0
-          var(--fill-container-spacing);
-        padding: var(--spacing) 0;
-        background-color: var(--boxel-dark);
-      }
-
-      :deep(.preview-code.code-block) {
-        display: inline-block; /* sometimes the ai bot may place the codeblock within an <li> */
-        width: 100%;
-        position: relative;
-        padding-top: var(--boxel-sp-xxxl);
+      .ai-assistant-code-block-actions {
+        position: absolute;
+        width: calc(100% + 2 * var(--ai-assistant-message-padding));
+        margin-left: -16px;
+        background: black;
+        margin-top: 5px;
+        z-index: 1;
+        height: 39px;
+        padding: 18px 25px;
       }
 
       :deep(.monaco-container) {
@@ -80,51 +318,28 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         with hardcoded colors; any instance will override the global style tag, making all code editors look the same,
         effectively disabling multiple themes to be used on the same page)
       */
-      :global(.preview-code .monaco-editor) {
+      :global(.code-block .monaco-editor) {
         filter: invert(1) hue-rotate(151deg) brightness(0.8) grayscale(0.1);
-      }
-
-      /* we are cribbing the boxel-ui style here as we have a rather 
-      awkward way that we insert the copy button */
-      :deep(.code-copy-button) {
-        --spacing: calc(1rem / 1.333);
-
-        position: absolute;
-        top: var(--boxel-sp);
-        left: var(--boxel-sp-lg);
-        color: var(--boxel-highlight);
-        background: none;
-        border: none;
-        font: 600 var(--boxel-font-xs);
-        padding: 0;
-        margin-bottom: var(--spacing);
-        display: grid;
-        grid-template-columns: auto 1fr;
-        gap: var(--spacing);
-        letter-spacing: var(--boxel-lsp-xs);
-        justify-content: center;
-        height: min-content;
-        align-items: center;
-        white-space: nowrap;
-        min-height: var(--boxel-button-min-height);
-        min-width: var(--boxel-button-min-width, 5rem);
-      }
-      :deep(.code-copy-button .copy-text) {
-        color: transparent;
-      }
-      :deep(.code-copy-button:hover .copy-text) {
-        color: var(--boxel-highlight);
       }
     </style>
   </template>
+}
 
-  private editorDisplayOptions: MonacoEditorOptions = {
-    wordWrap: 'on',
-    wrappingIndent: 'indent',
-    fontWeight: 'bold',
-    scrollbar: {
-      alwaysConsumeMouseWheel: false,
-    },
-    lineNumbers: 'off',
+interface HtmlDidUpdateSignature {
+  Args: {
+    Named: {
+      html: string;
+      onHtmlUpdate: (html: string) => void;
+    };
   };
+}
+
+class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    { html, onHtmlUpdate }: HtmlDidUpdateSignature['Args']['Named'],
+  ) {
+    onHtmlUpdate(html);
+  }
 }

@@ -64,6 +64,8 @@ if (process.env.DISABLE_MODULE_CACHING === 'true') {
   );
 }
 
+const ENABLE_FILE_WATCHER = process.env.ENABLE_FILE_WATCHER === 'true';
+
 let {
   port,
   matrixURL,
@@ -218,7 +220,11 @@ let autoMigrate = migrateDB || undefined;
       process.exit(-1);
     }
 
-    let realmAdapter = new NodeAdapter(resolve(String(path)));
+    let realmAdapter = new NodeAdapter(
+      resolve(String(path)),
+      ENABLE_FILE_WATCHER,
+    );
+
     let realm = new Realm(
       {
         url,
@@ -271,6 +277,7 @@ let autoMigrate = migrateDB || undefined;
     seedPath,
     seedRealmURL: seedRealmURL ? new URL(seedRealmURL) : undefined,
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
+    enableFileWatcher: ENABLE_FILE_WATCHER,
     getRegistrationSecret: useRegistrationSecretFunction
       ? getRegistrationSecret
       : undefined,

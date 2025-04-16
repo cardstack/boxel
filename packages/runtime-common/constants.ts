@@ -22,11 +22,16 @@ export const skillCardRef: ResolvedCodeRef = {
 
 export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
+export const realmURL = Symbol.for('cardstack-realm-url');
+export const localId = Symbol.for('cardstack-local-id');
 
 export const aiBotUsername = 'aibot';
 
 export const CardContextName = 'card-context';
 export const DefaultFormatsContextName = 'default-format-context';
+export const GetCardContextName = 'get-card-context';
+export const GetCardsContextName = 'get-cards-context';
+export const GetCardCollectionContextName = 'get-card-collection-context';
 
 export const PermissionsContextName = 'permissions-context';
 

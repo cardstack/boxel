@@ -3,8 +3,9 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import RecentCards from '@cardstack/host/services/recent-cards-service';
 
 import ResultsSection from './results-section';
@@ -19,29 +20,33 @@ interface Signature {
 }
 
 export default class RecentCardsSection extends Component<Signature> {
-  @service declare recentCardsService: RecentCards;
+  @service private declare recentCardsService: RecentCards;
+  @tracked private recentCardCollection = getCardCollection(
+    this,
+    () => this.recentCardsService.recentCardIds,
+  );
 
-  @cached
-  private get orderedRecentCards() {
-    // Most recently added first
-    return [...this.recentCardsService.recentCards].reverse();
+  get hasRecentCards() {
+    return this.recentCardsService.recentCardIds.length > 0;
   }
 
   <template>
-    {{#if this.recentCardsService.any}}
+    {{#if this.hasRecentCards}}
       <ResultsSection
         @label='Recent'
         @isCompact={{@isCompact}}
         as |SearchResult|
       >
-        {{#each this.orderedRecentCards as |card i|}}
-          <SearchResult
-            @card={{card}}
-            @cardId={{card.id}}
-            @isCompact={{@isCompact}}
-            {{on 'click' (fn @handleCardSelect card.id)}}
-            data-test-search-result-index={{i}}
-          />
+        {{#each this.recentCardCollection.cards as |card i|}}
+          {{#if card}}
+            <SearchResult
+              @card={{card}}
+              @cardId={{card.id}}
+              @isCompact={{@isCompact}}
+              {{on 'click' (fn @handleCardSelect card.id)}}
+              data-test-search-result-index={{i}}
+            />
+          {{/if}}
         {{/each}}
       </ResultsSection>
     {{/if}}

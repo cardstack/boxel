@@ -118,12 +118,14 @@ export class TestRealmAdapter implements RealmAdapter {
 
     let realmMatrixUsername = matrixClient.username;
 
-    for (let roomId of getRoomIds()) {
-      if (roomId.startsWith('test-session-room-realm-')) {
-        simulateRemoteMessage(roomId, realmMatrixUsername, event, {
-          type: APP_BOXEL_REALM_EVENT_TYPE,
-        });
-      }
+    let targetRoomIds = getRoomIds().filter((rid) =>
+      rid.replace('test-session-room-realm-', '').startsWith(this.#paths.url),
+    );
+
+    for (let roomId of targetRoomIds) {
+      simulateRemoteMessage(roomId, realmMatrixUsername, event, {
+        type: APP_BOXEL_REALM_EVENT_TYPE,
+      });
     }
   }
 
@@ -416,6 +418,10 @@ export class TestRealmAdapter implements RealmAdapter {
     });
     messageCloseHandler(s.readable, cleanup);
     return { response, writable: s.writable };
+  }
+
+  get fileWatcherEnabled() {
+    return false;
   }
 
   async subscribe(

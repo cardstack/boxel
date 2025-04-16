@@ -8,7 +8,6 @@ import TriangleAlert from '@cardstack/boxel-icons/triangle-alert';
 import { didCancel, restartableTask } from 'ember-concurrency';
 import { trackedFunction } from 'ember-resources/util/function';
 import { flatMap, isEqual } from 'lodash';
-import { stringify } from 'qs';
 
 import { TrackedSet } from 'tracked-built-ins';
 
@@ -106,6 +105,7 @@ interface Signature {
     format: Format;
     cardUrls?: string[];
     realms: string[];
+    isLive?: boolean;
   };
   Blocks: {
     loading: [];
@@ -117,6 +117,7 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   @service declare cardService: CardService;
   @service declare loaderService: LoaderService;
   _lastSearchQuery: Query | null = null;
+  _lastCardUrls: string[] | undefined;
   _lastSearchResults: PrerenderedCard[] | undefined;
   _lastRealms: string[] | undefined;
   realmsNeedingRefresh = new TrackedSet<string>();
@@ -135,15 +136,20 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     realmURL: string,
   ): Promise<PrerenderedCard[]> {
     let json = (await this.cardService.fetchJSON(
-      `${realmURL}_search-prerendered?${stringify(
-        {
+      `${realmURL}_search-prerendered`,
+      {
+        method: 'QUERY',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
           ...query,
           prerenderedHtmlFormat: format,
           cardUrls,
-        },
-        { strictNullHandling: true },
-      )}`,
+        }),
+      },
     )) as unknown as PrerenderedCardCollectionDocument;
+
     if (!isPrerenderedCardCollectionDocument(json)) {
       throw new Error(
         `The realm search response was not a prerendered-card collection document:
@@ -171,6 +177,8 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     let { query, format, cardUrls, realms } = this.args;
 
     let realmsChanged = !isEqual(realms, this._lastRealms);
+    let queryChanged = !isEqual(query, this._lastSearchQuery);
+    let cardUrlsChanged = !isEqual(cardUrls, this._lastSearchQuery);
     if (realmsChanged) {
       this._lastSearchResults = this._lastSearchResults?.filter((r) =>
         realms.includes(r.realmUrl),
@@ -180,10 +188,23 @@ export default class PrerenderedCardSearch extends Component<Signature> {
     this._lastRealms = realms;
 
     if (
-      query &&
-      format &&
-      (realmsChanged || this.realmsNeedingRefresh.size > 0)
+      // we want to only run the search when there is a deep equality
+      // difference, not a strict equality difference
+      !realmsChanged &&
+      !queryChanged &&
+      !cardUrlsChanged &&
+      (!this.args.isLive ||
+        (this.args.isLive && this.realmsNeedingRefresh.size === 0))
     ) {
+      return (
+        this.runSearchTask.lastSuccessful?.value ?? {
+          instances: [],
+          isLoading: true,
+        }
+      );
+    }
+
+    if (query && format) {
       try {
         await this.runSearchTask.perform(query, format, cardUrls);
       } catch (e) {
@@ -207,6 +228,10 @@ export default class PrerenderedCardSearch extends Component<Signature> {
       this._lastSearchResults = undefined;
       this._lastSearchQuery = query;
     }
+    if (!isEqual(cardUrls, this._lastCardUrls)) {
+      this._lastCardUrls = cardUrls;
+    }
+
     let results = [...(this._lastSearchResults || [])];
     let realmsNeedingRefresh = Array.from(this.realmsNeedingRefresh);
     let token = waiter.beginAsync();
@@ -261,7 +286,9 @@ export default class PrerenderedCardSearch extends Component<Signature> {
   };
 
   <template>
-    {{SubscribeToRealms @realms this.markRealmNeedsRefreshing}}
+    {{#if @isLive}}
+      {{SubscribeToRealms @realms this.markRealmNeedsRefreshing}}
+    {{/if}}
     {{#if this.searchResults.isLoading}}
       {{yield to='loading'}}
     {{else}}

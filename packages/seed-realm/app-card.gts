@@ -15,7 +15,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { and, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { baseRealm, getCard } from '@cardstack/runtime-common';
+import { baseRealm } from '@cardstack/runtime-common';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -62,29 +62,31 @@ export class Tab extends FieldDef {
 }
 
 class TableView extends GlimmerComponent<{
-  Args: { cards: PrerenderedCard[] };
+  Args: { cards: PrerenderedCard[]; context?: CardContext };
 }> {
   <template>
-    <table class='styled-table'>
-      <thead>
-        <tr>
-          {{#each this.tableData.headers as |header|}}
-            <th class='table-header'>{{header}}</th>
-          {{/each}}
-        </tr>
-      </thead>
-      <tbody>
-        {{#each this.tableData.rows as |row|}}
+    {{#if this.isLoaded}}
+      <table class='styled-table'>
+        <thead>
           <tr>
-            {{#each row as |cell|}}
-              <td class='table-cell'>
-                <div class='cell-content'>{{cell}}</div>
-              </td>
+            {{#each this.tableData.headers as |header|}}
+              <th class='table-header'>{{header}}</th>
             {{/each}}
           </tr>
-        {{/each}}
-      </tbody>
-    </table>
+        </thead>
+        <tbody>
+          {{#each this.tableData.rows as |row|}}
+            <tr>
+              {{#each row as |cell|}}
+                <td class='table-cell'>
+                  <div class='cell-content'>{{cell}}</div>
+                </td>
+              {{/each}}
+            </tr>
+          {{/each}}
+        </tbody>
+      </table>
+    {{/if}}
     <style scoped>
       .styled-table {
         width: 100%;
@@ -119,32 +121,22 @@ class TableView extends GlimmerComponent<{
     </style>
   </template>
 
-  @tracked instances?: CardDef[];
+  // explicitly setting this to @tracked since there is
+  // a possibility it might be initialized as undefined
+  @tracked private cardCollection = this.args.context?.getCardCollection(
+    this,
+    () => this.args.cards.map((c) => c.url),
+  );
 
-  constructor(owner: Owner, args: any) {
-    super(owner, args);
-    this._getCards.perform();
+  private get isLoaded() {
+    return this.cardCollection?.isLoaded;
   }
 
-  private _getCards = restartableTask(async () => {
-    let instances: CardDef[] = [];
-    await Promise.all(
-      this.args.cards.map(async (c) => {
-        let result = getCard(new URL(c.url));
-        await result.loaded;
-        if (result.card) {
-          instances.push(result.card);
-        }
-      }),
-    );
-    this.instances = instances;
-  });
-
   get tableData() {
-    if (!this.instances) {
+    if (!this.cardCollection || this.cardCollection.cards.length === 0) {
       return;
     }
-    let exampleCard = this.instances[0];
+    let exampleCard = this.cardCollection.cards[0];
     let headers: string[] = [];
     for (let fieldName in exampleCard) {
       if (
@@ -158,7 +150,7 @@ class TableView extends GlimmerComponent<{
     }
     headers.sort();
 
-    let rows = this.instances.map((card) => {
+    let rows = this.cardCollection.cards.map((card) => {
       let row: string[] = [];
       for (let header of headers) {
         row.push((card as any)[header]);
@@ -180,11 +172,12 @@ class DefaultTabTemplate extends GlimmerComponent<DefaultTabSignature> {
           @query={{this.query}}
           @format='fitted'
           @realms={{@realms}}
+          @isLive={{true}}
         >
           <:loading>Loading...</:loading>
           <:response as |cards|>
             {{#if @activeTab.isTable}}
-              <TableView @cards={{cards}} />
+              <TableView @cards={{cards}} @context={{@context}} />
             {{else}}
               <CardsGrid @cards={{cards}} @context={{@context}} />
             {{/if}}

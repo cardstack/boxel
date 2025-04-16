@@ -4,11 +4,11 @@ import * as AddFieldToCardDefinitionCommandModule from './add-field-to-card-defi
 import * as AddSkillsToRoomCommandModule from './add-skills-to-room';
 import * as ApplySearchReplaceBlockCommandModule from './apply-search-replace-block';
 import * as CopyCardCommandModule from './copy-card';
+import * as CopySourceCommandModule from './copy-source';
 import * as CreateAIAssistantRoomCommandModule from './create-ai-assistant-room';
 import * as GetBoxelUiStateModule from './get-boxel-ui-state';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as PatchCardCommandModule from './patch-card';
-import * as ReloadCardCommandModule from './reload-card';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
@@ -36,6 +36,10 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
     CopyCardCommandModule,
   );
   virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/copy-source',
+    CopySourceCommandModule,
+  );
+  virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/create-ai-assistant-room',
     CreateAIAssistantRoomCommandModule,
   );
@@ -46,10 +50,6 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/patch-card',
     PatchCardCommandModule,
-  );
-  virtualNetwork.shimModule(
-    '@cardstack/boxel-host/commands/reload-card',
-    ReloadCardCommandModule,
   );
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/save-card',

@@ -1,6 +1,5 @@
 import Component from '@glimmer/component';
 
-import { getCards } from '@cardstack/runtime-common';
 import type { Deal } from './deal';
 import type { Query } from '@cardstack/runtime-common';
 
@@ -11,11 +10,13 @@ import TrendingUpIcon from '@cardstack/boxel-icons/trending-up';
 import CalculatorIcon from '@cardstack/boxel-icons/calculator';
 import NumbersIcon from '@cardstack/boxel-icons/numbers';
 import ChartCovariateIcon from '@cardstack/boxel-icons/chart-covariate';
+import { type CardContext } from '../../base/card-api';
 
 interface Signature {
   Args: {
     query: Query;
     realmHrefs: string[];
+    context?: CardContext;
   };
 }
 
@@ -24,7 +25,8 @@ function formatCurrencyValue(value: number, currencySymbol: string) {
 }
 
 export class DealSummary extends Component<Signature> {
-  dealCardsQuery = getCards(
+  dealCardsQuery = this.args.context?.getCards(
+    this,
     () => this.args.query,
     () => this.args.realmHrefs,
     {
@@ -33,14 +35,14 @@ export class DealSummary extends Component<Signature> {
   );
 
   get deals() {
-    return (this.dealCardsQuery.instances || []) as Deal[];
+    return (this.dealCardsQuery?.instances || []) as Deal[];
   }
 
   get dealSummaries() {
     if (
       !this.deals ||
       this.deals.length === 0 ||
-      this.dealCardsQuery.isLoading
+      this.dealCardsQuery?.isLoading
     ) {
       return undefined;
     }

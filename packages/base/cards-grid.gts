@@ -137,6 +137,7 @@ class Isolated extends Component<typeof CardsGrid> {
               @query={{this.query}}
               @format='fitted'
               @realms={{this.realms}}
+              @isLive={{true}}
             >
 
               <:loading>
@@ -394,7 +395,7 @@ class Isolated extends Component<typeof CardsGrid> {
         ],
       };
     }
-    let card = await chooseCard<Spec>(
+    let specId = await chooseCard(
       {
         filter: {
           on: specRef,
@@ -403,13 +404,21 @@ class Isolated extends Component<typeof CardsGrid> {
       },
       { preselectedCardTypeQuery },
     );
-    if (!card) {
+    if (!specId) {
       return;
     }
 
-    await this.args.context?.actions?.createCard?.(card.ref, new URL(card.id), {
-      realmURL: this.args.model[realmURL],
-    });
+    let spec = await this.args.context?.store.get<Spec>(specId);
+
+    if (spec && isCardInstance<Spec>(spec)) {
+      await this.args.context?.actions?.createCard?.(
+        spec.ref,
+        new URL(specId),
+        {
+          realmURL: this.args.model[realmURL],
+        },
+      );
+    }
   });
 
   private loadFilterList = restartableTask(async () => {

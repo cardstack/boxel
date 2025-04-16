@@ -94,7 +94,7 @@ module('Integration | card-copy', function (hooks) {
           format: 'isolated' as const,
         })),
       ].filter((a) => a.length > 0);
-      await operatorModeStateService.restore({ stacks });
+      operatorModeStateService.restore({ stacks });
     };
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
@@ -707,7 +707,7 @@ module('Integration | card-copy', function (hooks) {
         realmSessionRoomId,
         realmEventTimestampStart,
       );
-      console.log(matrixMessages);
+
       return matrixMessages.some(
         (m) =>
           m.type === APP_BOXEL_REALM_EVENT_TYPE &&
@@ -912,7 +912,14 @@ module('Integration | card-copy', function (hooks) {
 
     lookupNetworkService().mount(
       async (req) => {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
+        if (
+          req.method !== 'GET' &&
+          req.method !== 'HEAD' &&
+          !(
+            req.method === 'POST' &&
+            req.headers.get('X-HTTP-Method-Override') === 'QUERY'
+          )
+        ) {
           let token = waiter.beginAsync();
           let json = JSON.parse(await req.clone().text());
           waiter.endAsync(token);
@@ -1055,7 +1062,14 @@ module('Integration | card-copy', function (hooks) {
 
     lookupNetworkService().mount(
       async (req) => {
-        if (req.method !== 'GET' && req.method !== 'HEAD') {
+        if (
+          req.method !== 'GET' &&
+          req.method !== 'HEAD' &&
+          !(
+            req.method === 'POST' &&
+            req.headers.get('X-HTTP-Method-Override') === 'QUERY'
+          )
+        ) {
           let token = waiter.beginAsync();
           let json = JSON.parse(await req.clone().text());
           waiter.endAsync(token);

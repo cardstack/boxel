@@ -9,19 +9,19 @@ import {
   realmURL,
   StringField,
 } from 'https://cardstack.com/base/card-api';
+import { WebsiteField } from 'https://cardstack.com/base/website';
+import { Address as AddressField } from 'https://cardstack.com/base/address';
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
-import { getCards, Query } from '@cardstack/runtime-common';
+import { Query } from '@cardstack/runtime-common';
 import { restartableTask } from 'ember-concurrency';
 
-import { Address as AddressField } from '../fields/address';
 import { Company } from './company';
 import { Contact } from './contact';
 import { CrmApp } from '../crm-app';
 import { Deal } from './deal';
 import { StatusTagField } from './contact-status-tag';
 import { UrgencyTag } from './urgency-tag';
-import { WebsiteField } from '../fields/website';
 
 import AccountHeader from '../components/account-header';
 import PageLayout from '../components/page-layout';
@@ -144,7 +144,8 @@ class IsolatedTemplate extends Component<typeof Account> {
     };
   }
 
-  deals = getCards(
+  deals = this.args.context?.getCards(
+    this,
     () => this.dealQuery,
     () => this.realmHrefs,
     {
@@ -152,7 +153,8 @@ class IsolatedTemplate extends Component<typeof Account> {
     },
   );
 
-  activeTasks = getCards(
+  activeTasks = this.args.context?.getCards(
+    this,
     () => this.activeTasksQuery,
     () => this.realmHrefs,
     {
@@ -279,7 +281,8 @@ class IsolatedTemplate extends Component<typeof Account> {
     };
   }
 
-  lifetimeValueDeals = getCards(
+  lifetimeValueDeals = this.args.context?.getCards(
+    this,
     () => this.lifetimeValueQuery,
     () => this.realmHrefs,
     {
@@ -711,7 +714,8 @@ class EmbeddedTemplate extends Component<typeof Account> {
     };
   }
 
-  deals = getCards(
+  deals = this.args.context?.getCards(
+    this,
     () => this.dealQuery,
     () => this.realmHrefs,
     {
@@ -719,7 +723,8 @@ class EmbeddedTemplate extends Component<typeof Account> {
     },
   );
 
-  activeTasks = getCards(
+  activeTasks = this.args.context?.getCards(
+    this,
     () => this.activeTasksQuery,
     () => this.realmHrefs,
     {
@@ -795,7 +800,8 @@ class EmbeddedTemplate extends Component<typeof Account> {
     };
   }
 
-  lifetimeValueDeals = getCards(
+  lifetimeValueDeals = this.args.context?.getCards(
+    this,
     () => this.lifetimeValueQuery,
     () => this.realmHrefs,
     {

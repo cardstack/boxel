@@ -39,10 +39,10 @@ import SearchSheet, {
 } from '../search-sheet';
 import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 
-import Disclaimer from './disclaimer';
-
+import AskAiContainer from './ask-ai-container';
 import WorkspaceChooser from './workspace-chooser';
 
+import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 
@@ -88,10 +88,12 @@ export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSettingsOpened = false;
   @tracked private profileSummaryOpened = false;
+
   private aiPanelWidths: PanelWidths = new TrackedObject({
     defaultWidth: 30,
     minWidth: 25,
   });
+  @service private declare commandService: CommandService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare router: RouterService;
@@ -131,10 +133,7 @@ export default class SubmodeLayout extends Component<Signature> {
     }
 
     let stackItem = this.allStackItems[this.allStackItems.length - 1];
-    if (stackItem.cardError) {
-      return stackItem.cardError.id;
-    }
-    return stackItem.card.id;
+    return stackItem.url;
   }
 
   private get isToggleWorkspaceChooserDisabled() {
@@ -243,8 +242,6 @@ export default class SubmodeLayout extends Component<Signature> {
   });
 
   <template>
-    <Disclaimer />
-
     <div
       {{handleWindowResizeModifier this.onWindowResize}}
       class='submode-layout {{this.aiAssistantVisibilityClass}}'
@@ -315,6 +312,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @hide={{this.operatorModeStateService.aiAssistantOpen}}
             @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
           />
+          <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
           <AiAssistantButton
             class='chat-btn'
             @isActive={{this.operatorModeStateService.aiAssistantOpen}}

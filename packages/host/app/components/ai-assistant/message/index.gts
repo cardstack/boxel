@@ -11,12 +11,13 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
+import { cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
-import { isCardInstance } from '@cardstack/runtime-common';
-
-import { markdownToHtml } from '@cardstack/runtime-common';
+import {
+  type getCardCollection,
+  markdownToHtml,
+} from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
@@ -25,54 +26,23 @@ import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import FormattedMessage from '../formatted-message';
 
 import type { ComponentLike } from '@glint/template';
 
-function findLastTextNodeWithContent(parentNode: Node): Text | null {
-  // iterate childNodes in reverse to find the last text node with non-whitespace text
-  for (let i = parentNode.childNodes.length - 1; i >= 0; i--) {
-    let child = parentNode.childNodes[i];
-    if (child.textContent && child.textContent.trim() !== '') {
-      if (child instanceof Text) {
-        return child;
-      }
-      return findLastTextNodeWithContent(child);
-    }
-  }
-  return null;
-}
-
-function wrapLastTextNodeInStreamingTextSpan(html: SafeString): SafeString {
-  let parser = new DOMParser();
-  let doc = parser.parseFromString(html.toString(), 'text/html');
-  let lastTextNode = findLastTextNodeWithContent(doc.body);
-  if (lastTextNode) {
-    let span = doc.createElement('span');
-    span.textContent = lastTextNode.textContent;
-    span.classList.add('streaming-text');
-    lastTextNode.replaceWith(span);
-  }
-  return htmlSafe(doc.body.innerHTML);
-}
-
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    formattedMessage: SafeString;
+    formattedMessage: string;
     reasoningContent?: string | null;
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
     profileAvatar?: ComponentLike;
-    resources?: {
-      cards: CardDef[] | undefined;
-      files: FileDef[] | undefined;
-      errors: { id: string; error: Error }[] | undefined;
-    };
+    collectionResource?: ReturnType<getCardCollection>;
+    files?: FileDef[] | undefined;
     index: number;
     eventId: string;
     monacoSDK: MonacoSDK;
@@ -286,29 +256,23 @@ export default class AiAssistantMessage extends Component<Signature> {
               {{/if}}
             </div>
           {{/if}}
-          {{#if (and @isFromAssistant @isStreaming)}}
-            <FormattedMessage
-              @renderCodeBlocks={{false}}
-              @monacoSDK={{@monacoSDK}}
-              @sanitizedHtml={{wrapLastTextNodeInStreamingTextSpan
-                @formattedMessage
-              }}
-            />
-          {{else if @formattedMessage}}
-            <FormattedMessage
-              @renderCodeBlocks={{true}}
-              @monacoSDK={{@monacoSDK}}
-              @sanitizedHtml={{@formattedMessage}}
-            />
-          {{/if}}
+
+          <FormattedMessage
+            @renderCodeBlocks={{@isFromAssistant}}
+            @monacoSDK={{@monacoSDK}}
+            @html={{@formattedMessage}}
+            @isStreaming={{@isStreaming}}
+          />
 
           {{yield}}
 
-          {{#if this.items.length}}
+          {{#if this.hasItems}}
             <div class='items' data-test-message-items>
               {{#each this.items as |item|}}
-                {{#if (isCardInstance item)}}
-                  <CardPill @card={{item}} />
+                {{#if (isCardCollectionResource item)}}
+                  {{#each item.cards as |card|}}
+                    <CardPill @cardId={{card.id}} />
+                  {{/each}}
                 {{else}}
                   <FilePill @file={{item}} />
                 {{/if}}
@@ -316,12 +280,12 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          {{#if @resources.errors.length}}
+          {{#if @collectionResource.cardErrors.length}}
             <div class='error-container error-footer'>
-              {{#each @resources.errors as |resourceError|}}
+              {{#each @collectionResource.cardErrors as |error|}}
                 <FailureBordered class='error-icon' />
                 <div class='error-message' data-test-card-error>
-                  <div>Cannot render {{resourceError.id}}</div>
+                  <div>Cannot render {{error.id}}</div>
                 </div>
               {{/each}}
             </div>
@@ -520,10 +484,19 @@ export default class AiAssistantMessage extends Component<Signature> {
     return this.args.isStreaming && !this.args.errorMessage;
   }
 
+  private get hasItems() {
+    return (
+      (this.args.files && this.args.files.length > 0) ||
+      (this.args.collectionResource &&
+        (this.args.collectionResource.cards.length > 0 ||
+          this.args.collectionResource.cardErrors.length > 0))
+    );
+  }
+
   private get items() {
     return [
-      ...(this.args.resources?.cards ?? []),
-      ...(this.args.resources?.files ?? []),
+      ...(this.args.collectionResource ? [this.args.collectionResource] : []),
+      ...(this.args.files ?? []),
     ];
   }
 }
@@ -563,5 +536,11 @@ const AiAssistantConversation: TemplateOnlyComponent<AiAssistantConversationSign
       }
     </style>
   </template>;
+
+function isCardCollectionResource(
+  obj: any,
+): obj is ReturnType<getCardCollection> {
+  return 'value' in obj;
+}
 
 export { AiAssistantConversation };

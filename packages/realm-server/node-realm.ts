@@ -37,7 +37,14 @@ import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-con
 const realmEventsLog = logger('realm:events');
 
 export class NodeAdapter implements RealmAdapter {
-  constructor(private realmDir: string) {}
+  constructor(
+    private realmDir: string,
+    private enableFileWatcher?: boolean,
+  ) {}
+
+  get fileWatcherEnabled(): boolean {
+    return this.enableFileWatcher ?? false;
+  }
 
   async *readdir(
     path: string,
@@ -67,44 +74,52 @@ export class NodeAdapter implements RealmAdapter {
 
   async subscribe(
     cb: (message: UpdateRealmEventContent) => void,
-    options: { watcher?: string },
   ): Promise<void> {
     if (this.watcher) {
       throw new Error(`tried to subscribe to watcher twice`);
     }
 
-    // TODO remove with CS-8014
-    let watcherOptions = options.watcher ? { [options.watcher]: true } : {};
+    if (this.enableFileWatcher) {
+      realmEventsLog.debug(`Starting file watcher at ${this.realmDir}`);
 
-    this.watcher = sane(join(this.realmDir, '/'), watcherOptions);
-    this.watcher.on('change', (path, _root, stat) => {
-      if (stat.isFile()) {
+      let watcherPath = join(this.realmDir, '/');
+
+      this.watcher = sane(watcherPath);
+
+      this.watcher.on('change', (path, _root, stat) => {
+        if (stat.isFile()) {
+          cb({
+            eventName: 'update',
+            updated: path,
+          });
+        }
+      });
+      this.watcher.on('add', (path, _root, stat) => {
+        if (stat.isFile()) {
+          cb({
+            eventName: 'update',
+            added: path,
+          });
+        }
+      });
+      this.watcher.on('delete', (path) =>
         cb({
           eventName: 'update',
-          updated: path,
+          removed: path,
+        }),
+      );
+      this.watcher.on('error', (err) => {
+        throw new Error(`watcher error: ${err}`);
+      });
+      await new Promise<void>((resolve) => {
+        this.watcher!.on('ready', () => {
+          resolve();
         });
-      }
-    });
-    this.watcher.on('add', (path, _root, stat) => {
-      if (stat.isFile()) {
-        cb({
-          eventName: 'update',
-          added: path,
-        });
-      }
-    });
-    this.watcher.on('delete', (path) =>
-      cb({
-        eventName: 'update',
-        removed: path,
-      }),
-    );
-    this.watcher.on('error', (err) => {
-      throw new Error(`watcher error: ${err}`);
-    });
-    await new Promise<void>((resolve) => {
-      this.watcher!.on('ready', resolve);
-    });
+      });
+    } else {
+      realmEventsLog.debug(`Not starting file watcher at ${this.realmDir}`);
+      return Promise.resolve();
+    }
   }
 
   unsubscribe(): void {
@@ -224,7 +239,7 @@ export class NodeAdapter implements RealmAdapter {
 
     try {
       dmRooms =
-        (await matrixClient.getAccountData<Record<string, string>>(
+        (await matrixClient.getAccountDataFromServer<Record<string, string>>(
           'boxel.session-rooms',
         )) ?? {};
     } catch (e) {

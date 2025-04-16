@@ -1,11 +1,10 @@
+import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { cached } from '@glimmer/tracking';
-
-import { task, timeout } from 'ember-concurrency';
 
 import { modifier } from 'ember-modifier';
 
@@ -19,8 +18,8 @@ import {
   CardHeader,
 } from '@cardstack/boxel-ui/components';
 
-import { MenuItem, bool, cn } from '@cardstack/boxel-ui/helpers';
-import { ArrowLeft, Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
+import { MenuItem, bool, cn, eq, not } from '@cardstack/boxel-ui/helpers';
+import { ArrowLeft } from '@cardstack/boxel-ui/icons';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
@@ -29,8 +28,7 @@ import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import ShowCardCommand from '@cardstack/host/commands/show-card';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
-import type { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
-import monacoModifier from '@cardstack/host/modifiers/monaco';
+
 import { RoomResource } from '@cardstack/host/resources/room';
 import type CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -42,7 +40,10 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
+import CodeBlock from '../ai-assistant/code-block';
 import Preview from '../preview';
+
+import PreparingRoomMessageCommand from './preparing-room-message-command';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -53,6 +54,7 @@ interface Signature {
     runCommand: () => void;
     isError?: boolean;
     isPending?: boolean;
+    isStreaming: boolean;
     monacoSDK: MonacoSDK;
   };
 }
@@ -62,35 +64,10 @@ export default class RoomMessageCommand extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare monacoService: MonacoService;
 
-  editorDisplayOptions: MonacoEditorOptions = {
-    wordWrap: 'on',
-    wrappingIndent: 'indent',
-    fontWeight: 'bold',
-    scrollbar: {
-      alwaysConsumeMouseWheel: false,
-    },
-    lineNumbers: 'off',
-  };
-
   private get previewCommandCode() {
     let { name, arguments: payload } = this.args.messageCommand;
     return JSON.stringify({ name, payload }, null, 2);
   }
-
-  private copyToClipboard = (event: MouseEvent) => {
-    this.copyClipboardTask.perform(event.currentTarget as HTMLElement);
-  };
-
-  private copyClipboardTask = task(async (buttonElement: HTMLElement) => {
-    await navigator.clipboard.writeText(this.previewCommandCode);
-    let svg = buttonElement.children[0];
-    buttonElement.replaceChildren(svg, document.createTextNode('Copied'));
-    await timeout(2000);
-    buttonElement.replaceChildren(
-      svg,
-      document.createTextNode('Copy to clipboard'),
-    );
-  });
 
   @cached
   private get applyButtonState(): ApplyButtonState {
@@ -166,7 +143,7 @@ export default class RoomMessageCommand extends Component<Signature> {
 
     let showCardCommand = new ShowCardCommand(commandContext);
     await showCardCommand.execute({
-      cardToShow: newCard,
+      cardIdToShow: newCard.id,
     });
   }
 
@@ -193,97 +170,80 @@ export default class RoomMessageCommand extends Component<Signature> {
       {{#if @messageCommand.description}}
         <div class='command-description'>{{@messageCommand.description}}</div>
       {{/if}}
-      <div
-        class='command-button-bar'
-        {{! In test, if we change this isIdle check to the task running locally on this component, it will fail because roomMessages get destroyed during re-indexing.
-              Since services are long-lived so it we will not have this issue. I think this will go away when we convert our room field into a room component }}
-        {{! TODO: Convert to non-EC async method after fixing CS-6987 }}
-        data-test-command-card-idle={{this.commandService.run.isIdle}}
-      >
-        <Button
-          class='view-code-button'
-          {{on 'click' this.toggleViewCode}}
-          @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
-          @size='extra-small'
-          data-test-view-code-button
+      {{#if @isStreaming}}
+        <PreparingRoomMessageCommand />
+      {{else}}
+        <div
+          class='command-button-bar'
+          data-test-command-card-idle={{not
+            (eq @messageCommand.status 'applying')
+          }}
         >
-          {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
-        </Button>
-        <ApplyButton
-          @state={{this.applyButtonState}}
-          {{on 'click' @runCommand}}
-          data-test-command-apply={{this.applyButtonState}}
-        />
-      </div>
-      {{#if this.isDisplayingCode}}
-        <div class='preview-code'>
           <Button
-            class='code-copy-button'
-            @kind='text-only'
+            class='view-code-button'
+            {{on 'click' this.toggleViewCode}}
+            @kind={{if this.isDisplayingCode 'primary-dark' 'secondary-dark'}}
             @size='extra-small'
-            {{on 'click' this.copyToClipboard}}
-            data-test-copy-code
+            data-test-view-code-button
           >
-            <CopyIcon
-              width='16'
-              height='16'
-              role='presentation'
-              aria-hidden='true'
-            />
-            <span class='copy-text'>Copy to clipboard</span>
+            {{if this.isDisplayingCode 'Hide Code' 'View Code'}}
           </Button>
-          <div
-            class='monaco-container'
-            {{this.scrollBottomIntoView}}
-            {{monacoModifier
-              content=this.previewCommandCode
-              contentChanged=undefined
-              monacoSDK=@monacoSDK
-              language='json'
-              readOnly=true
-              editorDisplayOptions=this.editorDisplayOptions
-            }}
-            data-test-editor
-            data-test-percy-hide
-          />
-        </div>
-      {{/if}}
-      {{#if this.failedCommandState}}
-        <div class='failed-command-result'>
-          <span class='failed-command-text'>
-            {{this.failedCommandState.message}}
-          </span>
-          <Button
+          <ApplyButton
+            @state={{this.applyButtonState}}
             {{on 'click' @runCommand}}
-            class='retry-button'
-            @size='small'
-            @kind='secondary-dark'
-            data-test-retry-command-button
-          >
-            Retry
-          </Button>
+            data-test-command-apply={{this.applyButtonState}}
+          />
         </div>
-      {{/if}}
-      {{#if this.commandResultCard.card}}
-        <CardContainer
-          @displayBoundaries={{false}}
-          class='command-result-card-preview'
-          data-test-command-result-container
-        >
-          <CardHeader
-            @cardTypeDisplayName={{this.headerTitle}}
-            @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
-            @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
-            class='header'
-            data-test-command-result-header
-          />
-          <Preview
-            @card={{this.commandResultCard.card}}
-            @format='embedded'
-            @displayContainer={{false}}
-            data-test-boxel-command-result
-          />
-        </CardContainer>
+        {{#if this.isDisplayingCode}}
+          <CodeBlock
+            {{this.scrollBottomIntoView}}
+            @monacoSDK={{@monacoSDK}}
+            @codeData={{hash code=this.previewCommandCode language='json'}}
+            as |codeBlock|
+          >
+            <codeBlock.actions as |actions|>
+              <actions.copyCode />
+            </codeBlock.actions>
+            <codeBlock.editor />
+          </CodeBlock>
+        {{/if}}
+        {{#if this.failedCommandState}}
+          <div class='failed-command-result'>
+            <span class='failed-command-text'>
+              {{this.failedCommandState.message}}
+            </span>
+            <Button
+              {{on 'click' @runCommand}}
+              class='retry-button'
+              @size='small'
+              @kind='secondary-dark'
+              data-test-retry-command-button
+            >
+              Retry
+            </Button>
+          </div>
+        {{/if}}
+        {{#if this.commandResultCard.card}}
+          <CardContainer
+            @displayBoundaries={{false}}
+            class='command-result-card-preview'
+            data-test-command-result-container
+          >
+            <CardHeader
+              @cardTypeDisplayName={{this.headerTitle}}
+              @cardTypeIcon={{cardTypeIcon this.commandResultCard.card}}
+              @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
+              class='header'
+              data-test-command-result-header
+            />
+            <Preview
+              @card={{this.commandResultCard.card}}
+              @format='embedded'
+              @displayContainer={{false}}
+              data-test-boxel-command-result
+            />
+          </CardContainer>
+        {{/if}}
       {{/if}}
     </div>
 
@@ -374,12 +334,6 @@ export default class RoomMessageCommand extends Component<Signature> {
       .header :deep(.content) {
         gap: 0;
       }
-      .icon-button {
-        --icon-color: var(--boxel-dark);
-      }
-      .icon-button:hover {
-        --icon-color: var(--boxel-highlight);
-      }
       .options-menu :deep(.boxel-menu__item__content) {
         padding-right: var(--boxel-sp-xxs);
         padding-left: var(--boxel-sp-xxs);
@@ -406,6 +360,9 @@ export default class RoomMessageCommand extends Component<Signature> {
       }
       .failed-command-text {
         color: var(--boxel-light);
+      }
+      :deep(.code-block-actions) {
+        margin-top: var(--boxel-sp);
       }
     </style>
   </template>

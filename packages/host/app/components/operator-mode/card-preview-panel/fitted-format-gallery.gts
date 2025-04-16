@@ -4,9 +4,13 @@ import { cached } from '@glimmer/tracking';
 
 import { provide } from 'ember-provide-consume-context';
 
+import { CardContainer } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
-import { DefaultFormatsContextName } from '@cardstack/runtime-common';
+import {
+  DefaultFormatsContextName,
+  FITTED_FORMATS,
+} from '@cardstack/runtime-common';
 
 import type { BaseDef } from 'https://cardstack.com/base/card-api';
 
@@ -14,111 +18,9 @@ interface Signature {
   Args: {
     card: BaseDef;
     isDarkMode?: boolean;
+    isFieldDef?: boolean;
   };
 }
-
-const fittedFormats = [
-  {
-    name: 'Badges',
-    specs: [
-      {
-        title: 'Small Badge',
-        width: 150,
-        height: 40,
-      },
-      {
-        title: 'Medium Badge',
-        width: 150,
-        height: 65,
-      },
-      {
-        title: 'Large Badge',
-        width: 150,
-        height: 105,
-      },
-    ],
-  },
-  {
-    name: 'Strips',
-    specs: [
-      {
-        title: 'Single Strip',
-        width: 250,
-        height: 40,
-      },
-      {
-        title: 'Double Strip',
-        width: 250,
-        height: 65,
-      },
-      {
-        title: 'Triple Strip',
-        width: 250,
-        height: 105,
-      },
-      {
-        title: 'Double Wide Strip',
-        width: 400,
-        height: 65,
-      },
-      {
-        title: 'Triple Wide Strip',
-        width: 400,
-        height: 105,
-      },
-    ],
-  },
-  {
-    name: 'Tiles',
-    specs: [
-      {
-        title: 'Small Tile',
-        width: 150,
-        height: 170,
-      },
-      {
-        title: 'Regular Tile',
-        width: 250,
-        height: 170,
-      },
-      {
-        title: 'CardsGrid Tile',
-        width: 170,
-        height: 250,
-      },
-      {
-        title: 'Tall Tile',
-        width: 150,
-        height: 275,
-      },
-      {
-        title: 'Large Tile',
-        width: 250,
-        height: 275,
-      },
-    ],
-  },
-  {
-    name: 'Cards',
-    specs: [
-      {
-        title: 'Compact Card',
-        width: 400,
-        height: 170,
-      },
-      {
-        title: 'Full Card',
-        width: 400,
-        height: 275,
-      },
-      {
-        title: 'Expanded Card',
-        width: 400,
-        height: 445,
-      },
-    ],
-  },
-];
 
 const setContainerSize = ({
   width,
@@ -131,6 +33,8 @@ const setContainerSize = ({
 };
 
 export default class FittedFormatGallery extends Component<Signature> {
+  formats = FITTED_FORMATS;
+
   @provide(DefaultFormatsContextName)
   get defaultFormat() {
     return { cardDef: 'fitted', fieldDef: 'fitted' };
@@ -143,7 +47,7 @@ export default class FittedFormatGallery extends Component<Signature> {
 
   <template>
     <div class={{cn 'fitted-format-gallery' dark-mode=@isDarkMode}}>
-      {{#each fittedFormats as |format|}}
+      {{#each this.formats as |format|}}
         <section class='format-section'>
           <h3 class='format-name'>{{format.name}}</h3>
           <ul class='specs'>
@@ -154,11 +58,21 @@ export default class FittedFormatGallery extends Component<Signature> {
                   -
                   {{spec.width}}x{{spec.height}}
                 </div>
-                <this.renderedCard
-                  class='item'
-                  @displayContainer={{true}}
-                  style={{setContainerSize spec}}
-                />
+                {{#if @isFieldDef}}
+                  <CardContainer
+                    class='item'
+                    @displayBoundaries={{true}}
+                    style={{setContainerSize spec}}
+                  >
+                    <this.renderedCard class='field' />
+                  </CardContainer>
+                {{else}}
+                  <this.renderedCard
+                    class='item'
+                    @displayContainer={{true}}
+                    style={{setContainerSize spec}}
+                  />
+                {{/if}}
               </li>
             {{/each}}
           </ul>
@@ -201,6 +115,9 @@ export default class FittedFormatGallery extends Component<Signature> {
       }
       .item {
         color: initial;
+      }
+      .item > .field {
+        height: 100%;
       }
 
       /* Dark mode */

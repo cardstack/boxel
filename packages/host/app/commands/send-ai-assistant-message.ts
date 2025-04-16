@@ -3,12 +3,18 @@ import { service } from '@ember/service';
 import { v4 as uuidv4 } from 'uuid';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
-import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
+import {
+  basicMappings,
+  generateJsonSchemaForCardType,
+  getPatchTool,
+} from '@cardstack/runtime-common/helpers/ai';
 
+import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 
 import HostBaseCommand from '../lib/host-base-command';
@@ -46,15 +52,17 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
     let { commandService, loaderService, matrixService } = this;
     let roomId = input.roomId;
-    let html = markdownToHtml(input.prompt);
+    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(input.prompt), {
+      escapeHtmlInCodeBlocks: false,
+    });
     let mappings = await basicMappings(loaderService.loader);
     let tools = [];
     let requireToolCall = input.requireCommandCall ?? false;
     if (requireToolCall && input.commands?.length > 1) {
       throw new Error('Cannot require tool call and have multiple commands');
     }
+    let cardAPI = await this.loadCardAPI();
     for (let { command, autoExecute } of input.commands ?? []) {
-      let cardAPI = await this.loadCardAPI();
       // get a registered name for the command
       let name = commandService.registerCommand(command, autoExecute);
       tools.push({
@@ -76,6 +84,34 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       });
     }
 
+    let attachedOpenCards: CardAPI.CardDef[] = [];
+    if (input.openCardIds) {
+      attachedOpenCards = input.attachedCards.filter((c: CardAPI.CardDef) =>
+        input.openCardIds.includes(c.id),
+      );
+      for (let attachedOpenCard of attachedOpenCards) {
+        let patchSpec = generateJsonSchemaForCardType(
+          attachedOpenCard.constructor as typeof CardAPI.CardDef,
+          cardAPI,
+          mappings,
+        );
+        tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
+      }
+    }
+
+    let files: FileDef[] | undefined;
+    if (input.attachedFileURLs) {
+      files = input.attachedFileURLs.map((url: string) =>
+        this.matrixService.fileAPI.createFileDef({
+          sourceUrl: url,
+          name: url.split('/').pop(),
+        }),
+      );
+    }
+    if (files?.length) {
+      files = await this.matrixService.uploadFiles(files);
+    }
+
     let attachedCardsEventIds = await matrixService.addCardsToRoom(
       input.attachedCards ?? [],
       roomId,
@@ -90,8 +126,10 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       formatted_body: html,
       clientGeneratedId,
       data: {
+        attachedFiles: files?.map((file: FileDef) => file.serialize()),
         attachedCardsEventIds,
         context: {
+          openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           requireToolCall,
         },
@@ -99,6 +137,6 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     } as CardMessageContent);
     let commandModule = await this.loadCommandModule();
     const { SendAiAssistantMessageResult } = commandModule;
-    return new SendAiAssistantMessageResult({ eventId: event_id });
+    return new SendAiAssistantMessageResult({ roomId, eventId: event_id });
   }
 }

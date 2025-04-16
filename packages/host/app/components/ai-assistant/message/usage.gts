@@ -1,6 +1,5 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -54,7 +53,7 @@ export default class AiAssistantMessageUsage extends Component {
             @registerConversationScroller={{this.noop}}
           >
             <AiAssistantMessage
-              @formattedMessage={{htmlSafe this.formattedMessage}}
+              @formattedMessage={{this.formattedMessage}}
               @reasoningContent={{this.reasoningContent}}
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
@@ -136,9 +135,7 @@ export default class AiAssistantMessageUsage extends Component {
             @registerConversationScroller={{this.noop}}
           >
             <AiAssistantMessage
-              @formattedMessage={{htmlSafe
-                'Please copy edit this message to make it more human.'
-              }}
+              @formattedMessage={{'Please copy edit this message to make it more human.'}}
               @datetime={{this.twoMinutesAgo}}
               @isFromAssistant={{false}}
               @index={{0}}
@@ -153,9 +150,7 @@ export default class AiAssistantMessageUsage extends Component {
               @isStreaming={{false}}
             />
             <AiAssistantMessage
-              @formattedMessage={{htmlSafe
-                'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
-              }}
+              @formattedMessage={{'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'}}
               @index={{1}}
               @eventId={{'125'}}
               @monacoSDK={{this.noopMonacoSDK}}

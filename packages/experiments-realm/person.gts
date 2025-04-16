@@ -7,9 +7,9 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
+import { Address } from 'https://cardstack.com/base/address';
 import { Pet } from './pet';
 import { GridContainer } from '@cardstack/boxel-ui/components';
-import { Address } from './fields/address';
 import { Trips } from './trips';
 import UserSquareRoundedIcon from '@cardstack/boxel-icons/user-square-rounded';
 

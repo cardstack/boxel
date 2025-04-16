@@ -10,7 +10,6 @@ import { ProductRequirementDocument } from '../product-requirement-document';
 import { SkillCard } from 'https://cardstack.com/base/skill-card';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import PatchCardCommand from '@cardstack/boxel-host/commands/patch-card';
-import ReloadCardCommand from '@cardstack/boxel-host/commands/reload-card';
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
@@ -107,9 +106,6 @@ export default class CreateProductRequirementsInstance extends Command<
     await patchPRDCommand.waitForNextCompletion();
     // TODO: alternate approach is to have room have a goal, and monitor for that completion as opposed to command completion
     // TODO: alternate simpler approach, send a message and wait for a reply. If the reply is a the tool call, continue, otherwise, show room to the user and wait for the next reply
-
-    let reloadCommand = new ReloadCardCommand(this.commandContext);
-    await reloadCommand.execute(prdCard);
 
     let result = new CreateProductRequirementsResult();
     result.productRequirements = prdCard;

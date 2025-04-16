@@ -40,7 +40,7 @@ let cardApi: typeof import('https://cardstack.com/base/card-api');
 let setCardInOperatorModeState: (
   leftCards: string[],
   rightCards?: string[],
-) => Promise<void>;
+) => void;
 
 module('Integration | card-delete', function (hooks) {
   let realm: Realm;
@@ -83,7 +83,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    setCardInOperatorModeState = async (
+    setCardInOperatorModeState = (
       leftCards: string[],
       rightCards: string[] = [],
     ) => {
@@ -103,7 +103,7 @@ module('Integration | card-delete', function (hooks) {
           format: 'isolated' as const,
         })),
       ].filter((a) => a.length > 0);
-      await operatorModeStateService.restore({ stacks });
+      operatorModeStateService.restore({ stacks });
     };
     let cardApi: typeof import('https://cardstack.com/base/card-api');
     let string: typeof import('https://cardstack.com/base/string');
@@ -187,7 +187,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test('can delete a card from the index card stack item', async function (assert) {
-    await setCardInOperatorModeState([`${testRealmURL}index`]);
+    setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -228,7 +228,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test('can cancel delete', async function (assert) {
-    await setCardInOperatorModeState([`${testRealmURL}index`]);
+    setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -265,7 +265,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test('can delete a card stack item in non-edit mode', async function (assert) {
-    await setCardInOperatorModeState([
+    setCardInOperatorModeState([
       `${testRealmURL}index`,
       `${testRealmURL}Pet/mango`,
     ]);
@@ -312,7 +312,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test('can delete a card stack item in edit mode', async function (assert) {
-    await setCardInOperatorModeState([
+    setCardInOperatorModeState([
       `${testRealmURL}index`,
       `${testRealmURL}Pet/mango`,
     ]);
@@ -362,7 +362,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test('can delete a card that appears in both stacks as a stack item', async function (assert) {
-    await setCardInOperatorModeState(
+    setCardInOperatorModeState(
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
     );
@@ -420,7 +420,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test('can delete a card that appears in both stacks as an element of the index card', async function (assert) {
-    await setCardInOperatorModeState(
+    setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealmURL}index`],
     );
@@ -472,7 +472,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test('can delete a card that appears in both stacks as an index item and an element of the index card', async function (assert) {
-    await setCardInOperatorModeState(
+    setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealmURL}index`, `${testRealmURL}Pet/mango`],
     );
@@ -543,9 +543,9 @@ module('Integration | card-delete', function (hooks) {
       'service:recent-cards-service',
     ) as RecentCardsService;
     let mango = await loadCard(`${testRealmURL}Pet/mango`);
-    recentCardsService.add(mango);
+    recentCardsService.add(mango.id);
 
-    await setCardInOperatorModeState([`${testRealmURL}index`]);
+    setCardInOperatorModeState([`${testRealmURL}index`]);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
@@ -595,7 +595,7 @@ module('Integration | card-delete', function (hooks) {
   });
 
   test('can delete a card that is a selected item', async function (assert) {
-    await setCardInOperatorModeState(
+    setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`http://localhost:4202/test/`],
     );

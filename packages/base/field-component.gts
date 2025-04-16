@@ -57,6 +57,9 @@ const DEFAULT_CARD_CONTEXT = {
   },
   actions: undefined,
   commandContext: undefined,
+  getCard: () => {},
+  getCards: () => {},
+  getCardCollection: () => {},
 };
 
 export class CardContextConsumer extends Component<CardContextConsumerSignature> {
@@ -281,6 +284,7 @@ export function getBoxComponent(
                         (not field.computeVia)
                         permissions.canWrite
                       }}
+                      @typeConstraint={{@typeConstraint}}
                     />
                   </div>
                 </DefaultFormatsProvider>
@@ -297,6 +301,7 @@ export function getBoxComponent(
                     @fieldName={{model.name}}
                     @context={{context}}
                     @canEdit={{and (not field.computeVia) permissions.canWrite}}
+                    @typeConstraint={{@typeConstraint}}
                     ...attributes
                   />
                 </DefaultFormatsProvider>

@@ -59,12 +59,14 @@ export interface RealmPrerenderedCards {
   realmInfo: RealmInfo;
   prerenderedCards: PrerenderedCard[];
 }
-
+export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
 import { Loader } from './loader';
+export * from './cached-fetch';
 export * from './commands';
 export * from './constants';
+export * from './matrix-constants';
 export * from './queue';
 export * from './expression';
 export * from './index-query-engine';
@@ -79,6 +81,7 @@ export * from './scoped-css';
 export * from './utils';
 export * from './authorization-middleware';
 export * from './query';
+export * from './formats';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath };
@@ -183,10 +186,10 @@ export type CreateNewCard = (
     doc?: LooseSingleCardDocument;
     realmURL?: URL;
   },
-) => Promise<CardDef | undefined>;
+) => Promise<string | undefined>;
 
 export interface CardChooser {
-  chooseCard<T extends BaseDef>(
+  chooseCard(
     query: CardCatalogQuery,
     opts?: {
       offerToCreate?: {
@@ -198,14 +201,14 @@ export interface CardChooser {
       createNewCard?: CreateNewCard;
       consumingRealm?: URL;
     },
-  ): Promise<undefined | T>;
+  ): Promise<undefined | string>;
 }
 
 export interface FileChooser {
   chooseFile<T>(defaultRealmURL?: URL): Promise<undefined | T>;
 }
 
-export async function chooseCard<T extends BaseDef>(
+export async function chooseCard(
   query: CardCatalogQuery,
   opts?: {
     offerToCreate?: {
@@ -218,7 +221,7 @@ export async function chooseCard<T extends BaseDef>(
     preselectedCardTypeQuery?: Query;
     consumingRealm?: URL;
   },
-): Promise<undefined | T> {
+): Promise<undefined | string> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CARD_CHOOSER) {
     throw new Error(
@@ -227,7 +230,7 @@ export async function chooseCard<T extends BaseDef>(
   }
   let chooser: CardChooser = here._CARDSTACK_CARD_CHOOSER;
 
-  return await chooser.chooseCard<T>(query, opts);
+  return await chooser.chooseCard(query, opts);
 }
 
 export async function chooseFile<T extends FieldDef>(): Promise<
@@ -244,78 +247,115 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   return await chooser.chooseFile<T>();
 }
 
-export interface CardSearch {
-  getCards(
-    getQuery: () => Query | undefined,
-    getRealms: () => string[] | undefined,
+export interface CardErrorsJSONAPI {
+  errors: {
+    id?: string; // 404 errors won't necessarily have an id
+    status: number;
+    title: string;
+    message: string;
+    realm: string | undefined;
+    meta: {
+      lastKnownGoodHtml: string | null;
+      cardTitle: string | null;
+      scopedCssUrls: string[];
+      stack: string | null;
+    };
+  }[];
+}
+export type CardErrorJSONAPI = CardErrorsJSONAPI['errors'][0];
+export type AutoSaveState = {
+  isSaving: boolean;
+  hasUnsavedChanges: boolean;
+  lastSaved: number | undefined;
+  lastSaveError: Error | undefined;
+  lastSavedErrorMsg: string | undefined;
+};
+export type getCard<T extends CardDef = CardDef> = (
+  parent: object,
+  id: () => string | undefined,
+) => // This is a duck type of the CardResource
+{
+  id: string | undefined;
+  card: T | undefined;
+  cardError: CardErrorJSONAPI | undefined;
+  isLoaded: boolean;
+  autoSaveState: AutoSaveState | undefined;
+};
+export type getCardCollection<T extends CardDef = CardDef> = (
+  parent: object,
+  ids: () => string[] | undefined,
+) => // This is a duck type of the CardResource
+{
+  ids: string[] | undefined;
+  cards: T[];
+  cardErrors: CardErrorJSONAPI[];
+  isLoaded: boolean;
+};
+export type getCards<T extends CardDef = CardDef> = (
+  parent: object,
+  getQuery: () => Query | undefined,
+  getRealms?: () => string[] | undefined,
+  opts?: {
+    isLive?: true;
+    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+  },
+) => // This is a duck type of the SearchResource
+{
+  instances: T[];
+  instancesByRealm: { realm: string; cards: T[] }[];
+  isLoading: boolean;
+};
+
+export interface Store {
+  save(id: string): void;
+  create(
+    doc: LooseSingleCardDocument,
+    relativeTo: URL | undefined,
+    realm?: string,
+  ): Promise<string | CardErrorJSONAPI>;
+  add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
     opts?: {
-      isLive?: true;
-      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+      realm?: string;
+      relativeTo?: URL | undefined;
+      doNotPersist?: true;
     },
-  ): {
-    instances: CardDef[];
-    loaded: Promise<void>;
-    isLoading: boolean;
-  };
-  getCard<T extends CardDef>(
-    url: URL,
-    opts?: { loader?: Loader; isLive?: boolean },
-  ): {
-    card: T | undefined;
-    loaded: Promise<void> | undefined;
-    cardError?: undefined | { id: string; error: Error };
-  };
+  ): Promise<T>;
+  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
+  delete(id: string): Promise<void>;
+  patch(
+    instance: CardDef,
+    doc: LooseSingleCardDocument,
+    patchData: PatchData,
+  ): Promise<void>;
+  search(query: Query, realmURL: URL): Promise<CardDef[]>;
+  getSaveState(id: string): AutoSaveState | undefined;
 }
 
 export interface CardCatalogQuery extends Query {
   filter?: CardTypeFilter | EveryFilter;
 }
 
-export function getCards(
-  getQuery: () => Query | undefined,
-  getRealms: () => string[] | undefined,
-  opts?: {
-    isLive?: true;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-  },
-) {
-  let here = globalThis as any;
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCards(getQuery, getRealms, opts);
-}
-
-export function getCard<T extends CardDef>(
-  url: URL,
-  opts?: { loader?: Loader; isLive?: boolean },
-) {
-  let here = globalThis as any;
-  if (!here._CARDSTACK_CARD_SEARCH) {
-    // on the server we don't need this
-    return { card: undefined, loaded: undefined };
-  }
-  let finder: CardSearch = here._CARDSTACK_CARD_SEARCH;
-  return finder?.getCard<T>(url, opts);
-}
-
 export interface CardCreator {
-  create<T extends CardDef>(
+  create(
     ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: {
       realmURL?: URL;
       doc?: LooseSingleCardDocument;
     },
-  ): Promise<undefined | T>;
+  ): Promise<string>;
 }
 
-export async function createNewCard<T extends CardDef>(
+export async function createNewCard(
   ref: CodeRef,
   relativeTo: URL | undefined,
   opts?: {
     realmURL?: URL;
     doc?: LooseSingleCardDocument;
   },
-): Promise<undefined | T> {
+): Promise<string> {
   let here = globalThis as any;
   if (!here._CARDSTACK_CREATE_NEW_CARD) {
     throw new Error(
@@ -324,7 +364,7 @@ export async function createNewCard<T extends CardDef>(
   }
   let cardCreator: CardCreator = here._CARDSTACK_CREATE_NEW_CARD;
 
-  return await cardCreator.create<T>(ref, relativeTo, opts);
+  return await cardCreator.create(ref, relativeTo, opts);
 }
 
 export interface RealmSubscribe {
@@ -364,7 +404,7 @@ export interface Actions {
       doc?: LooseSingleCardDocument; // initial data for the card
       cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
     },
-  ) => Promise<CardDef | undefined>;
+  ) => Promise<string | undefined>;
   viewCard: (
     cardOrURL: CardDef | URL,
     format?: Format,
@@ -373,29 +413,17 @@ export interface Actions {
       fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
       fieldName?: string;
     },
-  ) => Promise<void>;
+  ) => void;
   copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
   editCard: (card: CardDef) => void;
-  copyCard?: (card: CardDef) => Promise<CardDef>;
-  saveCard(card: CardDef): Promise<void>;
+  copyCard?: (card: CardDef) => Promise<string>;
+  saveCard: (id: string) => void;
   delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
     card: CardDef,
     changeSizeCallback: () => Promise<void>,
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
-  getCards: (
-    // The reason (getQuery, getRealms) is a thunk is to ensure that the arguments are reactive wrt to ember resource
-    // This is the expectation of ember-resources ie`.from` method should be instantiated at the root of the component and expect a thunk
-    // The issue is when we wrap `getCards` as an api, we tend to model it as a function that takes arguments (values) thereby enclosing in a scoped context
-    // We acknowledge that this is not the "perfect" api but it is a pragmatic solution for now to resolve the tension between card api usage and ember-resources
-    getQuery: () => Query | undefined,
-    getRealms: () => string[] | undefined,
-    opts?: {
-      isLive?: true;
-      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-    },
-  ) => SearchQuery;
 }
 
 export function hasExecutableExtension(path: string): boolean {

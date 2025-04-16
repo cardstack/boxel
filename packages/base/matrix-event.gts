@@ -1,4 +1,4 @@
-import { LooseSingleCardDocument } from '@cardstack/runtime-common';
+import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import type {
   AttributesSchema,
@@ -20,7 +20,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-} from '@cardstack/runtime-common/matrix-constants';
+} from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
 interface BaseMatrixEvent {
@@ -181,7 +181,6 @@ export interface CardMessageContent {
     // limits us to 65KB per message
     attachedFiles?: SerializedFile[];
     attachedCardsEventIds?: string[];
-    attachedSkillEventIds?: string[];
     // we materialize this field on the server from the card
     // fragments that we receive
     attachedCards?: LooseSingleCardDocument[];
@@ -239,18 +238,19 @@ export interface CommandResultEvent extends BaseMatrixEvent {
     prev_sender?: string;
   };
 }
+export interface CommandDefinitionSchema {
+  codeRef: {
+    module: string;
+    name: string;
+  };
+  tool: Tool;
+}
 
 export interface CommandDefinitionsContent {
   msgtype: typeof APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
   body: string;
   data: {
-    commandDefinitions: {
-      codeRef: {
-        module: string;
-        name: string;
-      };
-      tool: Tool;
-    }[];
+    commandDefinitions: CommandDefinitionSchema[];
   };
 }
 export interface CommandResultWithOutputContent {

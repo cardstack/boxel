@@ -669,13 +669,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           containedExamples: [],
         },
-        relationships: {
-          linkedExamples: {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/spec',
@@ -702,7 +695,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
-        linkedExamples: null,
         containedExamples: null,
         isCard: true,
         isField: false,
@@ -793,13 +785,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           },
           containedExamples: [],
         },
-        relationships: {
-          linkedExamples: {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/spec',
@@ -826,7 +811,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         moduleHref: `${testRealmURL}person`,
         ref: `${testRealmURL}person/Person`,
         title: 'Person Card',
-        linkedExamples: null,
         containedExamples: null,
         isCard: true,
         isField: false,
@@ -2238,7 +2222,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       description: 'Spec for Booking',
       specType: 'card',
       moduleHref: 'http://localhost:4202/test/booking',
-      linkedExamples: null,
       containedExamples: null,
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
@@ -2607,13 +2590,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           isCard: true,
           isField: false,
         },
-        relationships: {
-          linkedExamples: {
-            links: {
-              self: null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: {
             module: 'https://cardstack.com/base/spec',
@@ -2646,7 +2622,6 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         id: `${testRealmURL}pet-person-spec`,
         title: 'PetPerson',
         description: 'Spec for PetPerson',
-        linkedExamples: null,
         containedExamples: null,
         moduleHref: `${testModuleRealm}pet-person`,
         ref: `${testModuleRealm}pet-person/PetPerson`,
@@ -3711,7 +3686,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'https://cardstack.com/base/default-templates/field-edit',
         'https://cardstack.com/base/default-templates/fitted',
         'https://cardstack.com/base/default-templates/isolated-and-edit',
-        'https://cardstack.com/base/default-templates/missing-embedded',
+        'https://cardstack.com/base/default-templates/missing-template',
         'https://cardstack.com/base/field-component',
         'https://cardstack.com/base/links-to-editor',
         'https://cardstack.com/base/links-to-many-component',
@@ -3741,6 +3716,114 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         'https://packages/ember-css-url',
         'https://packages/ember-modifier',
         'https://packages/ember-provide-consume-context',
+        'https://packages/lodash',
+        'https://packages/tracked-built-ins',
+      ],
+      'the card references for the instance are correct',
+    );
+  });
+
+  test("indexing identifies an instance's polymorphic contained references", async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      mockMatrixUtils,
+      contents: {
+        'spec-1.json': {
+          data: {
+            attributes: {
+              title: 'My Spec',
+              containedExamples: [
+                {
+                  firstName: 'A',
+                  lastName: 'B',
+                },
+              ],
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+              fields: {
+                containedExamples: [
+                  {
+                    adoptsFrom: {
+                      module: `${testModuleRealm}person`,
+                      name: 'PersonField',
+                    },
+                  },
+                ],
+              },
+            },
+          },
+        },
+      },
+    });
+    let refs = (await getInstance(realm, new URL(`${realm.url}spec-1`)))?.deps;
+    assert.deepEqual(
+      refs!
+        .sort()
+        // Exclude synthetic imports that encapsulate scoped CSS
+        .filter((ref) => !ref.includes('glimmer-scoped.css')),
+      [
+        'http://localhost:4202/test/person',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/align-box-left-middle.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/apps.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/book-open-text.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/box-model.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/brain.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/captions.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/code.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/git-branch.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/hash.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/layers-subtract.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/layout-list.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/letter-case.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/rectangle-ellipsis.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/stack.js',
+        'https://boxel-icons.boxel.ai/@cardstack/boxel-icons/v1/icons/toggle-left.js',
+        'https://cardstack.com/base/boolean',
+        'https://cardstack.com/base/card-api',
+        'https://cardstack.com/base/code-ref',
+        'https://cardstack.com/base/contains-many-component',
+        'https://cardstack.com/base/default-templates/atom',
+        'https://cardstack.com/base/default-templates/embedded',
+        'https://cardstack.com/base/default-templates/field-edit',
+        'https://cardstack.com/base/default-templates/fitted',
+        'https://cardstack.com/base/default-templates/isolated-and-edit',
+        'https://cardstack.com/base/default-templates/missing-template',
+        'https://cardstack.com/base/field-component',
+        'https://cardstack.com/base/links-to-editor',
+        'https://cardstack.com/base/links-to-many-component',
+        'https://cardstack.com/base/markdown',
+        'https://cardstack.com/base/number',
+        'https://cardstack.com/base/shared-state',
+        'https://cardstack.com/base/spec',
+        'https://cardstack.com/base/string',
+        'https://cardstack.com/base/text-input-validator',
+        'https://cardstack.com/base/watched-array',
+        'https://packages/@cardstack/boxel-host/commands/create-ai-assistant-room',
+        'https://packages/@cardstack/boxel-host/commands/send-ai-assistant-message',
+        'https://packages/@cardstack/boxel-host/commands/switch-submode',
+        'https://packages/@cardstack/boxel-ui/components',
+        'https://packages/@cardstack/boxel-ui/helpers',
+        'https://packages/@cardstack/boxel-ui/icons',
+        'https://packages/@cardstack/boxel-ui/modifiers',
+        'https://packages/@cardstack/runtime-common',
+        'https://packages/@ember/component',
+        'https://packages/@ember/component/template-only',
+        'https://packages/@ember/helper',
+        'https://packages/@ember/modifier',
+        'https://packages/@ember/object',
+        'https://packages/@ember/template-factory',
+        'https://packages/@glimmer/component',
+        'https://packages/@glimmer/tracking',
+        'https://packages/ember-concurrency',
+        'https://packages/ember-concurrency/-private/async-arrow-runtime',
+        'https://packages/ember-css-url',
+        'https://packages/ember-modifier',
+        'https://packages/ember-provide-consume-context',
+        'https://packages/ember-resources',
         'https://packages/lodash',
         'https://packages/tracked-built-ins',
       ],

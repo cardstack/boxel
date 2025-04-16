@@ -14,7 +14,7 @@ import {
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import type CardService from '@cardstack/host/services/card-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
@@ -4089,10 +4089,8 @@ module('Integration | serialization', function (hooks) {
       },
     });
 
-    let cardService = this.owner.lookup('service:card-service') as CardService;
-    let captainMango = await cardService.getCard(
-      `${testRealmURL}Captain/mango`,
-    );
+    let store = this.owner.lookup('service:store') as StoreService;
+    let captainMango = await store.get(`${testRealmURL}Captain/mango`);
     let mangoTheBoat = (captainMango as Captain).createEponymousBoat();
 
     assert.deepEqual(

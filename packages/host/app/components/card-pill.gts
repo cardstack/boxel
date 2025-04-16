@@ -3,6 +3,10 @@ import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
+import { tracked } from '@glimmer/tracking';
+
+import { consume } from 'ember-provide-consume-context';
+
 import {
   IconButton,
   Pill,
@@ -12,76 +16,87 @@ import {
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import { type CardDef } from 'https://cardstack.com/base/card-api';
+import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
+
+import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import RealmService from '../services/realm';
 
 interface CardPillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
-    card: CardDef;
+    cardId: string;
     isAutoAttachedCard?: boolean;
-    removeCard?: (card: CardDef) => void;
+    removeCard?: (cardId: string) => void;
     onToggle?: () => void;
     isEnabled?: boolean;
   };
 }
 
 export default class CardPill extends Component<CardPillSignature> {
-  @service declare realm: RealmService;
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @service private declare realm: RealmService;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  get component() {
-    return this.args.card.constructor.getComponent(this.args.card);
-  }
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(this, () => this.args.cardId);
+  };
 
-  get hideIconRight() {
+  private get hideIconRight() {
     return !this.args.onToggle && !this.args.removeCard;
   }
 
+  private get card() {
+    return this.cardResource?.card;
+  }
+
   <template>
-    <Pill
-      class={{cn
-        'card-pill'
-        is-autoattached=@isAutoAttachedCard
-        hide-icon-right=this.hideIconRight
-      }}
-      data-test-attached-card={{@card.id}}
-      data-test-autoattached-card={{@isAutoAttachedCard}}
-      ...attributes
-    >
-      <:iconLeft>
-        <RealmIcon @realmInfo={{this.realm.info @card.id}} />
-      </:iconLeft>
-      <:default>
-        <div class='card-content' title={{@card.title}}>
-          {{@card.title}}
-        </div>
-      </:default>
-      <:iconRight>
-        {{#if @onToggle}}
-          <Switch
-            @isEnabled={{@isEnabled}}
-            @onChange={{@onToggle}}
-            @label={{@card.title}}
-            data-test-card-pill-toggle='{{@card.id}}-{{if
-              @isEnabled
-              "on"
-              "off"
-            }}'
-          />
-        {{/if}}
-        {{#if @removeCard}}
-          <IconButton
-            class='remove-button'
-            @icon={{IconX}}
-            @height='10'
-            @width='10'
-            {{on 'click' (fn @removeCard @card)}}
-            data-test-remove-card-btn
-          />
-        {{/if}}
-      </:iconRight>
-    </Pill>
+    {{consumeContext this.makeCardResource}}
+    {{#if this.card}}
+      <Pill
+        class={{cn
+          'card-pill'
+          is-autoattached=@isAutoAttachedCard
+          hide-icon-right=this.hideIconRight
+        }}
+        data-test-attached-card={{@cardId}}
+        data-test-autoattached-card={{@isAutoAttachedCard}}
+        ...attributes
+      >
+        <:iconLeft>
+          <RealmIcon @realmInfo={{this.realm.info @cardId}} />
+        </:iconLeft>
+        <:default>
+          <div class='card-content' title={{this.card.title}}>
+            {{this.card.title}}
+          </div>
+        </:default>
+        <:iconRight>
+          {{#if @onToggle}}
+            <Switch
+              @isEnabled={{@isEnabled}}
+              @onChange={{@onToggle}}
+              @label={{this.card.title}}
+              data-test-card-pill-toggle='{{@cardId}}-{{if
+                @isEnabled
+                "on"
+                "off"
+              }}'
+            />
+          {{/if}}
+          {{#if @removeCard}}
+            <IconButton
+              class='remove-button'
+              @icon={{IconX}}
+              @height='10'
+              @width='10'
+              {{on 'click' (fn @removeCard @cardId)}}
+              data-test-remove-card-btn
+            />
+          {{/if}}
+        </:iconRight>
+      </Pill>
+    {{/if}}
     <style scoped>
       .card-pill {
         --pill-gap: var(--boxel-sp-xxxs);

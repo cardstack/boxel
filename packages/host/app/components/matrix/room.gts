@@ -16,6 +16,7 @@ import {
 } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
+import { consume } from 'ember-provide-consume-context';
 import { resource, use } from 'ember-resources';
 import max from 'lodash/max';
 
@@ -23,14 +24,20 @@ import { MatrixEvent } from 'matrix-js-sdk';
 
 import pluralize from 'pluralize';
 
-import { TrackedObject, TrackedSet } from 'tracked-built-ins';
+import { TrackedObject, TrackedSet, TrackedArray } from 'tracked-built-ins';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
-import { eq, not } from '@cardstack/boxel-ui/helpers';
+import { BoxelButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { and, eq, not } from '@cardstack/boxel-ui/helpers';
 
-import { ResolvedCodeRef, internalKeyFor } from '@cardstack/runtime-common';
+import {
+  type getCard,
+  GetCardContextName,
+  ResolvedCodeRef,
+  internalKeyFor,
+  isCardInstance,
+} from '@cardstack/runtime-common';
 import { DEFAULT_LLM_LIST } from '@cardstack/runtime-common/matrix-constants';
 
 import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
@@ -38,17 +45,16 @@ import UpdateSkillActivationCommand from '@cardstack/host/commands/update-skill-
 import { Message } from '@cardstack/host/lib/matrix-classes/message';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
-import { getCard } from '@cardstack/host/resources/card-resource';
 import { RoomResource } from '@cardstack/host/resources/room';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
-import LoaderService from '@cardstack/host/services/loader-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -66,7 +72,7 @@ import { Submodes } from '../submode-switcher';
 import RoomMessage from './room-message';
 
 import type RoomData from '../../lib/matrix-classes/room';
-import type { Skill } from '../ai-assistant/skill-menu';
+import type { RoomSkill } from '../../resources/room';
 
 interface Signature {
   Args: {
@@ -82,30 +88,44 @@ export default class Room extends Component<Signature> {
     {{#if (not this.doMatrixEventFlush.isRunning)}}
       <section
         class='room'
-        data-room-settled={{this.doWhenRoomChanges.isIdle}}
-        data-test-room-settled={{this.doWhenRoomChanges.isIdle}}
+        data-room-settled={{(and
+          this.doWhenRoomChanges.isIdle
+          (not this.matrixService.isLoadingTimeline)
+        )}}
+        data-test-room-settled={{(and
+          this.doWhenRoomChanges.isIdle
+          (not this.matrixService.isLoadingTimeline)
+        )}}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
+        data-room-id={{@roomId}}
       >
         <AiAssistantConversation
           @registerConversationScroller={{this.registerConversationScroller}}
           @setScrollPosition={{this.setScrollPosition}}
         >
-          {{#each this.messages key='eventId' as |message i|}}
-            <RoomMessage
-              @roomId={{@roomId}}
-              @roomResource={{@roomResource}}
-              @index={{i}}
-              @registerScroller={{this.registerMessageScroller}}
-              @isPending={{this.isPendingMessage message}}
-              @monacoSDK={{@monacoSDK}}
-              @isStreaming={{this.isMessageStreaming message}}
-              @retryAction={{this.maybeRetryAction i message}}
-              data-test-message-idx={{i}}
+          {{#if this.matrixService.isLoadingTimeline}}
+            <LoadingIndicator
+              @color='var(--boxel-light)'
+              class='loading-indicator'
             />
           {{else}}
-            <NewSession @sendPrompt={{this.sendMessage}} />
-          {{/each}}
+            {{#each this.messages key='eventId' as |message i|}}
+              <RoomMessage
+                @roomId={{@roomId}}
+                @roomResource={{@roomResource}}
+                @index={{i}}
+                @registerScroller={{this.registerMessageScroller}}
+                @isPending={{this.isPendingMessage message}}
+                @monacoSDK={{@monacoSDK}}
+                @isStreaming={{this.isMessageStreaming message}}
+                @retryAction={{this.maybeRetryAction i message}}
+                data-test-message-idx={{i}}
+              />
+            {{else}}
+              <NewSession @sendPrompt={{this.sendMessage}} />
+            {{/each}}
+          {{/if}}
           {{#if this.room}}
             {{#if this.showUnreadIndicator}}
               <div class='unread-indicator'>
@@ -140,8 +160,8 @@ export default class Room extends Component<Signature> {
             />
             <div class='chat-input-area__bottom-section'>
               <AiAssistantAttachmentPicker
-                @autoAttachedCards={{this.autoAttachedCards}}
-                @cardsToAttach={{this.cardsToAttach}}
+                @autoAttachedCardIds={{this.autoAttachedCardIds}}
+                @cardIdsToAttach={{this.cardIdsToAttach}}
                 @chooseCard={{this.chooseCard}}
                 @removeCard={{this.removeCard}}
                 @chooseFile={{this.chooseFile}}
@@ -157,7 +177,7 @@ export default class Room extends Component<Signature> {
               />
               <LLMSelect
                 @selected={{@roomResource.activeLLM}}
-                @onChange={{@roomResource.activateLLM}}
+                @onChange={{perform @roomResource.activateLLMTask}}
                 @options={{this.supportedLLMs}}
                 @disabled={{@roomResource.isActivatingLLM}}
               />
@@ -213,9 +233,18 @@ export default class Room extends Component<Signature> {
       :deep(.ai-assistant-conversation > *:nth-last-of-type(2)) {
         padding-bottom: var(--boxel-sp-xl);
       }
+      .loading-indicator {
+        margin-top: auto;
+        margin-bottom: auto;
+        margin-left: auto;
+        margin-right: auto;
+      }
     </style>
   </template>
 
+  @consume(GetCardContextName) private declare getCard: getCard;
+
+  @service private declare store: StoreService;
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
   @service private declare matrixService: MatrixService;
@@ -223,18 +252,18 @@ export default class Room extends Component<Signature> {
   @service private declare loaderService: LoaderService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
 
-  private autoAttachmentResource = getAutoAttachment(
-    this,
-    () => this.topMostStackItems,
-    () => this.cardsToAttach,
-  );
-
+  private autoAttachmentResource = getAutoAttachment(this, {
+    topMostStackItems: () => this.topMostStackItems,
+    attachedCardIds: () => this.cardIdsToAttach,
+    removedCardIds: () => this.removedAttachedCardIds,
+  });
+  private removedAttachedCardIds = new TrackedArray<string>();
   private getConversationScrollability: (() => boolean) | undefined;
   private scrollConversationToBottom: (() => void) | undefined;
   private roomScrollState: WeakMap<
     RoomData,
     {
-      messageElemements: WeakMap<HTMLElement, number>;
+      messageElements: WeakMap<HTMLElement, number>;
       messageScrollers: Map<number, Element['scrollIntoView']>;
       messageVisibilityObserver: IntersectionObserver;
       isScrolledToBottom: boolean;
@@ -261,7 +290,7 @@ export default class Room extends Component<Signature> {
         isScrolledToBottom: false,
         userHasScrolled: false,
         isConversationScrollable: false,
-        messageElemements: new WeakMap(),
+        messageElements: new WeakMap(),
         messageScrollers: new Map(),
         messageVisibilityObserver: new IntersectionObserver((entries) => {
           entries.forEach((entry) => {
@@ -326,9 +355,9 @@ export default class Room extends Component<Signature> {
     return this.matrixService.filesToSend.get(this.args.roomId) ?? [];
   }
 
-  @use private playgroundPanelCardResource = resource(() => {
+  @use private playgroundPanelCardIdResource = resource(() => {
     let state = new TrackedObject<{
-      value: CardDef | undefined;
+      value: string | undefined;
       remove: () => void;
     }>({
       value: undefined,
@@ -338,26 +367,22 @@ export default class Room extends Component<Signature> {
     });
 
     (async () => {
-      let cardResource = getCard(this, () => {
-        if (!this.args.selectedCardRef) {
-          return;
-        }
-        let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
-        return this.playgroundPanelService.getSelection(moduleId)?.cardId;
-      });
-      await cardResource.loaded;
-      state.value = cardResource.card;
+      if (!this.args.selectedCardRef) {
+        return;
+      }
+      let moduleId = internalKeyFor(this.args.selectedCardRef, undefined);
+      state.value = this.playgroundPanelService.getSelection(moduleId)?.cardId;
     })();
 
     return state;
   });
 
-  private get playgroundPanelCard() {
-    return this.playgroundPanelCardResource.value;
+  private get playgroundPanelCardId() {
+    return this.playgroundPanelCardIdResource.value;
   }
 
   private get removePlaygroundPanelCard() {
-    return this.playgroundPanelCardResource.remove;
+    return this.playgroundPanelCardIdResource.remove;
   }
 
   private get isScrolledToBottom() {
@@ -373,7 +398,7 @@ export default class Room extends Component<Signature> {
   }
 
   private get messageElements() {
-    return this.scrollState().messageElemements;
+    return this.scrollState().messageElements;
   }
 
   private get messageScrollers() {
@@ -548,14 +573,14 @@ export default class Room extends Component<Signature> {
   private doMatrixEventFlush = restartableTask(async () => {
     await this.matrixService.flushMembership;
     await this.matrixService.flushTimeline;
-    await this.args.roomResource.loading;
+    await this.args.roomResource.processing;
   });
 
   private get messages() {
     return this.args.roomResource.messages;
   }
 
-  private get skills(): Skill[] {
+  private get skills(): RoomSkill[] {
     return this.args.roomResource.skills;
   }
 
@@ -563,12 +588,12 @@ export default class Room extends Component<Signature> {
     return DEFAULT_LLM_LIST.sort();
   }
 
-  private get sortedSkills(): Skill[] {
+  private get sortedSkills(): RoomSkill[] {
     return [...this.skills].sort((a, b) => {
       // Not all of the skills have a title, so we use the skillEventId as a fallback
       // which should be consistent.
-      let aTitle = a.card.title || a.skillEventId;
-      let bTitle = b.card.title || b.skillEventId;
+      let aTitle = a.cardId || a.skillEventId;
+      let bTitle = b.cardId || b.skillEventId;
       return aTitle.localeCompare(bTitle);
     });
   }
@@ -586,7 +611,7 @@ export default class Room extends Component<Signature> {
     return this.matrixService.messagesToSend.get(this.args.roomId) ?? '';
   }
 
-  private get cardsToAttach() {
+  private get cardIdsToAttach() {
     return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
@@ -607,13 +632,9 @@ export default class Room extends Component<Signature> {
     }
     let myLastMessage = myMessages[myMessages.length - 1];
 
-    let attachedCards = (myLastMessage!.attachedResources || [])
-      .map((resource) => resource.card)
-      .filter((card) => card !== undefined) as CardDef[];
-
     this.doSendMessage.perform(
       myLastMessage.message,
-      attachedCards,
+      myLastMessage!.attachedCardIds || [],
       myLastMessage.attachedFiles,
       true,
       myLastMessage.clientGeneratedId,
@@ -628,11 +649,11 @@ export default class Room extends Component<Signature> {
   @action
   private sendMessage(prompt?: string) {
     let cards = [];
-    if (this.cardsToAttach) {
-      cards.push(...this.cardsToAttach);
+    if (this.cardIdsToAttach) {
+      cards.push(...this.cardIdsToAttach);
     }
-    if (this.autoAttachedCards.size > 0) {
-      this.autoAttachedCards.forEach((card) => {
+    if (this.autoAttachedCardIds.size > 0) {
+      this.autoAttachedCardIds.forEach((card) => {
         cards.push(card);
       });
     }
@@ -652,38 +673,33 @@ export default class Room extends Component<Signature> {
   }
 
   @action
-  private chooseCard(card: CardDef) {
-    let cards = this.cardsToAttach ?? [];
-    if (!cards?.find((c) => c.id === card.id)) {
-      this.matrixService.cardsToSend.set(this.args.roomId, [...cards, card]);
+  private chooseCard(cardId: string) {
+    let cardIds = this.cardIdsToAttach ?? [];
+    if (!cardIds.includes(cardId)) {
+      this.matrixService.cardsToSend.set(this.args.roomId, [
+        ...cardIds,
+        cardId,
+      ]);
     }
   }
 
   @action
-  private isAutoAttachedCard(card: CardDef) {
-    return this.autoAttachedCards.has(card);
-  }
-
-  @action
-  private removeCard(card: CardDef) {
-    if (this.playgroundPanelCard?.id === card.id) {
+  private removeCard(id: string) {
+    if (this.playgroundPanelCardId === id) {
       this.removePlaygroundPanelCard();
-    } else if (this.isAutoAttachedCard(card)) {
-      this.autoAttachmentResource.onCardRemoval(card);
+    } else if (this.autoAttachmentResource.cardIds.has(id)) {
+      this.removedAttachedCardIds.push(id);
     } else {
-      const cardIndex = this.cardsToAttach?.findIndex((c) => c.id === card.id);
+      const cardIndex = this.cardIdsToAttach?.findIndex((url) => url === id);
       if (cardIndex != undefined && cardIndex !== -1) {
-        if (this.cardsToAttach !== undefined) {
-          this.autoAttachmentResource.onCardRemoval(
-            this.cardsToAttach[cardIndex],
-          );
-          this.cardsToAttach.splice(cardIndex, 1);
+        if (this.cardIdsToAttach !== undefined) {
+          this.cardIdsToAttach.splice(cardIndex, 1);
         }
       }
     }
     this.matrixService.cardsToSend.set(
       this.args.roomId,
-      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+      this.cardIdsToAttach?.length ? this.cardIdsToAttach : undefined,
     );
   }
 
@@ -718,14 +734,14 @@ export default class Room extends Component<Signature> {
 
     this.matrixService.cardsToSend.set(
       this.args.roomId,
-      this.cardsToAttach?.length ? this.cardsToAttach : undefined,
+      this.cardIdsToAttach?.length ? this.cardIdsToAttach : undefined,
     );
   }
 
   private doSendMessage = enqueueTask(
     async (
       message: string | undefined,
-      cards?: CardDef[],
+      cardsOrIds?: CardDef[] | string[],
       files?: FileDef[],
       keepInputAndAttachments: boolean = false,
       clientGeneratedId: string = uuidv4(),
@@ -737,16 +753,37 @@ export default class Room extends Component<Signature> {
         this.matrixService.messagesToSend.set(this.args.roomId, undefined);
         this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
+      let openCardIds =
+        this.operatorModeStateService.getOpenCardIds(
+          this.args.selectedCardRef,
+        ) || [];
+      for (let cardId of this.autoAttachedCardIds) {
+        if (!openCardIds.includes(cardId)) {
+          openCardIds.push(cardId);
+        }
+      }
       let context = {
         submode: this.operatorModeStateService.state.submode,
-        openCardIds: this.operatorModeStateService
-          .topMostStackItems()
-          .filter((stackItem) => stackItem)
-          .map((stackItem) => stackItem.card.id),
+        openCardIds: openCardIds ?? [],
       };
       try {
-        if (files) {
+        if (files?.length) {
           files = await this.matrixService.uploadFiles(files);
+        }
+        let cards: CardDef[] | undefined;
+        if (typeof cardsOrIds?.[0] === 'string') {
+          // we use detached instances since these are just
+          // serialized and send to matrix--these don't appear
+          // elsewhere in our app.
+          cards = (
+            await Promise.all(
+              (cardsOrIds as string[]).map((id) => this.store.get(id)),
+            )
+          )
+            .filter(Boolean)
+            .filter(isCardInstance) as CardDef[];
+        } else {
+          cards = cardsOrIds as CardDef[] | undefined;
         }
 
         await this.matrixService.sendMessage(
@@ -763,21 +800,38 @@ export default class Room extends Component<Signature> {
     },
   );
 
+  @cached
   private get topMostStackItems(): StackItem[] {
+    // side effect: whenever the stack changes we reset the
+    // auto-attached removed items state in a task to prevent rerender cycles
+    this.resetAutoAttachedRemovedStateTask.perform();
     return this.operatorModeStateService.topMostStackItems();
   }
 
-  private get autoAttachedCards() {
+  private resetAutoAttachedRemovedStateTask = task(async () => {
+    await Promise.resolve();
+    this.removedAttachedCardIds.splice(0);
+  });
+
+  private get autoAttachedCardIds() {
     if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      return this.playgroundPanelCard
-        ? new TrackedSet([this.playgroundPanelCard])
-        : new TrackedSet<CardDef>();
+      // also get the card ids of the cards that are open in code mode
+      let cardIds = new TrackedSet<string>();
+      if (this.autoAttachedFileUrl?.endsWith('.json')) {
+        // remove the json extension. TODO: is there a way of getting the actual card id
+        let cardId = this.autoAttachedFileUrl.replace(/\.json$/, '');
+        cardIds.add(cardId);
+      }
+      if (this.playgroundPanelCardId) {
+        cardIds.add(this.playgroundPanelCardId);
+      }
+      return cardIds;
     }
 
-    return this.autoAttachmentResource.cards;
+    return this.autoAttachmentResource.cardIds;
   }
 
-  updateSkillIsActiveTask = task(
+  private updateSkillIsActiveTask = task(
     async (skillEventId: string, isActive: boolean) => {
       await new UpdateSkillActivationCommand(
         this.commandService.commandContext,
@@ -794,11 +848,12 @@ export default class Room extends Component<Signature> {
       !this.doSendMessage.isRunning &&
       Boolean(
         this.messageToSend?.trim() ||
-          this.cardsToAttach?.length ||
-          this.autoAttachedCards.size !== 0,
+          this.cardIdsToAttach?.length ||
+          this.autoAttachedCardIds.size !== 0,
       ) &&
       !!this.room &&
-      !this.messages.some((m) => this.isPendingMessage(m))
+      !this.messages.some((m) => this.isPendingMessage(m)) &&
+      !this.matrixService.isLoadingTimeline
     );
   }
 
@@ -811,14 +866,18 @@ export default class Room extends Component<Signature> {
     return message.status === 'sending' || message.status === 'queued';
   }
 
-  private attachSkillTask = task(async (card: SkillCard) => {
+  private attachSkillTask = task(async (cardId: string) => {
     let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
       this.commandService.commandContext,
     );
-    await addSkillsToRoomCommand.execute({
-      roomId: this.args.roomId,
-      skills: [card],
-    });
+
+    let skillCard = await this.store.get<SkillCard>(cardId);
+    if (skillCard && isCardInstance(skillCard)) {
+      await addSkillsToRoomCommand.execute({
+        roomId: this.args.roomId,
+        skills: [skillCard],
+      });
+    }
   });
 }
 

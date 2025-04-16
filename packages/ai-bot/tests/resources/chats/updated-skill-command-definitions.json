@@ -1,0 +1,124 @@
+[
+  {
+    "type": "m.room.member",
+    "sender": "@host:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "Host"
+    },
+    "state_key": "@host:localhost",
+    "origin_server_ts": 1722374000000,
+    "room_id": "!testroom:localhost",
+    "event_id": "$member_event_1"
+  },
+  {
+    "type": "m.room.member",
+    "sender": "@aibot:localhost",
+    "content": {
+      "membership": "join",
+      "displayname": "AI Bot"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1722374010000,
+    "room_id": "!testroom:localhost",
+    "event_id": "$member_event_2"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@host:localhost",
+    "content": {
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/test-skill\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Test skill instructions\\\",\\\"title\\\":\\\"Test Skill\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1722374020000,
+    "event_id": "$skill_card_v1"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@host:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandDefinitions",
+      "body": "Command Definitions",
+      "data": "{\"commandDefinitions\":[{\"codeRef\":{\"name\":\"default\",\"module\":\"@cardstack/boxel-host/commands/switch-submode\"},\"tool\":{\"type\":\"function\",\"function\":{\"name\":\"switch-submode_dd88\",\"description\":\"COMMAND_DESCRIPTION_V1\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"submode\":{\"type\":\"string\"},\"codePath\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}}]}"
+    },
+    "origin_server_ts": 1722374030000,
+    "event_id": "$command_def_v1"
+  },
+  {
+    "type": "app.boxel.room.skills",
+    "room_id": "!testroom:localhost",
+    "sender": "@host:localhost",
+    "content": {
+      "enabledEventIds": ["$skill_card_v1"],
+      "disabledEventIds": []
+    },
+    "state_key": "",
+    "origin_server_ts": 1722374040000,
+    "event_id": "$skill_state_1"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "m.text",
+      "body": "Can you help me switch modes?"
+    },
+    "origin_server_ts": 1722374050000,
+    "event_id": "$message_1"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@host:localhost",
+    "content": {
+      "msgtype": "app.boxel.cardFragment",
+      "format": "app.boxel.card",
+      "body": "card fragment 1 of 1",
+      "formatted_body": "card fragment 1 of 1",
+      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/test-skill\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Test skill instructions with updated commands\\\",\\\"commands\\\":[{\\\"codeRef\\\":{\\\"name\\\":\\\"default\\\",\\\"module\\\":\\\"@cardstack/boxel-host/commands/switch-submode\\\"},\\\"requiresApproval\\\":false,\\\"functionName\\\":\\\"switch-submode_dd88\\\"}],\\\"title\\\":\\\"Test Skill\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
+    },
+    "origin_server_ts": 1722374060000,
+    "event_id": "$skill_card_v2"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@host:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandDefinitions",
+      "body": "Command Definitions",
+      "data": "{\"commandDefinitions\":[{\"codeRef\":{\"name\":\"default\",\"module\":\"@cardstack/boxel-host/commands/switch-submode\"},\"tool\":{\"type\":\"function\",\"function\":{\"name\":\"switch-submode_dd88\",\"description\":\"COMMAND_DESCRIPTION_V2\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"submode\":{\"type\":\"string\"},\"codePath\":{\"type\":\"string\"},\"option\":{\"type\":\"string\",\"description\":\"Additional option\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}}]}"
+    },
+    "origin_server_ts": 1722374070000,
+    "event_id": "$command_def_v2"
+  },
+  {
+    "type": "app.boxel.room.skills",
+    "room_id": "!testroom:localhost",
+    "sender": "@host:localhost",
+    "content": {
+      "enabledEventIds": ["$skill_card_v2"],
+      "disabledEventIds": []
+    },
+    "state_key": "",
+    "origin_server_ts": 1722374080000,
+    "event_id": "$skill_state_2"
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!testroom:localhost",
+    "sender": "@user:localhost",
+    "content": {
+      "msgtype": "m.text",
+      "body": "Can you switch to dark mode with extra options?"
+    },
+    "origin_server_ts": 1722374090000,
+    "event_id": "$message_2"
+  }
+]

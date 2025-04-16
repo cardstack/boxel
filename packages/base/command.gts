@@ -36,13 +36,18 @@ export class CopyCardResult extends CardDef {
   @field newCard = linksTo(CardDef);
 }
 
+export class CopySourceInput extends CardDef {
+  @field fromRealmUrl = contains(StringField);
+  @field toRealmUrl = contains(StringField);
+}
+
 export class PatchCardInput extends CardDef {
   @field cardId = contains(StringField);
   @field patch = contains(JsonField);
 }
 
 export class ShowCardInput extends CardDef {
-  @field cardToShow = linksTo(CardDef);
+  @field cardIdToShow = contains(StringField);
 }
 
 export class SwitchSubmodeInput extends CardDef {
@@ -95,11 +100,28 @@ export class UpdateSkillActivationInput extends CardDef {
   @field isActive = contains(BooleanField);
 }
 
+export class UseAiAssistantInput extends CardDef {
+  @field roomId = contains(StringField); // pass 'new' or leave blank to create a new room
+  @field roomName = contains(StringField); // only used when creating a new room
+  @field llmModel = contains(StringField);
+  @field openRoom = contains(BooleanField);
+  @field skillCards = linksToMany(SkillCard);
+  @field skillCardIds = containsMany(StringField);
+  @field attachedCards = linksToMany(CardDef);
+  @field attachedCardIds = containsMany(StringField);
+  @field attachedFileURLs = containsMany(StringField);
+  @field prompt = contains(StringField);
+  @field clientGeneratedId = contains(StringField);
+  @field openCardIds = containsMany(StringField);
+}
+
 export class SendAiAssistantMessageInput extends CardDef {
   @field roomId = contains(StringField);
   @field prompt = contains(StringField);
   @field clientGeneratedId = contains(StringField);
   @field attachedCards = linksToMany(CardDef);
+  @field attachedFileURLs = containsMany(StringField);
+  @field openCardIds = containsMany(StringField);
   @field requireCommandCall = contains(BooleanField);
   // This is a bit of a "fake" field in that it would not serialize properly.
   // It works OK for the purposes of transient input to SendAiAssistantMessageCommand.
@@ -108,6 +130,7 @@ export class SendAiAssistantMessageInput extends CardDef {
 }
 
 export class SendAiAssistantMessageResult extends CardDef {
+  @field roomId = contains(StringField);
   @field eventId = contains(StringField);
 }
 

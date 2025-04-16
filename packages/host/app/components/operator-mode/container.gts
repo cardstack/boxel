@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
@@ -10,23 +9,27 @@ import Component from '@glimmer/component';
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
+import { provide } from 'ember-provide-consume-context';
+
 import { Modal, LoadingIndicator } from '@cardstack/boxel-ui/components';
 
 import { or, not, and } from '@cardstack/boxel-ui/helpers';
 
-import { type Loader, type Query } from '@cardstack/runtime-common';
+import {
+  GetCardContextName,
+  GetCardsContextName,
+  GetCardCollectionContextName,
+} from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
 import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-
-import { getSearch, type SearchQuery } from '@cardstack/host/resources/search';
+import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import CardCatalogModal from '../card-catalog/modal';
 import { Submodes } from '../submode-switcher';
@@ -55,51 +58,34 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    (globalThis as any)._CARDSTACK_CARD_SEARCH = this;
-
     this.messageService.register();
 
     registerDestructor(this, () => {
-      delete (globalThis as any)._CARDSTACK_CARD_SEARCH;
       this.operatorModeStateService.clearStacks();
     });
   }
 
-  // public API
-  @action
-  getCards(
-    getQuery: () => Query | undefined,
-    getRealms: () => string[] | undefined,
-    opts: {
-      isLive?: true;
-      doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
-    },
-  ): SearchQuery {
-    return getSearch(this, getQuery, getRealms, opts);
+  @provide(GetCardContextName)
+  // @ts-ignore "getCard" is declared but not used
+  private get getCard() {
+    return getCard;
   }
 
-  // public API
-  @action
-  getCard(url: URL, opts?: { loader?: Loader; isLive?: boolean }) {
-    return getCard(this, () => url.href, {
-      ...(opts?.isLive ? { isLive: () => opts.isLive! } : {}),
-      ...(opts?.loader ? { loader: () => opts.loader! } : {}),
-    });
+  @provide(GetCardsContextName)
+  // @ts-ignore "getCards" is declared but not used
+  private get getCards() {
+    return getSearch;
+  }
+
+  @provide(GetCardCollectionContextName)
+  // @ts-ignore "getCardCollection" is declared but not used
+  private get getCardCollection() {
+    return getCardCollection;
   }
 
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
       await this.cardService.saveSource(url, content);
-    });
-  });
-
-  // we debounce saves in the stack item--by the time they reach
-  // this level we need to handle every request (so not restartable). otherwise
-  // we might drop writes from different stack items that want to save
-  // at the same time
-  private saveCard = task(async (card: CardDef) => {
-    return await this.withTestWaiters(async () => {
-      return await this.cardService.saveModel(card);
     });
   });
 
@@ -165,12 +151,9 @@ export default class OperatorModeContainer extends Component<Signature> {
           @flow={{if this.matrixService.isNewUser 'register' 'logged-in'}}
         />
       {{else if this.isCodeMode}}
-        <CodeSubmode
-          @saveSourceOnClose={{perform this.saveSource}}
-          @saveCardOnClose={{perform this.saveCard}}
-        />
+        <CodeSubmode @saveSourceOnClose={{perform this.saveSource}} />
       {{else}}
-        <InteractSubmode @saveCard={{perform this.saveCard}} />
+        <InteractSubmode />
       {{/if}}
     </Modal>
 

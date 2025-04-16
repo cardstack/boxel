@@ -15,7 +15,7 @@ jobs:
       group: build-host-${{ inputs.environment }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
 
       - name: Init
         uses: ./.github/actions/init
@@ -39,19 +39,19 @@ jobs:
             exit 1;
           fi
 
-      - name: Build boxel-ui
-        run: pnpm build
-        working-directory: packages/boxel-ui/addon
-
       - name: Build boxel-icons
         run: pnpm build
         working-directory: packages/boxel-icons
+
+      - name: Build boxel-ui
+        run: pnpm build
+        working-directory: packages/boxel-ui/addon
 
       - name: Build host
         run: pnpm deploy:boxel-host build-only --verbose
 
       - name: Save dist
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         with:
           name: host-dist
           path: packages/host/tmp/deploy-dist

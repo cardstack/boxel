@@ -5,10 +5,6 @@ import { EventStatus } from 'matrix-js-sdk';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import { getCard } from '@cardstack/runtime-common';
-
-import { CardDef } from 'https://cardstack.com/base/card-api';
-
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import { RoomMember } from './member';
@@ -17,12 +13,6 @@ import type MessageCommand from './message-command';
 
 const ErrorMessage: Record<string, string> = {
   ['M_TOO_LARGE']: 'Message is too large',
-};
-
-type AttachedCardResource = {
-  card: CardDef | undefined;
-  loaded?: Promise<void>;
-  cardError?: { id: string; error: Error };
 };
 
 type RoomMessageInterface = RoomMessageRequired & RoomMessageOptional;
@@ -94,31 +84,5 @@ export class Message implements RoomMessageInterface {
       this.errorMessage === undefined ||
       (this.errorMessage && this.errorMessage !== ErrorMessage['M_TOO_LARGE'])
     );
-  }
-
-  getCardResources(
-    cardIds: string[] | null | undefined,
-  ): AttachedCardResource[] | undefined {
-    if (!cardIds?.length) {
-      return undefined;
-    }
-    let cards = cardIds.map((id) => {
-      let card = getCard(new URL(id));
-      if (!card) {
-        return {
-          card: undefined,
-          cardError: {
-            id,
-            error: new Error(`cannot find card for id "${id}"`),
-          },
-        };
-      }
-      return card;
-    });
-    return cards;
-  }
-
-  get attachedResources(): AttachedCardResource[] | undefined {
-    return this.getCardResources(this.attachedCardIds);
   }
 }

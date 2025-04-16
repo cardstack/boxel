@@ -530,21 +530,28 @@ module('getModifyPrompt', () => {
       return originalFetch(url);
     };
 
-    let prompt = await getModifyPrompt(history, '@aibot:localhost');
+    let prompt = await getModifyPrompt(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      { getAccessToken: () => 'fake-access-token' },
+    );
 
     assert.equal(
       fetchCount,
       3,
       'downloads only recently attached files, not older ones',
     );
+
     assert.ok(
       prompt[0].content?.includes(
         `
 Attached files:
-spaghetti-recipe.gts: this is the content of the spaghetti-recipe.gts file
-best-friends.txt: this is the content of the best-friends.txt file
+[spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
+[best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
 file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 404
-example.pdf: Unsupported file type: application/pdf. For now, only text files are supported.
+[example.pdf](http://test.com/my-realm/example.pdf): Unsupported file type: application/pdf. For now, only text files are supported.
       `.trim(),
       ),
     );
@@ -1071,6 +1078,121 @@ example.pdf: Unsupported file type: application/pdf. For now, only text files ar
     });
   });
 
+  test('Adds the "unable to edit cards" only if there are attached cards and no tools', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        sender: '@ian:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'set the name to dave',
+          formatted_body: '<p>set the name to dave</p>\n',
+          data: {
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              tools: [],
+              submode: 'code',
+            },
+            attachedCards: [
+              {
+                data: {
+                  type: 'card',
+                  id: 'http://localhost:4201/drafts/Author/1',
+                  attributes: {
+                    firstName: 'Alice',
+                    lastName: 'Enwunder',
+                    photo: null,
+                    body: 'Alice is a software engineer at Google.',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4201/drafts/author',
+                      name: 'Author',
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        },
+        room_id: 'room1',
+        origin_server_ts: 1696813813166,
+        unsigned: {
+          age: 115498,
+          transaction_id: '1',
+        },
+        event_id: '1',
+        status: EventStatus.SENT,
+      },
+    ];
+
+    let historyWithStringifiedData = (history: DiscreteMatrixEvent[]) => {
+      return history.map((event) => ({
+        ...event,
+        content: {
+          ...event.content,
+          data: JSON.stringify(event.content.data),
+        },
+      }));
+    };
+
+    const { messages } = await getPromptParts(
+      historyWithStringifiedData(history),
+      '@aibot:localhost',
+    );
+
+    let nonEditableCardsMessage =
+      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
+
+    assert.ok(
+      messages[0].content.includes(nonEditableCardsMessage),
+      'System message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files',
+    );
+
+    // Now add a tool
+    history[0].content.data.context.tools = [
+      getPatchTool('http://localhost:4201/drafts/Author/1', {
+        attributes: { firstName: { type: 'string' } },
+      }),
+    ];
+
+    const { messages: messages2 } = await getPromptParts(
+      historyWithStringifiedData(history),
+      '@aibot:localhost',
+    );
+
+    assert.ok(
+      !messages2[0].content.includes(nonEditableCardsMessage),
+      'System message should not include the "unable to edit cards" message when there are attached cards and a tool',
+    );
+
+    // Now remove cards, tools, and add an attached file
+    history[0].content.data.context.openCardIds = [];
+    history[0].content.data.context.tools = [];
+    history[0].content.data.attachedFiles = [
+      {
+        url: 'https://example.com/file.txt',
+        sourceUrl: 'https://example.com/file.txt',
+        name: 'file.txt',
+        contentType: 'text/plain',
+        content: 'Hello, world!',
+      },
+    ];
+
+    const { messages: messages3 } = await getPromptParts(
+      historyWithStringifiedData(history),
+      '@aibot:localhost',
+    );
+
+    assert.ok(
+      !messages3[0].content.includes(nonEditableCardsMessage),
+      'System message should not include the "unable to edit cards" message when there is an attached file',
+    );
+  });
+
   test('Gets only the latest functions', () => {
     const history: DiscreteMatrixEvent[] = [
       {
@@ -1356,7 +1478,6 @@ test('Return host result of tool call back to open ai', async () => {
         clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
-          attachedSkillEventIds: ['attached-skill-event-id-1'],
           context: {
             openCardIds: ['http://localhost:4201/drafts/Author/1'],
             tools: [
@@ -1496,7 +1617,6 @@ test('Return host result of tool call back to open ai', async () => {
         clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
-          attachedSkillEventIds: ['attached-skill-event-id-1'],
           context: {
             openCardIds: ['http://localhost:4201/drafts/Author/1'],
             tools: [
@@ -1883,6 +2003,39 @@ test('No tools are available if skill is not enabled', async () => {
   const { tools } = await getPromptParts(eventList, '@aibot:localhost');
   // we should not have any tools available
   assert.true(tools.length == 0, 'Should not have tools available');
+});
+
+test('Uses updated command definitions when skill card is updated', async () => {
+  const eventList: DiscreteMatrixEvent[] = JSON.parse(
+    readFileSync(
+      path.join(
+        __dirname,
+        'resources/chats/updated-skill-command-definitions.json',
+      ),
+    ),
+  );
+
+  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
+  assert.true(tools.length > 0, 'Should have tools available');
+
+  // Verify that the tools array contains the updated command definition
+  const updatedCommandTool = tools.find(
+    (tool) => tool.function?.name === 'switch-submode_dd88',
+  );
+  assert.ok(
+    updatedCommandTool,
+    'Should have updated command definition available',
+  );
+
+  // Verify updated properties are present (description indicates V2)
+  assert.true(
+    updatedCommandTool.function?.description.includes('COMMAND_DESCRIPTION_V2'),
+    'Should use updated command description',
+  );
+  assert.false(
+    updatedCommandTool.function?.description.includes('COMMAND_DESCRIPTION_V1'),
+    'Should not include old command description',
+  );
 });
 
 module('set model in prompt', () => {

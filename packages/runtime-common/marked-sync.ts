@@ -1,35 +1,46 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
-import { simpleHash } from '.';
-import { escapeHtmlTags } from './helpers/html';
+import { escapeHtml } from './helpers/html';
 
-const CODEBLOCK_KEY_PREFIX = 'codeblock_';
-
-export function markedSync(markdown: string) {
+export function markedSync(
+  markdown: string,
+  opts: { escapeHtmlInCodeBlocks?: boolean } = {
+    escapeHtmlInCodeBlocks: true,
+  },
+): string {
   return marked
     .use({
       renderer: {
-        // If you are relying on codeblocks in your
-        // markdown, please use the `CodeBlock` modifier to render the
-        // markdown.
         code(code, language = '') {
-          let id = `${CODEBLOCK_KEY_PREFIX}${simpleHash(Date.now() + language + code)}`;
-          // we pass the code thru using localstorage instead of in the DOM,
-          // that way we don't have to worry about escaping code. note that the
-          // DOM wants to render "<template>" strings when we put them in the
-          // DOM even when wrapped by <pre>. also consider a codeblock that has
-          // a "</pre>" string in it.
-          //
-          // also note that since we are in common, we don't have ember-window-mock
-          // available to us.
-          globalThis.localStorage?.setItem(id, code);
-          return `<pre id="${id}" class="language-${language}" data-codeblock="${language}">${escapeHtmlTags(code)}</pre></div>`;
+          if (opts.escapeHtmlInCodeBlocks) {
+            return `<pre data-code-language="${language}">${escapeHtml(code)}</pre>`;
+          } else {
+            return `<pre data-code-language="${language}">${code}</pre>`;
+          }
         },
       },
     })
     .parse(markdown, { async: false }) as string;
 }
 
-export function markdownToHtml(markdown: string | null | undefined): string {
-  return markdown ? sanitizeHtml(markedSync(markdown)) : '';
+const DEFAULT_OPTS = {
+  sanitize: true,
+  escapeHtmlInCodeBlocks: true,
+};
+
+export function markdownToHtml(
+  markdown: string | null | undefined,
+  opts: { sanitize?: boolean; escapeHtmlInCodeBlocks?: boolean } = DEFAULT_OPTS,
+): string {
+  opts = { ...DEFAULT_OPTS, ...opts };
+  if (!markdown) {
+    return '';
+  }
+  let html = markedSync(markdown, {
+    escapeHtmlInCodeBlocks: opts.escapeHtmlInCodeBlocks,
+  });
+  if (opts.sanitize) {
+    html = sanitizeHtml(html);
+  }
+  return html;
 }

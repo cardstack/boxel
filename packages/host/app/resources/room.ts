@@ -2,7 +2,7 @@ import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
-import { restartableTask, timeout } from 'ember-concurrency';
+import { TaskInstance, restartableTask, timeout } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
 import { TrackedMap } from 'tracked-built-ins';
@@ -45,13 +45,17 @@ import { Message } from '../lib/matrix-classes/message';
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
 
-import type { Skill } from '../components/ai-assistant/skill-menu';
-
 import type Room from '../lib/matrix-classes/room';
 
-import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type StoreService from '../services/store';
+
+export type RoomSkill = {
+  cardId: string;
+  skillEventId: string;
+  isActive: boolean;
+};
 
 interface Args {
   named: {
@@ -74,7 +78,7 @@ export class RoomResource extends Resource<Args> {
   private _isDisplayingViewCodeMap: TrackedMap<string, boolean> =
     new TrackedMap();
   @tracked matrixRoom: Room | undefined;
-  @tracked loading: Promise<void> | undefined;
+  @tracked processing: TaskInstance<void> | undefined;
   @tracked roomId: string | undefined;
 
   // To avoid delay, instead of using `roomResource.activeLLM`, we use a tracked property
@@ -82,17 +86,24 @@ export class RoomResource extends Resource<Args> {
   @tracked private llmBeingActivated: string | undefined;
   @service declare private matrixService: MatrixService;
   @service declare private commandService: CommandService;
-  @service declare private cardService: CardService;
+  @service declare private store: StoreService;
 
   modify(_positional: never[], named: Args['named']) {
     if (!named.roomId) {
       return;
     }
     this.roomId = named.roomId;
-    this.loading = this.load.perform(named.roomId);
+    this.processing = this.processRoomTask.perform(named.roomId);
   }
 
-  private load = restartableTask(async (roomId: string) => {
+  get isProcessing() {
+    return this.processRoomTask.isRunning;
+  }
+
+  processingLastStartedAt = 0;
+
+  private processRoomTask = restartableTask(async (roomId: string) => {
+    this.processingLastStartedAt = Date.now();
     try {
       this.matrixRoom = roomId
         ? await this.matrixService.getRoomData(roomId)
@@ -213,22 +224,20 @@ export class RoomResource extends Resource<Args> {
     ]);
   }
 
-  get skills(): Skill[] {
-    let result: Skill[] = [];
+  get skills(): RoomSkill[] {
+    let result: RoomSkill[] = [];
     for (let skillEventId of this.allSkillEventIds) {
       let cardId = this._skillEventIdToCardIdCache.get(skillEventId);
       if (!cardId) {
         continue;
       }
-      let skillCard = this._skillCardsCache.get(cardId);
-      if (!skillCard) {
-        continue;
-      }
       result.push({
-        card: skillCard,
+        cardId,
         skillEventId,
         isActive:
-          this.matrixRoom?.skillsConfig.enabledEventIds.includes(skillEventId),
+          this.matrixRoom?.skillsConfig.enabledEventIds.includes(
+            skillEventId,
+          ) ?? false,
       });
     }
     return result;
@@ -238,8 +247,9 @@ export class RoomResource extends Resource<Args> {
     // Usable commands are all commands on *active* skills
     let commands = [];
     for (let skill of this.skills) {
-      if (skill.isActive) {
-        commands.push(...skill.card.commands);
+      let skillCard = this._skillCardsCache.get(skill.cardId);
+      if (skillCard && skill.isActive) {
+        commands.push(...skillCard.commands);
       }
     }
     return commands;
@@ -271,15 +281,12 @@ export class RoomResource extends Resource<Args> {
     return this.llmBeingActivated ?? this.matrixRoom?.activeLLM ?? DEFAULT_LLM;
   }
 
-  activateLLM(model: string) {
-    this.activateLLMTask.perform(model);
-  }
-
   get isActivatingLLM() {
     return this.activateLLMTask.isRunning;
   }
 
-  private activateLLMTask = restartableTask(async (model: string) => {
+  activateLLMTask = restartableTask(async (model: string) => {
+    await this.processing;
     if (this.activeLLM === model) {
       return;
     }
@@ -372,6 +379,9 @@ export class RoomResource extends Resource<Args> {
     return this.allSkillEventIds.has(eventId);
   }
 
+  // TODO we should think about why we are caching these running instances
+  // outside of the store. it would be a good idea to bring these into the fold
+  // so that we can make the `createFromSerialized()` more private.
   private async ensureSkillCardCached(eventId: string) {
     if (this._skillEventIdToCardIdCache.has(eventId)) {
       return;
@@ -384,10 +394,12 @@ export class RoomResource extends Resource<Args> {
       return;
     }
     let cardId = cardDoc.data.id;
-    let skillCard = (await this.cardService.createFromSerialized(
-      cardDoc.data,
-      cardDoc,
-    )) as SkillCard;
+    // Warning these are garbage collected: probably that's ok since nothing
+    // links to this, but we should refactor this to the store for its cache
+    // instead: CS-8304
+    let skillCard = await this.store.add<SkillCard>(cardDoc, {
+      doNotPersist: true,
+    });
     this._skillCardsCache.set(cardId, skillCard);
     this._skillEventIdToCardIdCache.set(eventId, cardId);
   }
@@ -416,6 +428,7 @@ export class RoomResource extends Resource<Args> {
       serializedCardFromFragments: this.serializedCardFromFragments,
       events: this.events,
       skills: this.skills,
+      skillCardsCache: this._skillCardsCache,
     });
 
     if (!message) {
@@ -467,6 +480,7 @@ export class RoomResource extends Resource<Args> {
         events: this.events,
         skills: this.skills,
         commandResultEvent: event,
+        skillCardsCache: this._skillCardsCache,
       },
     );
     messageBuilder.updateMessageCommandResult(message);
@@ -489,9 +503,7 @@ export class RoomResource extends Resource<Args> {
   }
 
   private async loadRoomCreateEvent(event: RoomCreateEvent) {
-    if (!this._createEvent) {
-      this._createEvent = event;
-    }
+    this._createEvent = event;
   }
 
   private upsertRoomMember({

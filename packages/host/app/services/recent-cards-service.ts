@@ -1,85 +1,70 @@
 import type Owner from '@ember/owner';
 import Service, { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
 import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
-
-import { getCard } from '@cardstack/host/resources/card-resource';
-
-import type { CardDef } from 'https://cardstack.com/base/card-api';
 
 import type ResetService from './reset';
 
 export default class RecentCardsService extends Service {
   @service declare private reset: ResetService;
-  @tracked declare recentCards: TrackedArray<CardDef>;
+  @tracked private ascendingRecentCardIds = new TrackedArray<string>([]);
 
   constructor(owner: Owner) {
     super(owner);
     this.resetState();
     this.reset.register(this);
-    this.constructRecentCards.perform();
+
+    const recentCardIdsString = window.localStorage.getItem('recent-cards');
+    if (recentCardIdsString) {
+      const recentCardIds = JSON.parse(recentCardIdsString) as string[];
+      this.ascendingRecentCardIds.push(...recentCardIds);
+    }
   }
 
-  get any() {
-    return this.recentCards.length > 0;
+  @cached
+  // return in descending order: most recent to oldest
+  get recentCardIds() {
+    return [...this.ascendingRecentCardIds].reverse();
   }
 
   resetState() {
-    this.recentCards = new TrackedArray([]);
+    this.ascendingRecentCardIds = new TrackedArray([]);
   }
 
-  add(card: CardDef) {
-    const existingCardIndex = this.recentCards.findIndex(
-      (recentCard) => recentCard.id === card.id,
+  add(newId: string) {
+    const existingCardIndex = this.ascendingRecentCardIds.findIndex(
+      (id) => id === newId,
     );
     if (existingCardIndex !== -1) {
-      this.recentCards.splice(existingCardIndex, 1);
+      this.ascendingRecentCardIds.splice(existingCardIndex, 1);
     }
 
-    this.recentCards.push(card);
-    if (this.recentCards.length > 10) {
-      this.recentCards.splice(0, 1);
+    this.ascendingRecentCardIds.push(newId);
+    if (this.ascendingRecentCardIds.length > 10) {
+      this.ascendingRecentCardIds.splice(0, 1);
     }
-    const recentCardIds = this.recentCards
-      .map((recentCard) => recentCard.id)
-      .filter(Boolean); // don't include cards that don't have an ID
-    window.localStorage.setItem('recent-cards', JSON.stringify(recentCardIds));
+    window.localStorage.setItem(
+      'recent-cards',
+      JSON.stringify(this.ascendingRecentCardIds),
+    );
   }
 
-  remove(id: string) {
-    let index = this.recentCards.findIndex((c) => c.id === id);
+  remove(idToRemove: string) {
+    let index = this.ascendingRecentCardIds.findIndex(
+      (id) => id === idToRemove,
+    );
     if (index === -1) {
       return;
     }
     while (index !== -1) {
-      this.recentCards.splice(index, 1);
-      index = this.recentCards.findIndex((c) => c.id === id);
+      this.ascendingRecentCardIds.splice(index, 1);
+      index = this.ascendingRecentCardIds.findIndex((id) => id === idToRemove);
     }
     window.localStorage.setItem(
       'recent-cards',
-      JSON.stringify(this.recentCards.map((c) => c.id)),
+      JSON.stringify(this.ascendingRecentCardIds),
     );
   }
-
-  private constructRecentCards = task(async () => {
-    const recentCardIdsString = window.localStorage.getItem('recent-cards');
-    if (!recentCardIdsString) {
-      return;
-    }
-
-    const recentCardIds = JSON.parse(recentCardIdsString) as string[];
-    for (const recentCardId of recentCardIds) {
-      const cardResource = getCard(this, () => recentCardId);
-      await cardResource.loaded;
-      let { card } = cardResource;
-      if (!card) {
-        console.warn(`cannot load card ${recentCardId}`);
-        continue;
-      }
-      this.recentCards.push(card);
-    }
-  });
 }

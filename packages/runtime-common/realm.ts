@@ -36,7 +36,6 @@ import {
   type QueuePublisher,
   type FileMeta,
   type DirectoryMeta,
-  type ResolvedCodeRef,
 } from './index';
 import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
@@ -45,7 +44,6 @@ import {
   fileContentToText,
   readFileAsText,
   getFileWithFallbacks,
-  waitForClose,
   type TextFileRef,
 } from './stream';
 import { transpileJS } from './transpile';
@@ -162,12 +160,9 @@ export interface RealmAdapter {
     writable: WritableStream;
   };
 
-  subscribe(
-    cb: (message: UpdateRealmEventContent) => void,
-    options?: {
-      watcher?: string;
-    },
-  ): Promise<void>;
+  fileWatcherEnabled: boolean;
+
+  subscribe(cb: (message: UpdateRealmEventContent) => void): Promise<void>;
 
   unsubscribe(): void;
 
@@ -284,9 +279,6 @@ export class Realm {
       ),
     ]);
 
-    // TODO: remove after running in all environments; CS-7875
-    this.backfillRetentionPolicies();
-
     let loader = new Loader(fetch, virtualNetwork.resolveImport);
     adapter.setLoader?.(loader);
 
@@ -318,6 +310,11 @@ export class Realm {
       .get('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .query('/_search', SupportedMimeType.CardJson, this.search.bind(this))
       .get(
+        '/_search-prerendered',
+        SupportedMimeType.CardJson,
+        this.searchPrerendered.bind(this),
+      )
+      .query(
         '/_search-prerendered',
         SupportedMimeType.CardJson,
         this.searchPrerendered.bind(this),
@@ -368,11 +365,6 @@ export class Realm {
         this.removeCardSource.bind(this),
       )
       .get(
-        '/_message',
-        SupportedMimeType.EventStream,
-        this.subscribe.bind(this),
-      )
-      .get(
         '.*/',
         SupportedMimeType.DirectoryListing,
         this.getDirectoryListing.bind(this),
@@ -411,29 +403,17 @@ export class Realm {
     });
   }
 
-  // TODO: remove after running in all environments; CS-7875
-  private async backfillRetentionPolicies() {
-    try {
-      await this.#matrixClient.waitForLogin();
-
-      let roomIds = (await this.#matrixClient.getJoinedRooms()).joined_rooms;
-      for (let roomId of roomIds) {
-        await this.#matrixClient.setRoomRetentionPolicy(
-          roomId,
-          REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
-        );
-      }
-    } catch (e) {
-      console.error('backfillRetentionPolicies: error', e);
-    }
-  }
-
   async indexing() {
     return this.#realmIndexUpdater.indexing();
   }
 
   async start() {
     this.#startedUp.fulfill((() => this.#startup())());
+
+    if (this.#adapter.fileWatcherEnabled) {
+      await this.startFileWatcher();
+    }
+
     await this.#startedUp.promise;
   }
 
@@ -449,6 +429,7 @@ export class Realm {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
+  // TODO update to write to multiple paths
   async write(
     path: LocalPath,
     contents: string,
@@ -479,19 +460,23 @@ export class Realm {
       : (await this.#adapter.exists(path))
         ? 'updated'
         : 'added';
-    let messageHash = `${type}-${JSON.stringify({ [type]: path })}`;
+    let recentWritesKey = this.constructRecentWritesKey(type, path);
     this.#recentWrites.set(
-      messageHash,
+      recentWritesKey,
       setTimeout(() => {
-        this.#recentWrites.delete(messageHash);
+        this.#recentWrites.delete(recentWritesKey);
       }, 500) as unknown as number, // don't use NodeJS Timeout type
     );
+  }
+
+  private constructRecentWritesKey(operation: string, path: string) {
+    return `${operation}-${JSON.stringify({ [operation]: path })}`;
   }
 
   private getTrackedWrite(
     data: UpdateRealmEventContent,
   ): { isTracked: boolean; url: URL } | undefined {
-    let file: string | undefined;
+    let file: string;
     let type: string | undefined;
     if ('updated' in data) {
       file = data.updated;
@@ -505,14 +490,14 @@ export class Realm {
     } else {
       return;
     }
-    let messageHash = `${type}-${JSON.stringify(data)}`;
+    let recentWritesKey = this.constructRecentWritesKey(type, file);
     let url = this.paths.fileURL(file);
-    let timeout = this.#recentWrites.get(messageHash);
+    let timeout = this.#recentWrites.get(recentWritesKey);
     if (timeout) {
       // This is a best attempt to eliminate an echo here since it's unclear whether this update is one
       // that we wrote or one that was created outside of us
       clearTimeout(timeout);
-      this.#recentWrites.delete(messageHash);
+      this.#recentWrites.delete(recentWritesKey);
       return { isTracked: true, url };
     }
     return { isTracked: false, url };
@@ -668,6 +653,18 @@ export class Realm {
       return redirectResponse;
     }
 
+    if (
+      request.method === 'POST' &&
+      request.headers.get('X-HTTP-Method-Override') === 'QUERY'
+    ) {
+      request = new Request(request.url, {
+        method: 'QUERY',
+        headers: request.headers,
+        body: await request.clone().text(),
+      });
+      request.headers.delete('X-HTTP-Method-Override');
+    }
+
     let requestContext = await this.createRequestContext(); // Cache realm permissions for the duration of the request so that we don't have to fetch them multiple times
 
     try {
@@ -770,11 +767,30 @@ export class Realm {
       });
       if (module?.type === 'module') {
         try {
+          if (
+            module.lastModified != null &&
+            request.headers.get('if-none-match') === String(module.lastModified)
+          ) {
+            return createResponse({
+              body: null,
+              init: { status: 304 },
+              requestContext,
+            });
+          }
+
           return createResponse({
             body: module.executableCode,
             init: {
               status: 200,
-              headers: { 'content-type': 'text/javascript' },
+              headers: {
+                'content-type': 'text/javascript',
+                ...(module.lastModified != null
+                  ? {
+                      etag: String(module.lastModified),
+                      'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
+                    }
+                  : {}),
+              },
             },
             requestContext,
           });
@@ -829,22 +845,39 @@ export class Realm {
           requestContext,
         );
       }
-      return await this.serveLocalFile(fileRef, requestContext);
+      return await this.serveLocalFile(request, fileRef, requestContext);
     } finally {
       this.#logRequestPerformance(request, start, 'cache miss');
     }
   }
 
   private async serveLocalFile(
+    request: Request,
     ref: FileRef,
     requestContext: RequestContext,
+    options?: {
+      defaultHeaders?: Record<string, string>;
+    },
   ): Promise<ResponseWithNodeStream> {
+    if (
+      ref.lastModified != null &&
+      request.headers.get('if-none-match') === String(ref.lastModified)
+    ) {
+      return createResponse({
+        body: null,
+        init: { status: 304 },
+        requestContext,
+      });
+    }
     let headers = {
+      ...(options?.defaultHeaders || {}),
       'x-created': formatRFC7231(ref.created * 1000),
       'last-modified': formatRFC7231(ref.lastModified * 1000),
       ...(Symbol.for('shimmed-module') in ref
         ? { 'X-Boxel-Shimmed-Module': 'true' }
         : {}),
+      etag: String(ref.lastModified),
+      'cache-control': 'public, max-age=0', // instructs the browser to check with server before using cache
     };
     if (
       ref.content instanceof ReadableStream ||
@@ -950,6 +983,7 @@ export class Realm {
     let { lastModified } = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
+      request.headers.get('X-Boxel-Client-Request-Id'),
     );
     return createResponse({
       body: null,
@@ -1022,7 +1056,12 @@ export class Realm {
           requestContext,
         });
       }
-      return await this.serveLocalFile(handle, requestContext);
+
+      return await this.serveLocalFile(request, handle, requestContext, {
+        defaultHeaders: {
+          'content-type': 'text/plain; charset=utf-8',
+        },
+      });
     } finally {
       this.#logRequestPerformance(request, start);
     }
@@ -1171,6 +1210,8 @@ export class Realm {
     );
     let localPath = this.paths.local(fileURL);
     let fileSerialization: LooseSingleCardDocument | undefined;
+    // TODO update to serialize and write any side loaded resources that need to
+    // be created
     try {
       fileSerialization = await this.fileSerialization(
         merge(json, { data: { meta: { realmURL: this.url } } }),
@@ -1303,6 +1344,8 @@ export class Realm {
     delete (card as any).data.id; // don't write the ID to the file
     let path: LocalPath = `${localPath}.json`;
     let fileSerialization: LooseSingleCardDocument | undefined;
+    // TODO update to serialize and write any side loaded resources that need to
+    // be created
     try {
       fileSerialization = await this.fileSerialization(
         merge(card, { data: { meta: { realmURL: this.url } } }),
@@ -1617,29 +1660,76 @@ export class Realm {
       request.headers.get('X-Boxel-Building-Index'),
     );
 
-    let href = new URL(request.url).search.slice(1);
-    let parsedQueryString = parseQuery(href);
-    let htmlFormat = parsedQueryString.prerenderedHtmlFormat as string;
-    let cardUrls = parsedQueryString.cardUrls as string[];
-    let renderType = parsedQueryString.renderType as ResolvedCodeRef;
+    let payload;
+    let htmlFormat;
+    let cardUrls;
+    let renderType;
+
+    // Handle QUERY method
+    if (request.method === 'QUERY') {
+      payload = await request.json();
+      htmlFormat = payload.prerenderedHtmlFormat;
+      cardUrls = payload.cardUrls;
+      renderType = payload.renderType;
+    } else {
+      // Handle GET method (existing logic)
+      let href = new URL(request.url).search.slice(1);
+      payload = parseQuery(href);
+      htmlFormat = payload.prerenderedHtmlFormat;
+      cardUrls = payload.cardUrls;
+      renderType = payload.renderType;
+    }
 
     if (!isValidPrerenderedHtmlFormat(htmlFormat)) {
-      return badRequest(
-        JSON.stringify({
+      return createResponse({
+        body: JSON.stringify({
           errors: [
-            `Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint.`,
+            {
+              status: '400',
+              title: 'Bad Request',
+              message:
+                "Must include a 'prerenderedHtmlFormat' parameter with a value of 'embedded' or 'atom' to use this endpoint",
+            },
           ],
         }),
+        init: {
+          status: 400,
+          headers: { 'content-type': SupportedMimeType.CardJson },
+        },
         requestContext,
-      );
+      });
     }
-    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint so don't include it in our Query for standard card search
-    delete parsedQueryString.prerenderedHtmlFormat;
-    delete parsedQueryString.cardUrls;
-    delete parsedQueryString.renderType;
 
-    let cardsQuery = parsedQueryString;
-    assertQuery(parsedQueryString);
+    // prerenderedHtmlFormat and cardUrls are special parameters only for this endpoint
+    delete payload.prerenderedHtmlFormat;
+    delete payload.cardUrls;
+    delete payload.renderType;
+
+    let cardsQuery = payload;
+
+    try {
+      assertQuery(cardsQuery);
+    } catch (e) {
+      if (e instanceof InvalidQueryError) {
+        return createResponse({
+          body: JSON.stringify({
+            errors: [
+              {
+                status: '400',
+                title: 'Invalid Query',
+                message: `Invalid query: ${e.message}`,
+              },
+            ],
+          }),
+          init: {
+            status: 400,
+            headers: { 'content-type': SupportedMimeType.CardJson },
+          },
+          requestContext,
+        });
+      }
+      throw e;
+    }
 
     let results = await this.#realmIndexQueryEngine.searchPrerendered(
       cardsQuery,
@@ -1888,70 +1978,23 @@ export class Realm {
     return data;
   }
 
-  private listeningClients: WritableStream[] = [];
-
-  private async subscribe(
-    request: Request,
-    requestContext: RequestContext,
-  ): Promise<Response> {
-    let headers = {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      Connection: 'keep-alive',
-    };
-
-    let { response, writable } = this.#adapter.createStreamingResponse(
-      request,
-      requestContext,
-      {
-        status: 200,
-        headers,
-      },
-      () => {
-        this.listeningClients = this.listeningClients.filter(
-          (w) => w !== writable,
-        );
-        if (this.listeningClients.length === 0) {
-          this.#adapter.unsubscribe();
-        }
-      },
-    );
-
-    // To remove as part of CS-8104, a workaround for a file watcher irregularity in tests
-    let subscribeOptions: { watcher?: string } = {};
-
-    if (new URL(request.url).searchParams.has('testFileWatcher')) {
-      subscribeOptions.watcher = new URL(request.url).searchParams.get(
-        'testFileWatcher',
-      )!;
-    }
-
-    if (this.listeningClients.length === 0) {
-      await this.#adapter.subscribe((data) => {
-        let tracked = this.getTrackedWrite(data);
-        if (!tracked || tracked.isTracked) {
-          return;
-        }
-        this.broadcastRealmEvent(data);
-        this.#updateItems.push({
-          operation: ('added' in data
-            ? 'add'
-            : 'updated' in data
-              ? 'update'
-              : 'removed') as UpdateItem['operation'],
-          url: tracked.url,
-        });
-        this.drainUpdates();
-      }, subscribeOptions);
-    }
-
-    this.listeningClients.push(writable);
-
-    // TODO: We may need to store something else here to do cleanup to keep
-    // tests consistent
-    waitForClose(writable);
-
-    return response;
+  private async startFileWatcher() {
+    await this.#adapter.subscribe((data) => {
+      let tracked = this.getTrackedWrite(data);
+      if (!tracked || tracked.isTracked) {
+        return;
+      }
+      this.broadcastRealmEvent(data);
+      this.#updateItems.push({
+        operation: ('added' in data
+          ? 'add'
+          : 'updated' in data
+            ? 'update'
+            : 'removed') as UpdateItem['operation'],
+        url: tracked.url,
+      });
+      this.drainUpdates();
+    });
   }
 
   unsubscribe() {

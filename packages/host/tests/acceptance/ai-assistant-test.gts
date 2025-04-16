@@ -1,4 +1,4 @@
-import { click, fillIn, waitFor } from '@ember/test-helpers';
+import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -35,6 +35,7 @@ import {
 } from '../helpers/base-realm';
 
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { getRoomIdForRealmAndUser } from '../helpers/mock-matrix/_utils';
 import { setupApplicationTest } from '../helpers/setup';
 
 async function selectCardFromCatalog(cardId: string) {
@@ -52,6 +53,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [baseRealm.url, testRealmURL],
+    directRooms: [
+      getRoomIdForRealmAndUser(testRealmURL, '@testuser:localhost'),
+      getRoomIdForRealmAndUser(baseRealm.url, '@testuser:localhost'),
+    ],
   });
 
   let { createAndJoinRoom, getRoomState } = mockMatrixUtils;
@@ -183,6 +188,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     const testCard = `${testRealmURL}Person/hassan`;
 
     for (let i = 1; i <= 3; i++) {
@@ -260,7 +266,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
     await click('[data-test-open-ai-assistant]');
-
+    await waitFor(`[data-room-settled]`);
     assert
       .dom('[data-test-llm-select-selected]')
       .hasText(DEFAULT_LLM.split('/')[1]);
@@ -275,7 +281,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-llm-select-item="google/gemini-pro-1.5"]');
     assert.dom('[data-test-llm-select-selected]').hasText('gemini-pro-1.5');
 
-    let roomState = getRoomState('mock_room_1', APP_BOXEL_ACTIVE_LLM, '');
+    let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
     assert.strictEqual(roomState.model, 'google/gemini-pro-1.5');
   });
 
@@ -291,9 +297,10 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
 
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    await click('[data-test-open-ai-assistant]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
 
     createAndJoinRoom({
@@ -302,8 +309,8 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     await click('[data-test-past-sessions-button]');
-    await waitFor("[data-test-enter-room='mock_room_2']");
-    await click('[data-test-enter-room="mock_room_2"]');
+    await waitFor("[data-test-enter-room='mock_room_1']");
+    await click('[data-test-enter-room="mock_room_1"]');
     assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
   });
 
@@ -325,12 +332,46 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
     );
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists();
+    // Move to code mode and a file will be attached
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom('[data-test-autoattached-card]').exists();
+    // Move back to interact mode and check the file is not attached
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists();
+  });
+
+  test('cards are auto-attached in code mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+    );
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-autoattached-file]').doesNotExist();
     assert.dom('[data-test-autoattached-card]').exists();
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-autoattached-file]').exists();
-    assert.dom('[data-test-autoattached-card]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists();
   });
 
   test('can open attach file modal', async function (assert) {
@@ -347,6 +388,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     });
 
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
 
     await click('[data-test-choose-file-btn]');
@@ -411,6 +453,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       ],
     });
     await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-choose-file-btn]').hasText('Attach File');
 
     await click('[data-test-file="person.gts"]');
@@ -430,5 +473,43 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-file="person.gts"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom(`[data-test-autoattached-file]`).hasText('person.gts');
+  });
+
+  test('loads more AI rooms when scrolling', async function (assert) {
+    for (let i = 1; i <= 15; i++) {
+      createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: `AI Room ${i}`,
+      });
+    }
+
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await click('[data-test-past-sessions-button]');
+
+    assert.dom('[data-test-past-sessions]').exists();
+    assert.dom('[data-test-joined-room]').exists({ count: 10 });
+
+    let pastSessionsElement = document.querySelector(
+      '[data-test-past-sessions] .body ul',
+    );
+    if (pastSessionsElement) {
+      pastSessionsElement.scrollTop = pastSessionsElement.scrollHeight;
+    }
+    await waitUntil(
+      () => document.querySelectorAll('[data-test-joined-room]').length === 16,
+    );
+    assert.dom('[data-test-joined-room]').exists({ count: 16 });
   });
 });

@@ -1,4 +1,11 @@
-import { writeFileSync, writeJSONSync, readdirSync, statSync } from 'fs-extra';
+import {
+  writeFileSync,
+  writeJSONSync,
+  readdirSync,
+  statSync,
+  ensureDirSync,
+  copySync,
+} from 'fs-extra';
 import { NodeAdapter } from '../../node-realm';
 import { resolve, join } from 'path';
 import {
@@ -25,7 +32,8 @@ import {
   type QueueRunner,
   type IndexRunner,
 } from '@cardstack/runtime-common';
-import { dirSync } from 'tmp';
+import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms';
+import { dirSync, setGracefulCleanup, type DirResult } from 'tmp';
 import { getLocalConfig as getSynapseConfig } from '../../synapse';
 import { makeFastBootIndexRunner } from '../../fastboot';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -39,6 +47,19 @@ import { Server } from 'http';
 import { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { shimExternals } from '../../lib/externals';
 import { Plan, Subscription, User } from '@cardstack/billing/billing-queries';
+import supertest, { SuperTest, Test } from 'supertest';
+import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import type {
+  IncrementalIndexEventContent,
+  MatrixEvent,
+  RealmEvent,
+  RealmEventContent,
+} from 'https://cardstack.com/base/matrix-event';
+
+const testRealmURL = new URL('http://127.0.0.1:4444/');
+const testRealmHref = testRealmURL.href;
+
+export { testRealmHref, testRealmURL };
 
 export async function waitUntil<T>(
   condition: () => Promise<T>,
@@ -224,6 +245,7 @@ export async function createRealm({
   dbAdapter,
   matrixConfig = testMatrix,
   withWorker,
+  enableFileWatcher = false,
 }: {
   dir: string;
   fileSystem?: Record<string, string | LooseSingleCardDocument>;
@@ -235,6 +257,7 @@ export async function createRealm({
   runner?: QueueRunner;
   dbAdapter: PgAdapter;
   deferStartUp?: true;
+  enableFileWatcher?: boolean;
   // if you are creating a realm  to test it directly without a server, you can
   // also specify `withWorker: true` to also include a worker with your realm
   withWorker?: true;
@@ -249,7 +272,7 @@ export async function createRealm({
     }
   }
 
-  let adapter = new NodeAdapter(dir);
+  let adapter = new NodeAdapter(dir, enableFileWatcher);
   let worker: Worker | undefined;
   if (withWorker) {
     if (!runner) {
@@ -374,6 +397,7 @@ export async function runTestRealmServer({
   matrixConfig,
   matrixURL,
   permissions = { '*': ['read'] },
+  enableFileWatcher = false,
 }: {
   testRealmDir: string;
   realmsRootPath: string;
@@ -386,6 +410,7 @@ export async function runTestRealmServer({
   dbAdapter: PgAdapter;
   matrixURL: URL;
   matrixConfig?: MatrixConfig;
+  enableFileWatcher?: boolean;
 }) {
   let { getRunner: indexRunner, getIndexHTML } = await getFastbootState();
   let worker = new Worker({
@@ -407,6 +432,7 @@ export async function runTestRealmServer({
     matrixConfig,
     publisher,
     dbAdapter,
+    enableFileWatcher,
   });
 
   await testRealm.logInToMatrix();
@@ -426,6 +452,7 @@ export async function runTestRealmServer({
       matrixConfig,
       publisher,
       dbAdapter,
+      enableFileWatcher,
     });
     virtualNetwork.mount(seedRealm.handle);
     realms.push(seedRealm);
@@ -615,4 +642,188 @@ export async function insertJob(
     result: result[0].result,
     priority: result[0].priority,
   };
+}
+
+export function setupMatrixRoom(
+  hooks: NestedHooks,
+  getRealmSetup: () => {
+    testRealm: Realm;
+    testRealmHttpServer: Server;
+    request: SuperTest<Test>;
+    dir: DirResult;
+  },
+) {
+  let matrixClient = new MatrixClient({
+    matrixURL: realmServerTestMatrix.url,
+    username: 'node-test_realm',
+    seed: realmSecretSeed,
+  });
+
+  let testAuthRoomId: string | undefined;
+
+  hooks.beforeEach(async function () {
+    await matrixClient.login();
+    let userId = matrixClient.getUserId()!;
+
+    let response = await getRealmSetup()
+      .request.post('/_server-session')
+      .send(JSON.stringify({ user: userId }))
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json');
+
+    let json = response.body;
+
+    let { joined_rooms: rooms } = await matrixClient.getJoinedRooms();
+
+    if (!rooms.includes(json.room)) {
+      await matrixClient.joinRoom(json.room);
+    }
+
+    await matrixClient.sendEvent(json.room, 'm.room.message', {
+      body: `auth-response: ${json.challenge}`,
+      msgtype: 'm.text',
+    });
+
+    response = await getRealmSetup()
+      .request.post('/_server-session')
+      .send(JSON.stringify({ user: userId, challenge: json.challenge }))
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json');
+
+    testAuthRoomId = json.room;
+
+    await matrixClient.setAccountData('boxel.session-rooms', {
+      [userId]: json.room,
+    });
+  });
+
+  return {
+    matrixClient,
+    getMessagesSince: async function (since: number) {
+      let allMessages = await matrixClient.roomMessages(testAuthRoomId!);
+      let messagesAfterSentinel = allMessages.filter(
+        (m) => m.origin_server_ts > since,
+      );
+
+      return messagesAfterSentinel;
+    },
+  };
+}
+
+export async function waitForRealmEvent(
+  getMessagesSince: (since: number) => Promise<MatrixEvent[]>,
+  since: number,
+) {
+  await waitUntil(async () => {
+    let matrixMessages = await getMessagesSince(since);
+    return matrixMessages.length > 0;
+  });
+}
+
+export function findRealmEvent(
+  events: MatrixEvent[],
+  eventName: string,
+  indexType: string,
+): RealmEvent | undefined {
+  return events.find(
+    (m) =>
+      m.type === APP_BOXEL_REALM_EVENT_TYPE &&
+      m.content.eventName === eventName &&
+      (realmEventIsIndex(m.content) ? m.content.indexType === indexType : true),
+  ) as RealmEvent | undefined;
+}
+
+function realmEventIsIndex(
+  event: RealmEventContent,
+): event is IncrementalIndexEventContent {
+  return event.eventName === 'index';
+}
+
+export function setupPermissionedRealm(
+  hooks: NestedHooks,
+  {
+    permissions,
+    fileSystem,
+    onRealmSetup,
+    subscribeToRealmEvents = false,
+  }: {
+    permissions: RealmPermissions;
+    fileSystem?: Record<string, string | LooseSingleCardDocument>;
+    onRealmSetup?: (args: {
+      dbAdapter: PgAdapter;
+      testRealm: Realm;
+      testRealmPath: string;
+      testRealmHttpServer: Server;
+      request: SuperTest<Test>;
+      dir: DirResult;
+    }) => void;
+    subscribeToRealmEvents?: boolean;
+  },
+) {
+  let testRealmServer: Awaited<ReturnType<typeof runTestRealmServer>>;
+
+  setGracefulCleanup();
+
+  setupDB(hooks, {
+    beforeEach: async (dbAdapter, publisher, runner) => {
+      let dir = dirSync();
+      let testRealmDir = join(dir.name, 'realm_server_1', 'test');
+
+      ensureDirSync(testRealmDir);
+
+      // If a fileSystem is provided, use it to populate the test realm, otherwise copy the default cards
+      if (!fileSystem) {
+        copySync(join(__dirname, '..', 'cards'), testRealmDir);
+      }
+
+      let virtualNetwork = createVirtualNetwork();
+
+      testRealmServer = await runTestRealmServer({
+        virtualNetwork,
+        testRealmDir,
+        realmsRootPath: join(dir.name, 'realm_server_1'),
+        realmURL: testRealmURL,
+        permissions,
+        dbAdapter,
+        runner,
+        publisher,
+        matrixURL,
+        fileSystem,
+        enableFileWatcher: subscribeToRealmEvents,
+      });
+
+      let request = supertest(testRealmServer.testRealmHttpServer);
+
+      onRealmSetup?.({
+        dbAdapter,
+        testRealm: testRealmServer.testRealm,
+        testRealmPath: testRealmServer.testRealmDir,
+        testRealmHttpServer: testRealmServer.testRealmHttpServer,
+        request,
+        dir,
+      });
+    },
+  });
+
+  hooks.afterEach(async function () {
+    testRealmServer.testRealm.unsubscribe();
+    await closeServer(testRealmServer.testRealmHttpServer);
+    resetCatalogRealms();
+  });
+}
+
+export function createJWT(
+  realm: Realm,
+  user: string,
+  permissions: RealmPermissions['user'] = [],
+) {
+  return realm.createJWT(
+    {
+      user,
+      realm: realm.url,
+      permissions,
+      sessionRoom: `test-session-room-for-${user}`,
+    },
+    '7d',
+  );
 }

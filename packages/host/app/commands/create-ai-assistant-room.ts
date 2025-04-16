@@ -31,27 +31,44 @@ export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
     let { matrixService } = this;
     let userId = matrixService.userId;
     let aiBotFullId = matrixService.aiBotUserId;
-    let { room_id: roomId } = await matrixService.createRoom({
-      preset: matrixService.privateChatPreset,
-      invite: [aiBotFullId],
-      name: input.name,
-      topic: undefined,
-      room_alias_name: encodeURIComponent(
-        `${input.name} - ${format(
-          new Date(),
-          "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
-        )} - ${userId}`,
-      ),
-    });
-    await this.matrixService.setPowerLevel(
-      roomId,
-      aiBotFullId,
-      matrixService.aiBotPowerLevel,
-    );
-    await this.matrixService.sendStateEvent(roomId, APP_BOXEL_ACTIVE_LLM, {
-      model: DEFAULT_LLM,
-    });
-    let commandModule = await this.loadCommandModule();
+
+    if (!userId) {
+      throw new Error(
+        'Requires userId to execute CreateAiAssistantRoomCommand',
+      );
+    }
+
+    // Run room creation and module loading in parallel
+    const [roomResult, commandModule] = await Promise.all([
+      await matrixService.createRoom({
+        preset: matrixService.privateChatPreset,
+        invite: [aiBotFullId],
+        name: input.name,
+        room_alias_name: encodeURIComponent(
+          `${input.name} - ${format(
+            new Date(),
+            "yyyy-MM-dd'T'HH:mm:ss.SSSxxx",
+          )} - ${userId}`,
+        ),
+        power_level_content_override: {
+          users: {
+            [userId]: 100,
+            [aiBotFullId]: matrixService.aiBotPowerLevel,
+          },
+        },
+        initial_state: [
+          {
+            type: APP_BOXEL_ACTIVE_LLM,
+            content: {
+              model: DEFAULT_LLM,
+            },
+          },
+        ],
+      }),
+      await this.loadCommandModule(),
+    ]);
+
+    const { room_id: roomId } = roomResult;
     const { CreateAIAssistantRoomResult } = commandModule;
     return new CreateAIAssistantRoomResult({ roomId });
   }

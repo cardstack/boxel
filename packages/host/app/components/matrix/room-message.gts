@@ -1,28 +1,35 @@
 import { fn } from '@ember/helper';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
+
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { tracked, cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
-import { trackedFunction } from 'ember-resources/util/function';
+import { consume } from 'ember-provide-consume-context';
 
 import { Avatar } from '@cardstack/boxel-ui/components';
 
 import { bool } from '@cardstack/boxel-ui/helpers';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
+import {
+  type getCardCollection,
+  GetCardCollectionContextName,
+  markdownToHtml,
+} from '@cardstack/runtime-common';
+import {
+  isHtml,
+  escapeHtmlOutsideCodeBlocks,
+} from '@cardstack/runtime-common/helpers/html';
 
+import consumeContext from '@cardstack/host/helpers/consume-context';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
 import { type RoomResource } from '@cardstack/host/resources/room';
 import CommandService from '@cardstack/host/services/command-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import AiAssistantMessage from '../ai-assistant/message';
 import { aiBotUserId } from '../ai-assistant/panel';
@@ -54,13 +61,25 @@ interface Signature {
 const STREAMING_TIMEOUT_MS = 60000;
 
 export default class RoomMessage extends Component<Signature> {
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
+  @tracked private streamingTimeout = false;
+  @tracked private attachedCardCollection:
+    | ReturnType<getCardCollection>
+    | undefined;
+
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner, args);
 
     this.checkStreamingTimeout.perform();
   }
 
-  @tracked private streamingTimeout = false;
+  private makeCardResources = () => {
+    this.attachedCardCollection = this.getCardCollection(
+      this,
+      () => this.message.attachedCardIds ?? [],
+    );
+  };
 
   private get message() {
     return this.args.roomResource.messages[this.args.index];
@@ -91,20 +110,39 @@ export default class RoomMessage extends Component<Signature> {
     return this.commandService.run.unlinked().perform(command);
   });
 
+  private get messageInHtmlFormat() {
+    // formattedMessage will be sent in two different formats: markdown and html
+    // the formatted message that is sent by ai bot will be in markdown format
+    // and the formatted message that is sent by the user will be in html format
+    // so we need to convert the markdown to html when the message is sent by the ai bot
+    if (
+      !this.message.formattedMessage ||
+      isHtml(this.message.formattedMessage)
+    ) {
+      return this.message.formattedMessage;
+    }
+    return markdownToHtml(
+      escapeHtmlOutsideCodeBlocks(this.message.formattedMessage),
+      {
+        sanitize: false,
+        escapeHtmlInCodeBlocks: true,
+      },
+    );
+  }
+
   <template>
+    {{consumeContext this.makeCardResources}}
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
       This is because if the message resources render asynchronously after the message is already rendered (e.g. card pills),
       it is problematic to ensure the last message sticks to the bottom of the screen.
       In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
       If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
     }}
-    {{#if this.resources}}
+    {{#if this.attachedCardCollection.isLoaded}}
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
-        @formattedMessage={{htmlSafe
-          (markdownToHtml this.message.formattedMessage)
-        }}
+        @formattedMessage={{this.messageInHtmlFormat}}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
@@ -118,7 +156,8 @@ export default class RoomMessage extends Component<Signature> {
           userId=this.message.author.userId
           displayName=this.message.author.displayName
         }}
-        @resources={{this.resources}}
+        @collectionResource={{this.attachedCardCollection}}
+        @files={{this.message.attachedFiles}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
         @retryAction={{@retryAction}}
@@ -136,6 +175,7 @@ export default class RoomMessage extends Component<Signature> {
             @isPending={{@isPending}}
             @monacoSDK={{@monacoSDK}}
             @isError={{bool this.errorMessage}}
+            @isStreaming={{@isStreaming}}
           />
         {{/each}}
       </AiAssistantMessage>
@@ -152,40 +192,7 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service declare commandService: CommandService;
 
-  private loadMessageResources = trackedFunction(this, async () => {
-    let cards: CardDef[] = [];
-    let errors: { id: string; error: Error }[] = [];
-
-    let promises = this.message.attachedResources?.map(async (resource) => {
-      await resource.loaded;
-      if (resource.card) {
-        cards.push(resource.card);
-      } else if (resource.cardError) {
-        let { id, error } = resource.cardError;
-        errors.push({
-          id,
-          error,
-        });
-      }
-    });
-
-    if (promises) {
-      await Promise.all(promises);
-    }
-
-    return {
-      cards: cards.length ? cards : undefined,
-      files: this.message.attachedFiles?.length
-        ? this.message.attachedFiles
-        : undefined,
-      errors: errors.length ? errors : undefined,
-    };
-  });
-
-  private get resources() {
-    return this.loadMessageResources.value;
-  }
-
+  @cached
   private get errorMessage() {
     if (this.message.errorMessage) {
       return this.message.errorMessage;
@@ -193,17 +200,9 @@ export default class RoomMessage extends Component<Signature> {
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';
     }
-    if (!this.resources?.errors) {
+    if (this.attachedCardCollection?.cardErrors.length === 0) {
       return undefined;
     }
-
-    let hasResourceErrors = this.resources.errors.length > 0;
-    if (hasResourceErrors) {
-      return 'Error rendering attached cards.';
-    }
-
-    return this.resources.errors
-      .map((e: { id: string; error: Error }) => `${e.id}: ${e.error.message}`)
-      .join(', ');
+    return 'Error rendering attached cards.';
   }
 }

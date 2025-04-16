@@ -201,11 +201,6 @@ export class VirtualNetwork {
       response.headers.set('Location', finalRedirectionURL);
     }
   }
-
-  createEventSource(url: string) {
-    let mappedUrl = this.resolveURLMapping(url, 'virtual-to-real');
-    return new EventSource(mappedUrl || url);
-  }
 }
 
 export function isUrlLike(moduleIdentifier: string): boolean {
@@ -267,8 +262,7 @@ async function buildRequest(url: string, originalRequest: Request) {
   // the new url and the body as a Uint8Array.
 
   let body = null;
-
-  if (['POST', 'PUT', 'PATCH'].includes(originalRequest.method)) {
+  if (['POST', 'PUT', 'PATCH', 'QUERY'].includes(originalRequest.method)) {
     body = await originalRequest.clone().text();
   }
 

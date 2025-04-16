@@ -8,8 +8,8 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
-import type CardService from '../services/card-service';
 import type RealmServerService from '../services/realm-server';
+import type StoreService from '../services/store';
 
 export class SearchCardsByTypeAndTitleCommand extends HostBaseCommand<
   typeof BaseCommandModule.SearchCardsByTypeAndTitleInput,
@@ -53,12 +53,12 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
   typeof BaseCommandModule.SearchCardsByQueryInput,
   typeof BaseCommandModule.SearchCardsResult
 > {
-  @service declare private cardService: CardService;
+  @service declare private store: StoreService;
   @service declare private realmServer: RealmServerService;
 
   description =
     'Propose a query to search for a card instance filtered by type. \
-  If a card was shared with you, always prioritise search based upon the card that was last shared. \
+  If a card was shared with you, always prioritize search based upon the card that was last shared. \
   If you do not have information on card module and name, do the search using the `_cardType` attribute.';
 
   async getInputType() {
@@ -75,8 +75,7 @@ export class SearchCardsByQueryCommand extends HostBaseCommand<
     let instances = flatMap(
       await Promise.all(
         realmUrls.map(
-          async (realm) =>
-            await this.cardService.search(input.query, new URL(realm)),
+          async (realm) => await this.store.search(input.query, new URL(realm)),
         ),
       ),
     );

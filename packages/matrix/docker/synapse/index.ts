@@ -126,7 +126,7 @@ export async function synapseStart(
   );
   await dockerCreateNetwork({ networkName: 'boxel' });
   const synapseId = await dockerRun({
-    image: 'matrixdotorg/synapse:v1.99.0rc1',
+    image: 'matrixdotorg/synapse:v1.126.0',
     containerName: 'boxel-synapse',
     dockerParams: [
       '--rm',

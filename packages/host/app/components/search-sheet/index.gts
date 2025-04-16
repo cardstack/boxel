@@ -9,6 +9,7 @@ import { tracked } from '@glimmer/tracking';
 
 import onClickOutside from 'ember-click-outside/modifiers/on-click-outside';
 import { modifier } from 'ember-modifier';
+import { consume } from 'ember-provide-consume-context';
 
 import { trackedFunction } from 'ember-resources/util/function';
 
@@ -20,7 +21,8 @@ import {
 
 import { eq } from '@cardstack/boxel-ui/helpers';
 
-import { getCard } from '@cardstack/host/resources/card-resource';
+import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
+
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import RealmServerService from '@cardstack/host/services/realm-server';
@@ -32,6 +34,8 @@ import RecentCardsSection from './recent-cards-section';
 import { getCodeRefFromSearchKey } from './utils';
 
 import type LoaderService from '../../services/loader-service';
+
+import type StoreService from '../../services/store';
 
 export const SearchSheetModes = {
   Closed: 'closed',
@@ -68,12 +72,14 @@ let elementCallback = modifier(
 );
 
 export default class SearchSheet extends Component<Signature> {
-  @tracked private searchKey = '';
-  @tracked cardURL = '';
+  @consume(GetCardContextName) private declare getCard: getCard;
 
-  @service declare operatorModeStateService: OperatorModeStateService;
-  @service declare loaderService: LoaderService;
-  @service declare realmServer: RealmServerService;
+  @tracked private searchKey = '';
+
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare loaderService: LoaderService;
+  @service private declare realmServer: RealmServerService;
+  @service private declare store: StoreService;
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -161,30 +167,34 @@ export default class SearchSheet extends Component<Signature> {
     }
   }
 
-  get isCompact() {
+  private get isCompact() {
     return this.sheetSize === 'prompt';
   }
 
-  get isSearchKeyEmpty() {
+  private get isSearchKeyEmpty() {
     return (this.searchKey?.trim() || '') === '';
   }
 
-  private fetchCardByUrl = trackedFunction(this, async () => {
+  private get searchKeyAsURL() {
     if (!this.searchKeyIsURL) {
-      return;
+      return undefined;
     }
     let cardURL = this.searchKey;
 
     let maybeIndexCardURL = this.realmServer.availableRealmURLs.find(
       (u) => u === cardURL + '/',
     );
-    let cardResource = getCard(this, () => maybeIndexCardURL ?? cardURL, {
-      isLive: () => false,
-    });
+    return maybeIndexCardURL ?? cardURL;
+  }
 
-    await cardResource.loaded;
-    let { card } = cardResource;
-
+  // note that this is a card that is eligible for garbage collection
+  // and is meant for immediate consumption. it's not safe to pass this
+  // as state for another component.
+  private fetchCardByUrl = trackedFunction(this, async () => {
+    if (!this.searchKeyAsURL) {
+      return;
+    }
+    let card = await this.store.get(this.searchKeyAsURL);
     return {
       card,
     };
@@ -243,7 +253,7 @@ export default class SearchSheet extends Component<Signature> {
             @url={{this.searchKey}}
             @handleCardSelect={{this.handleCardSelect}}
             @isCompact={{this.isCompact}}
-            @fetchCardByUrlResult={{this.fetchCardByUrlResult}}
+            @searchKeyAsURL={{this.searchKeyAsURL}}
           />
         {{else if this.isSearchKeyEmpty}}
           {{! nothing }}

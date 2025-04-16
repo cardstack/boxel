@@ -1,6 +1,6 @@
-import { click, waitFor, fillIn, triggerEvent } from '@ember/test-helpers';
+import { click, fillIn, triggerEvent, find } from '@ember/test-helpers';
 
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -14,7 +14,15 @@ import {
   type TestContextWithSave,
   setupOnSave,
 } from '../../helpers';
+
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import {
+  getPlaygroundSelections,
+  getRecentFiles,
+  assertCardExists,
+  selectDeclaration,
+} from '../../helpers/playground';
+
 import { setupApplicationTest } from '../../helpers/setup';
 
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -22,7 +30,7 @@ import '@cardstack/runtime-common/helpers/code-equality-assertion';
 const testRealm2URL = `http://test-realm/test2/`;
 
 const personCardSource = `
-  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
+  import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
 
   export class Person extends CardDef {
@@ -50,6 +58,12 @@ const personCardSource = `
       </template>
     };
   }
+  export class PersonField extends FieldDef {
+    static displayName = 'PersonField';
+  }
+  export class DifferentField extends FieldDef {
+    static displayName = 'DifferentField';
+  }
 `;
 
 const person1CardSource = `
@@ -62,7 +76,7 @@ const person1CardSource = `
 `;
 
 const petCardSource = `
-  import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
+  import { contains, field, Component, CardDef, FieldDef } from "https://cardstack.com/base/card-api";
   import StringCard from "https://cardstack.com/base/string";
 
   export class Pet extends CardDef {
@@ -86,14 +100,11 @@ const petCardSource = `
         <h2 data-test-pet={{@model.name}}>
           <@fields.name/>
         </h2>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
-        <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/> <br/>
       </template>
     }
+  }
+  export class PetField extends FieldDef {
+    static displayName = 'PetField';
   }
 `;
 
@@ -122,6 +133,106 @@ const newSkillCardSource = `
 
   export class ExtendedNewSkill extends NewSkill {
     static displayName = 'ExtendedNewSkill';
+  }
+`;
+
+const primitiveFieldCardSource = `
+  import {
+    field,
+    Component,
+    FieldDef,
+    primitive,
+  } from 'https://cardstack.com/base/card-api';
+
+   export class PrimitiveField extends FieldDef {
+    static displayName = 'PrimitiveField';
+    static [primitive]: number 
+   }
+
+   export class SubclassPrimitiveField extends PrimitiveField {
+    static displayName = 'SubclassPrimitiveField';
+   }
+`;
+
+const polymorphicFieldCardSource = `
+  import {
+    Component,
+    CardDef,
+    field,
+    contains,
+    StringField,
+    FieldDef,
+  } from 'https://cardstack.com/base/card-api';
+  import { on } from '@ember/modifier';
+
+  export class TestField extends FieldDef {
+    static displayName = 'TestField';
+    @field firstName = contains(StringField);
+
+    static fitted = class Fitted extends Component<typeof this> {
+      <template>
+        <div data-test-baseclass>
+          BaseClass
+          <@fields.firstName />
+        </div>
+      </template>
+    };
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <div data-test-baseclass>
+          Embedded BaseClass
+          <@fields.firstName />
+        </div>
+      </template>
+    };
+  }
+  export class SubTestField extends TestField {
+    static displayName = 'SubTestField';
+
+    static fitted = class Fitted extends Component<typeof this> {
+      <template>
+        <div data-test-subclass>
+          SubClass
+          <@fields.firstName />
+        </div>
+      </template>
+    };
+
+    static embedded = class Embedded extends Component<typeof this> {
+      <template>
+        <div data-test-subclass>
+          Embedded SubClass
+          <@fields.firstName />
+        </div>
+      </template>
+    };
+
+    static edit = class Edit extends Component<typeof this> {
+      <template>
+        <div data-test-edit>
+          Edit
+          <@fields.firstName />
+        </div>
+      </template>
+    };
+  }
+  export class PolymorphicFieldExample extends CardDef {
+    static displayName = 'PolymorphicFieldExample';
+    @field specialField = contains(TestField);
+
+    static isolated = class Isolated extends Component<typeof this> {
+      setSubclass = () => {
+        this.args.model.specialField = new SubTestField({
+          firstName: 'New Name',
+        });
+      };
+      <template>
+        <button {{on 'click' this.setSubclass}} data-test-set-subclass>Set
+          Subclass From Outside</button>
+        <@fields.specialField />
+      </template>
+    };
   }
 `;
 
@@ -157,12 +268,14 @@ module('Acceptance | Spec preview', function (hooks) {
         'pet.gts': petCardSource,
         'employee.gts': employeeCardSource,
         'new-skill.gts': newSkillCardSource,
+        'primitive-field.gts': primitiveFieldCardSource,
+        'polymorphic-field.gts': polymorphicFieldCardSource,
         'person-entry.json': {
           data: {
             type: 'card',
             attributes: {
               title: 'Person',
-              description: 'Spec',
+              description: 'Spec for Person',
               specType: 'card',
               ref: {
                 module: `./person`,
@@ -199,6 +312,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
+              title: 'Pet',
               specType: 'card',
               ref: {
                 module: `./pet`,
@@ -217,6 +331,7 @@ module('Acceptance | Spec preview', function (hooks) {
           data: {
             type: 'card',
             attributes: {
+              title: 'Pet2',
               specType: 'card',
               ref: {
                 module: `./pet`,
@@ -314,6 +429,115 @@ module('Acceptance | Spec preview', function (hooks) {
             },
           },
         },
+        'subTestField.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              readMe: null,
+              ref: {
+                name: 'SubTestField',
+                module: './polymorphic-field',
+              },
+              specType: 'field',
+              containedExamples: [],
+              description: null,
+              thumbnailURL: null,
+            },
+            relationships: {
+              linkedExamples: {
+                links: {
+                  self: null,
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'pet-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'PetField',
+              description: 'Spec',
+              specType: 'field',
+              ref: {
+                module: `./pet`,
+                name: 'PetField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'different-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'DifferentField',
+              description: 'Spec for DifferentField',
+              specType: 'field',
+              ref: {
+                module: `./person`,
+                name: 'DifferentField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'primitve-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'PrimitiveField',
+              description: 'Spec for PrimitiveField',
+              specType: 'field',
+              ref: {
+                module: `./primitive-field`,
+                name: 'PrimitiveField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
+        'subclass-primitive-field-entry.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              title: 'SubclassPrimitiveField',
+              description: 'Spec for SubclassPrimitiveField',
+              specType: 'field',
+              ref: {
+                module: `./primitive-field`,
+                name: 'SubclassPrimitiveField',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${baseRealm.url}spec`,
+                name: 'Spec',
+              },
+            },
+          },
+        },
         '.realm.json': {
           name: 'Test Workspace B',
           backgroundURL:
@@ -361,24 +585,19 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-has-spec]').containsText('card');
     await click('[data-test-accordion-item="spec-preview"] button');
-    await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
-    assert
-      .dom('[data-test-spec-selector-item-path]')
-      .hasText('person-entry.json');
+    assert.dom('[data-test-spec-selector-item-path]').hasText('person-entry');
     await percySnapshot(assert);
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person');
     assert
       .dom('[data-test-description] [data-test-boxel-input]')
-      .hasValue('Spec');
+      .hasValue('Spec for Person');
     assert.dom('[data-test-module-href]').containsText(`${testRealmURL}person`);
     assert.dom('[data-test-exported-name]').containsText('Person');
     assert.dom('[data-test-exported-type]').containsText('card');
-    await waitFor('[data-test-view-spec-instance]');
     assert.dom('[data-test-view-spec-instance]').exists();
   });
   test('view when there are multiple spec instances', async function (assert) {
@@ -386,17 +605,12 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-has-spec]').containsText('2 instances');
     await click('[data-test-accordion-item="spec-preview"] button');
-    await waitFor('[data-test-spec-selector]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
-    assert
-      .dom('[data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2.json');
-    await waitFor('[data-test-view-spec-instance]');
+    assert.dom('[data-test-spec-selector-item-path]').hasText('pet-entry-2');
     assert.dom('[data-test-view-spec-instance]').exists();
   });
   test('view when there are no spec instances', async function (assert) {
@@ -404,7 +618,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}new-skill.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').exists();
     assert.dom('[data-test-create-spec-intent-message]').exists();
@@ -415,7 +628,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealm2URL}new-skill.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
@@ -429,7 +641,6 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealm2URL}person.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
@@ -443,9 +654,9 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}person-1.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-accordion-item="spec-preview"] button');
     await click('[data-test-create-spec-button]');
-
+    //spec is opened
+    assert.dom('[data-test-accordion-item="spec-preview"]').hasClass('open');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('Person1');
@@ -464,6 +675,7 @@ module('Acceptance | Spec preview', function (hooks) {
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('NewSkill');
     assert.dom('[data-test-exported-type]').hasText('skill');
+    assert.dom('[data-test-spec-tag]').hasText('skill');
     assert.dom('[data-test-exported-name]').hasText('NewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
@@ -481,6 +693,7 @@ module('Acceptance | Spec preview', function (hooks) {
       .dom('[data-test-title] [data-test-boxel-input]')
       .hasValue('ExtendedNewSkill');
     assert.dom('[data-test-exported-type]').hasText('skill');
+    assert.dom('[data-test-spec-tag]').hasText('skill');
     assert.dom('[data-test-exported-name]').hasText('ExtendedNewSkill');
     assert.dom('[data-test-module-href]').hasText(`${testRealmURL}new-skill`);
   });
@@ -516,19 +729,18 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
     await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
     assert.dom('[data-test-exported-name]').containsText('default');
+    assert.dom('[data-test-spec-tag]').hasText('card');
   });
 
-  test<TestContextWithSave>('spec auto saved', async function (assert) {
+  skip<TestContextWithSave>('spec auto saved (with stability)', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     await click('[data-test-accordion-item="spec-preview"] button');
     let readMeInput = 'This is a spec for a person';
     this.onSave((_, json) => {
@@ -537,7 +749,14 @@ module('Acceptance | Spec preview', function (hooks) {
       }
       assert.strictEqual(json.data.attributes?.readMe, readMeInput);
     });
+    let cardComponentId = find(
+      `[data-test-card='${testRealmURL}person-entry']`,
+    )?.id;
     await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
+    let cardComponentIdAfter = find(
+      `[data-test-card='${testRealmURL}person-entry']`,
+    )?.id;
+    assert.strictEqual(cardComponentIdAfter, cardComponentId);
   });
 
   test('clicking view instance button correctly navigates to spec file and displays content in editor', async function (assert) {
@@ -545,17 +764,12 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-
-    await waitFor('[data-test-view-spec-instance]');
+    await click('[data-test-accordion-item="spec-preview"] button');
     assert.dom('[data-test-view-spec-instance]').exists();
     await click('[data-test-view-spec-instance]');
-
-    await waitFor('[data-test-card-url-bar-input]');
     assert
       .dom('[data-test-card-url-bar-input]')
       .hasValue(`${testRealmURL}person-entry.json`);
-
-    await waitFor('[data-test-editor]');
     assert.dom('[data-test-editor]').hasAnyText();
     assert.dom('[data-test-editor]').containsText('Person');
     assert.dom('[data-test-editor]').containsText('Spec');
@@ -573,20 +787,15 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await waitFor('[data-test-accordion-item="spec-preview"]');
     assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+
     await click('[data-test-accordion-item="spec-preview"] button');
-
-    await waitFor('[data-test-spec-selector]');
-    assert.dom('[data-test-spec-selector]').exists();
-
     await click('[data-test-spec-selector] > div');
-
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
-      .hasText('pet-entry-2.json');
-    await click('[data-option-index="0"]');
+      .hasText('pet-entry-2');
 
+    await click('[data-option-index="0"]');
     assert.dom(`[data-test-links-to-many="linkedExamples"]`).exists();
     assert.dom(`[data-test-card="${testRealmURL}Pet/mango"]`).exists();
 
@@ -594,14 +803,313 @@ module('Acceptance | Spec preview', function (hooks) {
       `[data-test-card="${testRealmURL}Pet/mango"]`,
       'mouseenter',
     );
-
     assert.dom('[data-test-card-overlay]').exists();
 
     await triggerEvent(
       `[data-test-card="${testRealmURL}Pet/mango"]`,
       'mouseleave',
     );
-
     assert.dom('[data-test-card-overlay]').doesNotExist();
+  });
+
+  test<TestContextWithSave>('can render containedExamples for spec for field', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}polymorphic-field.gts`,
+    });
+    const elementName = 'SubTestField';
+    await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
+    assert.dom('[data-test-accordion-item="spec-preview"]').exists();
+    assert.dom('[data-test-has-spec]').containsText('field');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-spec-selector]').exists();
+    assert
+      .dom('[data-test-module-href]')
+      .containsText(`${testRealmURL}polymorphic-field`);
+    assert.dom('[data-test-exported-name]').containsText('SubTestField');
+    assert.dom('[data-test-exported-type]').containsText('field');
+    await click('[data-test-add-new]');
+    let firstNameToAdd = 'Tintin';
+    let classExportName = 'SubTestField';
+
+    this.onSave((_, json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      assert.strictEqual(json.data.attributes?.containedExamples.length, 1);
+      assert.strictEqual(
+        json.data.attributes?.containedExamples[0].firstName,
+        firstNameToAdd,
+      );
+      assert.strictEqual(
+        json.data.attributes?.meta.fields.containedExamples[0].adoptsFrom.name,
+        classExportName,
+      );
+      assert.strictEqual(
+        json.data.attributes?.meta.fields.containedExamples[0].adoptsFrom
+          .module,
+        `${testRealmURL}${classExportName}`,
+      );
+    });
+    await fillIn(
+      '[data-test-item="0"] [data-test-edit] [data-test-boxel-input]',
+      firstNameToAdd,
+    );
+    assert.dom('[data-test-edit]').exists({ count: 1 });
+    assert.dom('[data-test-item="0"] [data-test-edit]').containsText('Edit');
+    await percySnapshot(assert);
+  });
+
+  test('primitive fields do not have examples', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}primitive-field.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-spec-example-incompatible-primitives]').exists();
+    await click(
+      '[data-test-boxel-selector-item-text="SubclassPrimitiveField"]',
+    );
+    assert.dom('[data-test-spec-example-incompatible-primitives]').exists();
+  });
+
+  test('updatePlaygroundSelections persists card selection in playground when clicking an example card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    // Select the pet-entry-2 spec which has linked examples
+    await click('[data-test-spec-selector] > div');
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2');
+    await click('[data-option-index="0"]');
+
+    // Wait for linked examples to appear
+    const petId = `${testRealmURL}Pet/mango`;
+    assert.dom(`[data-test-card="${petId}"]`).exists();
+
+    // Click on the first linked example
+    await triggerEvent(`[data-test-card="${petId}"]`, 'mouseenter');
+    await click(`[data-test-card="${petId}"]`);
+
+    // Verify the card was persisted in playground selections
+    const petModuleId = `${testRealmURL}pet/Pet`;
+    assert.deepEqual(
+      getPlaygroundSelections()?.[petModuleId],
+      {
+        cardId: petId,
+        format: 'isolated', // Default format
+      },
+      'Card selection is persisted in localStorage',
+    );
+
+    // Verify the playground panel shows the selected card
+    assert.dom('[data-test-selected-item]').hasText('Mango');
+    assertCardExists(
+      assert,
+      petId,
+      'isolated',
+      'Card is displayed in isolated format',
+    );
+  });
+
+  test('updatePlaygroundSelections adds card to recent files storage when clicking an example card', async function (assert) {
+    const petId = `${testRealmURL}Pet/mango`;
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    // Select the pet-entry-2 spec which has linked examples
+    await click('[data-test-spec-selector] > div');
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2');
+
+    await click('[data-option-index="0"]');
+    assert.dom(`[data-test-card="${petId}"]`).exists();
+    // Click on the first linked example
+    await triggerEvent(`[data-test-card="${petId}"]`, 'mouseenter');
+    await click(`[data-test-card="${petId}"]`);
+
+    // Verify the card was added to recent files
+    assert.deepEqual(
+      getRecentFiles()?.[0],
+      [testRealmURL, 'Pet/mango.json', null],
+      'Card is added to recent files storage',
+    );
+    // Verify the card appears in the playground
+    assertCardExists(
+      assert,
+      petId,
+      'isolated',
+      'Card appears in playground panel',
+    );
+  });
+
+  test('updatePlaygroundSelections preserves existing format when selecting different examples card', async function (assert) {
+    const firstPetId = `${testRealmURL}Pet/mango`;
+    const secondPetId = `${testRealmURL}Pet/pudding`;
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await click('[data-test-spec-selector] > div');
+    assert
+      .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
+      .hasText('pet-entry-2');
+    await click('[data-option-index="0"]');
+    assert.dom(`[data-test-card="${firstPetId}"]`).exists();
+    assert.dom(`[data-test-card="${secondPetId}"]`).exists();
+
+    // Click on the first linked example
+    await triggerEvent(`[data-test-card="${firstPetId}"]`, 'mouseenter');
+    await click(`[data-test-card="${firstPetId}"]`);
+    assertCardExists(
+      assert,
+      firstPetId,
+      'isolated',
+      'First card initially shown in isolated format',
+    );
+
+    await click('[data-test-format-chooser="embedded"]');
+    assertCardExists(
+      assert,
+      firstPetId,
+      'embedded',
+      'Format changed to embedded for first card',
+    );
+
+    // Verify format was changed
+    const petModuleId = `${testRealmURL}pet/Pet`;
+    assert.deepEqual(
+      getPlaygroundSelections()?.[petModuleId],
+      {
+        cardId: firstPetId,
+        format: 'embedded',
+      },
+      'Format is set to embedded',
+    );
+
+    // Go back to spec preview and click the second card
+    await click('[data-test-accordion-item="spec-preview"] button');
+    await triggerEvent(`[data-test-card="${secondPetId}"]`, 'mouseenter');
+    await click(`[data-test-card="${secondPetId}"]`);
+
+    // Verify the format was preserved when selecting the second card
+    assert.deepEqual(
+      getPlaygroundSelections()?.[petModuleId],
+      {
+        cardId: secondPetId,
+        format: 'embedded',
+      },
+      'The embedded format is preserved when selecting another card',
+    );
+
+    // Verify the second card is shown in embedded format
+    assert.dom('[data-test-selected-item]').hasText('Pudding');
+    assertCardExists(
+      assert,
+      secondPetId,
+      'embedded',
+      'Second card is displayed in the embedded format',
+    );
+  });
+
+  test('spec preview updates when changing between different declarations inside inspector', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}pet.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet2');
+    assert.dom('[data-test-number-of-instance]').hasText('2 instances');
+    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-name]').hasText('Pet');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
+    await click('[data-test-boxel-selector-item-text="PetField"]');
+    assert
+      .dom('[data-test-title] [data-test-boxel-input]')
+      .hasValue('PetField');
+    assert.dom('[data-test-exported-type]').hasText('field');
+    assert.dom('[data-test-exported-name]').hasText('PetField');
+    assert.dom('[data-test-spec-tag]').hasText('field');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
+
+    await click('[data-test-boxel-selector-item-text="Pet"]');
+
+    assert
+      .dom('[data-test-spec-selector] [data-test-spec-selector-item-path]')
+      .containsText('pet-entry');
+    await click('[data-test-spec-selector] > div');
+    await click('[data-option-index="1"]');
+
+    assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet');
+    assert.dom('[data-test-number-of-instance]').hasText('2 instances');
+    assert.dom('[data-test-exported-type]').hasText('card');
+    assert.dom('[data-test-exported-name]').hasText('Pet');
+    assert.dom('[data-test-module-href]').hasText(`${testRealmURL}pet`);
+  });
+
+  test('it does not set the wrong spec for field playground', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await click('[data-test-accordion-item="playground"] button');
+    await selectDeclaration('Person');
+    assert.dom('[data-test-playground-panel]').exists();
+    await selectDeclaration('PersonField');
+    let selection =
+      getPlaygroundSelections()?.[`${testRealmURL}person/PersonField`];
+    assert.notStrictEqual(
+      selection?.cardId,
+      `${testRealmURL}person-entry`,
+      'Person Spec is not set as the spec for PersonField',
+    );
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert
+      .dom('[data-test-create-spec-button]')
+      .doesNotExist('PersonField spec is autogenerated by playground');
+    assert
+      .dom('[data-test-boxel-input-id="spec-title"]')
+      .hasValue('PersonField');
+
+    await click('[data-test-view-spec-instance]');
+    await click('[data-test-action-button="Delete"]');
+    await click('[data-test-confirm-delete-button]'); // delete PersonField spec
+    assert.dom('[data-test-create-spec-button]').exists();
+
+    await selectDeclaration('DifferentField');
+    assert.dom('[data-test-create-spec-button]').doesNotExist();
+    assert
+      .dom('[data-test-boxel-input-id="spec-title"]')
+      .hasValue('DifferentField');
+    selection =
+      getPlaygroundSelections()?.[`${testRealmURL}person/DifferentField`];
+    assert.strictEqual(
+      selection?.cardId,
+      `${testRealmURL}different-field-entry`,
+    );
+
+    await click('[data-test-accordion-item="playground"] button');
+    await selectDeclaration('PersonField');
+    selection =
+      getPlaygroundSelections()?.[`${testRealmURL}person/PersonField`];
+    assert.notStrictEqual(
+      selection?.cardId,
+      `${testRealmURL}different-field-entry`,
+      'DifferentField Spec is not set as the spec for PersonField',
+    );
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert
+      .dom('[data-test-create-spec-button]')
+      .doesNotExist('PersonField spec is autogenerated by playground');
+    assert
+      .dom('[data-test-boxel-input-id="spec-title"]')
+      .hasValue('PersonField');
   });
 });

@@ -21,7 +21,7 @@ export function createResponse({
       }),
       vary: 'Accept',
       'Access-Control-Expose-Headers':
-        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,Authorization',
+        'X-Boxel-Realm-Url,X-Boxel-Realm-Public-Readable,Authorization,Cache-Control,ETag',
     },
   });
 }

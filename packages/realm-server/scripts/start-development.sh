@@ -18,6 +18,7 @@ NODE_ENV=development \
   REALM_SECRET_SEED="shhh! it's a secret" \
   MATRIX_URL=http://localhost:8008 \
   REALM_SERVER_MATRIX_USERNAME=realm_server \
+  ENABLE_FILE_WATCHER=true \
   ts-node \
   --transpileOnly main \
   --port=4201 \
@@ -43,7 +44,7 @@ NODE_ENV=development \
   --fromUrl='http://localhost:4201/seed/' \
   --toUrl='http://localhost:4201/seed/' \
   \
-  --path='../catalog-realm' \
+  --path='../catalog-realm-dev' \
   --username='catalog_realm' \
   --fromUrl='http://localhost:4201/catalog/' \
   --toUrl='http://localhost:4201/catalog/'

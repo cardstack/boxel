@@ -9,9 +9,13 @@ import { tracked } from '@glimmer/tracking';
 
 import { enqueueTask } from 'ember-concurrency';
 
+import { consume } from 'ember-provide-consume-context';
+
 import {
   Deferred,
   RealmPaths,
+  GetCardContextName,
+  type getCard,
   type CodeRef,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
@@ -26,12 +30,11 @@ import CardEditor from './card-editor';
 import ModalContainer from './modal-container';
 
 import type CardService from '../services/card-service';
-
-// Is this actually still being used in our app?? or can we remove it?
+import type StoreService from '../services/store';
 
 export default class CreateCardModal extends Component {
   <template>
-    {{#let this.currentRequest.card as |card|}}
+    {{#let this.currentRequest.cardResource.card as |card|}}
       {{#if card}}
         <ModalContainer
           @title='Create New Card'
@@ -46,11 +49,13 @@ export default class CreateCardModal extends Component {
     {{/let}}
   </template>
 
-  @service declare cardService: CardService;
-  @tracked currentRequest:
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @service private declare cardService: CardService;
+  @service private declare store: StoreService;
+  @tracked private currentRequest:
     | {
-        card: CardDef;
-        deferred: Deferred<CardDef | undefined>;
+        cardResource: ReturnType<getCard>;
+        deferred: Deferred<string | undefined>;
       }
     | undefined = undefined;
 
@@ -62,26 +67,28 @@ export default class CreateCardModal extends Component {
     });
   }
 
-  async create<T extends CardDef>(
+  async create(
     ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: {
       realmURL?: URL;
       doc?: LooseSingleCardDocument;
     },
-  ): Promise<undefined | T> {
-    return (await this._create.perform(ref, relativeTo, opts)) as T | undefined;
+  ): Promise<undefined | string> {
+    return (await this._create.perform(ref, relativeTo, opts)) as
+      | string
+      | undefined;
   }
 
   private _create = enqueueTask(
-    async <T extends CardDef>(
+    async (
       ref: CodeRef,
       relativeTo: URL | undefined, // this relativeTo should be the spec ID that the CodeRef comes from
       opts?: {
         doc?: LooseSingleCardDocument;
         realmURL?: URL;
       },
-    ) => {
+    ): Promise<string | undefined> => {
       let cardModule = new URL(moduleFrom(ref), relativeTo);
       // we make the code ref use an absolute URL for safety in
       // the case it's being created in a different realm than where the card
@@ -100,26 +107,27 @@ export default class CreateCardModal extends Component {
           },
         },
       };
-      this.currentRequest = {
-        card: await this.cardService.createFromSerialized(
-          doc.data,
-          doc,
-          relativeTo,
-        ),
-        deferred: new Deferred(),
-      };
-      let card = await this.currentRequest.deferred.promise;
-      if (card) {
-        return card as T;
-      } else {
-        return undefined;
+
+      let maybeUrl = await this.store.create(doc, relativeTo);
+      if (typeof maybeUrl === 'string') {
+        let url = maybeUrl;
+        let cardResource = this.getCard(this, () => url);
+        this.currentRequest = {
+          cardResource,
+          deferred: new Deferred(),
+        };
+        return await this.currentRequest.deferred.promise;
       }
+      console.error(
+        `could not create card: ${JSON.stringify(maybeUrl, null, 2)}`,
+      );
+      return undefined;
     },
   );
 
   @action save(card?: CardDef): void {
     if (this.currentRequest) {
-      this.currentRequest.deferred.fulfill(card);
+      this.currentRequest.deferred.fulfill(card?.id);
       this.currentRequest = undefined;
     }
   }
