@@ -7,7 +7,6 @@ import { restartableTask, task } from 'ember-concurrency';
 import { consume } from 'ember-provide-consume-context';
 
 import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { bool } from '@cardstack/boxel-ui/helpers';
 
 import {
   internalKeyFor,
@@ -103,7 +102,6 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
-  @tracked private cardCreationError: CardErrorJSONAPI | undefined;
 
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
@@ -129,7 +127,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
-    return this.cardCreationError ?? this.cardResource?.cardError;
+    return this.cardResource?.cardError;
   }
 
   private get specCard(): Spec | undefined {
@@ -338,8 +336,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   });
 
   @action private createNew() {
-    this.args.isFieldDef && this.card
-      ? this.createNewField.perform(this.card as Spec)
+    this.args.isFieldDef && this.specCard
+      ? this.createNewField.perform(this.specCard)
       : this.createNewCard.perform();
   }
 
@@ -392,7 +390,13 @@ export default class PlaygroundPanel extends Component<Signature> {
     );
     if (typeof maybeId !== 'string') {
       let error = maybeId;
-      this.cardCreationError = error;
+      this.cardResource = {
+        id: undefined,
+        card: undefined,
+        cardError: error,
+        isLoaded: false,
+        autoSaveState: undefined,
+      };
     } else {
       let cardId = maybeId;
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
@@ -457,7 +461,6 @@ export default class PlaygroundPanel extends Component<Signature> {
           createNewIsRunning=this.createNewIsRunning
           isFieldDef=@isFieldDef
           cardError=this.cardError
-          cardCreationError=(bool this.cardCreationError)
         )
       )
     }}

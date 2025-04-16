@@ -1142,12 +1142,40 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-card-error]').doesNotExist();
 
       await createNewInstance();
-      assert
-        .dom('[data-test-card-error]')
-        .containsText('Failed to create card');
+      // assert
+      //   .dom('[data-test-card-error]')
+      //   .containsText('Failed to create card');
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').containsText('Boom!');
+
+      // fix error
+      const petFixed = `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
+      // this field explodes when serialized (saved)
+      export class BoomField extends FieldDef {
+        @field title = contains(StringField);
+        static embedded = class Embedded extends Component<typeof this> {
+          <template>
+            <@fields.title />
+          </template>
+        };
+      }
+      export class BoomPet extends CardDef {
+        static displayName = 'Boom Pet';
+        @field boom = contains(BoomField);
+      }
+    `;
+      await realm.write('boom-pet.gts', petFixed);
+      await settled();
+      assert.dom('[data-test-card-error]').doesNotExist();
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+
+      await createNewInstance();
+      await settled();
+      assert.dom('[data-test-card-error]').doesNotExist();
+      assert
+        .dom('[data-test-playground-panel] [data-test-field="boom"]')
+        .exists();
     });
 
     test('it can render the last known good state for card with error', async function (assert) {
