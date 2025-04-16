@@ -123,21 +123,20 @@ class TableView extends GlimmerComponent<{
 
   // explicitly setting this to @tracked since there is
   // a possibility it might be initialized as undefined
-  @tracked private cardResources = !this.args.context
-    ? []
-    : this.args.cards.map((c) => this.args.context!.getCard(this, () => c.url));
+  @tracked private cardCollection = this.args.context?.getCardCollection(
+    this,
+    () => this.args.cards.map((c) => c.url),
+  );
+
   private get isLoaded() {
-    return this.cardResources.map((r) => r.isLoaded).every((i) => i);
+    return this.cardCollection?.isLoaded;
   }
 
   get tableData() {
-    if (this.cardResources.length === 0) {
+    if (!this.cardCollection || this.cardCollection.cards.length === 0) {
       return;
     }
-    if (this.cardResources.find((r) => !r.card)) {
-      return;
-    }
-    let exampleCard = this.cardResources[0].card;
+    let exampleCard = this.cardCollection.cards[0];
     let headers: string[] = [];
     for (let fieldName in exampleCard) {
       if (
@@ -151,10 +150,10 @@ class TableView extends GlimmerComponent<{
     }
     headers.sort();
 
-    let rows = this.cardResources.map((cardResource) => {
+    let rows = this.cardCollection.cards.map((card) => {
       let row: string[] = [];
       for (let header of headers) {
-        row.push((cardResource.card as any)[header]);
+        row.push((card as any)[header]);
       }
       return row;
     });

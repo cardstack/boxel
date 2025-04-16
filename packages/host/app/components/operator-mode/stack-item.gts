@@ -40,11 +40,13 @@ import {
   type Permissions,
   type getCard,
   type getCards,
+  type getCardCollection,
   cardTypeDisplayName,
   PermissionsContextName,
   RealmURLContextName,
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
   Deferred,
   cardTypeIcon,
   CommandContext,
@@ -115,6 +117,8 @@ type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
 export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
 
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
@@ -248,6 +252,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       commandContext: this.args.commandContext,
       getCard: this.getCard,
       getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
       store: this.store,
     };
   }

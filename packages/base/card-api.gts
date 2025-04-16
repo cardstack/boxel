@@ -38,6 +38,8 @@ import {
   uuidv4,
   realmURL,
   localId,
+  formats,
+  type Format,
   type Meta,
   type CardFields,
   type Relationship,
@@ -50,6 +52,7 @@ import {
   type ResolvedCodeRef,
   type getCard,
   type getCards,
+  type getCardCollection,
   type Store,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -104,14 +107,7 @@ export type FieldsTypeFor<T extends BaseDef> = {
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
-export const formats: Format[] = [
-  'isolated',
-  'embedded',
-  'fitted',
-  'edit',
-  'atom',
-];
-export type Format = 'isolated' | 'embedded' | 'fitted' | 'edit' | 'atom';
+export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 export type FieldFormats = {
   ['fieldDef']: Format;
@@ -152,6 +148,7 @@ export interface CardContext<T extends CardDef = CardDef> {
   prerenderedCardSearchComponent: any;
   getCard: getCard<T>;
   getCards: getCards;
+  getCardCollection: getCardCollection;
   store: Store;
 }
 

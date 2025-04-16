@@ -13,6 +13,7 @@ import RouteTemplate from 'ember-route-template';
 import {
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
 import AiAssistantApplyButtonUsage from '@cardstack/host/components/ai-assistant/apply-button/usage';
@@ -24,6 +25,7 @@ import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
 import PillMenuUsage from '@cardstack/host/components/pill-menu/usage';
 import SearchSheetUsage from '@cardstack/host/components/search-sheet/usage';
 
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
@@ -48,9 +50,15 @@ class HostFreestyleComponent extends Component<HostFreestyleSignature> {
   }
 
   @provide(GetCardsContextName)
-  // @ts-ignore "getCard" is declared but not used
+  // @ts-ignore "getCards" is declared but not used
   private get getCards() {
     return getSearch;
+  }
+
+  @provide(GetCardCollectionContextName)
+  // @ts-ignore "getCardCollection" is declared but not used
+  private get getCardCollection() {
+    return getCardCollection;
   }
 
   get usageComponents() {

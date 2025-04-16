@@ -10,9 +10,11 @@ import {
   CardURLContextName,
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
   ResolvedCodeRef,
   type getCard,
   type getCards,
+  type getCardCollection,
 } from '@cardstack/runtime-common';
 
 import type StoreService from '@cardstack/host/services/store';
@@ -40,6 +42,8 @@ interface Signature {
 export default class Preview extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
   @service private declare store: StoreService;
 
   @provide(DefaultFormatsContextName)
@@ -57,6 +61,7 @@ export default class Preview extends Component<Signature> {
       prerenderedCardSearchComponent: PrerenderedCardSearch,
       getCard: this.getCard,
       getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
       store: this.store,
       ...this.args.cardContext,
     };
