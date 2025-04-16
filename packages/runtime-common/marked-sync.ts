@@ -1,15 +1,6 @@
 import { marked } from 'marked';
 import { sanitizeHtml } from './dompurify-runtime';
-
-// Helper function to escape HTML content
-function escapeHtml(unsafe: string): string {
-  return unsafe
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
+import { escapeHtml } from './helpers/html';
 
 export function markedSync(
   markdown: string,

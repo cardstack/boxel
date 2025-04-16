@@ -432,9 +432,6 @@ export default class CreateFileModal extends Component<Signature> {
         this.defaultSpecResource = this.getCard(
           this,
           () => `${baseRealm.url}${specEntryPath}`,
-          {
-            isLive: false,
-          },
         );
       }
       let url = await this.currentRequest.newFileDeferred.promise;
@@ -625,7 +622,7 @@ export default class CreateFileModal extends Component<Signature> {
 
     let spec: Spec | undefined;
     if (this.selectedSpecResource?.id) {
-      let maybeSpec = await this.store.peek<Spec>(this.selectedSpecResource.id);
+      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
       if (maybeSpec && !isCardInstance(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }
@@ -674,33 +671,6 @@ import { Component } from 'https://cardstack.com/base/card-api';
 export class ${className} extends ${exportName} {
   static displayName = "${this.displayName}";`);
     }
-    src.push(`\n  /*`);
-    if (this.fileType.id === 'card-definition') {
-      src.push(
-        `  static isolated = class Isolated extends Component<typeof this> {
-    <template></template>
-  }
-`,
-      );
-    }
-    src.push(
-      `  static embedded = class Embedded extends Component<typeof this> {
-    <template></template>
-  }
-
-  static atom = class Atom extends Component<typeof this> {
-    <template></template>
-  }
-
-  static edit = class Edit extends Component<typeof this> {
-    <template></template>
-  }
-
-  static fitted = class Fitted extends Component<typeof this> {
-    <template></template>
-  }`,
-    );
-    src.push(`  */`);
     src.push(`}`);
 
     try {
@@ -746,7 +716,7 @@ export class ${className} extends ${exportName} {
     }
     let spec: Spec | undefined;
     if (this.selectedSpecResource?.id) {
-      let maybeSpec = await this.store.peek<Spec>(this.selectedSpecResource.id);
+      let maybeSpec = await this.store.get<Spec>(this.selectedSpecResource.id);
       if (maybeSpec && !isCardInstance(maybeSpec)) {
         throw new Error(`Failed to load spec ${maybeSpec.id}`);
       }

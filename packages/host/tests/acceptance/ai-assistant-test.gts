@@ -335,10 +335,43 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     assert.dom('[data-test-autoattached-file]').doesNotExist();
     assert.dom('[data-test-autoattached-card]').exists();
+    // Move to code mode and a file will be attached
     await click('[data-test-submode-switcher] > [data-test-boxel-button]');
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-autoattached-file]').exists();
-    assert.dom('[data-test-autoattached-card]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists();
+    // Move back to interact mode and check the file is not attached
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists();
+  });
+
+  test('cards are auto-attached in code mode', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+
+    await click(
+      '[data-test-cards-grid-item="http://test-realm/test/Person/fadhlan"]',
+    );
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert.dom('[data-test-autoattached-file]').doesNotExist();
+    assert.dom('[data-test-autoattached-card]').exists();
+    await click('[data-test-submode-switcher] > [data-test-boxel-button]');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    assert.dom('[data-test-autoattached-file]').exists();
+    assert.dom('[data-test-autoattached-card]').exists();
   });
 
   test('can open attach file modal', async function (assert) {

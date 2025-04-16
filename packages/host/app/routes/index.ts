@@ -83,7 +83,7 @@ export default class Index extends Route<void> {
       // a card that is detached from the store as we only care about it's ID.
       let canonicalCardUrl: string | undefined;
       // the peek takes advantage of the store cache so this should be quick
-      canonicalCardUrl = (await this.store.peek(cardUrl))?.id;
+      canonicalCardUrl = (await this.store.get(cardUrl))?.id;
       if (!canonicalCardUrl) {
         // TODO: show a 404 page
         // https://linear.app/cardstack/issue/CS-7364/show-user-a-clear-message-when-they-try-to-access-a-realm-they-cannot

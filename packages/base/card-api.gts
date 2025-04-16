@@ -36,6 +36,10 @@ import {
   CodeRef,
   CommandContext,
   uuidv4,
+  realmURL,
+  localId,
+  formats,
+  type Format,
   type Meta,
   type CardFields,
   type Relationship,
@@ -68,7 +72,7 @@ interface CardOrFieldTypeIconSignature {
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
-export { primitive, isField, type BoxComponent };
+export { localId, realmURL, primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
@@ -78,9 +82,7 @@ export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
-export const realmURL = Symbol.for('cardstack-realm-url');
 export const meta = Symbol.for('cardstack-meta');
-export const localId = Symbol.for('cardstack-local-id');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
@@ -104,14 +106,7 @@ export type FieldsTypeFor<T extends BaseDef> = {
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
-export const formats: Format[] = [
-  'isolated',
-  'embedded',
-  'fitted',
-  'edit',
-  'atom',
-];
-export type Format = 'isolated' | 'embedded' | 'fitted' | 'edit' | 'atom';
+export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 export type FieldFormats = {
   ['fieldDef']: Format;
@@ -278,6 +273,8 @@ export async function flushLogs() {
 export interface IdentityContext {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
+  setNonTracked(id: string, instance: CardDef): void;
+  makeTracked(id: string): void;
 }
 
 type JSONAPIResource =
@@ -1021,7 +1018,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let identityContext =
-      identityContexts.get(instance as BaseDef) ?? new Map();
+      identityContexts.get(instance as BaseDef) ?? new SimpleIdentityContext();
     // taking advantage of the identityMap regardless of whether loadFields is set
     let fieldValue = identityContext.get(e.reference as string);
 
@@ -1433,7 +1430,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
   ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
-    let identityContext = identityContexts.get(instance) ?? new Map();
+    let identityContext =
+      identityContexts.get(instance) ?? new SimpleIdentityContext();
 
     for (let ref of e.reference) {
       // taking advantage of the identityMap regardless of whether loadFields is set
@@ -2419,7 +2417,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   relativeTo: URL | undefined,
   opts?: { identityContext?: IdentityContext },
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = opts?.identityContext ?? new Map();
+  let identityContext = opts?.identityContext ?? new SimpleIdentityContext();
   let {
     meta: { adoptsFrom },
   } = resource;
@@ -2439,54 +2437,11 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   ) as BaseInstanceType<T>;
 }
 
-// Crawls all fields for cards and populates the identityContext
-function buildIdentityContext(
-  instance: CardDef | FieldDef,
-  identityContext: IdentityContext = new Map(),
-  visited: WeakSet<CardDef | FieldDef> = new WeakSet(),
-) {
-  if (instance == null || visited.has(instance)) {
-    return identityContext;
-  }
-  visited.add(instance);
-  let fields = getFields(instance);
-  for (let fieldName of Object.keys(fields)) {
-    let value = peekAtField(instance, fieldName);
-    if (value == null) {
-      continue;
-    }
-    if (Array.isArray(value)) {
-      for (let item of value) {
-        if (value == null) {
-          continue;
-        }
-        if (isCard(item)) {
-          identityContext.set(item.id, item);
-        }
-        if (isCardOrField(item)) {
-          buildIdentityContext(item, identityContext, visited);
-        }
-      }
-    } else {
-      if (isCard(value) && value.id) {
-        identityContext.set(value.id, value);
-      }
-      if (isCardOrField(value)) {
-        buildIdentityContext(value, identityContext, visited);
-      }
-    }
-  }
-  return identityContext;
-}
-
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
-  identityContext?: IdentityContext,
+  identityContext: IdentityContext = new SimpleIdentityContext(),
 ): Promise<BaseInstanceType<T>> {
-  if (!identityContext) {
-    identityContext = buildIdentityContext(instance);
-  }
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
@@ -2510,7 +2465,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
   _relativeTo: URL | undefined,
-  identityContext: IdentityContext = new Map(),
+  identityContext: IdentityContext = new SimpleIdentityContext(),
 ): Promise<BaseInstanceType<T>> {
   let resource: LooseCardResource | undefined;
   if (isCardResource(data)) {
@@ -2549,8 +2504,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   doc: LooseSingleCardDocument | CardDocument,
   identityContext: IdentityContext,
 ): Promise<BaseInstanceType<T>> {
+  // because our store uses a tracked map for its identity map all the assembly
+  // work that we are doing to deserialize the instance below is "live". so we
+  // add the actual instance silently in a non-tracked way and only track it at
+  // the very end.
   if (resource.id != null) {
-    identityContext.set(resource.id, instance as CardDef); // the instance must be a composite card since we are updating it from a resource
+    identityContext.setNonTracked(resource.id, instance as CardDef);
   }
   let deferred = new Deferred<BaseDef>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
@@ -2652,6 +2611,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       instance[isSavedInstance] = true;
       (instance as any)[meta] = resource.meta;
     }
+  }
+
+  // now we make the instance "live" after it's all constructed
+  if (resource.id != null) {
+    identityContext.makeTracked(resource.id);
   }
 
   deferred.fulfill(instance);
@@ -3201,4 +3165,18 @@ export function getCardMeta<K extends keyof CardResourceMeta>(
   metaKey: K,
 ): CardResourceMeta[K] | undefined {
   return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
+}
+
+class SimpleIdentityContext implements IdentityContext {
+  #instances: Map<string, CardDef> = new Map();
+  get(id: string) {
+    return this.#instances.get(id);
+  }
+  set(id: string, instance: CardDef) {
+    return this.#instances.set(id, instance);
+  }
+  setNonTracked(id: string, instance: CardDef) {
+    return this.#instances.set(id, instance);
+  }
+  makeTracked(_id: string) {}
 }

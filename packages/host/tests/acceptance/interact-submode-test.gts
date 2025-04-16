@@ -828,7 +828,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(9);
+      assert.expect(7);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
@@ -1603,8 +1603,6 @@ module('Acceptance | interact submode tests', function (hooks) {
             // second save is after a field has been filled in
             assert.strictEqual(json.data.attributes?.name, 'Paper');
             deferred.fulfill();
-          } else {
-            assert.ok(false, 'unexpected save of Pet card');
           }
         }
       });

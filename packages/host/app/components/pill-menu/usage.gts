@@ -6,20 +6,12 @@ import { tracked } from '@glimmer/tracking';
 
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
 
-import { consume } from 'ember-provide-consume-context';
-
 import { TrackedObject } from 'tracked-built-ins';
 
 import { IconX } from '@cardstack/boxel-ui/icons';
 
-import {
-  baseRealm,
-  getPlural,
-  GetCardContextName,
-  type getCard,
-} from '@cardstack/runtime-common';
+import { baseRealm, getPlural } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
 import type StoreService from '@cardstack/host/services/store';
 
 import headerIcon from '../ai-assistant/ai-assist-icon@2x.webp';
@@ -34,26 +26,21 @@ const sampleCardURLs = [
 ];
 
 export default class PillMenuUsage extends Component {
-  @consume(GetCardContextName) private declare getCard: getCard;
-
   @service private declare store: StoreService;
 
   @tracked private title = 'Pill Menu';
   @tracked private isExpandableHeader = false;
-  @tracked private items: PillMenuItem[] = [];
+  @tracked private items: PillMenuItem[] = sampleCardURLs.map(
+    (cardId) =>
+      new TrackedObject({
+        cardId,
+        isActive: true,
+      }),
+  );
+
   @tracked private itemDisplayName = 'Card';
   @tracked private canAttachCard = false;
   private headerIconURL = headerIcon;
-
-  private makeCardResources = () => {
-    this.items = sampleCardURLs.map(
-      (cardId) =>
-        new TrackedObject({
-          cardId,
-          isActive: true,
-        }),
-    );
-  };
 
   private get activeItems() {
     return this.items.filter((item) => item.isActive);
@@ -72,7 +59,6 @@ export default class PillMenuUsage extends Component {
   }
 
   <template>
-    {{consumeContext this.makeCardResources}}
     <FreestyleUsage @name='PillMenu'>
       <:description>
         Component with a header and a list of card pills.

@@ -237,21 +237,15 @@ export default class CodeSubmode extends Component<Signature> {
   // you cannot consume context in the constructor. the provider is wired up
   //  as part of the DOM rendering
   private makeCardResource = () => {
-    this.cardResource = this.getCard(
-      this,
-      () => {
-        if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
-          return undefined;
-        }
-        // this includes all JSON files, but the card resource is smart enough
-        // to skip JSON that are not card instances
-        let url = this.codePath.href.replace(/\.json$/, '');
-        return url;
-      },
-      {
-        isAutoSaved: true,
-      },
-    );
+    this.cardResource = this.getCard(this, () => {
+      if (!this.codePath || this.codePath.href.split('.').pop() !== 'json') {
+        return undefined;
+      }
+      // this includes all JSON files, but the card resource is smart enough
+      // to skip JSON that are not card instances
+      let url = this.codePath.href.replace(/\.json$/, '');
+      return url;
+    });
   };
 
   private get card() {
