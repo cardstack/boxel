@@ -84,7 +84,7 @@ export default class PlaygroundContent extends Component<Signature> {
             >
               <CardHeader
                 class='error-header'
-                @cardTypeDisplayName={{this.cardErrorTitle}}
+                @cardTypeDisplayName='Card Error: {{@cardError.title}}'
                 @cardTypeIcon={{ExclamationCircle}}
               />
               <div class='card-error' data-test-card-error>
@@ -94,10 +94,7 @@ export default class PlaygroundContent extends Component<Signature> {
                   <CardError @cardCreationError={{@cardCreationError}} />
                 {{/if}}
               </div>
-              <CardErrorDetail
-                @error={{@cardError}}
-                @title={{this.cardErrorTitle}}
-              />
+              <CardErrorDetail @error={{@cardError}} />
             </CardContainer>
           {{else if card}}
             <div
@@ -331,15 +328,6 @@ export default class PlaygroundContent extends Component<Signature> {
       return htmlComponent(lastKnownGoodHtml);
     }
     return undefined;
-  }
-
-  @cached
-  private get cardErrorTitle() {
-    let error = this.args.cardError;
-    if (!error) {
-      return undefined;
-    }
-    return `Card Error: ${error.status} - ${error.title}`;
   }
 
   private loadScopedCSS = task(async () => {

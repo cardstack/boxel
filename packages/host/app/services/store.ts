@@ -940,31 +940,93 @@ export default class StoreService extends Service implements StoreInterface {
   }
 }
 
-function formatError(err: CardError, realm?: string): CardErrorsJSONAPI {
-  if (err.additionalErrors?.length && isCardError(err.additionalErrors[0])) {
-    err = err.additionalErrors[0];
-  }
-  let title: string;
-  if (err.status === 404 && err.message?.includes('missing')) {
+function formattedError(
+  url: string | undefined,
+  error: any,
+  err?: CardError | Partial<CardErrorJSONAPI>,
+): CardErrorsJSONAPI {
+  let errorStatus = err?.status ?? error.status;
+  let errorMessage = err?.message ?? error.message;
+  let title: string | undefined;
+
+  if (errorStatus === 404 && errorMessage?.includes('missing')) {
     // a missing link error looks a lot like a missing card error
     title = 'Link Not Found';
-  } else {
-    title = err.title ?? status.message[err.status] ?? err.name;
   }
-  let formattedError = {
-    message: err.message,
-    status: err.status,
-    title,
-    realm,
-    meta: {
-      lastKnownGoodHtml: null,
-      scopedCssUrls: [],
-      stack: err.stack ?? null,
-      cardTitle: null,
-    },
-    additionalErrors: err.additionalErrors,
+
+  if (isCardError(err)) {
+    let additionalError = err.additionalErrors?.[0];
+    let cardError = isCardError(additionalError) ? additionalError : err;
+    return {
+      errors: [
+        {
+          id: url,
+          message: cardError.message,
+          status: cardError.status,
+          title:
+            title ??
+            cardError.title ??
+            status.message[cardError.status] ??
+            cardError.message,
+          realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+          meta: {
+            lastKnownGoodHtml: null,
+            scopedCssUrls: [],
+            stack: cardError.stack ?? null,
+            cardTitle: null,
+          },
+          additionalErrors: cardError.additionalErrors,
+        },
+      ],
+    };
+  }
+
+  if (err) {
+    let message = err.message?.length
+      ? err.message
+      : errorStatus
+        ? `Received HTTP ${errorStatus} from server`
+        : `${error.message}: ${error.stack}`;
+    return {
+      errors: [
+        {
+          id: url,
+          message,
+          status: errorStatus ?? 500,
+          title: title ?? err.title ?? status.message[errorStatus] ?? message,
+          realm: err.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
+          meta: err.meta ?? {
+            lastKnownGoodHtml: null,
+            scopedCssUrls: [],
+            stack: error.stack ?? null,
+            cardTitle: null,
+          },
+        },
+      ],
+    };
+  }
+
+  return {
+    errors: [
+      {
+        id: url,
+        status: errorStatus ?? 500,
+        title: title ?? status.message[errorStatus] ?? error.message,
+        message: error.status
+          ? `Received HTTP ${error.status} from server ${
+              error.responseText ?? ''
+            }`.trim()
+          : `${error.message}: ${error.stack}`,
+        realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+        meta: {
+          lastKnownGoodHtml: null,
+          scopedCssUrls: [],
+          stack: null,
+          cardTitle: null,
+        },
+      },
+    ],
   };
-  return { errors: [formattedError] };
 }
 
 function processCardError(
@@ -972,59 +1034,19 @@ function processCardError(
   error: any,
 ): CardErrorsJSONAPI {
   try {
-    let response: CardErrorsJSONAPI | { errors: CardError[] } = JSON.parse(
-      error.responseText,
-    );
-    let err = response.errors[0];
-    let errorResponse = isCardError(err)
-      ? formatError(err, error.responseHeaders?.get('X-Boxel-Realm-Url'))
-      : (response as CardErrorsJSONAPI);
-    return errorResponse;
+    let errorResponse = JSON.parse(error.responseText);
+    return formattedError(url, error, errorResponse.errors?.[0]);
   } catch (parseError) {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        return {
-          errors: [
-            {
-              id: url,
-              status: 404,
-              title: 'Card Not Found',
-              message: `The card ${url} does not exist`,
-              realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-              meta: {
-                lastKnownGoodHtml: null,
-                scopedCssUrls: [],
-                stack: null,
-                cardTitle: null,
-              },
-            },
-          ],
-        };
+        return formattedError(url, error, {
+          status: 404,
+          title: 'Card Not Found',
+          message: `The card ${url} does not exist`,
+        });
       default:
-        return {
-          errors: [
-            {
-              id: url,
-              status: error.status ?? 500,
-              title: error.status
-                ? status.message[error.status]
-                : error.message,
-              message: error.status
-                ? `Received HTTP ${error.status} from server ${
-                    error.responseText ?? ''
-                  }`.trim()
-                : `${error.message}: ${error.stack}`,
-              realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-              meta: {
-                lastKnownGoodHtml: null,
-                scopedCssUrls: [],
-                stack: null,
-                cardTitle: null,
-              },
-            },
-          ],
-        };
+        return formattedError(url, error);
     }
   }
 }
