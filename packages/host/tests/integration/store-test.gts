@@ -37,7 +37,6 @@ import {
   setupIntegrationTestRealm,
   type TestContextWithSave,
 } from '../helpers';
-import { renderComponent } from '../helpers/render-component';
 import { TestRealmAdapter } from '../helpers/adapter';
 import {
   CardDef,
@@ -50,6 +49,7 @@ import {
   setupBaseRealm,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import { renderComponent } from '../helpers/render-component';
 import { setupRenderingTest } from '../helpers/setup';
 
 module('Integration | Store', function (hooks) {
