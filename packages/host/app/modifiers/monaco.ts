@@ -15,7 +15,7 @@ interface Signature {
   Args: {
     Named: {
       content: string;
-      contentChanged: (text: string) => void;
+      contentChanged: ((text: string) => void) | undefined;
       initialCursorPosition?: MonacoSDK.Position;
       onCursorPositionChange?: (position: MonacoSDK.Position) => void;
       onSetup?: (editor: MonacoSDK.editor.IStandaloneCodeEditor) => void;
@@ -37,6 +37,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private lastModified = Date.now();
   private lastCursorPosition: MonacoSDK.Position | undefined;
   @service declare private monacoService: MonacoService;
 
@@ -59,22 +60,73 @@ export default class Monaco extends Modifier<Signature> {
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
-
-      if (content !== this.model.getValue()) {
+      if (
+        content !== this.model.getValue() &&
+        // ignore realm event echoes of our own saves by not processing content changes
+        // within serverEchoDebounceMs of the last monaco change in memory
+        Date.now() >=
+          this.lastModified + this.monacoService.serverEchoDebounceMs
+      ) {
         this.lastContent = content;
         this.model.setValue(content);
       }
     } else {
-      this.setupEditor({
-        element,
-        content,
-        language,
+      // The light theme editor is used for the main editor in code mode,
+      // but we also have a dark themed editor for the preview editor in AI panel.
+      // The latter is themed using a CSS filter as opposed to defining a new monaco theme
+      // because monaco does not support multiple themes on the same page (check the comment in
+      // room-message-command.gts for more details)
+      monacoSDK.editor.defineTheme('boxel-monaco-light-theme', {
+        base: 'vs',
+        inherit: true,
+        rules: [],
+        colors: {
+          'editor.background': '#FFFFFF',
+        },
+      });
+
+      let editorOptions: MonacoEditorOptions = {
         readOnly,
-        editorDisplayOptions,
-        monacoSDK,
-        contentChanged,
-        onCursorPositionChange,
-        onSetup,
+        value: content,
+        language,
+        scrollBeyondLastLine: false,
+        automaticLayout: true,
+        minimap: {
+          enabled: false,
+        },
+        theme: 'boxel-monaco-light-theme',
+        ...editorDisplayOptions,
+      };
+
+      // Code rendering is inconsistently wrapped without this, producing spurious visual diffs
+      if (isTesting()) {
+        editorOptions.wordWrap = 'on';
+      }
+
+      this.editor = monacoSDK.editor.create(element, editorOptions);
+
+      onSetup?.(this.editor);
+
+      registerDestructor(this, () => this.editor!.dispose());
+
+      this.model = this.editor.getModel()!;
+
+      this.model.onDidChangeContent(() =>
+        contentChanged ? this.onContentChanged.perform(contentChanged) : null,
+      );
+      this.editor.onDidChangeCursorSelection((event) => {
+        if (
+          this.editor &&
+          event.source !== 'model' &&
+          event.selection.startLineNumber === event.selection.endLineNumber &&
+          event.selection.startColumn === event.selection.endColumn
+        ) {
+          let position = this.editor.getPosition();
+          if (position) {
+            onCursorPositionChange?.(position);
+            this.lastCursorPosition = position;
+          }
+        }
       });
     }
     this.lastLanguage = language;
@@ -84,85 +136,13 @@ export default class Monaco extends Modifier<Signature> {
     }
   }
 
-  private async setupEditor({
-    element,
-    content,
-    language,
-    readOnly,
-    editorDisplayOptions,
-    monacoSDK,
-    contentChanged,
-    onCursorPositionChange,
-    onSetup,
-  }: Omit<Signature['Args']['Named'], 'initialCursorPosition'> & {
-    element: HTMLElement;
-  }) {
-    // The light theme editor is used for the main editor in code mode,
-    // but we also have a dark themed editor for the preview editor in AI panel.
-    // The latter is themed using a CSS filter as opposed to defining a new monaco theme
-    // because monaco does not support multiple themes on the same page (check the comment in
-    // room-message-command.gts for more details)
-    monacoSDK.editor.defineTheme('boxel-monaco-light-theme', {
-      base: 'vs',
-      inherit: true,
-      rules: [],
-      colors: {
-        'editor.background': '#FFFFFF',
-      },
-    });
-
-    let editorOptions: MonacoEditorOptions = {
-      readOnly,
-      value: content,
-      language,
-      scrollBeyondLastLine: false,
-      automaticLayout: true,
-      minimap: {
-        enabled: false,
-      },
-      theme: 'boxel-monaco-light-theme',
-      ...editorDisplayOptions,
-    };
-
-    // Code rendering is inconsistently wrapped without this, producing spurious visual diffs
-    if (isTesting()) {
-      editorOptions.wordWrap = 'on';
-    }
-
-    this.editor = monacoSDK.editor.create(element, editorOptions);
-
-    onSetup?.(this.editor);
-
-    registerDestructor(this, () => this.editor!.dispose());
-
-    this.model = this.editor.getModel()!;
-
-    this.model.onDidChangeContent(() =>
-      this.onContentChanged.perform(contentChanged),
-    );
-    this.editor.onDidChangeCursorSelection((event) => {
-      if (
-        this.editor &&
-        event.source !== 'model' &&
-        event.selection.startLineNumber === event.selection.endLineNumber &&
-        event.selection.startColumn === event.selection.endColumn
-      ) {
-        let position = this.editor.getPosition();
-        if (position) {
-          onCursorPositionChange?.(position);
-          this.lastCursorPosition = position;
-        }
-      }
-    });
-  }
-
   private onContentChanged = restartableTask(
     async (contentChanged: (text: string) => void) => {
       let content = this.model?.getValue();
       if (this.lastContent === content) {
         return;
       }
-
+      this.lastModified = Date.now();
       await timeout(monacoDebounceMs);
       if (this.model) {
         this.lastContent = this.model.getValue();
