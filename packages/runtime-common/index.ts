@@ -324,11 +324,10 @@ export interface Store {
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
   get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
-  patch(
-    instance: CardDef,
-    doc: LooseSingleCardDocument,
+  patch<T extends CardDef>(
+    id: string,
     patchData: PatchData,
-  ): Promise<void>;
+  ): Promise<T | undefined>;
   search(query: Query, realmURL: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }

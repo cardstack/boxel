@@ -73,11 +73,11 @@ class IDResolver {
 export default class IdentityContextWithGarbageCollection
   implements IdentityContext
 {
-  // importantly these "silent" properties are not tracked so that we are able
+  // importantly these properties are not tracked so that we are able
   // to deserialize an instance without glimmer rendering the inner workings of
   // the deserialization process.
-  #silentCards = new Map<string, CardDef>();
-  #silentCardErrors = new Map<string, CardError>();
+  #nonTrackedCards = new Map<string, CardDef>();
+  #nonTrackedCardErrors = new Map<string, CardError>();
 
   #cards = new TrackedMap<string, CardDef>();
   #cardErrors = new TrackedMap<string, CardError>();
@@ -116,43 +116,43 @@ export default class IdentityContextWithGarbageCollection
   }
 
   delete(id: string): void {
-    this.#cards.delete(id);
-    this.#cardErrors.delete(id);
-
     let localId = isLocalId(id) ? id : undefined;
     let remoteId = !isLocalId(id) ? id : undefined;
 
     if (localId) {
-      this.#gcCandidates.delete(localId);
       let remoteIds = this.#idResolver.getRemoteIds(localId);
+      this.#gcCandidates.delete(localId);
+      this.deleteFromAll(localId);
       if (remoteIds.length) {
         for (let id of remoteIds) {
-          this.#cards.delete(id);
-          this.#cardErrors.delete(id);
+          this.deleteFromAll(id);
+          this.#idResolver.removeByRemoteId(id);
         }
       }
     }
     if (remoteId) {
       localId = this.#idResolver.getLocalId(remoteId);
       if (localId) {
-        this.#cards.delete(localId);
-        this.#cardErrors.delete(localId);
-        this.#gcCandidates.delete(localId);
         let otherRemoteIds = this.#idResolver
           .getRemoteIds(localId)
           .filter((i) => i !== remoteId);
+        this.deleteFromAll(localId);
+        this.#gcCandidates.delete(localId);
         for (let id of otherRemoteIds) {
-          this.#cards.delete(id);
-          this.#cardErrors.delete(id);
+          this.deleteFromAll(id);
+          this.#idResolver.removeByRemoteId(id);
         }
-        this.#idResolver.removeByRemoteId(remoteId);
       }
+      this.deleteFromAll(remoteId);
+      this.#idResolver.removeByRemoteId(remoteId);
     }
   }
 
   reset() {
     this.#cards.clear();
     this.#cardErrors.clear();
+    this.#nonTrackedCards.clear();
+    this.#nonTrackedCardErrors.clear();
     this.#gcCandidates.clear();
     this.#idResolver.reset();
   }
@@ -201,17 +201,24 @@ export default class IdentityContextWithGarbageCollection
   }
 
   makeTracked(remoteId: string) {
-    let instance = this.#silentCards.get(remoteId);
+    let instance = this.#nonTrackedCards.get(remoteId);
     if (instance) {
       this.set(remoteId, instance);
     }
-    this.#silentCards.delete(remoteId);
+    this.#nonTrackedCards.delete(remoteId);
 
-    let error = this.#silentCardErrors.get(remoteId);
+    let error = this.#nonTrackedCardErrors.get(remoteId);
     if (error) {
       this.addInstanceOrError(remoteId, error);
     }
-    this.#silentCardErrors.delete(remoteId);
+    this.#nonTrackedCardErrors.delete(remoteId);
+  }
+
+  private deleteFromAll(id: string) {
+    this.#cards.delete(id);
+    this.#cardErrors.delete(id);
+    this.#nonTrackedCards.delete(id);
+    this.#nonTrackedCardErrors.delete(id);
   }
 
   private getItem(type: 'instance', id: string): CardDef | undefined;
@@ -222,7 +229,7 @@ export default class IdentityContextWithGarbageCollection
   ): CardDef | CardError | undefined {
     let bucket = type === 'instance' ? this.#cards : this.#cardErrors;
     let silentBucket =
-      type === 'instance' ? this.#silentCards : this.#silentCardErrors;
+      type === 'instance' ? this.#nonTrackedCards : this.#nonTrackedCardErrors;
     let localId = isLocalId(id) ? id : undefined;
     let remoteId = !isLocalId(id) ? id : undefined;
     if (localId) {
@@ -244,7 +251,7 @@ export default class IdentityContextWithGarbageCollection
     return item;
   }
 
-  private setItem(id: string, item: CardDef | CardError, isSilent?: true) {
+  private setItem(id: string, item: CardDef | CardError, notTracked?: true) {
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
     let localId = isLocalId(id) ? id : undefined;
@@ -262,8 +269,10 @@ export default class IdentityContextWithGarbageCollection
       this.#gcCandidates.delete(localId);
     }
 
-    let cardBucket = isSilent ? this.#silentCards : this.#cards;
-    let errorBucket = isSilent ? this.#silentCardErrors : this.#cardErrors;
+    let cardBucket = notTracked ? this.#nonTrackedCards : this.#cards;
+    let errorBucket = notTracked
+      ? this.#nonTrackedCardErrors
+      : this.#cardErrors;
     // make entries for both the local ID and the remote ID in the identity map
     if (instance) {
       // instances always have a local ID
