@@ -1,3 +1,9 @@
+export function isHtml(text: string): boolean {
+  // Check if the text starts with an HTML tag and ends with a closing tag
+  const htmlTagPattern = /^<([a-z][a-z0-9]*)\b[^>]*>[\s\S]*<\/\1>$/i;
+  return htmlTagPattern.test(text.trim());
+}
+
 export function escapeHtmlTags(html: string) {
   // For example, html can be <pre><code><h1>Hello</h1></code></pre>
   // We want to escape the <h1>Hello</h1> so that it is rendered as
@@ -23,7 +29,7 @@ export function escapeHtmlOutsideCodeBlocks(text?: string) {
   }
 
   let matches = [];
-  let codeBlockRegex = /```[\s\S]*?```/g;
+  let codeBlockRegex = /`[\s\S]*?`/g;
 
   let match;
   while ((match = codeBlockRegex.exec(text)) !== null) {
@@ -59,4 +65,23 @@ export function escapeHtmlOutsideCodeBlocks(text?: string) {
   }
 
   return result;
+}
+
+// Helper function to escape HTML content
+export function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+export function unescapeHtml(html: string): string {
+  return html
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'");
 }
