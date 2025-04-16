@@ -59,6 +59,7 @@ const DEFAULT_CARD_CONTEXT = {
   commandContext: undefined,
   getCard: () => {},
   getCards: () => {},
+  getCardCollection: () => {},
 };
 
 export class CardContextConsumer extends Component<CardContextConsumerSignature> {

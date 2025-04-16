@@ -32,8 +32,10 @@ import {
   type Query,
   type getCard,
   type getCards,
+  type getCardCollection,
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
   specRef,
   isCardDef,
   isFieldDef,
@@ -221,6 +223,8 @@ type SpecPreviewCardContext = Omit<
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
   @service private declare realm: RealmService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare specPanelService: SpecPanelService;
@@ -236,6 +240,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return {
       getCard: this.getCard,
       getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
       store: this.store,
       cardComponentModifier: this.cardTracker.trackElement,
     };

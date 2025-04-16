@@ -121,16 +121,26 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
-    currentReferenceCount--;
+    currentReferenceCount -= 1;
     this.referenceCount.set(id, currentReferenceCount);
 
-    if (currentReferenceCount === 0) {
+    console.debug(
+      `dropping reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
+    );
+    if (currentReferenceCount <= 0) {
       this.referenceCount.delete(id);
       let autoSaveState = this.autoSaveStates.get(id);
       if (autoSaveState?.hasUnsavedChanges) {
         this.initiateAutoSaveTask.perform(id, { isImmediate: true });
       }
-      this.autoSaveStates.delete(id);
+      // await for a microtask to prevent rerender dirty tag error so we don't
+      // get in trouble because we read this.autosaveStates in the same frame as
+      // we mutate this.autosaveStates
+      (async () => {
+        await Promise.resolve();
+        this.autoSaveStates.delete(id);
+      })();
+
       let instance = this.identityContext.get(id);
       if (instance) {
         if (this.cardApiCache && instance) {
@@ -174,7 +184,11 @@ export default class StoreService extends Service implements StoreInterface {
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
-    this.referenceCount.set(id, currentReferenceCount++);
+    currentReferenceCount += 1;
+    this.referenceCount.set(id, currentReferenceCount);
+    console.debug(
+      `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
+    );
 
     // intentionally not awaiting this. we keep track of the promise in
     // this.newReferencePromises
@@ -364,6 +378,7 @@ export default class StoreService extends Service implements StoreInterface {
     await this.withTestWaiters(async () => {
       this.newReferencePromises.push(deferred.promise);
       let maybeUrl: string | undefined;
+      let isDoc = typeof idOrDoc !== 'string';
       try {
         await this.ready;
         maybeUrl = asURL(idOrDoc);
@@ -377,8 +392,11 @@ export default class StoreService extends Service implements StoreInterface {
         let url = maybeUrl;
         let urlOrDoc = idOrDoc;
         let instanceOrError = this.peek(url);
-        if (!instanceOrError) {
-          instanceOrError = await this.getInstance({ urlOrDoc });
+        if (!instanceOrError || isDoc) {
+          instanceOrError = await this.getInstance({
+            urlOrDoc,
+            opts: { noCache: isDoc },
+          });
         }
         this.subscribeToRealm(new URL(url));
         await this.trackSavedInstance('start-tracking', instanceOrError);
@@ -590,7 +608,7 @@ export default class StoreService extends Service implements StoreInterface {
     urlOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
-    opts?: { noCache?: true };
+    opts?: { noCache?: boolean };
   }) {
     let deferred: Deferred<CardDef | CardError> | undefined;
     let url = asURL(urlOrDoc);
@@ -671,12 +689,12 @@ export default class StoreService extends Service implements StoreInterface {
         return;
       }
       let autoSaveState = this.initOrGetAutoSaveState(id);
-      if (!opts?.isImmediate) {
-        await timeout(this.environmentService.autoSaveDelayMs);
-      }
       try {
         autoSaveState.isSaving = true;
         autoSaveState.lastSaveError = undefined;
+        if (!opts?.isImmediate) {
+          await timeout(this.environmentService.autoSaveDelayMs);
+        }
         if (!opts?.isImmediate) {
           await timeout(25);
         }

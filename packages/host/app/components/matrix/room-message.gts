@@ -9,15 +9,13 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { consume } from 'ember-provide-consume-context';
 
-import { trackedFunction } from 'ember-resources/util/function';
-
 import { Avatar } from '@cardstack/boxel-ui/components';
 
 import { bool } from '@cardstack/boxel-ui/helpers';
 
 import {
-  type getCard,
-  GetCardContextName,
+  type getCardCollection,
+  GetCardCollectionContextName,
   markdownToHtml,
 } from '@cardstack/runtime-common';
 import {
@@ -63,10 +61,11 @@ interface Signature {
 const STREAMING_TIMEOUT_MS = 60000;
 
 export default class RoomMessage extends Component<Signature> {
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
   @tracked private streamingTimeout = false;
-  @tracked private attachedCardCollectionResource:
-    | { value: ReturnType<getCard>[] | null }
+  @tracked private attachedCardCollection:
+    | ReturnType<getCardCollection>
     | undefined;
 
   constructor(owner: unknown, args: Signature['Args']) {
@@ -76,16 +75,11 @@ export default class RoomMessage extends Component<Signature> {
   }
 
   private makeCardResources = () => {
-    this.attachedCardCollectionResource = trackedFunction(this, () =>
-      (this.message.attachedCardIds ?? []).map((id) =>
-        this.getCard(this, () => id),
-      ),
+    this.attachedCardCollection = this.getCardCollection(
+      this,
+      () => this.message.attachedCardIds ?? [],
     );
   };
-
-  private get attachedCardResources() {
-    return this.attachedCardCollectionResource?.value ?? [];
-  }
 
   private get message() {
     return this.args.roomResource.messages[this.args.index];
@@ -144,7 +138,7 @@ export default class RoomMessage extends Component<Signature> {
       In AiAssistantMessage, there is a ScrollIntoView modifier that will scroll the last message into view (i.e. scroll to the bottom) when it renders.
       If we let things in the message render asynchronously, the height of the message will change after that and the scroll position will move up a bit (i.e. not stick to the bottom).
     }}
-    {{#if this.areResourcesLoaded}}
+    {{#if this.attachedCardCollection.isLoaded}}
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
@@ -162,7 +156,7 @@ export default class RoomMessage extends Component<Signature> {
           userId=this.message.author.userId
           displayName=this.message.author.displayName
         }}
-        @resources={{this.attachedCardResources}}
+        @collectionResource={{this.attachedCardCollection}}
         @files={{this.message.attachedFiles}}
         @errorMessage={{this.errorMessage}}
         @isStreaming={{@isStreaming}}
@@ -199,17 +193,6 @@ export default class RoomMessage extends Component<Signature> {
   @service declare commandService: CommandService;
 
   @cached
-  private get areResourcesLoaded() {
-    if (!this.attachedCardResources) {
-      return false;
-    }
-
-    return this.attachedCardResources.length === 0
-      ? true
-      : this.attachedCardResources.every((r) => r.isLoaded);
-  }
-
-  @cached
   private get errorMessage() {
     if (this.message.errorMessage) {
       return this.message.errorMessage;
@@ -217,10 +200,7 @@ export default class RoomMessage extends Component<Signature> {
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';
     }
-    let resourcesWithErrors = (this.attachedCardResources ?? []).filter(
-      (r) => r.cardError,
-    );
-    if (resourcesWithErrors.length === 0) {
+    if (this.attachedCardCollection?.cardErrors.length === 0) {
       return undefined;
     }
     return 'Error rendering attached cards.';

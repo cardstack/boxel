@@ -281,7 +281,16 @@ export type getCard<T extends CardDef = CardDef> = (
   isLoaded: boolean;
   autoSaveState: AutoSaveState | undefined;
 };
-
+export type getCardCollection<T extends CardDef = CardDef> = (
+  parent: object,
+  ids: () => string[] | undefined,
+) => // This is a duck type of the CardResource
+{
+  ids: string[] | undefined;
+  cards: T[];
+  cardErrors: CardErrorJSONAPI[];
+  isLoaded: boolean;
+};
 export type getCards<T extends CardDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
