@@ -635,7 +635,11 @@ module(basename(__filename), function () {
       let name = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}name`),
       );
-      assert.equal(name?.type, 'module', 'Name module is successfully indexed');
+      assert.strictEqual(
+        name?.type,
+        'module',
+        'Name module is successfully indexed',
+      );
 
       // Since the name is ready, the pet should be indexed and not in an error state
       assert.deepEqual(
@@ -655,7 +659,11 @@ module(basename(__filename), function () {
         new URL(`${testRealm}pet`),
       );
       // Currently, encountered error loading module "http://test-realm/pet.gts": http://test-realm/name not found
-      assert.equal(pet?.type, 'module', 'Pet module is successfully indexed');
+      assert.strictEqual(
+        pet?.type,
+        'module',
+        'Pet module is successfully indexed',
+      );
     });
 
     test('can successfully create instance after module sequence error is resolved', async function (assert) {
@@ -703,7 +711,11 @@ module(basename(__filename), function () {
       let name = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}name`),
       );
-      assert.equal(name?.type, 'module', 'Name module is successfully indexed');
+      assert.strictEqual(
+        name?.type,
+        'module',
+        'Name module is successfully indexed',
+      );
 
       // Create a pet instance
       await realm.write(
