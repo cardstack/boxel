@@ -635,13 +635,13 @@ module(basename(__filename), function () {
       let name = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}name`),
       );
-      assert.equal(name?.type, 'module');
+      assert.equal(name?.type, 'module', 'Name module is successfully indexed');
 
       // Since the name is ready, the pet should be indexed and not in an error state
       assert.deepEqual(
         { ...realm.realmIndexUpdater.stats },
         {
-          instancesIndexed: 1, 
+          instancesIndexed: 1,
           instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 2,
@@ -649,14 +649,92 @@ module(basename(__filename), function () {
         },
         'indexed correct number of files',
       );
-      
+
       // Fetch the pet module
       let pet = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}pet`),
       );
       // Currently, encountered error loading module "http://test-realm/pet.gts": http://test-realm/name not found
-      assert.equal(pet?.type, 'module');
-    }); 
+      assert.equal(pet?.type, 'module', 'Pet module is successfully indexed');
+    });
+
+    test('can successfully create instance after module sequence error is resolved', async function (assert) {
+      // First create pet.gts that depends on name.gts which doesn't exist yet
+      await realm.write(
+        'pet.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+          import { Name } from "./name";
+          export class Pet extends CardDef {
+            @field name = contains(Name);
+          }
+        `,
+      );
+
+      // Verify initial error state
+      assert.deepEqual(
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 0,
+          instanceErrors: 2,
+          moduleErrors: 2,
+          modulesIndexed: 0,
+          totalIndexEntries: 9,
+        },
+        'instance and module are in error state before dependency is available',
+      );
+
+      // Now create the missing name.gts module
+      await realm.write(
+        'name.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+    
+          export class Name extends CardDef {
+            @field firstName = contains(StringCard);
+            @field lastName = contains(StringCard);
+          }
+        `,
+      );
+
+      // Verify the Name module is properly indexed
+      let name = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}name`),
+      );
+      assert.equal(name?.type, 'module', 'Name module is successfully indexed');
+
+      // Create a pet instance
+      await realm.write(
+        'pet-apple.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              name: {
+                firstName: 'Apple',
+                lastName: 'Tangle',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './pet',
+                name: 'Pet',
+              },
+            },
+          },
+        }),
+      );
+
+      let petApple = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}pet-apple`),
+      );
+      assert.strictEqual(
+        petApple?.type,
+        'instance',
+        'pet-apple instance is created without error',
+      );
+    });
 
     test('can incrementally index deleted instance', async function (assert) {
       await realm.delete('mango.json');
