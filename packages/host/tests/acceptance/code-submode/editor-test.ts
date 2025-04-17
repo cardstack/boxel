@@ -11,7 +11,6 @@ import {
   baseRealm,
 } from '@cardstack/runtime-common';
 
-import CardService from '@cardstack/host/services/card-service';
 import type EnvironmentService from '@cardstack/host/services/environment-service';
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
@@ -390,8 +389,8 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     );
   });
 
-  test<TestContextWithSave>('card instance change made in monaco editor is auto-saved and includes a clientRequestId', async function (assert) {
-    assert.expect(6);
+  test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
+    assert.expect(4);
 
     let expected: LooseSingleCardDocument = {
       data: {
@@ -406,9 +405,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         },
       },
     };
-
-    let cardService = this.owner.lookup('service:card-service') as CardService;
-
     await visitOperatorMode({
       stacks: [
         [
@@ -427,23 +423,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
       .containsText('Mango');
 
-    assert.strictEqual(
-      cardService.clientRequestIds.size,
-      0,
-      'no clientRequestIds stored',
-    );
-
     this.onSave((url, content) => {
       if (typeof content !== 'string') {
         throw new Error('expected string save data');
       }
       assert.strictEqual(url.href, `${testRealmURL}Pet/mango.json`);
       assert.strictEqual(JSON.parse(content).data.attributes?.name, 'MangoXXX');
-      assert.strictEqual(
-        cardService.clientRequestIds.size,
-        1,
-        'one clientRequestId stored',
-      );
     });
 
     setMonacoContent(JSON.stringify(expected));
@@ -511,22 +496,13 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await waitFor('[data-test-save-idle]');
   });
 
-  test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved and includes a clientRequestId', async function (assert) {
-    assert.expect(4);
-
-    let cardService = this.owner.lookup('service:card-service') as CardService;
-
+  test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {
+    assert.expect(2);
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}README.txt`,
     });
     await waitForCodeEditor();
-
-    assert.strictEqual(
-      cardService.clientRequestIds.size,
-      0,
-      'no clientRequestIds stored',
-    );
 
     this.onSave((url, content) => {
       if (typeof content !== 'string') {
@@ -534,11 +510,6 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       }
       assert.strictEqual(url.href, `${testRealmURL}README.txt`);
       assert.strictEqual(content, 'Hello Mars');
-      assert.strictEqual(
-        cardService.clientRequestIds.size,
-        1,
-        'one clientRequestId stored',
-      );
     });
 
     setMonacoContent('Hello Mars');
