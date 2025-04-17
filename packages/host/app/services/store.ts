@@ -23,6 +23,7 @@ import {
   delay,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
+  logger,
   type Store as StoreInterface,
   type Query,
   type PatchData,
@@ -62,6 +63,8 @@ import type ResetService from './reset';
 export { CardError, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
+
+const realmEventsLogger = logger('realm:events');
 
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
@@ -484,44 +487,45 @@ export default class StoreService extends Service implements StoreInterface {
       }
       let instance = this.identityContext.get(invalidation);
       if (instance) {
-        // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
-        // the inputs with past values. This can happen if the user makes edits in the time between the auto
-        // save request and the arrival realm event.
-        if (
-          !event.clientRequestId ||
-          !this.cardService.clientRequestIds.has(event.clientRequestId)
-        ) {
-          console.debug(`store reloading ${invalidation}`);
-          if (!event.clientRequestId) {
-            console.debug('because event has null clientRequestId');
-          } else if (
-            !this.cardService.clientRequestIds.has(event.clientRequestId)
-          ) {
-            console.debug(
-              `because clientRequestId ${event.clientRequestId} is not found in`,
-              Array.from(this.cardService.clientRequestIds.values()),
+        // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
+        // overwriting the inputs with past values. This can happen if the user makes edits in the time between
+        // the auto save request and the arrival realm event.
+
+        let clientRequestId = event.clientRequestId;
+        let reloadFile = false;
+
+        if (!clientRequestId) {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${invalidation} because event has no clientRequestId`,
+          );
+        } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
+          if (clientRequestId.startsWith('instance:')) {
+            realmEventsLogger.debug(
+              `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+            );
+          } else {
+            reloadFile = true;
+            realmEventsLogger.debug(
+              `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
             );
           }
-
-          this.reloadTask.perform(instance);
         } else {
-          if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
-            if (event.clientRequestId.startsWith('editor:')) {
-              console.debug(
-                `store reloading ${invalidation} because of source clientRequestId ${event.clientRequestId}`,
-              );
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
+            Array.from(this.cardService.clientRequestIds.values()),
+          );
+        }
 
-              this.reloadTask.perform(instance);
-            } else {
-              console.debug(
-                'ignoring invalidation for card because clientRequestId is ours',
-                event,
-              );
-            }
-          }
+        if (reloadFile) {
+          this.reloadTask.perform(instance);
         }
       } else if (!this.identityContext.get(invalidation)) {
         // load the card using just the ID because we don't have a running card on hand
+        realmEventsLogger.debug(
+          `reloading file resource ${invalidation} because it is not found in the identity context`,
+        );
         this.loadInstanceTask.perform(invalidation);
       }
     }
