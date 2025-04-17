@@ -1,9 +1,10 @@
 {
   "compilerOptions": {
-    "target": "es2020",
+    "target": "es2023",
+    "lib": ["es2023", "dom"],
     "allowJs": true,
-    "lib": ["es2023", "DOM"],
-    "moduleResolution": "node",
+    "module": "CommonJS",
+    "moduleResolution": "nodenext",
     "allowSyntheticDefaultImports": true,
     "noImplicitAny": true,
     "noImplicitThis": true,
@@ -19,7 +20,6 @@
     "inlineSourceMap": true,
     "inlineSources": true,
     "baseUrl": ".",
-    "module": "CommonJS",
     "esModuleInterop": true,
     "experimentalDecorators": true,
     "skipLibCheck": true,
@@ -27,6 +27,12 @@
     "paths": {
       "https://cardstack.com/base/*": ["../base/*"],
       "*": ["types/*"]
+    }
+  },
+  "glint": {
+    "environment": ["ember-loose", "ember-template-imports"],
+    "transform": {
+      "include": ["../base/**"]
     }
   },
   "include": ["../base/**/*", "./**/*"],
