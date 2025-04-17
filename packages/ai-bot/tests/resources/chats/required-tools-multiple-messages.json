@@ -306,12 +306,7 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      }
+      "format": "org.matrix.custom.html"
     },
     "origin_server_ts": 1734900008837,
     "unsigned": {
@@ -431,12 +426,7 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      }
+      "format": "org.matrix.custom.html"
     },
     "origin_server_ts": 1734900035846,
     "unsigned": {
@@ -454,11 +444,6 @@
       "body": "It",
       "msgtype": "m.text",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -481,11 +466,6 @@
       "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
       "msgtype": "m.text",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -508,11 +488,6 @@
       "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
       "msgtype": "m.text",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -535,11 +510,6 @@
       "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
       "msgtype": "m.text",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -562,11 +532,6 @@
       "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
       "msgtype": "m.text",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": true,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -607,12 +572,7 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      }
+      "format": "org.matrix.custom.html"
     },
     "origin_server_ts": 1734900093129,
     "unsigned": {

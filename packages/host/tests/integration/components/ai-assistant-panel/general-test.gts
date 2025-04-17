@@ -820,11 +820,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         body: 'This is the first message',
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
-        'm.new_content': {
-          body: 'First message body',
-          msgtype: 'org.text',
-          format: 'org.matrix.custom.html',
-        },
       },
       {
         origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
@@ -849,11 +844,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
         body: 'First replacement message body',
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
-        ['m.new_content']: {
-          body: 'First replacement message body',
-          msgtype: 'org.text',
-          format: 'org.matrix.custom.html',
-        },
         ['m.relates_to']: {
           event_id: firstMessageId,
           rel_type: 'm.replace',

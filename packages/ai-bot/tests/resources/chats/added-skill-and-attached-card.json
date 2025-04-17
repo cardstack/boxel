@@ -408,12 +408,7 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "format": "org.matrix.custom.html"
-      }
+      "format": "org.matrix.custom.html"
     },
     "origin_server_ts": 1733266551309,
     "unsigned": {
