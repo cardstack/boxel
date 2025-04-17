@@ -73,8 +73,7 @@ export default class MessageBuilder {
       author: this.builderContext.author,
       created: new Date(this.event.origin_server_ts),
       updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
-      message: this.event.content.body,
-      formattedMessage: this.event.content.formatted_body,
+      body: this.event.content.body,
       // These are not guaranteed to exist in the event
       transactionId: this.event.unsigned?.transaction_id || null,
       attachedCardIds: null,
@@ -160,8 +159,7 @@ export default class MessageBuilder {
       return;
     }
 
-    message.message = this.event.content.body;
-    message.formattedMessage = this.event.content.formatted_body;
+    message.body = this.event.content.body;
     message.reasoningContent =
       (this.event.content as CardMessageContent)[
         APP_BOXEL_REASONING_CONTENT_KEY

@@ -630,7 +630,6 @@ module('Acceptance | Commands tests', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -692,7 +691,6 @@ module('Acceptance | Commands tests', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -748,9 +746,8 @@ Hello, world!
 =======
 Hi, world!
 >>>>>>> REPLACE\n\`\`\``;
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
-      formatted_body: codeBlock,
       msgtype: 'org.text',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
@@ -803,9 +800,8 @@ We are one!
     await click('[data-test-open-ai-assistant]');
     let roomId = getRoomIds().pop()!;
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
-      formatted_body: codeBlock,
       msgtype: 'org.text',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
@@ -904,7 +900,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Switching to code submode',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -991,7 +986,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -1055,7 +1049,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -1124,7 +1117,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -1201,7 +1193,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Show the card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -1277,7 +1268,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Checking the current UI state and searching for cards',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Checking the current UI state and searching for cards',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -1358,7 +1348,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Inspecting the current UI state',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Inspecting the current UI state',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -1414,7 +1403,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Getting weather information for London',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Getting weather information for London',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -1472,7 +1460,6 @@ We are one!
       simulateRemoteMessage(roomId, '@aibot:localhost', {
         body: 'Will it boom?',
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        formatted_body: 'Will it boom?',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
         [APP_BOXEL_COMMAND_REQUESTS_KEY]: [

@@ -30,7 +30,6 @@ import {
   baseRealm,
   LooseCardResource,
   logger,
-  markdownToHtml,
   ResolvedCodeRef,
   isCardInstance,
 } from '@cardstack/runtime-common';
@@ -41,7 +40,6 @@ import {
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -762,10 +760,6 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body), {
-      escapeHtmlInCodeBlocks: false,
-    });
-
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
@@ -797,7 +791,6 @@ export default class MatrixService extends Service {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: body || '',
       format: 'org.matrix.custom.html',
-      formatted_body: html,
       clientGeneratedId,
       data: {
         attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
