@@ -39,6 +39,7 @@
     "@cardstack/base": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/requirejs-monaco-ember-polyfill": "^0.0.1",
     "@cardstack/runtime-common": "workspace:*",
     "@ember/optional-features": "^2.0.0",

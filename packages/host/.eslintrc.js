@@ -22,13 +22,19 @@ module.exports = {
           ],
         },
       },
-      plugins: ['ember', '@typescript-eslint', 'window-mock'],
+      plugins: [
+        'ember',
+        '@typescript-eslint',
+        'window-mock',
+        '@cardstack/boxel',
+      ],
       extends: [
         'eslint:recommended',
         'plugin:ember/recommended',
         'plugin:@typescript-eslint/recommended',
         'plugin:prettier/recommended',
         'plugin:qunit-dom/recommended',
+        'plugin:@cardstack/boxel/recommended',
       ],
       rules: {
         '@typescript-eslint/no-empty-function': 'off',
@@ -66,7 +72,7 @@ module.exports = {
         },
         warnOnUnsupportedTypeScriptVersion: false,
       },
-      plugins: ['ember', 'window-mock'],
+      plugins: ['ember', 'window-mock', '@cardstack/boxel'],
       extends: [
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended',
