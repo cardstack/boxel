@@ -60,6 +60,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 
@@ -153,6 +154,7 @@ export default class CodeSubmode extends Component<Signature> {
 
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
@@ -623,6 +625,7 @@ export default class CodeSubmode extends Component<Signature> {
       let card = item;
       await this.withTestWaiters(async () => {
         await this.operatorModeStateService.deleteCard(card.id);
+        this.playgroundPanelService.removeSelectionsByCardId(card.id);
       });
     } else {
       let file = item;
@@ -638,6 +641,11 @@ export default class CodeSubmode extends Component<Signature> {
           this.recentFilesService.removeRecentFile(filePath);
         }
         await this.cardService.deleteSource(file);
+        if (file.href.endsWith('.json')) {
+          this.playgroundPanelService.removeSelectionsByCardId(
+            file.href.replace('.json', ''),
+          );
+        }
       });
     }
 
