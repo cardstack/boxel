@@ -32,7 +32,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { MatrixClient } from './lib/matrix';
+import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
 
 let log = logger('ai-bot');
 
@@ -97,9 +97,10 @@ export async function getPromptParts(
 ): Promise<PromptParts> {
   let cardFragments: Map<string, CardFragmentContent> =
     extractCardFragmentsFromEvents(eventList);
-  let history: DiscreteMatrixEvent[] = constructHistory(
+  let history: DiscreteMatrixEvent[] = await constructHistory(
     eventList,
     cardFragments,
+    client,
   );
   let shouldRespond = getShouldRespond(history);
   if (!shouldRespond) {
@@ -112,8 +113,8 @@ export async function getPromptParts(
       toolChoice: undefined,
     };
   }
-  let skills = getEnabledSkills(eventList, cardFragments);
-  let tools = getTools(history, skills, aiBotUserId);
+  let skills = await getEnabledSkills(eventList, cardFragments, client);
+  let tools = await getTools(eventList, history, skills, aiBotUserId, client);
   let toolChoice = getToolChoice(history, aiBotUserId);
   let messages = await getModifyPrompt(
     history,
@@ -147,9 +148,10 @@ export function extractCardFragmentsFromEvents(
   return fragments;
 }
 
-export function constructHistory(
+export async function constructHistory(
   eventlist: IRoomEvent[],
   cardFragments: Map<string, CardFragmentContent>,
+  client: MatrixClient,
 ) {
   /**
    * We send a lot of events to create messages,
@@ -201,10 +203,33 @@ export function constructHistory(
       continue;
     }
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let { attachedCardsEventIds } = event.content.data ?? {};
+      let { attachedCardsEventIds, attachedCards } = event.content.data ?? {};
       if (attachedCardsEventIds && attachedCardsEventIds.length > 0) {
         event.content.data.attachedCards = attachedCardsEventIds.map(
-          (id: string) => serializedCardFromFragments(id, cardFragments),
+          (id: string) => {
+            let card = serializedCardFromFragments(id, cardFragments);
+            return {
+              sourceUrl: card.data.id,
+              content: card,
+            };
+          },
+        );
+      } else if (attachedCards && attachedCards.length > 0) {
+        event.content.data.attachedCards = await Promise.all(
+          attachedCards.map(async (attachedCard: SerializedFileDef) => {
+            try {
+              let cardContent = await downloadFile(client, attachedCard);
+              return {
+                ...attachedCard,
+                content: JSON.parse(cardContent) as LooseSingleCardDocument,
+              };
+            } catch (e) {
+              return {
+                ...attachedCard,
+                error: `Error loading attached card: ${(e as Error).message}`,
+              };
+            }
+          }),
         );
       }
     }
@@ -254,10 +279,11 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   return allCommandsHaveResults;
 }
 
-function getEnabledSkills(
+async function getEnabledSkills(
   eventlist: DiscreteMatrixEvent[],
   cardFragments: Map<string, CardFragmentContent>,
-): LooseCardResource[] {
+  client: MatrixClient,
+): Promise<LooseCardResource[]> {
   let skillsConfigEvent = eventlist.findLast(
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
@@ -265,9 +291,22 @@ function getEnabledSkills(
     return [];
   }
   let enabledEventIds = skillsConfigEvent.content.enabledEventIds;
-  return enabledEventIds.map(
-    (id: string) => serializedCardFromFragments(id, cardFragments).data,
-  );
+  if (enabledEventIds?.length) {
+    return enabledEventIds.map(
+      (id: string) => serializedCardFromFragments(id, cardFragments).data,
+    );
+  }
+
+  let enabledCards = skillsConfigEvent.content.enabledCards;
+  if (enabledCards?.length) {
+    return await Promise.all(
+      enabledCards?.map(async (cardFileDef: SerializedFileDef) => {
+        let cardContent = await downloadFile(client, cardFileDef);
+        return (JSON.parse(cardContent) as LooseSingleCardDocument)?.data;
+      }),
+    );
+  }
+  return [];
 }
 
 function serializedCardFromFragments(
@@ -355,14 +394,16 @@ export function getRelevantCards(
     if (event.type !== 'm.room.message') {
       continue;
     }
+
     if (event.sender !== aiBotUserId) {
       let { content } = event;
+      let attachedCards = content.data?.attachedCards?.map(
+        (attachedCard: SerializedFileDef) => attachedCard.content,
+      );
       if (content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-        setRelevantCards(attachedCardMap, content.data?.attachedCards);
+        setRelevantCards(attachedCardMap, attachedCards);
         if (content.data?.attachedCards) {
-          mostRecentlyAttachedCard = getMostRecentlyAttachedCard(
-            content.data?.attachedCards,
-          );
+          mostRecentlyAttachedCard = getMostRecentlyAttachedCard(attachedCards);
         }
       }
     }
@@ -378,20 +419,11 @@ export function getRelevantCards(
   };
 }
 
-export async function loadCurrentlyAttachedFiles(
+export async function loadCurrentlySerializedFileDefs(
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
-): Promise<
-  {
-    url: string;
-    sourceUrl: string;
-    name: string;
-    contentType?: string;
-    content: string | undefined;
-    error: string | undefined;
-  }[]
-> {
+): Promise<SerializedFileDef[]> {
   let lastMessageEventByUser = history.findLast(
     (event) => event.sender !== aiBotUserId,
   );
@@ -399,12 +431,7 @@ export async function loadCurrentlyAttachedFiles(
   let mostRecentUserMessageContent = lastMessageEventByUser?.content as {
     msgtype?: string;
     data?: {
-      attachedFiles?: {
-        url: string;
-        sourceUrl: string;
-        name: string;
-        contentType?: string;
-      }[];
+      attachedFiles?: SerializedFileDef[];
     };
   };
 
@@ -425,65 +452,36 @@ export async function loadCurrentlyAttachedFiles(
   let attachedFiles = mostRecentUserMessageContent.data.attachedFiles;
 
   return Promise.all(
-    attachedFiles.map(
-      async (attachedFile: {
-        url: string;
-        sourceUrl: string;
-        name: string;
-        contentType?: string;
-      }) => {
-        try {
-          let content: string | undefined;
-          let error: string | undefined;
-          if (attachedFile.contentType?.startsWith('text/')) {
-            let response = await (globalThis as any).fetch(attachedFile.url, {
-              headers: {
-                Authorization: `Bearer ${client.getAccessToken()}`,
-              },
-            });
-            if (!response.ok) {
-              throw new Error(`HTTP error. Status: ${response.status}`);
-            }
-            content = await response.text();
-          } else {
-            error = `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`;
-          }
+    attachedFiles.map(async (attachedFile: SerializedFileDef) => {
+      try {
+        let content = await downloadFile(client, attachedFile);
 
-          return {
-            url: attachedFile.url,
-            sourceUrl: attachedFile.sourceUrl,
-            name: attachedFile.name,
-            contentType: attachedFile.contentType,
-            content,
-            error,
-          };
-        } catch (error) {
-          log.error(`Failed to fetch file ${attachedFile.url}:`, error);
-          Sentry.captureException(error, {
-            extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
-          });
-          return {
-            url: attachedFile.url,
-            name: attachedFile.name,
-            contentType: attachedFile.contentType,
-            content: undefined,
-            error: `Error loading attached file: ${(error as Error).message}`,
-          };
-        }
-      },
-    ),
+        return {
+          url: attachedFile.url,
+          sourceUrl: attachedFile.sourceUrl,
+          name: attachedFile.name,
+          contentType: attachedFile.contentType,
+          content,
+        };
+      } catch (error) {
+        log.error(`Failed to fetch file ${attachedFile.url}:`, error);
+        Sentry.captureException(error, {
+          extra: { fileUrl: attachedFile.url, fileName: attachedFile.name },
+        });
+        return {
+          url: attachedFile.url,
+          name: attachedFile.name,
+          contentType: attachedFile.contentType,
+          content: undefined,
+          error: `Error loading attached file: ${(error as Error).message}`,
+        };
+      }
+    }),
   );
 }
 
 export function attachedFilesToPrompt(
-  attachedFiles: {
-    url: string;
-    sourceUrl: string;
-    name: string;
-    contentType?: string;
-    content: string | undefined;
-    error: string | undefined;
-  }[],
+  attachedFiles: SerializedFileDef[],
 ): string {
   if (!attachedFiles.length) {
     return 'No attached files';
@@ -500,11 +498,13 @@ export function attachedFilesToPrompt(
     .join('\n');
 }
 
-export function getTools(
+export async function getTools(
+  eventList: DiscreteMatrixEvent[],
   history: DiscreteMatrixEvent[],
   enabledSkills: LooseCardResource[],
   aiBotUserId: string,
-): Tool[] {
+  client: MatrixClient,
+): Promise<Tool[]> {
   // Build map directly from messages
   let enabledCommandNames = new Set<string>();
   let toolMap = new Map<string, Tool>();
@@ -519,23 +519,42 @@ export function getTools(
     }
   }
 
-  // Iterate over the command definitions, and add any tools that are in
-  // enabled skills to the tool map
-  let commandDefinitionEvents: CommandDefinitionsEvent[] = history.filter(
-    (event) =>
-      event.type === 'm.room.message' &&
-      event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-  ) as CommandDefinitionsEvent[];
+  let skillsConfigEvent = eventList.findLast(
+    (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  ) as SkillsConfigEvent;
 
-  for (let event of commandDefinitionEvents) {
-    let { content } = event;
-    let { commandDefinitions } = content.data;
+  if (skillsConfigEvent?.content?.commandDefinitions) {
+    let commandDefinitions = skillsConfigEvent.content.commandDefinitions;
     for (let commandDefinition of commandDefinitions) {
-      if (enabledCommandNames.has(commandDefinition.tool.function.name)) {
-        toolMap.set(
-          commandDefinition.tool.function.name,
-          commandDefinition.tool,
+      if (enabledCommandNames.has(commandDefinition.name)) {
+        let commandDefinitionContent = await downloadFile(
+          client,
+          commandDefinition,
         );
+        let commandDefinitionObject = JSON.parse(commandDefinitionContent);
+        toolMap.set(commandDefinition.name, commandDefinitionObject.tool);
+      }
+    }
+  } else {
+    // This is a deprecated approach where we store command definitions as room events
+    // Iterate over the command definitions, and add any tools that are in
+    // enabled skills to the tool map
+    let commandDefinitionEvents: CommandDefinitionsEvent[] = history.filter(
+      (event) =>
+        event.type === 'm.room.message' &&
+        event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
+    ) as CommandDefinitionsEvent[];
+
+    for (let event of commandDefinitionEvents) {
+      let { content } = event;
+      let { commandDefinitions } = content.data;
+      for (let commandDefinition of commandDefinitions) {
+        if (enabledCommandNames.has(commandDefinition.tool.function.name)) {
+          toolMap.set(
+            commandDefinition.tool.function.name,
+            commandDefinition.tool,
+          );
+        }
       }
     }
   }
@@ -727,7 +746,7 @@ export async function getModifyPrompt(
     aiBotUserId,
   );
 
-  let attachedFiles = await loadCurrentlyAttachedFiles(
+  let attachedFiles = await loadCurrentlySerializedFileDefs(
     client,
     history,
     aiBotUserId,

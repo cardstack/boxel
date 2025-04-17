@@ -115,13 +115,33 @@ class EmbeddedTemplate extends Component<typeof BlogPost> {
         gap: var(--boxel-sp-xxxs);
       }
 
-      .category {
-        display: inline-block;
-        padding: 3px var(--boxel-sp-xxxs);
-        border-radius: var(--boxel-border-radius-sm);
-        font: 500 var(--boxel-font-xs);
-        letter-spacing: var(--boxel-lsp-sm);
-      }
+        .category {
+          display: inline-block;
+          padding: 4px var(--boxel-sp-xs);
+          border-radius: var(--boxel-border-radius-sm);
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-sm);
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .category:hover {
+          transform: translateY(-1px);
+          box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        @media (max-width: 768px) {
+          article {
+            padding: var(--boxel-sp-sm) var(--boxel-sp-sm);
+          }
+          
+          h1 {
+            font-size: 2rem;
+          }
+          
+          .description {
+            font-size: 1.1rem;
+          }
+        }
     </style>
   </template>
 }
@@ -764,18 +784,21 @@ export class BlogPost extends CardDef {
       <style scoped>
         @import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400..700;1,400..700&family=Playfair+Display:ital,wght@0,400..900;1,400..900&display=swap');
         article {
-          --markdown-font-size: 1rem;
+          --markdown-font-size: 1.125rem;
           --markdown-font-family: var(--blog-post-font-family, 'Lora', serif);
           --markdown-heading-font-family: var(
             --blog-post-heading-font-family,
             'Playfair Display',
             serif
           );
+          --markdown-line-height: 1.8;
           height: max-content;
           min-height: 100%;
-          padding: var(--boxel-sp-sm) var(--boxel-sp-xl) var(--boxel-sp-lg);
+          padding: var(--boxel-sp-sm) clamp(var(--boxel-sp-sm), 8vw, var(--boxel-sp-xxl)) var(--boxel-sp-lg);
           background-color: #fcf9f2;
           font-family: var(--blog-post-font-family, 'Lora', serif);
+          max-width: 80ch;
+          margin: 0 auto;
         }
         h1,
         h2,
@@ -820,8 +843,10 @@ export class BlogPost extends CardDef {
           gap: var(--boxel-sp-xs);
           flex-wrap: wrap;
           list-style: none;
-          margin: 0;
+          margin: var(--boxel-sp-sm) 0 var(--boxel-sp-xl);
           padding: 0;
+          font-size: 0.95rem;
+          color: var(--boxel-dark-600);
         }
         .info > li + li {
           border-left: 1px solid black;

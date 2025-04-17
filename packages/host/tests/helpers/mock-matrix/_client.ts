@@ -132,7 +132,7 @@ export class MockClient implements ExtendedClient {
   }
 
   getAccessToken(): string | null {
-    throw new Error('Method not implemented.');
+    return "shhh! it's a secret";
   }
 
   setAccountData<T>(type: string, data: T): Promise<{}> {
@@ -616,7 +616,9 @@ export class MockClient implements ExtendedClient {
     _content: ArrayBuffer,
     _opts?: { type?: string; name?: string },
   ): Promise<{ content_uri: string }> {
-    return { content_uri: `mxc://mock-server/${Math.random()}` };
+    let contentUri = `mxc://mock-server/${Math.random()}`;
+    this.serverState.addContent(this.mxcUrlToHttp(contentUri), _content);
+    return { content_uri: contentUri };
   }
 
   mxcUrlToHttp(mxcUrl: string): string {

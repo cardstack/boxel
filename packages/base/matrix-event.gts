@@ -1,4 +1,3 @@
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import type {
   AttributesSchema,
@@ -177,14 +176,14 @@ export interface CardMessageContent {
   // to verify whether the message is already sent or not.
   clientGeneratedId?: string;
   data: {
-    // we use this field over the wire since the matrix message protocol
-    // limits us to 65KB per message
     attachedFiles?: SerializedFile[];
+    attachedCards?: SerializedFile[];
+    /**
+     * @deprecated This field is deprecated and will be removed in a future version.
+     * We use this field over the wire since the matrix message protocol
+     * requires a string value for the content field.
+     */
     attachedCardsEventIds?: string[];
-    // we materialize this field on the server from the card
-    // fragments that we receive
-    attachedCards?: LooseSingleCardDocument[];
-    skillCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
       tools: Tool[];
@@ -216,8 +215,13 @@ export interface CardFragmentContent {
 export interface SkillsConfigEvent extends RoomStateEvent {
   type: typeof APP_BOXEL_ROOM_SKILLS_EVENT_TYPE;
   content: {
-    enabledEventIds: string[];
-    disabledEventIds: string[];
+    enabledCards?: SerializedFile[];
+    disabledCards?: SerializedFile[];
+    commandDefinitions?: SerializedFile[];
+
+    // @deprecated Use enabledCards and disabledCards instead
+    enabledEventIds?: string[];
+    disabledEventIds?: string[];
   };
 }
 
@@ -261,9 +265,8 @@ export interface CommandResultWithOutputContent {
   };
   commandRequestId: string;
   data: {
-    cardEventId: string;
-    // we materialize this field on the server
-    card?: LooseSingleCardDocument;
+    cardEventId?: string;
+    card?: SerializedFile;
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;
 }

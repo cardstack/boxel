@@ -112,9 +112,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       files = await this.matrixService.uploadFiles(files);
     }
 
-    let attachedCardsEventIds = await matrixService.addCardsToRoom(
+    let cardFileDefs = await matrixService.uploadCards(
       input.attachedCards ?? [],
-      roomId,
     );
 
     let clientGeneratedId = input.clientGeneratedId ?? uuidv4();
@@ -127,7 +126,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       clientGeneratedId,
       data: {
         attachedFiles: files?.map((file: FileDef) => file.serialize()),
-        attachedCardsEventIds,
+        attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,

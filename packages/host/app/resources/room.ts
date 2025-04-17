@@ -20,6 +20,7 @@ import {
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardFragmentContent,
   MatrixEvent as DiscreteMatrixEvent,
@@ -53,7 +54,8 @@ import type StoreService from '../services/store';
 
 export type RoomSkill = {
   cardId: string;
-  skillEventId: string;
+  skillEventId?: string;
+  fileDef?: SerializedFile;
   isActive: boolean;
 };
 
@@ -116,6 +118,7 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
+      await this.loadSkillCards(this.matrixRoom.skillsConfig.enabledCards);
 
       let index = this._messageCache.size;
       // This is brought up to this level so if the
@@ -215,13 +218,45 @@ export class RoomResource extends Resource<Args> {
 
   private get allSkillEventIds(): Set<string> {
     let skillsConfig = this.matrixRoom?.skillsConfig;
-    if (!skillsConfig) {
+
+    if (
+      !skillsConfig ||
+      !skillsConfig.enabledEventIds ||
+      !skillsConfig.disabledEventIds
+    ) {
       return new Set();
     }
     return new Set([
       ...skillsConfig.enabledEventIds,
       ...skillsConfig.disabledEventIds,
     ]);
+  }
+
+  private get allSkillFileDefs(): SerializedFile[] {
+    let skillConfig = this.matrixRoom?.skillsConfig;
+    if (
+      !skillConfig ||
+      !skillConfig.enabledCards ||
+      !skillConfig.disabledCards
+    ) {
+      return [];
+    }
+
+    const enabledCards = skillConfig.enabledCards || [];
+    const disabledCards = skillConfig.disabledCards || [];
+    const uniqueCardsMap = new Map();
+
+    for (const card of enabledCards) {
+      uniqueCardsMap.set(card.sourceUrl, card);
+    }
+
+    for (const card of disabledCards) {
+      if (!uniqueCardsMap.has(card.sourceUrl)) {
+        uniqueCardsMap.set(card.sourceUrl, card);
+      }
+    }
+
+    return Array.from(uniqueCardsMap.values());
   }
 
   get skills(): RoomSkill[] {
@@ -238,6 +273,17 @@ export class RoomResource extends Resource<Args> {
           this.matrixRoom?.skillsConfig.enabledEventIds.includes(
             skillEventId,
           ) ?? false,
+      });
+    }
+
+    for (let skillCard of this.allSkillFileDefs) {
+      result.push({
+        cardId: skillCard.sourceUrl,
+        fileDef: skillCard,
+        isActive:
+          this.matrixRoom?.skillsConfig.enabledCards
+            .map((enabledCard) => enabledCard.sourceUrl)
+            .includes(skillCard.sourceUrl) ?? false,
       });
     }
     return result;
@@ -379,6 +425,25 @@ export class RoomResource extends Resource<Args> {
     return this.allSkillEventIds.has(eventId);
   }
 
+  private async createSkillCard(cardDoc: LooseSingleCardDocument) {
+    let cardId = cardDoc.data.id;
+    if (!cardId) {
+      console.warn(
+        `No card id found, this should not happen, this can happen if you add a skill card to a room without saving it, and without giving it an ID`,
+      );
+      return;
+    }
+    if (this._skillCardsCache.has(cardId)) {
+      return this._skillCardsCache.get(cardId);
+    }
+
+    let skillCard = await this.store.add<SkillCard>(cardDoc, {
+      doNotPersist: true,
+    });
+    this._skillCardsCache.set(cardId, skillCard);
+    return skillCard;
+  }
+
   // TODO we should think about why we are caching these running instances
   // outside of the store. it would be a good idea to bring these into the fold
   // so that we can make the `createFromSerialized()` more private.
@@ -387,21 +452,18 @@ export class RoomResource extends Resource<Args> {
       return;
     }
     let cardDoc = this.serializedCardFromFragments(eventId);
-    if (!cardDoc.data.id) {
-      console.warn(
-        `No card id found for skill event id ${eventId}, this should not happen, this can happen if you add a skill card to a room without saving it, and without giving it an ID`,
-      );
-      return;
+    let card = await this.createSkillCard(cardDoc);
+    if (card) {
+      this._skillEventIdToCardIdCache.set(eventId, card.id);
     }
-    let cardId = cardDoc.data.id;
-    // Warning these are garbage collected: probably that's ok since nothing
-    // links to this, but we should refactor this to the store for its cache
-    // instead: CS-8304
-    let skillCard = await this.store.add<SkillCard>(cardDoc, {
-      doNotPersist: true,
-    });
-    this._skillCardsCache.set(cardId, skillCard);
-    this._skillEventIdToCardIdCache.set(eventId, cardId);
+  }
+
+  private async loadSkillCards(skillCardFileDefs: SerializedFile[]) {
+    for (let skillCardFileDef of skillCardFileDefs) {
+      let cardDoc =
+        await this.matrixService.downloadCardFileDef(skillCardFileDef);
+      await this.createSkillCard(cardDoc);
+    }
   }
 
   private loadRoomMessage({

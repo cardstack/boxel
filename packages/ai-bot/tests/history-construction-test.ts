@@ -12,17 +12,28 @@ import {
 
 import { EventStatus, type IRoomEvent } from 'matrix-js-sdk';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { FakeMatrixClient } from './helpers/fake-matrix-client';
 
-module('constructHistory', () => {
-  test('should return an empty array when the input array is empty', () => {
+module('constructHistory', (hooks) => {
+  let fakeMatrixClient: FakeMatrixClient;
+
+  hooks.beforeEach(() => {
+    fakeMatrixClient = new FakeMatrixClient();
+  });
+
+  hooks.afterEach(() => {
+    fakeMatrixClient.resetSentEvents();
+  });
+
+  test('should return an empty array when the input array is empty', async () => {
     const history: DiscreteMatrixEvent[] = [];
 
-    const result = constructHistory(history, new Map());
+    const result = await constructHistory(history, new Map(), fakeMatrixClient);
 
     assert.deepEqual(result, []);
   });
 
-  test('should return an empty array when the input array contains only non-message events', () => {
+  test('should return an empty array when the input array contains only non-message events', async () => {
     const history: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.create',
@@ -71,12 +82,12 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history, new Map());
+    const result = await constructHistory(history, new Map(), fakeMatrixClient);
 
     assert.deepEqual(result, []);
   });
 
-  test('should return an array with a single message event when the input array contains only one message event', () => {
+  test('should return an array with a single message event when the input array contains only one message event', async () => {
     const eventlist: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -97,12 +108,16 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(eventlist, new Map());
+    const result = await constructHistory(
+      eventlist,
+      new Map(),
+      fakeMatrixClient,
+    );
 
     assert.deepEqual(result, eventlist);
   });
 
-  test('should return an array with all message events when the input array contains multiple message events', () => {
+  test('should return an array with all message events when the input array contains multiple message events', async () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -157,12 +172,12 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history, new Map());
+    const result = await constructHistory(history, new Map(), fakeMatrixClient);
 
     assert.deepEqual(result, history);
   });
 
-  test('should return an array with all message events when the input array contains multiple events with the same origin_server_ts', () => {
+  test('should return an array with all message events when the input array contains multiple events with the same origin_server_ts', async () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -217,12 +232,12 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history, new Map());
+    const result = await constructHistory(history, new Map(), fakeMatrixClient);
 
     assert.deepEqual(result, history);
   });
 
-  test('should return an array of DiscreteMatrixEvent objects with no duplicates based on event_id even when m.relates_to is present and include senders and origin_server_ts', () => {
+  test('should return an array of DiscreteMatrixEvent objects with no duplicates based on event_id even when m.relates_to is present and include senders and origin_server_ts', async () => {
     const history: IRoomEvent[] = [
       // this event will _not_ replace event_id 2 since it's timestamp is before event_id 2
       {
@@ -321,7 +336,7 @@ module('constructHistory', () => {
       },
     ];
 
-    const result = constructHistory(history, new Map());
+    const result = await constructHistory(history, new Map(), fakeMatrixClient);
 
     assert.deepEqual(result, [
       {
@@ -382,7 +397,7 @@ module('constructHistory', () => {
     ]);
   });
 
-  test('should reassemble card fragments', () => {
+  test('should reassemble card fragments', async () => {
     // we can't use the DiscreteMatrixEvent type here because we need to start
     // from the wire-format which serializes the data.content to a string for
     // safe transport over the wire
@@ -481,7 +496,11 @@ module('constructHistory', () => {
     ];
 
     let cardFragments = extractCardFragmentsFromEvents(eventlist);
-    const result = constructHistory(eventlist, cardFragments);
+    const result = await constructHistory(
+      eventlist,
+      cardFragments,
+      fakeMatrixClient,
+    );
     assert.deepEqual(result, [
       {
         type: 'm.room.message',
@@ -500,33 +519,39 @@ module('constructHistory', () => {
             attachedCardsEventIds: ['2', '3'],
             attachedCards: [
               {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/experiments/Author/1',
-                  attributes: {
-                    firstName: 'Terry',
-                    lastName: 'Pratchett',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../author',
-                      name: 'Author',
+                sourceUrl: 'http://localhost:4201/experiments/Author/1',
+                content: {
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/experiments/Author/1',
+                    attributes: {
+                      firstName: 'Terry',
+                      lastName: 'Pratchett',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../author',
+                        name: 'Author',
+                      },
                     },
                   },
                 },
               },
               {
-                data: {
-                  type: 'card',
-                  id: 'http://localhost:4201/experiments/Author/1',
-                  attributes: {
-                    firstName: 'Mango',
-                    lastName: 'Abdel-Rahman',
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: '../author',
-                      name: 'Author',
+                sourceUrl: 'http://localhost:4201/experiments/Author/1',
+                content: {
+                  data: {
+                    type: 'card',
+                    id: 'http://localhost:4201/experiments/Author/1',
+                    attributes: {
+                      firstName: 'Mango',
+                      lastName: 'Abdel-Rahman',
+                    },
+                    meta: {
+                      adoptsFrom: {
+                        module: '../author',
+                        name: 'Author',
+                      },
                     },
                   },
                 },
@@ -544,7 +569,7 @@ module('constructHistory', () => {
     ]);
   });
 
-  test('handles invalid fragments', () => {
+  test('handles invalid fragments', async () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
@@ -573,7 +598,7 @@ module('constructHistory', () => {
     ];
 
     try {
-      constructHistory(history, new Map());
+      await constructHistory(history, new Map(), fakeMatrixClient);
       assert.ok(false, 'Expected an error');
     } catch (e) {
       assert.ok(e instanceof HistoryConstructionError);

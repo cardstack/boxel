@@ -87,7 +87,7 @@ import type {
 import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
-import CardEventPublisher from '../lib/card-event-publisher';
+import CardFileDefManager from '../lib/card-file-def-manager';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -150,7 +150,7 @@ export default class MatrixService extends Service {
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
   private startedAtTs = -1;
-  private cardEventPublisher = new CardEventPublisher(
+  private cardFileDefManager = new CardFileDefManager(
     getOwner(this) as Owner,
     () => this.cardAPI,
   );
@@ -643,23 +643,35 @@ export default class MatrixService extends Service {
     });
   }
 
-  async addCardsToRoom(cards: CardDef[], roomId: string) {
-    let cardEventIds = await this.cardEventPublisher.addCardsToRoom(
-      cards,
-      roomId,
-    );
-    return cardEventIds;
+  async downloadCardFileDef(cardFileDef: SerializedFile) {
+    return this.cardFileDefManager.downloadCardFileDef(cardFileDef);
   }
 
-  async addSkillCardsToRoomHistory(
-    skillCards: SkillCardModule.SkillCard[],
-    roomId: string,
+  async downloadFile(url: string) {
+    let response = await this.network.fetch(url, {
+      headers: {
+        Authorization: `Bearer ${this.client.getAccessToken()}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error. Status: ${response.status}`);
+    }
+    return response;
+  }
+
+  async uploadCards(cards: CardDef[]) {
+    let cardFileDefs = await this.cardFileDefManager.uploadCards(cards);
+    return cardFileDefs;
+  }
+
+  async uploadCommandDefinitions(
+    commandDefinitions: SkillCardModule.CommandField[],
   ) {
-    let cardEventIds = await this.cardEventPublisher.addSkillCardsToRoomHistory(
-      skillCards,
-      roomId,
-    );
-    return cardEventIds;
+    let commandFileDefs =
+      await this.cardFileDefManager.uploadCommandDefinitions(
+        commandDefinitions,
+      );
+    return commandFileDefs;
   }
 
   async sendCommandResultEvent(
@@ -668,17 +680,14 @@ export default class MatrixService extends Service {
     toolCallId: string,
     resultCard?: CardDef,
   ) {
-    let resultCardEventId: string | undefined;
+    let cardFileDef: FileDef | undefined;
     if (resultCard) {
-      [resultCardEventId] = await this.cardEventPublisher.addCardsToRoom(
-        [resultCard],
-        roomId,
-      );
+      [cardFileDef] = await this.cardFileDefManager.uploadCards([resultCard]);
     }
     let content:
       | CommandResultWithNoOutputContent
       | CommandResultWithOutputContent;
-    if (resultCardEventId === undefined) {
+    if (cardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: toolCallId,
@@ -698,7 +707,7 @@ export default class MatrixService extends Service {
         },
         commandRequestId: toolCallId,
         data: {
-          cardEventId: resultCardEventId,
+          card: cardFileDef.serialize(),
         },
       };
     }
@@ -739,12 +748,8 @@ export default class MatrixService extends Service {
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-
-        let uploadResponse = await this.client.uploadContent(text, {
-          type: contentType,
-        });
-
-        file.url = this.client.mxcUrlToHttp(uploadResponse.content_uri);
+        console.log('uploading file', file.sourceUrl, contentType);
+        file.url = await this.uploadContent(text, contentType);
         file.contentType = contentType;
 
         return file;
@@ -752,6 +757,13 @@ export default class MatrixService extends Service {
     );
 
     return uploadedFiles;
+  }
+
+  async uploadContent(content: string, contentType: string) {
+    let uploadResponse = await this.client.uploadContent(content, {
+      type: contentType,
+    });
+    return this.client.mxcUrlToHttp(uploadResponse.content_uri);
   }
 
   async sendMessage(
@@ -788,10 +800,7 @@ export default class MatrixService extends Service {
       }
     }
 
-    let attachedCardsEventIds = await this.cardEventPublisher.addCardsToRoom(
-      attachedCards,
-      roomId,
-    );
+    let cardFileDefs = await this.cardFileDefManager.uploadCards(attachedCards);
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -801,7 +810,7 @@ export default class MatrixService extends Service {
       clientGeneratedId,
       data: {
         attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
-        attachedCardsEventIds,
+        attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
@@ -931,7 +940,7 @@ export default class MatrixService extends Service {
     this.flushRoomState = undefined;
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
-    this.cardEventPublisher = new CardEventPublisher(
+    this.cardFileDefManager = new CardFileDefManager(
       getOwner(this) as Owner,
       () => this.cardAPI,
     );
@@ -1467,7 +1476,9 @@ export default class MatrixService extends Service {
           ? JSON.parse(event.content.data)
           : event.content.data
       ) as CommandResultWithOutputContent['data'];
-      await this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
+      if (data.cardEventId) {
+        await this.ensureCardFragmentsLoaded(data.cardEventId, roomData);
+      }
     } else if (
       event.type === 'm.room.message' &&
       event.content?.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE

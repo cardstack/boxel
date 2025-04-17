@@ -207,6 +207,10 @@ export default class MessageBuilder {
           event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
             ? event.content.data.cardEventId
             : undefined;
+        messageCommand.commandResultFileDef =
+          event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+            ? event.content.data.card
+            : undefined;
       }
     }
   }
@@ -258,6 +262,7 @@ export default class MessageBuilder {
         }
       }
     }
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
@@ -269,6 +274,10 @@ export default class MessageBuilder {
       commandResultEvent?.content.msgtype ===
       APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
         ? commandResultEvent.content.data.cardEventId
+        : undefined,
+      commandResultEvent?.content.msgtype ===
+      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+        ? commandResultEvent.content.data.card
         : undefined,
       getOwner(this)!,
     );

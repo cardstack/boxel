@@ -145,6 +145,9 @@ export default class CommandService extends Service {
         if (messageCommand.commandResultCardEventId) {
           continue;
         }
+        if (messageCommand.commandResultCardId) {
+          continue;
+        }
         if (!messageCommand.name) {
           continue;
         }

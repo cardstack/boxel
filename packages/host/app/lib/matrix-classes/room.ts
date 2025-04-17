@@ -8,6 +8,7 @@ import {
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   ActiveLLMEvent,
   MatrixEvent as DiscreteMatrixEvent,
@@ -67,7 +68,16 @@ export default class Room {
       ?.get('')?.event.content ?? {
       enabledEventIds: [],
       disabledEventIds: [],
-    }) as { enabledEventIds: string[]; disabledEventIds: string[] };
+      enabledCards: [],
+      disabledCards: [],
+      commandDefinitions: [],
+    }) as {
+      enabledEventIds: string[];
+      disabledEventIds: string[];
+      enabledCards: SerializedFile[];
+      disabledCards: SerializedFile[];
+      commandDefinitions: SerializedFile[];
+    };
   }
 
   get activeLLM() {

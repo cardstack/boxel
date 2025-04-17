@@ -24,23 +24,47 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
   ): Promise<undefined> {
     let { matrixService } = this;
     let { roomId, skills } = input;
-    let roomSkillEventIds = await matrixService.addSkillCardsToRoomHistory(
-      skills,
-      roomId,
-    );
+    let skillFileDefs = await matrixService.uploadCards(skills);
+    const commandDefinitions = skills.flatMap((skill) => skill.commands);
+    let commandFileDefs =
+      await matrixService.uploadCommandDefinitions(commandDefinitions);
+
     await matrixService.updateStateEvent(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       '',
       async (oldContent: Record<string, any>) => {
+        let enabledCards = [...(oldContent.enabledCards || [])];
+
+        const newCards = skillFileDefs
+          .map((fileDef) => fileDef.serialize())
+          .filter(
+            (newCard) =>
+              !enabledCards.some(
+                (existingCard) => existingCard.sourceUrl === newCard.sourceUrl,
+              ),
+          );
+        const updatedEnabledCards = [...enabledCards, ...newCards];
+
+        let commandDefinitions = [...(oldContent.commandDefinitions || [])];
+        const newCommandDefinitions = commandFileDefs
+          .map((fileDef) => fileDef.serialize())
+          .filter(
+            (newCommandDefinition) =>
+              !commandDefinitions.some(
+                (commandDefinition) =>
+                  commandDefinition.sourceUrl ===
+                  newCommandDefinition.sourceUrl,
+              ),
+          );
+        const updatedCommandDefinitions = [
+          ...commandDefinitions,
+          ...newCommandDefinitions,
+        ];
         return {
-          enabledEventIds: [
-            ...new Set([
-              ...(oldContent.enabledEventIds || []),
-              ...roomSkillEventIds,
-            ]),
-          ],
-          disabledEventIds: [...(oldContent.disabledEventIds || [])],
+          enabledCards: updatedEnabledCards,
+          disabledCards: [...(oldContent.disabledCards || [])],
+          commandDefinitions: updatedCommandDefinitions,
         };
       },
     );

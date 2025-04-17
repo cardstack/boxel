@@ -612,6 +612,10 @@ export default class Room extends Component<Signature> {
   }
 
   private get cardIdsToAttach() {
+    console.log(
+      'cardIdsToAttach',
+      this.matrixService.cardsToSend.get(this.args.roomId),
+    );
     return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
@@ -832,12 +836,19 @@ export default class Room extends Component<Signature> {
   }
 
   private updateSkillIsActiveTask = task(
-    async (skillEventId: string, isActive: boolean) => {
+    async (isActive: boolean, skillEventId?: string, skillCardId?: string) => {
+      console.log(
+        'updateSkillIsActiveTask',
+        isActive,
+        skillEventId,
+        skillCardId,
+      );
       await new UpdateSkillActivationCommand(
         this.commandService.commandContext,
       ).execute({
         roomId: this.args.roomId,
         skillEventId,
+        skillCardId,
         isActive,
       });
     },
