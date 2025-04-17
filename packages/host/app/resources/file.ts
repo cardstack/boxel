@@ -214,33 +214,37 @@ class _FileResource extends Resource<Args> {
       let normalizedURL = this.url.endsWith('.json')
         ? this.url.replace(/\.json$/, '')
         : this.url;
-      if (invalidations.includes(normalizedURL)) {
-        console.log(
-          'maybe read.perform in file resource because of invalidation',
-        );
-        console.log('this was the event', event);
 
-        if (
-          event.clientRequestId &&
-          event.clientRequestId.startsWith('source:')
-        ) {
-          if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
-            console.log(
-              'ignoring because request id is contained in known clientRequestIds',
+      if (invalidations.includes(normalizedURL)) {
+        log.trace(
+          `file resource ${normalizedURL} processing invalidation`,
+          event,
+        );
+
+        let clientRequestId = event.clientRequestId;
+        let reloadFile = false;
+
+        if (!clientRequestId) {
+          reloadFile = true;
+          log.debug(
+            `reloading file resource ${normalizedURL} because realm event has no clientRequestId`,
+          );
+        } else if (clientRequestId.startsWith('source:')) {
+          if (this.cardService.clientRequestIds.has(clientRequestId)) {
+            log.debug(
+              `ignoring because request id is contained in known clientRequestIds`,
               event.clientRequestId,
             );
           } else {
-            console.log(
-              'read.perform happening because request id is',
-              event.clientRequestId,
+            reloadFile = true;
+            log.debug(
+              `reloading file resource ${normalizedURL} because request id is ${clientRequestId}, not contained within known clientRequestIds`,
+              Object.keys(this.cardService.clientRequestIds),
             );
-            this.read.perform();
           }
-        } else {
-          console.log(
-            'read.perform happening because request id is',
-            event.clientRequestId,
-          );
+        }
+
+        if (reloadFile) {
           this.read.perform();
         }
       }
