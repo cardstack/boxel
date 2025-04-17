@@ -44,10 +44,13 @@ export interface CodeData {
 }
 
 interface FormattedMessageSignature {
-  html: string;
-  monacoSDK: MonacoSDK;
-  renderCodeBlocks: boolean;
-  isStreaming: boolean;
+  Element: HTMLDivElement;
+  Args: {
+    html: SafeString;
+    monacoSDK: MonacoSDK;
+    renderCodeBlocks: boolean;
+    isStreaming: boolean;
+  };
 }
 
 function sanitize(html: string): SafeString {
@@ -105,7 +108,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     }
   };
 
-  private onHtmlUpdate = (html: string) => {
+  private onHtmlUpdate = (html: SafeString) => {
     // The reason why reacting to html argument this way is because we want to
     // have full control of when the @html argument changes so that we can
     // properly fragment it into htmlParts, and in our reactive structure, only update
@@ -113,7 +116,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
     // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
     scheduleOnce('afterRender', () => {
-      this.updateHtmlGroups(html);
+      this.updateHtmlGroups(html.toString());
     });
   };
 
@@ -182,6 +185,10 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
     this.applyAllCodePatchTasksState = 'applied';
   });
+
+  sanitizeSafeString = (html: SafeString) => {
+    return sanitize(html.toString());
+  };
 
   <template>
     {{#if @renderCodeBlocks}}
@@ -270,7 +277,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       </div>
     {{else}}
       <div class='message'>
-        {{sanitize @html}}
+        {{this.sanitizeSafeString @html}}
       </div>
     {{/if}}
 
@@ -328,8 +335,8 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 interface HtmlDidUpdateSignature {
   Args: {
     Named: {
-      html: string;
-      onHtmlUpdate: (html: string) => void;
+      html: SafeString;
+      onHtmlUpdate: (html: SafeString) => void;
     };
   };
 }

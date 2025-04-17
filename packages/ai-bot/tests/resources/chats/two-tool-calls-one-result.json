@@ -304,7 +304,6 @@
       "msgtype": "app.boxel.cardFragment",
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
-      "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/onnx/AiCommandExample/86ed3d35-c97c-4c2c-a7cb-88c3dba6e1ec\\\",\\\"attributes\\\":{\\\"locations\\\":[\\\"New York\\\"],\\\"title\\\":\\\"AI COMMAND TEST\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"AiCommandExample\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
     "origin_server_ts": 1736864363215,
@@ -323,7 +322,6 @@
       "msgtype": "app.boxel.message",
       "body": "I'm planning to visit these locations: New York, Beverly Hills. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions",
       "format": "org.matrix.custom.html",
-      "formatted_body": "<p>I'm planning to visit these locations: New York, Beverly Hills. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions</p>\n",
       "clientGeneratedId": "4a3d6e7f-f492-48de-b3e5-7ef8c5bda696",
       "data": "{\"attachedCardsEventIds\":[\"$YSkK-gX0AH0fT_t23m_BDabQB4f4f6dE0c8JSV-3CXE\"],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":false}}"
     },
@@ -342,14 +340,7 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "formatted_body": "Thinking...",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "formatted_body": "Thinking...",
-        "format": "org.matrix.custom.html"
-      }
+      "format": "org.matrix.custom.html"
     },
     "origin_server_ts": 1736864365020,
     "unsigned": {
@@ -366,7 +357,6 @@
     "content": {
       "body": "Check the current weather conditions for traveling",
       "msgtype": "app.boxel.message",
-      "formatted_body": "Check the current weather conditions for traveling",
       "format": "org.matrix.custom.html",
       "data": "{\"eventId\":\"$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_or0qFTa8y9Ef8ZVyRDNR2P1T\",\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"arguments\":{\"description\":\"Check the current weather conditions for traveling\",\"attributes\":{\"location\":\"New York\"}}}}",
       "app.boxel.commandRequests": [
@@ -408,7 +398,6 @@
       "msgtype": "app.boxel.cardFragment",
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
-      "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"attributes\\\":{\\\"temperature\\\":\\\"22°C\\\",\\\"conditions\\\":\\\"Cloudy\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"WeatherReport\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
     "origin_server_ts": 1736864370828,
