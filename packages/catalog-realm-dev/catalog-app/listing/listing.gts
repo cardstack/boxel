@@ -7,13 +7,13 @@ import {
   StringField,
   linksTo,
   Component,
-  updateFromSerialized,
   meta,
-  relativeTo,
 } from 'https://cardstack.com/base/card-api';
 import {
   codeRefWithAbsoluteURL,
-  ResolvedCodeRef,
+  isResolvedCodeRef,
+  type CopyCardsWithCodeRef,
+  type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
@@ -129,12 +129,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _install = task(async (realmUrl: string) => {
-    const specsToCopy: Spec[] = this.args.model?.specs ?? [];
     const copyMeta: CopyMeta[] = [];
 
     // Copy the gts file based on the attached spec's moduleHref
-    await Promise.all(
-      specsToCopy.map(async (spec: Spec) => {
+    for (const spec of this.args.model?.specs ?? []) {
+      if (spec.specType !== 'field') {
         const absoluteModulePath = spec.moduleHref;
         const relativeModulePath = spec.ref.module;
         const normalizedPath = relativeModulePath.split('/').slice(1).join('/');
@@ -156,35 +155,40 @@ class EmbeddedTemplate extends Component<typeof Listing> {
             name: spec.ref.name,
           },
         });
-      }),
-    );
+      }
+    }
 
     if (this.args.model.examples) {
       // Create serialized objects for each example with modified adoptsFrom
-      const examplesToCopy = [];
+      const copyCardsWithCodeRef: CopyCardsWithCodeRef[] = [];
       await Promise.all(
-        this.args.model.examples.map(async (instance) => {
-          let adoptsFrom = instance[meta].adoptsFrom;
-          let exampleCodeRef = codeRefWithAbsoluteURL(adoptsFrom, instance.id);
+        this.args.model.examples.map(async (instance: CardDef) => {
+          let adoptsFrom = instance[meta]?.adoptsFrom;
+          if (!adoptsFrom) {
+            return;
+          }
+          let exampleCodeRef = instance.id
+            ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
+            : adoptsFrom;
 
+          if (!isResolvedCodeRef(exampleCodeRef)) {
+            throw new Error('exampleCodeRef is NOT resolved');
+          }
           let maybeCopyMeta = copyMeta.find(
             (meta) =>
               meta.sourceCodeRef.module === exampleCodeRef.module &&
               meta.sourceCodeRef.name === exampleCodeRef.name,
           );
-
           if (maybeCopyMeta) {
-            instance[meta].adoptsFrom = maybeCopyMeta.targetCodeRef; //mutating adoptsFrom. Check if this is ok
-            examplesToCopy.push(instance);
+            copyCardsWithCodeRef.push({
+              sourceCard: instance,
+              codeRef: maybeCopyMeta.targetCodeRef,
+            });
           }
         }),
       );
-      examplesToCopy.forEach((instance) => {
-        console.log();
-        console.log(instance[meta].adoptsFrom);
-      });
       await this.args.context?.actions?.copyCards?.(
-        examplesToCopy,
+        copyCardsWithCodeRef,
         realmUrl,
         this.args.model.name
           ? camelCase(`${this.args.model.name}NewerExamples`)
@@ -681,4 +685,15 @@ function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {
     },
     {} as Record<SpecType, Spec[]>,
   );
+}
+
+function normalizePath(absolutePath: string, realmPath: string): string {
+  const absoluteUrl = new URL(absolutePath);
+  const realmUrl = new URL(realmPath);
+
+  // Get the pathname and remove the realm pathname
+  const relativePath = absoluteUrl.pathname.slice(realmUrl.pathname.length);
+
+  // Remove leading slash if present
+  return relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
 }
