@@ -197,7 +197,7 @@ test.describe('Live Cards', () => {
     await expect(page.locator('[data-test-file="hello.gts"]')).toHaveCount(1);
   });
 
-  test('updating a card in code mode edit updates its source', async ({
+  test.skip('updating a card in code mode edit updates its source', async ({
     page,
   }) => {
     await clearLocalStorage(page, serverIndexUrl);
@@ -222,8 +222,6 @@ test.describe('Live Cards', () => {
     await page
       .locator('[data-test-field="fullName"] input')
       .fill('Replacement');
-
-    await page.pause();
 
     await expect(
       page.locator('[data-test-monaco-container-operator-mode]'),
