@@ -63,8 +63,6 @@ export { CardError, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
 
-// FIXME this used to use serverEchoDebounceMs, does that need to exist? What will break
-
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
   @service declare private loaderService: LoaderService;
