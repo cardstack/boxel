@@ -21,7 +21,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -29,10 +28,9 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
-import RealmServerService from './realm-server';
-import StoreService from './store';
-
 import type LoaderService from './loader-service';
+import type RealmServerService from './realm-server';
+import type StoreService from './store';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -42,7 +40,6 @@ type GenericCommand = Command<
 >;
 
 export default class CommandService extends Service {
-  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
   @service declare private loaderService: LoaderService;
@@ -215,13 +212,10 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
-        await this.operatorModeStateService.patchCard.perform(
-          payload?.attributes?.cardId,
-          {
-            attributes: payload?.attributes?.patch?.attributes,
-            relationships: payload?.attributes?.patch?.relationships,
-          },
-        );
+        await this.store.patch(payload?.attributes?.cardId, {
+          attributes: payload?.attributes?.patch?.attributes,
+          relationships: payload?.attributes?.patch?.relationships,
+        });
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
