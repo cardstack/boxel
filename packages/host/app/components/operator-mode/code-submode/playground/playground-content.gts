@@ -14,7 +14,7 @@ import {
   CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -91,7 +91,7 @@ export default class PlaygroundContent extends Component<Signature> {
                 {{#if this.lastKnownGoodHtml}}
                   <this.lastKnownGoodHtml />
                 {{else}}
-                  <CardError @cardCreationError={{@cardCreationError}} />
+                  <CardError @cardCreationError={{not @cardError.id}} />
                 {{/if}}
               </div>
               <CardErrorDetail @error={{@cardError}} />

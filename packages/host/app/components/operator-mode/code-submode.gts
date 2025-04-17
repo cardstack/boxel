@@ -59,8 +59,8 @@ import type EnvironmentService from '@cardstack/host/services/environment-servic
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type RealmService from '@cardstack/host/services/realm';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 

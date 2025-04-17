@@ -1094,19 +1094,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         contents: {
           'boom-pet.gts': boomPet,
           'person.gts': person,
-          'BoomPet/cassidy.json': {
-            data: {
-              attributes: {
-                title: 'Cassidy Cat',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}boom-pet`,
-                  name: 'BoomPet',
-                },
-              },
-            },
-          },
           'Person/delilah.json': {
             data: {
               attributes: { title: 'Delilah' },
@@ -1123,6 +1110,22 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('it renders a playground instance with an error that has does not have a last known good state', async function (assert) {
+      await realm.write(
+        'BoomPet/cassidy.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              title: 'Cassidy Cat',
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}boom-pet`,
+                name: 'BoomPet',
+              },
+            },
+          },
+        }),
+      );
       setPlaygroundSelections({
         [`${testRealmURL}boom-pet/BoomPet`]: {
           cardId: `${testRealmURL}BoomPet/cassidy`,
@@ -1130,7 +1133,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         },
       });
       await openFileInPlayground('boom-pet.gts', testRealmURL, 'BoomPet');
-      assert.dom('[data-test-card-error]').exists();
+      assert
+        .dom('[data-test-boxel-card-header-title]')
+        .containsText('Card Error: Internal Server Error');
+      assert
+        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .containsText('This card contains an error.');
+      assert.dom('[data-test-error-title]').hasText('Internal Server Error');
+      assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').hasText('Boom!');
@@ -1142,40 +1155,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-card-error]').doesNotExist();
 
       await createNewInstance();
-      // assert
-      //   .dom('[data-test-card-error]')
-      //   .containsText('Failed to create card');
+      assert
+        .dom('[data-test-card-error]')
+        .containsText('Failed to create card');
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').containsText('Boom!');
-
-      // fix error
-      const petFixed = `import { contains, field, CardDef, Component, FieldDef, StringField } from 'https://cardstack.com/base/card-api';
-      // this field explodes when serialized (saved)
-      export class BoomField extends FieldDef {
-        @field title = contains(StringField);
-        static embedded = class Embedded extends Component<typeof this> {
-          <template>
-            <@fields.title />
-          </template>
-        };
-      }
-      export class BoomPet extends CardDef {
-        static displayName = 'Boom Pet';
-        @field boom = contains(BoomField);
-      }
-    `;
-      await realm.write('boom-pet.gts', petFixed);
-      await settled();
-      assert.dom('[data-test-card-error]').doesNotExist();
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-
-      await createNewInstance();
-      await settled();
-      assert.dom('[data-test-card-error]').doesNotExist();
-      assert
-        .dom('[data-test-playground-panel] [data-test-field="boom"]')
-        .exists();
     });
 
     test('it can render the last known good state for card with error', async function (assert) {
@@ -1189,39 +1174,73 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
 
       await openFileInPlayground('person.gts', testRealmURL, 'Person');
-      assertCardExists(assert, cardId);
-      assert.dom('[data-test-format-chooser]').exists();
-      assert.dom('[data-test-error-container]').doesNotExist();
-
-      const boomPerson = {
-        data: {
-          attributes: { title: 'Lila' },
-          relationships: {
-            pet: {
-              links: {
-                self: './missing-link',
-              },
-            },
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
-          },
-        },
-      };
-      await realm.write('Person/delilah.json', JSON.stringify(boomPerson));
-      await settled();
       assert
         .dom('[data-test-playground-panel] [data-test-field="title"]')
         .containsText('Delilah');
+      assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
+      assert.dom('[data-test-format-chooser]').exists();
+      assert.dom('[data-test-error-container]').doesNotExist();
+
+      // cause error (non-existent link)
+      await realm.write(
+        'Person/delilah.json',
+        JSON.stringify({
+          data: {
+            attributes: { title: 'Lila' },
+            relationships: {
+              pet: {
+                links: {
+                  self: './missing-link',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        }),
+      );
+      await settled();
+      assert
+        .dom('[data-test-boxel-card-header-title]')
+        .containsText('Card Error: Link Not Found');
       assert.dom('[data-test-card-error]').exists();
+      assert
+        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .containsText('Delilah', 'last known good state is rendered');
       assert.dom('[data-test-error-title]').hasText('Link Not Found');
+      assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').containsText('missing file');
       assert.dom('[data-test-error-stack]').exists();
+
+      // fix error
+      await realm.write(
+        'Person/delilah.json',
+        JSON.stringify({
+          data: {
+            attributes: { title: 'Lila' },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        }),
+      );
+      await settled();
+      assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
+      assert
+        .dom('[data-test-playground-panel] [data-test-field="title"]')
+        .containsText('Lila');
+      assert
+        .dom('[data-test-error-container]')
+        .doesNotExist('can recover from missing link error');
     });
   });
 });
