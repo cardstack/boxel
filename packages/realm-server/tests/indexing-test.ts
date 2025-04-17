@@ -594,6 +594,70 @@ module(basename(__filename), function () {
       );
     });
 
+    test('can recover from a module sequence error', async function (assert) {
+      // introduce errors into 2 gts file with first module has dependency on second module
+      await realm.write(
+        'pet.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+          import { Name } from "./name";
+          export class Pet extends CardDef {
+            @field name = contains(Name);
+          }
+        `,
+      );
+      assert.deepEqual(
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 0,
+          instanceErrors: 2,
+          moduleErrors: 2,
+          modulesIndexed: 0,
+          totalIndexEntries: 9,
+        },
+        'indexed correct number of files',
+      );
+      await realm.write(
+        'name.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringCard from "https://cardstack.com/base/string";
+
+          export class Name extends CardDef {
+            @field firstName = contains(StringCard);
+            @field lastName = contains(StringCard);
+          }
+        `,
+      );
+
+      // Aspect module should be indexed
+      let name = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}name`),
+      );
+      assert.equal(name?.type, 'module');
+
+      // Since the name is ready, the pet should be indexed and not in an error state
+      assert.deepEqual(
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 1, 
+          instanceErrors: 1,
+          moduleErrors: 0,
+          modulesIndexed: 2,
+          totalIndexEntries: 10,
+        },
+        'indexed correct number of files',
+      );
+      
+      // Fetch the pet module
+      let pet = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}pet`),
+      );
+      // Currently, encountered error loading module "http://test-realm/pet.gts": http://test-realm/name not found
+      assert.equal(pet?.type, 'module');
+    }); 
+
     test('can incrementally index deleted instance', async function (assert) {
       await realm.delete('mango.json');
 
