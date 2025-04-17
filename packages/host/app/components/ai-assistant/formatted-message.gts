@@ -174,7 +174,11 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           });
         patchedCode = patchedCodeResult;
       }
-      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
+      await this.cardService.saveSource(
+        new URL(fileUrl),
+        patchedCode,
+        'bot-patch',
+      );
       codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
         codePatchAction.patchCodeTaskState = 'applied';
       });

@@ -244,6 +244,11 @@ class _FileResource extends Resource<Args> {
               Object.keys(this.cardService.clientRequestIds),
             );
           }
+        } else if (clientRequestId.startsWith('bot-patch:')) {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${normalizedURL} because request id is ${clientRequestId}`,
+          );
         }
 
         if (reloadFile) {
