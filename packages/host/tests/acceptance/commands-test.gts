@@ -746,7 +746,7 @@ Hello, world!
 =======
 Hi, world!
 >>>>>>> REPLACE\n\`\`\``;
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
       msgtype: 'org.text',
       format: 'org.matrix.custom.html',
@@ -800,7 +800,7 @@ We are one!
     await click('[data-test-open-ai-assistant]');
     let roomId = getRoomIds().pop()!;
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
       msgtype: 'org.text',
       format: 'org.matrix.custom.html',
