@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
-    "target": "es2023",
-    "lib": ["es2023", "dom"],
+    "target": "es2022",
+    "lib": ["es2022", "dom"],
     "allowJs": true,
     "module": "CommonJS",
     "moduleResolution": "nodenext",
