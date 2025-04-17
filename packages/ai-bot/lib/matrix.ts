@@ -103,7 +103,7 @@ export async function sendErrorEvent(
     await sendMessageEvent(
       client,
       roomId,
-      'There was an error processing your request, please try again later',
+      'There was an error processing your request, please try again later.',
       eventIdToReplace,
       {
         isStreamingFinished: true,

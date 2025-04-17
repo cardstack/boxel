@@ -171,6 +171,7 @@ export default class MessageBuilder {
         ? this.event.content.isStreamingFinished
         : undefined;
     message.updated = new Date();
+    message.errorMessage = this.errorMessage;
 
     let commandRequests =
       (this.event.content as CardMessageContent)[
