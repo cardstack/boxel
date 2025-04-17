@@ -156,8 +156,8 @@ export default class CardService extends Service {
     return response.text();
   }
 
-  async saveSource(url: URL, content: string, type?: string) {
-    let clientRequestId = `${type ?? 'source'}:${uuidv4()}`;
+  async saveSource(url: URL, content: string, type: string) {
+    let clientRequestId = `${type}:${uuidv4()}`;
     this.clientRequestIds.add(clientRequestId);
 
     let response = await this.network.authedFetch(url, {
@@ -189,7 +189,7 @@ export default class CardService extends Service {
     });
 
     const content = await response.text();
-    await this.saveSource(toUrl, content);
+    await this.saveSource(toUrl, content, 'copy');
     return response;
   }
 

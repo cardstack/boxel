@@ -231,7 +231,7 @@ class _FileResource extends Resource<Args> {
           realmEventsLogger.debug(
             `reloading file resource ${normalizedURL} because realm event has no clientRequestId`,
           );
-        } else if (clientRequestId.startsWith('source:')) {
+        } else if (clientRequestId.startsWith('editor:')) {
           if (this.cardService.clientRequestIds.has(clientRequestId)) {
             realmEventsLogger.debug(
               `ignoring because request id is contained in known clientRequestIds`,
@@ -263,6 +263,7 @@ class _FileResource extends Resource<Args> {
       let response = await this.cardService.saveSource(
         new URL(this._url),
         content,
+        'editor',
       );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario

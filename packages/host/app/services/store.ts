@@ -508,7 +508,7 @@ export default class StoreService extends Service implements StoreInterface {
           this.reloadTask.perform(instance);
         } else {
           if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
-            if (event.clientRequestId.startsWith('source:')) {
+            if (event.clientRequestId.startsWith('editor:')) {
               console.debug(
                 `store reloading ${invalidation} because of source clientRequestId ${event.clientRequestId}`,
               );
