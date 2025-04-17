@@ -180,6 +180,9 @@ importers:
       '@types/sinonjs__fake-timers':
         specifier: ^8.1.5
         version: 8.1.5
+      concurrently:
+        specifier: ^8.0.1
+        version: 8.2.2
       fs-extra:
         specifier: ~11.3.0
         version: 11.3.0
