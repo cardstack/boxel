@@ -65,7 +65,6 @@ export async function sendMessageEvent(
     ...{
       body,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: body,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
@@ -76,7 +75,6 @@ export async function sendMessageEvent(
     contentObject['m.new_content'] = {
       body,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: body,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,

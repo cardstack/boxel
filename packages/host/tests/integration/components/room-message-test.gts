@@ -62,8 +62,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
   ) {
     let message = {
       author: { userId: '@aibot:localhost' },
-      message: messageContent,
-      formattedMessage: messageContent,
+      body: messageContent,
       created: new Date(new Date().getTime() - timeAgoForCreated * 60 * 1000),
       updated: new Date(new Date().getTime() - timeAgoForUpdated * 60 * 1000),
       attachedResources() {

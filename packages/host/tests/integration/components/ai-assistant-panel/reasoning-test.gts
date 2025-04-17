@@ -156,7 +156,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
       body: null,
       msgtype: 'm.text',
-      formatted_body: null,
       isStreamingFinished: false,
     });
     await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
@@ -172,7 +171,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
       [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
       body: null,
       msgtype: 'm.text',
-      formatted_body: null,
       isStreamingFinished: false,
     });
 
@@ -189,7 +187,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
       body: null,
       msgtype: 'm.text',
-      formatted_body: null,
       isStreamingFinished: false,
       'm.relates_to': {
         rel_type: 'm.replace',
@@ -216,7 +213,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
       body: 'You should get a',
       msgtype: 'm.text',
-      formatted_body: 'You should get a',
       isStreamingFinished: false,
       'm.relates_to': {
         rel_type: 'm.replace',
@@ -238,7 +234,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
       [APP_BOXEL_REASONING_CONTENT_KEY]: 'Thinking...',
       body: null,
       msgtype: 'm.text',
-      formatted_body: null,
       isStreamingFinished: false,
     });
     await settled();
@@ -254,7 +249,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.',
       body: null,
       msgtype: 'm.text',
-      formatted_body: null,
       isStreamingFinished: false,
       'm.relates_to': {
         rel_type: 'm.replace',
@@ -281,7 +275,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
       body: null,
       msgtype: 'm.text',
-      formatted_body: null,
       isStreamingFinished: false,
       'm.relates_to': {
         rel_type: 'm.replace',
@@ -298,7 +291,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
       body: 'You should get a beagle.',
       msgtype: 'm.text',
-      formatted_body: 'You should get a beagle.',
       isStreamingFinished: false,
     });
     await settled();
@@ -317,7 +309,6 @@ module('Integration | ai-assistant-panel | reasoning', function (hooks) {
         'OK, they want to know what kind of dog to get. Let me think about what relevant details I know about them.\n\nThey like beagles.',
       body: 'You should get a beagle. They are great companions.',
       msgtype: 'm.text',
-      formatted_body: 'You should get a beagle. They are great companions.',
       isStreamingFinished: false,
       'm.relates_to': {
         rel_type: 'm.replace',

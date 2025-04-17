@@ -304,7 +304,6 @@
       "msgtype": "app.boxel.cardFragment",
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
-      "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/onnx/AiCommandExample/86ed3d35-c97c-4c2c-a7cb-88c3dba6e1ec\\\",\\\"attributes\\\":{\\\"locations\\\":[\\\"New York\\\"],\\\"title\\\":\\\"AI COMMAND TEST\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"AiCommandExample\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
     "origin_server_ts": 1736864363215,
@@ -323,7 +322,6 @@
       "msgtype": "app.boxel.message",
       "body": "I'm planning to visit these locations: New York. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions",
       "format": "org.matrix.custom.html",
-      "formatted_body": "<p>I'm planning to visit these locations: New York. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions</p>\n",
       "clientGeneratedId": "4a3d6e7f-f492-48de-b3e5-7ef8c5bda696",
       "data": "{\"attachedCardsEventIds\":[\"$YSkK-gX0AH0fT_t23m_BDabQB4f4f6dE0c8JSV-3CXE\"],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":false}}"
     },
@@ -342,12 +340,10 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "formatted_body": "Thinking...",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "Thinking...",
         "msgtype": "m.text",
-        "formatted_body": "Thinking...",
         "format": "org.matrix.custom.html"
       }
     },
@@ -366,7 +362,6 @@
     "content": {
       "body": "Check the current weather conditions for traveling",
       "msgtype": "app.boxel.message",
-      "formatted_body": "Check the current weather conditions for traveling",
       "format": "org.matrix.custom.html",
       "data": "{\"eventId\":\"$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_or0qFTa8y9Ef8ZVyRDNR2P1T\",\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"arguments\":{\"description\":\"Check the current weather conditions for traveling\",\"attributes\":{\"location\":\"New York\"}}}}",
       "app.boxel.commandRequests": [
@@ -400,7 +395,6 @@
       "msgtype": "app.boxel.cardFragment",
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
-      "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"attributes\\\":{\\\"temperature\\\":\\\"22°C\\\",\\\"conditions\\\":\\\"Cloudy\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"WeatherReport\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
     "origin_server_ts": 1736864370828,
@@ -440,12 +434,10 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "formatted_body": "Thinking...",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "Thinking...",
         "msgtype": "m.text",
-        "formatted_body": "Thinking...",
         "format": "org.matrix.custom.html"
       }
     },
@@ -489,12 +481,10 @@
     "content": {
       "body": "The",
       "msgtype": "m.text",
-      "formatted_body": "The",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The",
         "msgtype": "m.text",
-        "formatted_body": "The",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -518,12 +508,10 @@
     "content": {
       "body": "The current weather",
       "msgtype": "m.text",
-      "formatted_body": "The current weather",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather",
         "msgtype": "m.text",
-        "formatted_body": "The current weather",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -547,12 +535,10 @@
     "content": {
       "body": "The current weather in",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -576,12 +562,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suit",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -605,12 +589,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -634,12 +616,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -663,12 +643,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -692,12 +670,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -721,12 +697,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -750,12 +724,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -779,12 +751,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": false,
@@ -808,12 +778,10 @@
     "content": {
       "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
       "msgtype": "m.text",
-      "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
       "format": "org.matrix.custom.html",
       "m.new_content": {
         "body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
         "msgtype": "m.text",
-        "formatted_body": "The current weather in New York is 22°C and cloudy. Here are some travel tips based on this weather:\n\n1. **Weather Conditions Suitability:**\n   - New York's temperature is quite comfortable for traveling. However, the cloudy conditions might mean less sunshine but it shouldn't disrupt outdoor activities.\n   \n2. **Weather-Related Travel Tips:**\n   - Carry a light jacket or sweater considering the temperature.\n   - An umbrella might be useful in case of rain.\n   - Wear comfortable shoes as the weather is favorable for walking tours or exploring the city on foot.\n\n3. **Order of Visits and Considerations:**\n   - Since the weather is moderate and satisfactory for typical sightseeing, New York can be a good starting point. Make sure to check for any minor weather updates closer to your departure for any specific warnings or advisories.\n\nIf you have more locations to visit, let me know, and I'll help you decide the best order or provide more detailed insights!",
         "format": "org.matrix.custom.html"
       },
       "isStreamingFinished": true,

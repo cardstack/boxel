@@ -22,8 +22,7 @@ interface RoomMessageRequired {
   author: RoomMember;
   created: Date;
   updated: Date;
-  message: string;
-  formattedMessage: string;
+  body: string;
   eventId: string;
   status: EventStatus | null;
 }
@@ -40,8 +39,7 @@ interface RoomMessageOptional {
 }
 
 export class Message implements RoomMessageInterface {
-  @tracked formattedMessage: string;
-  @tracked message: string;
+  @tracked body: string;
   @tracked commands: TrackedArray<MessageCommand>;
   @tracked isStreamingFinished?: boolean;
   @tracked reasoningContent?: string | null;
@@ -67,8 +65,7 @@ export class Message implements RoomMessageInterface {
   constructor(init: RoomMessageInterface) {
     Object.assign(this, init);
     this.author = init.author;
-    this.formattedMessage = init.formattedMessage;
-    this.message = init.message;
+    this.body = init.body;
     this.eventId = init.eventId;
     this.created = init.created;
     this.updated = init.updated;
