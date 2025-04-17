@@ -14,7 +14,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-import OperatorModeStateService from '../services/operator-mode-state-service';
+import StoreService from '../services/store';
 
 interface Configuration {
   cardType: typeof CardDef;
@@ -23,7 +23,7 @@ export default class PatchCardCommand extends HostBaseCommand<
   typeof BaseCommandModule.PatchCardInput,
   undefined
 > {
-  @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private store: StoreService;
 
   description = `Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making. Do NOT leave out the cardId or patch fields or this tool will not work.`;
 
@@ -48,7 +48,7 @@ export default class PatchCardCommand extends HostBaseCommand<
         "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
       );
     }
-    await this.operatorModeStateService.patchCard.perform(input.cardId, {
+    await this.store.patch(input.cardId, {
       attributes: input.patch.attributes,
       relationships: input.patch.relationships,
     });

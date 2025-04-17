@@ -1231,6 +1231,7 @@ export class Realm {
     let { lastModified } = await this.write(
       localPath,
       JSON.stringify(fileSerialization, null, 2),
+      request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#realmIndexQueryEngine.cardDocument(

@@ -24,6 +24,7 @@ import {
   CardContextName,
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
   Deferred,
   codeRefWithAbsoluteURL,
   moduleFrom,
@@ -33,6 +34,7 @@ import {
   realmURL as realmURLSymbol,
   type getCard,
   type getCards,
+  type getCardCollection,
   type Actions,
   type CodeRef,
   type LooseSingleCardDocument,
@@ -151,6 +153,8 @@ interface CardToDelete {
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
 
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
@@ -682,6 +686,7 @@ export default class InteractSubmode extends Component {
       actions: this.publicAPI(this, 0),
       getCard: this.getCard,
       getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
       store: this.store,
       // TODO: should we include this here??
       commandContext: this.commandService.commandContext,

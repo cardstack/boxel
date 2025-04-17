@@ -11,7 +11,7 @@ import Modifier from 'ember-modifier';
 import { Button } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import type { Format } from 'https://cardstack.com/base/card-api';
+import { formats, type Format } from '@cardstack/runtime-common';
 
 interface Signature {
   Args: {
@@ -22,8 +22,6 @@ interface Signature {
   };
   Element: HTMLElement;
 }
-
-const formats: Format[] = ['isolated', 'embedded', 'fitted', 'atom', 'edit'];
 
 export default class FormatChooser extends Component<Signature> {
   <template>

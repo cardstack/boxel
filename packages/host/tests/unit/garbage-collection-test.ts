@@ -474,9 +474,41 @@ module('Unit | identity-context garbage collection', function (hooks) {
       undefined,
       'the instance does not exist',
     );
+    assert.deepEqual(
+      identityContext.get(hassan[localId]),
+      undefined,
+      'the instance does not exist via local id',
+    );
 
     assert.deepEqual(
       identityContext.getInstanceOrError(hassan.id),
+      undefined,
+      'the instance does not exist',
+    );
+  });
+
+  test('can delete an instance from the identity map by local id', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest(saveAll);
+
+    identityContext.delete(hassan[localId]);
+
+    assert.deepEqual(
+      identityContext.get(hassan[localId]),
+      undefined,
+      'the instance does not exist',
+    );
+
+    assert.deepEqual(
+      identityContext.get(hassan.id),
+      undefined,
+      'the instance does not exist via remote id',
+    );
+
+    assert.deepEqual(
+      identityContext.getInstanceOrError(hassan[localId]),
       undefined,
       'the instance does not exist',
     );
