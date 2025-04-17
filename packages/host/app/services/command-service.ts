@@ -46,6 +46,7 @@ export default class CommandService extends Service {
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
+  executedCommandRequestIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
 
@@ -139,6 +140,9 @@ export default class CommandService extends Service {
         if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
           continue;
         }
+        if (this.executedCommandRequestIds.has(messageCommand.id!)) {
+          continue;
+        }
         if (messageCommand.commandResultCardEventId) {
           continue;
         }
@@ -218,6 +222,7 @@ export default class CommandService extends Service {
           `Unrecognized command: ${command.name}. This command may have been associated with a previous browser session.`,
         );
       }
+      this.executedCommandRequestIds.add(commandRequestId!);
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
