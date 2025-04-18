@@ -21,6 +21,8 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import { formattedError } from './store';
+
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -157,23 +159,31 @@ export default class CardService extends Service {
   }
 
   async saveSource(url: URL, content: string) {
-    let response = await this.network.authedFetch(url, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.card+source',
-      },
-      body: content,
-    });
+    try {
+      let response = await this.network.authedFetch(url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+source',
+        },
+        body: content,
+      });
 
-    if (!response.ok) {
-      let errorMessage = `Could not write file ${url}, status ${
-        response.status
-      }: ${response.statusText} - ${await response.text()}`;
-      console.error(errorMessage);
-      throw new Error(errorMessage);
+      if (!response.ok) {
+        let errorMessage = `Could not write file ${url}, status ${
+          response.status
+        }: ${response.statusText} - ${await response.text()}`;
+        console.error(errorMessage);
+        throw new Error(errorMessage);
+      }
+      this.subscriber?.(url, content);
+      return response;
+    } catch (e: any) {
+      let error = formattedError(undefined, e)?.errors?.[0];
+      if (error) {
+        throw error;
+      }
+      throw new Error(e);
     }
-    this.subscriber?.(url, content);
-    return response;
   }
 
   async copySource(fromUrl: URL, toUrl: URL) {

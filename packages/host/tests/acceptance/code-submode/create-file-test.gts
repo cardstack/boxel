@@ -379,20 +379,21 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor(`[data-test-selected-type="Error"]`);
 
       await click('[data-test-create-card-instance]');
-
-      await waitFor('[data-test-create-file-modal] [data-test-error-message]');
+      assert.dom('[data-test-error-container]').exists();
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-message]')
-        .containsText(
-          'Error creating card instance: A deliberate constructor error',
-        );
+        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .hasText('A deliberate constructor error');
+      await click('[data-test-error-detail-toggle] > button');
+      assert
+        .dom('[data-test-error-detail]')
+        .containsText('A deliberate constructor error');
 
       await click('[data-test-cancel-create-file]');
       await openNewFileModal('Card Instance');
 
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-message]')
-        .doesNotExist();
+        .dom('[data-test-error-container]')
+        .doesNotExist('error is cleared');
     });
 
     test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
@@ -711,17 +712,18 @@ export class TestCard extends Person {
       await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
 
       await click('[data-test-create-definition]');
-
-      await waitFor('[data-test-create-file-modal] [data-test-error-message]');
+      assert.dom('[data-test-error-container]').exists();
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-message]')
-        .containsText('Error creating card definition')
+        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .hasText('A deliberate fetch error');
+      await click('[data-test-error-detail-toggle] > button');
+      assert
+        .dom('[data-test-error-detail]')
         .containsText('A deliberate fetch error');
 
       await fillIn('[data-test-display-name-field]', 'Test Card');
-
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-message]')
+        .dom('[data-test-error-container]')
         .doesNotExist('changing a field should clear the error');
     });
 
@@ -788,11 +790,12 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       );
       await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
       await click('[data-test-create-definition]');
-
-      await waitFor('[data-test-create-file-modal] [data-test-error-message]');
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-message]')
-        .containsText('Error creating field definition')
+        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .hasText('A deliberate fetch error');
+      await click('[data-test-error-detail-toggle] > button');
+      assert
+        .dom('[data-test-error-detail]')
         .containsText('A deliberate fetch error');
     });
 
