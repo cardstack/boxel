@@ -232,9 +232,14 @@ export function constructHistory(
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   // If the aibot is awaiting command results, it should not respond yet.
-  let lastEventExcludingCommandResults = history.findLast(
+  let lastEventExcludingCommandResults = findLast(
+    history,
     (event) => event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   );
+
+  if (!lastEventExcludingCommandResults) {
+    return false;
+  }
   let commandRequests =
     lastEventExcludingCommandResults.content[APP_BOXEL_COMMAND_REQUESTS_KEY];
   if (!commandRequests || commandRequests.length === 0) {
@@ -258,7 +263,8 @@ function getEnabledSkills(
   eventlist: DiscreteMatrixEvent[],
   cardFragments: Map<string, CardFragmentContent>,
 ): LooseCardResource[] {
-  let skillsConfigEvent = eventlist.findLast(
+  let skillsConfigEvent = findLast(
+    eventlist,
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
   if (!skillsConfigEvent) {
@@ -392,7 +398,8 @@ export async function loadCurrentlyAttachedFiles(
     error: string | undefined;
   }[]
 > {
-  let lastMessageEventByUser = history.findLast(
+  let lastMessageEventByUser = findLast(
+    history,
     (event) => event.sender !== aiBotUserId,
   );
 
@@ -563,7 +570,8 @@ export function getToolChoice(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): ToolChoice {
-  const lastUserMessage = history.findLast(
+  const lastUserMessage = findLast(
+    history,
     (event) => event.sender !== aiBotUserId,
   );
 
@@ -609,7 +617,8 @@ function getCommandResults(
 }
 
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
-  return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+  const content = event.content as CardMessageContent;
+  return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
     (commandRequest: CommandRequest) => {
       return {
         id: commandRequest.id,
@@ -806,7 +815,8 @@ export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
 };
 
 function getModel(eventlist: DiscreteMatrixEvent[]): string {
-  let activeLLMEvent = eventlist.findLast(
+  let activeLLMEvent = findLast(
+    eventlist,
     (event) => event.type === APP_BOXEL_ACTIVE_LLM,
   ) as ActiveLLMEvent;
   if (!activeLLMEvent) {
@@ -826,4 +836,16 @@ export function isCommandResultEvent(
     event.content['m.relates_to']?.rel_type ===
       APP_BOXEL_COMMAND_RESULT_REL_TYPE
   );
+}
+
+function findLast<T>(
+  array: T[],
+  predicate: (item: T) => boolean,
+): T | undefined {
+  for (let i = array.length - 1; i >= 0; i--) {
+    if (predicate(array[i])) {
+      return array[i];
+    }
+  }
+  return undefined;
 }

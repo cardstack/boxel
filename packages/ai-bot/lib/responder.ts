@@ -18,6 +18,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
@@ -66,6 +67,7 @@ export class Responder {
   latestReasoning = '';
   latestContent = '';
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
+  toolCallsJson: string | undefined;
   isStreamingFinished = false;
   needsMessageSend = false;
 
@@ -140,7 +142,9 @@ export class Responder {
     }
 
     // reasoning does not support snapshots, so we need to handle the delta
-    let newReasoningContent = chunk.choices?.[0]?.delta?.reasoning;
+    let newReasoningContent = (
+      chunk.choices?.[0]?.delta as { reasoning?: string }
+    )?.reasoning;
     if (newReasoningContent?.length) {
       if (this.latestReasoning === thinkingMessage) {
         this.latestReasoning = '';

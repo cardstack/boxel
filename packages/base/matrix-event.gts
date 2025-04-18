@@ -131,7 +131,7 @@ export interface MessageEvent extends BaseMatrixEvent {
 
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: CardMessageContent | CardFragmentContent;
+  content: CardMessageContent | CardFragmentContent | CommandDefinitionsContent;
   unsigned: {
     age: number;
     transaction_id: string;
