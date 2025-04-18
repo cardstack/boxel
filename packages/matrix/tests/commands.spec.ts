@@ -164,7 +164,6 @@ test.describe('Commands', () => {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
-      formatted_body: 'some command',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -214,7 +213,6 @@ test.describe('Commands', () => {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
-      formatted_body: 'some command',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -369,7 +367,6 @@ test.describe('Commands', () => {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: '',
-      formatted_body: '',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -438,7 +435,6 @@ test.describe('Commands', () => {
     await putEvent(userCred.accessToken, roomId, 'm.room.message', '2', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [

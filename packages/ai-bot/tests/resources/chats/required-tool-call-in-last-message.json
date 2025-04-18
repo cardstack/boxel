@@ -288,7 +288,6 @@
       "msgtype": "app.boxel.message",
       "body": "Alerting the user should only be done if requested",
       "format": "org.matrix.custom.html",
-      "formatted_body": "<p>Alerting the user should only be done if requested</p>\n",
       "clientGeneratedId": "a4108056-3f47-46cc-b979-cee8113925a6",
       "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"AlertTheUser_pcDFLKJ9auSJQfSovb3LT2\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":true}}"
     },
