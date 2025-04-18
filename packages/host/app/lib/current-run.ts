@@ -533,7 +533,7 @@ export class CurrentRun {
       card = await api.createFromSerialized<typeof CardDef>(
         adjustedResource,
         { data: adjustedResource },
-        new URL(fileURL),
+        new URL(instanceURL),
         {
           identityContext,
         },

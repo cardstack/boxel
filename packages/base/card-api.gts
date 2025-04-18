@@ -971,9 +971,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       if (loadedValue !== undefined) {
         return loadedValue;
       }
-      console.log('value.links.self', value.links.self);
-      console.log('doc.data.id', doc.data?.id);
-      console.log('relativeTo', relativeTo?.href);
       return {
         type: 'not-loaded',
         reference: value.links.self,
@@ -2310,7 +2307,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
     identityContext,
     modelPromise,
     loadedValue,
-    resource.id,
+    resource.id ? new URL(resource.id) : relativeTo,
   );
   return result;
 }
