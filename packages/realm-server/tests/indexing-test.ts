@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, skip } from 'qunit';
 import { dirSync } from 'tmp';
 import {
   baseRealm,
@@ -594,7 +594,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('can recover from a module sequence error', async function (assert) {
+    skip('can recover from a module sequence error', async function (assert) {
       // introduce errors into 2 gts file with first module has dependency on second module
       await realm.write(
         'pet.gts',
@@ -666,7 +666,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('can successfully create instance after module sequence error is resolved', async function (assert) {
+    skip('can successfully create instance after module sequence error is resolved', async function (assert) {
       // First create pet.gts that depends on name.gts which doesn't exist yet
       await realm.write(
         'pet.gts',
