@@ -971,6 +971,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       if (loadedValue !== undefined) {
         return loadedValue;
       }
+      console.log('value.links.self', value.links.self);
+      console.log('doc.data.id', doc.data?.id);
+      console.log('relativeTo', relativeTo?.href);
       return {
         type: 'not-loaded',
         reference: value.links.self,
@@ -1319,12 +1322,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        let resourceId = new URL(
-          value.links.self,
-          !Array.isArray(doc.data) && 'id' in doc.data && doc.data.id
-            ? doc.data.id
-            : relativeTo,
-        ).href;
+        let resourceId = new URL(value.links.self, relativeTo).href;
         if (loadedValues && Array.isArray(loadedValues)) {
           let loadedValue = loadedValues.find(
             (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
@@ -2312,7 +2310,7 @@ async function getDeserializedValue<CardT extends BaseDefConstructor>({
     identityContext,
     modelPromise,
     loadedValue,
-    relativeTo,
+    resource.id,
   );
   return result;
 }
