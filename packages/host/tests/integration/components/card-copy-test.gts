@@ -876,7 +876,7 @@ module('Integration | card-copy', function (hooks) {
     );
 
     assert.strictEqual(savedCards.length, 2, 'correct number of cards saved');
-    let cardIds = savedCards.map((c) => c.data.id.split('/').pop()!);
+    let cardIds = savedCards.map((c) => c.data.id!.split('/').pop()!);
     assert
       .dom(
         `[data-test-operator-mode-stack="1"] [data-test-cards-grid-item="${testRealm2URL}Pet/${cardIds[0]}"]`,
