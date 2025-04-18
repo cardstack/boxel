@@ -187,11 +187,14 @@ export interface CardMessageContent {
     skillCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      tools: Tool[];
+      tools?: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
       requireToolCall?: boolean;
+      functions: Tool['function'][];
     };
+    cardEventId?: string;
+    card?: LooseSingleCardDocument;
   };
 }
 

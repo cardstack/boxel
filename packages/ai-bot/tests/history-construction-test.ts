@@ -99,6 +99,7 @@ module('constructHistory', () => {
 
     const result = constructHistory(eventlist, new Map());
 
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, eventlist);
   });
 
@@ -159,6 +160,7 @@ module('constructHistory', () => {
 
     const result = constructHistory(history, new Map());
 
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, history);
   });
 
@@ -219,6 +221,7 @@ module('constructHistory', () => {
 
     const result = constructHistory(history, new Map());
 
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, history);
   });
 
@@ -324,6 +327,7 @@ module('constructHistory', () => {
     const result = constructHistory(history, new Map());
 
     assert.deepEqual(result, [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '2',
         type: 'm.room.message',
@@ -341,6 +345,7 @@ module('constructHistory', () => {
           transaction_id: '2',
         },
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '3',
         type: 'm.room.message',
@@ -362,6 +367,7 @@ module('constructHistory', () => {
           transaction_id: '4',
         },
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '5',
         type: 'm.room.message',
@@ -483,6 +489,7 @@ module('constructHistory', () => {
     let cardFragments = extractCardFragmentsFromEvents(eventlist);
     const result = constructHistory(eventlist, cardFragments);
     assert.deepEqual(result, [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '4',
