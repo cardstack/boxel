@@ -226,14 +226,12 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
     simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'Say one word.',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Say one word.',
       format: 'org.matrix.custom.html',
     });
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Word.',
       msgtype: 'm.text',
-      formatted_body: 'Word.',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
@@ -258,7 +256,6 @@ module('Integration | ai-assistant-panel | past sessions', function (hooks) {
       {
         body: 'I sent a message from the background.',
         msgtype: 'm.text',
-        formatted_body: 'Word.',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
