@@ -59,7 +59,9 @@ export class Responder {
     readonly roomId: string,
   ) {}
 
-  messagePromises: Promise<ISendEventResponse | void>[] = [];
+  messagePromises: Promise<
+    ISendEventResponse | void | { errorMessage: string }
+  >[] = [];
 
   initialMessageSent = false;
   responseEventId: string | undefined;
@@ -92,7 +94,11 @@ export class Responder {
         this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
       ),
       this.latestReasoning,
-    );
+    ).catch((e) => {
+      return {
+        errorMessage: e.message,
+      };
+    });
     this.messagePromises.push(messagePromise);
     await messagePromise;
   };
@@ -222,7 +228,14 @@ export class Responder {
       ).cancel();
       this.sendMessageEvent();
     }
-    await Promise.all(this.messagePromises);
+
+    let results = await Promise.all(this.messagePromises);
+
+    for (let result of results) {
+      if (result && 'errorMessage' in result) {
+        await this.onError(result.errorMessage);
+      }
+    }
   }
 
   async finalize() {
