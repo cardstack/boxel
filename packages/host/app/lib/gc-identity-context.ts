@@ -3,6 +3,7 @@ import { TrackedMap } from 'tracked-built-ins';
 import {
   isPrimitive,
   isCardInstance,
+  isNotLoadedError,
   localId as localIdSymbol,
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
@@ -361,7 +362,15 @@ export function getDeps(api: typeof CardAPI, instance: CardDef): CardDef[] {
   );
   let deps: CardDef[] = [];
   for (let [fieldName, field] of Object.entries(fields)) {
-    let value = (instance as any)[fieldName];
+    let value: any;
+    try {
+      value = (instance as any)[fieldName];
+    } catch (e) {
+      if (isNotLoadedError(e)) {
+        continue;
+      }
+      throw e;
+    }
     if (isPrimitive(field.card) || !value || typeof value !== 'object') {
       continue;
     }
