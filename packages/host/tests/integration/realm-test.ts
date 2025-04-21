@@ -468,7 +468,7 @@ module('Integration | realm', function (hooks) {
     let json = await response.json();
     let id: string | undefined;
     if (isSingleCardDocument(json)) {
-      id = json.data.id.split('/').pop()!;
+      id = json.data.id!.split('/').pop()!;
       assert.true(uuidValidate(id), 'card ID is a UUID');
       assert.strictEqual(
         json.data.id,

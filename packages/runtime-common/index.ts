@@ -10,7 +10,7 @@ export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
 
 export interface LooseSingleCardDocument {
   data: LooseCardResource;
-  included?: CardResource<Saved>[];
+  included?: CardResource[];
 }
 
 export type PatchData = {
@@ -19,7 +19,12 @@ export type PatchData = {
 };
 
 export { Deferred } from './deferred';
-export { CardError } from './error';
+export {
+  CardError,
+  isCardError,
+  type CardErrorJSONAPI,
+  type CardErrorsJSONAPI,
+} from './error';
 
 export interface ResourceObject {
   type: string;
@@ -121,8 +126,6 @@ export type {
   RealmSession,
 } from './realm';
 
-import type { Saved } from './card-document';
-
 import type { CodeRef } from './code-ref';
 export type { CodeRef };
 
@@ -134,7 +137,9 @@ export type {
   CardFields,
   SingleCardDocument,
   Relationship,
+  ResourceID,
   Meta,
+  Saved,
   CardResourceMeta,
 } from './card-document';
 export type { JWTPayload } from './realm-auth-client';
@@ -247,22 +252,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   return await chooser.chooseFile<T>();
 }
 
-export interface CardErrorsJSONAPI {
-  errors: {
-    id?: string; // 404 errors won't necessarily have an id
-    status: number;
-    title: string;
-    message: string;
-    realm: string | undefined;
-    meta: {
-      lastKnownGoodHtml: string | null;
-      cardTitle: string | null;
-      scopedCssUrls: string[];
-      stack: string | null;
-    };
-  }[];
-}
-export type CardErrorJSONAPI = CardErrorsJSONAPI['errors'][0];
+import { type CardErrorJSONAPI } from './error';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
