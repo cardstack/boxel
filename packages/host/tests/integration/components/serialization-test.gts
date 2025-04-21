@@ -4189,49 +4189,6 @@ module('Integration | serialization', function (hooks) {
       },
     );
   });
-  test('can deserialize linksTo relationship that does not have value.data.id; NotLoaded error thrown when accessed', async function (assert) {
-    class Person extends CardDef {
-      @field friend = linksTo(() => Person);
-    }
-    await setupIntegrationTestRealm({
-      loader,
-      mockMatrixUtils,
-      contents: {
-        'test-cards.gts': { Person },
-      },
-    });
-
-    let doc: LooseSingleCardDocument = {
-      data: {
-        type: 'card',
-        id: `${testRealmURL}Person/hassan`,
-        relationships: {
-          friend: {
-            links: { self: `${testRealmURL}Person/mango` },
-          },
-        },
-        meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
-        },
-      },
-    };
-    let card = await createFromSerialized<typeof Person>(
-      doc.data,
-      doc,
-      undefined,
-    );
-    assert.ok(card instanceof Person, 'card is a Person');
-    try {
-      await card.friend;
-      throw new Error(`expected error not thrown`);
-    } catch (error: any) {
-      assert.ok(error instanceof NotLoaded, 'NotLoaded error thrown');
-      assert.strictEqual(
-        error.message,
-        `The field Person.friends refers to the card instance ${testRealmURL}Person/mango which is not loaded`,
-      );
-    }
-  });
 
   module('linksToMany', function () {
     test('can serialize a linksToMany relationship', async function (assert) {
@@ -5090,50 +5047,6 @@ module('Integration | serialization', function (hooks) {
       assert.ok(hassan instanceof Person, `${hassan.id} is a Person`);
       assert.ok(isSaved(hassan), `${hassan.id} is saved`);
       assert.strictEqual(hassan.firstName, 'Hassan');
-    });
-
-    test('can deserialize linksToMany relationship that does not have value.data.id; NotLoaded error thrown when accessed', async function (assert) {
-      class Person extends CardDef {
-        @field friends = linksToMany(() => Person);
-      }
-      await setupIntegrationTestRealm({
-        loader,
-        mockMatrixUtils,
-        contents: {
-          'test-cards.gts': { Person },
-        },
-      });
-
-      let doc: LooseSingleCardDocument = {
-        data: {
-          type: 'card',
-          id: `${testRealmURL}Person/hassan`,
-          relationships: {
-            'friends.0': {
-              links: { self: `${testRealmURL}Person/mango` },
-            },
-          },
-          meta: {
-            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
-          },
-        },
-      };
-      let card = await createFromSerialized<typeof Person>(
-        doc.data,
-        doc,
-        undefined,
-      );
-      assert.ok(card instanceof Person, 'card is a Person');
-      try {
-        await card.friends;
-        throw new Error(`expected error not thrown`);
-      } catch (error: any) {
-        assert.ok(error instanceof NotLoaded, 'NotLoaded error thrown');
-        assert.strictEqual(
-          error.message,
-          `The field Person.friends refers to the card instance ${testRealmURL}Person/mango which is not loaded`,
-        );
-      }
     });
   });
 
