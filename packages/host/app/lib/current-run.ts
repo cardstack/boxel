@@ -15,7 +15,7 @@ import {
   trimExecutableExtension,
   hasExecutableExtension,
   SupportedMimeType,
-  loadCard,
+  loadCardDef,
   identifyCard,
   moduleFrom,
   isCardDef,
@@ -618,7 +618,7 @@ export class CurrentRun {
       // instances when there is no last known good state
       if (!typesMaybeError) {
         try {
-          let cardType = (await loadCard(resource.meta.adoptsFrom, {
+          let cardType = (await loadCardDef(resource.meta.adoptsFrom, {
             loader: this.loaderService.loader,
             relativeTo: instanceURL,
           })) as typeof CardDef;
@@ -751,7 +751,7 @@ export class CurrentRun {
         let loadedCard: typeof CardAPI.CardDef,
           loadedCardRef: CodeRef | undefined;
         try {
-          let maybeCard = await loadCard(fullRef, {
+          let maybeCard = await loadCardDef(fullRef, {
             loader: this.loaderService.loader,
           });
           if (!isCardDef(maybeCard)) {

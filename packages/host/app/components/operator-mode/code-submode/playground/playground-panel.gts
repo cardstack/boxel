@@ -14,7 +14,7 @@ import {
   GetCardContextName,
   type getCard,
   chooseCard,
-  loadCard,
+  loadCardDef,
   specRef,
   type Query,
   type LooseSingleCardDocument,
@@ -343,7 +343,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   private createNewCard = restartableTask(async () => {
     let newCardJSON: LooseSingleCardDocument;
     if (this.args.isFieldDef) {
-      let fieldCard = await loadCard(this.args.codeRef, {
+      let fieldCard = await loadCardDef(this.args.codeRef, {
         loader: this.loaderService.loader,
       });
       // for field def, create a new spec card instance
@@ -395,7 +395,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   });
 
   private createNewField = restartableTask(async (specCard: Spec) => {
-    let fieldCard = await loadCard(this.args.codeRef, {
+    let fieldCard = await loadCardDef(this.args.codeRef, {
       loader: this.loaderService.loader,
     });
     let examples = specCard.containedExamples;
