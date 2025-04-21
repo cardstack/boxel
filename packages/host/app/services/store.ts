@@ -317,7 +317,7 @@ export default class StoreService extends Service implements StoreInterface {
           try {
             return await this.getInstance({
               urlOrDoc: { data: doc },
-              relativeTo: new URL(doc.id),
+              relativeTo: new URL(doc.id!), // all results will have id's
             });
           } catch (e) {
             console.warn(
@@ -648,7 +648,7 @@ export default class StoreService extends Service implements StoreInterface {
       let instance = await this.createFromSerialized(
         doc.data,
         doc,
-        new URL(doc.data.id),
+        new URL(doc.data.id!), // instances from the server will have id's
       );
       // in case the url is an alias for the id (like index card without the
       // "/index") we also add this
@@ -823,10 +823,10 @@ export default class StoreService extends Service implements StoreInterface {
           // in this case a new card was created, but there is an immediate change
           // that was made--so we save off the new ID for the card so in the next
           // save we'll correlate to the correct card ID
-          instance.id = json.data.id;
+          instance.id = json.data.id!; // resources from the server will have ID's
         }
         if (this.onSaveSubscriber) {
-          this.onSaveSubscriber(new URL(json.data.id), json);
+          this.onSaveSubscriber(new URL(json.data.id!), json);
         }
 
         if (isNew) {
@@ -922,7 +922,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async loadRelationshipInstance(rel: Relationship, relativeTo: URL) {
-    if (!rel.links.self) {
+    if (!rel.links?.self) {
       return;
     }
     let id = rel.links.self;

@@ -10,7 +10,7 @@ export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
 
 export interface LooseSingleCardDocument {
   data: LooseCardResource;
-  included?: CardResource<Saved>[];
+  included?: CardResource[];
 }
 
 export type PatchData = {
@@ -121,8 +121,6 @@ export type {
   RealmSession,
 } from './realm';
 
-import type { Saved } from './card-document';
-
 import type { CodeRef } from './code-ref';
 export type { CodeRef };
 
@@ -134,7 +132,9 @@ export type {
   CardFields,
   SingleCardDocument,
   Relationship,
+  ResourceID,
   Meta,
+  Saved,
   CardResourceMeta,
 } from './card-document';
 export type { JWTPayload } from './realm-auth-client';

@@ -43,6 +43,7 @@ import {
   type Meta,
   type CardFields,
   type Relationship,
+  type ResourceID,
   type LooseCardResource,
   type LooseSingleCardDocument,
   type CardDocument,
@@ -292,8 +293,10 @@ type JSONAPIResource =
     };
 
 export interface JSONAPISingleResourceDocument {
-  data: Partial<JSONAPIResource> & { id?: string; type: string };
-  included?: (Partial<JSONAPIResource> & { id: string; type: string })[];
+  data: Partial<JSONAPIResource> & { type: string } & { id?: string } & {
+    lid?: string;
+  };
+  included?: (Partial<JSONAPIResource> & ResourceID)[];
 }
 
 export interface Field<
@@ -894,35 +897,45 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         },
       };
     }
-    // TODO add support for visited without an id
-    visited.add(value.id);
+    if (visited.has(value[localId])) {
+      return {
+        relationships: {
+          [this.name]: {
+            data: { type: 'card', lid: value[localId] },
+          },
+        },
+      };
+    }
+
+    visited.add(value.id ?? value[localId]);
 
     let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
       | (JSONAPIResource & { id: string; type: string })
       | null;
     if (serialized) {
-      // TODO this goes away
-      if (!value[isSavedInstance]) {
-        throw new Error(
-          `the linksTo field '${this.name}' cannot be serialized with an unsaved card`,
-        );
-      }
       let resource: JSONAPIResource = {
         relationships: {
           [this.name]: {
-            // TODO add support for unsaved card
-            links: {
-              self: makeRelativeURL(value.id, opts),
-            },
-            // we also write out the data form of the relationship
-            // which correlates to the included resource
-            data: { type: 'card', id: value.id },
+            ...(value[isSavedInstance]
+              ? {
+                  links: {
+                    self: makeRelativeURL(value.id, opts),
+                  },
+                  data: { type: 'card', id: value.id },
+                }
+              : {
+                  data: { type: 'card', lid: value[localId] },
+                }),
           },
         },
       };
       if (
-        !(doc.included ?? []).find((r) => r.id === value.id) &&
-        doc.data.id !== value.id
+        (!(doc.included ?? []).find((r) => 'id' in r && r.id === value.id) &&
+          doc.data.id !== value.id) ||
+        (!(doc.included ?? []).find(
+          (r) => 'lid' in r && r.lid === value[localId],
+        ) &&
+          doc.data.lid !== value[localId])
       ) {
         doc.included = doc.included ?? [];
         doc.included.push(serialized);
@@ -1073,6 +1086,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
           null,
           2,
         )}`,
+      );
+    }
+
+    if (!json.data.id) {
+      throw new Error(
+        `should never get here: the document from the card we just fetched, ${reference}, did not have an id`,
       );
     }
 
@@ -1252,32 +1271,47 @@ class LinksToMany<FieldT extends CardDefConstructor>
         };
         return;
       }
-      // TODO add support for when value is unsaved and has no id
-      visited.add(value.id);
-      let serialized: JSONAPIResource & { id: string; type: string } =
-        callSerializeHook(this.card, value, doc, visited, opts);
-      if (!value[isSavedInstance]) {
-        // TODO this goes away
-        throw new Error(
-          `the linksToMany field '${this.name}' cannot be serialized with an unsaved card`,
-        );
+      if (visited.has(value[localId])) {
+        relationships[`${this.name}\.${i}`] = {
+          data: { type: 'card', lid: value[localId] },
+        };
+        return;
       }
+
+      visited.add(value.id ?? value[localId]);
+      let serialized: JSONAPIResource & ResourceID = callSerializeHook(
+        this.card,
+        value,
+        doc,
+        visited,
+        opts,
+      );
       if (serialized.meta && Object.keys(serialized.meta).length === 0) {
         delete serialized.meta;
       }
       if (
-        !(doc.included ?? []).find((r) => r.id === value.id) &&
-        doc.data.id !== value.id
+        (!(doc.included ?? []).find((r) => 'id' in r && r.id === value.id) &&
+          doc.data.id !== value.id) ||
+        (!(doc.included ?? []).find(
+          (r) => 'lid' in r && r.lid === value[localId],
+        ) &&
+          doc.data.lid !== value[localId])
       ) {
         doc.included = doc.included ?? [];
         doc.included.push(serialized);
       }
-      // TODO add support for unsaved card
+
       relationships[`${this.name}\.${i}`] = {
-        links: {
-          self: makeRelativeURL(value.id, opts),
-        },
-        data: { type: 'card', id: value.id },
+        ...(value[isSavedInstance]
+          ? {
+              links: {
+                self: makeRelativeURL(value.id, opts),
+              },
+              data: { type: 'card', id: value.id },
+            }
+          : {
+              data: { type: 'card', lid: value[localId] },
+            }),
       };
     });
 
@@ -1309,7 +1343,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
             )}`,
           );
         }
-        if (value.links.self == null) {
+        // TODO support lid (e,g, value.links will not exist in this case)
+        if (value.links?.self == null) {
           return null;
         }
         let cachedInstance = identityContext.get(
@@ -1510,6 +1545,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
               null,
               2,
             )}`,
+          );
+        }
+        if (!json.data.id) {
+          throw new Error(
+            `should never get here: the document from the card we just fetched, ${reference}, did not have an id`,
           );
         }
         let fieldInstance = (await createFromSerialized(
@@ -2357,7 +2397,7 @@ function serializeCardResource(
       type: 'card',
       meta: { adoptsFrom },
     },
-    model.id ? { id: model.id } : undefined,
+    model.id ? { id: model.id } : { lid: model[localId] },
   );
 }
 
@@ -2366,7 +2406,10 @@ export function serializeCard(
   opts?: SerializeOpts,
 ): LooseSingleCardDocument {
   let doc = {
-    data: { type: 'card', ...(model.id != null ? { id: model.id } : {}) },
+    data: {
+      type: 'card',
+      ...(model.id != null ? { id: model.id } : { lid: model[localId] }),
+    },
   };
   let modelRelativeTo = model[relativeTo];
   let data = serializeCardResource(model, doc, {
