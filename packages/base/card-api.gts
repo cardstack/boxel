@@ -39,6 +39,7 @@ import {
   realmURL,
   localId,
   formats,
+  isLocalResourceID,
   type Format,
   type Meta,
   type CardFields,
@@ -976,6 +977,9 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
       );
     }
+    if (isLocalResourceID(value.data)) {
+      throw new Error(`lid is not supported in deserialization`);
+    }
     if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
@@ -1359,6 +1363,9 @@ class LinksToMany<FieldT extends CardDefConstructor>
           throw new Error(
             `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
           );
+        }
+        if (isLocalResourceID(value.data)) {
+          throw new Error(`lid is not supported in deserialization`);
         }
         // TODO support lid (e,g, value.links will not exist in this case)
         if (value.links?.self == null) {

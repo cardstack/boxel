@@ -383,3 +383,7 @@ export function makeCardTypeSummaryDoc(summaries: CardTypeSummary[]) {
 
   return { data };
 }
+
+function isLocalResourceID(id: ResourceID): id is ResourceLocalID {
+  return 'lid' in id;
+}
