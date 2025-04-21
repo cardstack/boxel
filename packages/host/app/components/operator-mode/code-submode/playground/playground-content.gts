@@ -6,7 +6,6 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
 import { task } from 'ember-concurrency';
 
 import {
@@ -15,7 +14,12 @@ import {
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
-import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
+import {
+  Eye,
+  ExclamationCircle,
+  IconCode,
+  IconLink,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   type Query,

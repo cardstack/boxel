@@ -12,7 +12,6 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
 import {
   restartableTask,
   timeout,
@@ -33,7 +32,11 @@ import {
 import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
-import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
+import {
+  ExclamationCircle,
+  IconTrash,
+  IconLink,
+} from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,

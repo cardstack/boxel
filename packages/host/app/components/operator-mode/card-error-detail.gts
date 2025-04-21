@@ -5,12 +5,11 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
-
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Accordion, Button } from '@cardstack/boxel-ui/components';
+import { ExclamationCircle } from '@cardstack/boxel-ui/icons';
 
 import SwitchSubmodeCommand from '../../commands/switch-submode';
 import { type CardErrorJSONAPI } from '../../services/store';

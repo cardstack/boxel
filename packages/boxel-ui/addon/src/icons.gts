@@ -19,6 +19,7 @@ import DropdownArrowDown from './icons/dropdown-arrow-down.gts';
 import DropdownArrowFilled from './icons/dropdown-arrow-filled.gts';
 import DropdownArrowUp from './icons/dropdown-arrow-up.gts';
 import Exclamation from './icons/exclamation.gts';
+import ExclamationCircle from './icons/exclamation-circle.gts';
 import Eye from './icons/eye.gts';
 import FailureBordered from './icons/failure-bordered.gts';
 import File from './icons/file.gts';
@@ -81,6 +82,7 @@ export const ALL_ICON_COMPONENTS = [
   DropdownArrowFilled,
   DropdownArrowUp,
   Exclamation,
+  ExclamationCircle,
   Eye,
   FailureBordered,
   File,
@@ -144,6 +146,7 @@ export {
   DropdownArrowFilled,
   DropdownArrowUp,
   Exclamation,
+  ExclamationCircle,
   Eye,
   FailureBordered,
   File,
