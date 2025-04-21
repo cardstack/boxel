@@ -13,13 +13,20 @@ export interface CardFields {
   [fieldName: string]: Partial<Meta> | Partial<Meta>[];
 }
 
-interface ResourceID {
+export type ResourceID = ResourceRemoteID | ResourceLocalID;
+
+interface ResourceRemoteID {
   type: string;
   id: string;
 }
 
+interface ResourceLocalID {
+  type: string;
+  lid: string;
+}
+
 export type Relationship = {
-  links: {
+  links?: {
     // there are other valid items for links in the spec, but we don't
     // anticipate using them
     self: string | null;
@@ -37,7 +44,8 @@ export type CardResourceMeta = Meta & {
 };
 
 export interface CardResource<Identity extends Unsaved = Saved> {
-  id: Identity;
+  id?: Identity;
+  lid?: string;
   type: 'card';
   attributes?: Record<string, any>;
   relationships?: {
@@ -72,6 +80,9 @@ export function isCardResource(resource: any): resource is CardResource {
     return false;
   }
   if ('id' in resource && typeof resource.id !== 'string') {
+    return false;
+  }
+  if ('lid' in resource && typeof resource.lid !== 'string') {
     return false;
   }
   if ('type' in resource && resource.type !== 'card') {
@@ -191,6 +202,12 @@ export function isRelationship(
     if (data !== null && 'type' in data && 'id' in data) {
       let { type, id } = data;
       if (typeof type !== 'string' || typeof id !== 'string') {
+        return false;
+      }
+    }
+    if (data !== null && 'type' in data && 'lid' in data) {
+      let { type, lid } = data;
+      if (typeof type !== 'string' || typeof lid !== 'string') {
         return false;
       }
     }
@@ -315,7 +332,10 @@ function isIncluded(included: any): included is CardResource<Saved>[] {
     if (typeof resource !== 'object' || !resource) {
       return false;
     }
-    if (!('id' in resource) || typeof resource.id !== 'string') {
+    if (
+      (!('id' in resource) || typeof resource.id !== 'string') &&
+      (!('lid' in resource) || typeof resource.lid !== 'string')
+    ) {
       return false;
     }
     if (!isCardResource(resource)) {

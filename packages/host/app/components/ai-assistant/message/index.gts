@@ -35,8 +35,8 @@ import type { ComponentLike } from '@glint/template';
 interface Signature {
   Element: HTMLDivElement;
   Args: {
-    formattedMessage: string;
     reasoningContent?: string | null;
+    messageHTML: SafeString;
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
@@ -174,7 +174,7 @@ export default class AiAssistantMessage extends Component<Signature> {
   get isReasoningExpandedByDefault() {
     let result =
       this.args.isStreaming &&
-      !isPresent(this.args.formattedMessage) &&
+      !isPresent(this.args.messageHTML) &&
       isPresent(this.args.reasoningContent) &&
       !isThinkingMessage(this.args.reasoningContent);
     return result;
@@ -260,7 +260,7 @@ export default class AiAssistantMessage extends Component<Signature> {
           <FormattedMessage
             @renderCodeBlocks={{@isFromAssistant}}
             @monacoSDK={{@monacoSDK}}
-            @html={{@formattedMessage}}
+            @html={{@messageHTML}}
             @isStreaming={{@isStreaming}}
           />
 

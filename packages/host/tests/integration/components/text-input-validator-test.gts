@@ -64,7 +64,7 @@ module('Integration | text-input-validator', function (hooks) {
     let card = await createFromSerialized<typeof CardDef>(
       result.doc.data,
       result.doc,
-      new URL(result.doc.data.id),
+      new URL(result.doc.data.id!),
     );
     await recompute(card, { loadFields: true });
     return card;

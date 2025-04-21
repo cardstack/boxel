@@ -47,7 +47,7 @@ export default class AiAssistantToast extends Component<Signature> {
         </time>
       </header>
       <div class='toast-content' data-test-ai-assistant-toast-content>
-        {{htmlSafe (markdownToHtml this.unseenMessage.formattedMessage)}}
+        {{htmlSafe (markdownToHtml this.unseenMessage.body)}}
       </div>
       <BoxelButton
         @kind='secondary-dark'
@@ -200,7 +200,7 @@ export default class AiAssistantToast extends Component<Signature> {
     return (
       this.state.value?.message ??
       ({
-        formattedMessage: '',
+        body: '',
         created: new Date(),
       } as Message)
     );

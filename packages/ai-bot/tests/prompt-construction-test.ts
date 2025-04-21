@@ -65,7 +65,6 @@ module('getModifyPrompt', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           isStreamingFinished: true,
         },
         sender: '@user:localhost',
@@ -100,7 +99,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             context: {
               tools: [],
@@ -170,7 +168,6 @@ module('getModifyPrompt', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           isStreamingFinished: true,
         },
         sender: '@user:localhost',
@@ -203,7 +200,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             attachedCards: [
               {
@@ -256,7 +252,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
-          formatted_body: 'set the location to home',
           data: {
             attachedCards: [
               {
@@ -338,7 +333,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: [],
@@ -363,7 +357,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
-          formatted_body: 'set the location to home',
           data: {
             context: {
               openCardIds: [],
@@ -397,7 +390,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey I am attaching a couple of files',
-          formatted_body: 'Hey I am attaching a couple of files',
           data: {
             context: {
               tools: [],
@@ -434,7 +426,6 @@ module('getModifyPrompt', () => {
         content: {
           body: 'Ok. What do you want me to do with these files?',
           msgtype: 'm.text',
-          formatted_body: 'Ok. What do you want me to do with these files?',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
         },
@@ -455,8 +446,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Nevermind, those files are now outdated, I am attaching new ones',
-          formatted_body:
-            'Nevermind, those files are now outdated, I am attaching new ones',
           data: {
             context: {
               tools: [],
@@ -568,7 +557,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -618,7 +606,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -661,7 +648,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -711,7 +697,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -754,7 +739,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -815,7 +799,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             attachedCards: [
               {
@@ -867,7 +850,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         sender: '@ian:localhost',
         content: {
           body: 'Just a regular message',
-          formatted_body: 'Just a regular message',
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
@@ -910,7 +892,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCards: [
@@ -1006,7 +987,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
@@ -1087,7 +1067,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Author/1'],
@@ -1202,7 +1181,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
@@ -1233,7 +1211,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
-          formatted_body: 'set the location to home',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
@@ -1474,7 +1451,6 @@ test('Return host result of tool call back to open ai', async () => {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'search for the following card instances',
         format: 'org.matrix.custom.html',
-        formatted_body: '<p>search for the following card instances</p>\n',
         clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
@@ -1588,8 +1564,6 @@ test('Return host result of tool call back to open ai', async () => {
       content: {
         body: 'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
         msgtype: 'm.text',
-        formatted_body:
-          'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
         'm.relates_to': {
@@ -1613,7 +1587,6 @@ test('Return host result of tool call back to open ai', async () => {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'yes module type',
         format: 'org.matrix.custom.html',
-        formatted_body: '<p>yes module type</p>\n',
         clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
@@ -1750,7 +1723,6 @@ test('Return host result of tool call back to open ai', async () => {
       content: {
         body: "Search for card instances of type 'Author'",
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        formatted_body: "Search for card instances of type 'Author'",
         format: 'org.matrix.custom.html',
         [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
           {

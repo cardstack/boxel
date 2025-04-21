@@ -266,7 +266,6 @@ export default class CardEventPublisher {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
           body: `card fragment ${index + 1} of ${fragments.length}`,
-          formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
           data: {
             ...(index < fragments.length - 1
               ? { nextFragment: responses[0].event_id }
