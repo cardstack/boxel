@@ -39,6 +39,7 @@ import {
   realmURL,
   localId,
   formats,
+  isLocalResourceID,
   type Format,
   type Meta,
   type CardFields,
@@ -377,11 +378,14 @@ function resourceFrom(
   resourceId: string | undefined,
 ): LooseCardResource | undefined {
   if (doc == null) {
-    return undefined;
+    return;
   }
   let data: CardResource[];
   if (isSingleCardDocument(doc)) {
-    if (resourceId == null) {
+    if (resourceId === undefined) {
+      return undefined;
+    }
+    if (resourceId === null) {
       return doc.data;
     }
     data = [doc.data];
@@ -968,6 +972,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         }' cannot deserialize non-relationship value ${JSON.stringify(value)}`,
       );
     }
+    if (Array.isArray(value.data)) {
+      throw new Error(
+        `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
+      );
+    }
+    if (isLocalResourceID(value.data)) {
+      throw new Error(`lid is not supported in deserialization`);
+    }
     if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
@@ -978,8 +990,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
     }
-    let resourceId = new URL(value.links.self, relativeTo).href;
-    let resource = resourceFrom(doc, resourceId);
+    //links.self is used to tell the consumer of this payload how to get the resource via HTTP. data.id is used to tell the
+    //consumer of this payload how to get the resource from the side loaded included bucket. we need to strictly only
+    //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
+    //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
+    //that means that the serialization is incorrect and is not JSON-API compliant.
+    let resource = resourceFrom(doc, value.data?.id);
     if (!resource) {
       if (loadedValue !== undefined) {
         return loadedValue;
@@ -1343,6 +1359,14 @@ class LinksToMany<FieldT extends CardDefConstructor>
             )}`,
           );
         }
+        if (Array.isArray(value.data)) {
+          throw new Error(
+            `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
+          );
+        }
+        if (isLocalResourceID(value.data)) {
+          throw new Error(`lid is not supported in deserialization`);
+        }
         // TODO support lid (e,g, value.links will not exist in this case)
         if (value.links?.self == null) {
           return null;
@@ -1354,12 +1378,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        let resourceId = new URL(
-          value.links.self,
-          !Array.isArray(doc.data) && 'id' in doc.data && doc.data.id
-            ? doc.data.id
-            : relativeTo,
-        ).href;
+        //links.self is used to tell the consumer of this payload how to get the resource via HTTP. data.id is used to tell the
+        //consumer of this payload how to get the resource from the side loaded included bucket. we need to strictly only
+        //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
+        //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
+        //that means that the serialization is incorrect and is not JSON-API compliant.
+        let resourceId = value.data?.id;
         if (loadedValues && Array.isArray(loadedValues)) {
           let loadedValue = loadedValues.find(
             (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
