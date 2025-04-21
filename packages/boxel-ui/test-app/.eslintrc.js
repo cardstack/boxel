@@ -34,6 +34,71 @@ module.exports = {
     ],
   },
   overrides: [
+    {
+      files: ['**/*.gts'],
+      parser: 'ember-eslint-parser',
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        requireConfigFile: false,
+        babelOptions: {
+          plugins: [
+            [
+              '@babel/plugin-proposal-decorators',
+              { decoratorsBeforeExport: true },
+            ],
+          ],
+        },
+        warnOnUnsupportedTypeScriptVersion: false,
+      },
+      plugins: ['ember', '@cardstack/boxel'],
+      extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended',
+        'plugin:ember/recommended',
+        'plugin:ember/recommended-gts',
+        'plugin:prettier/recommended',
+        'plugin:qunit-dom/recommended',
+        'plugin:@cardstack/boxel/recommended',
+      ],
+      rules: {
+        '@typescript-eslint/no-empty-function': 'off',
+        '@typescript-eslint/no-unused-vars': [
+          'error',
+          { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        ],
+        'prefer-const': 'off',
+        '@typescript-eslint/no-explicit-any': 'off',
+        '@typescript-eslint/ban-types': 'off',
+        '@typescript-eslint/ban-ts-comment': 'off',
+        '@typescript-eslint/explicit-module-boundary-types': 'off',
+        '@typescript-eslint/no-this-alias': 'off',
+        '@typescript-eslint/no-non-null-assertion': 'off',
+        'no-undef': 'off',
+        'ember/template-no-let-reference': 'off',
+        'ember/no-tracked-properties-from-args': 'off',
+        'ember/no-runloop': 'off',
+        'node/no-deprecated-api': 'off',
+        '@cardstack/boxel/template-missing-invokable': [
+          'error',
+          {
+            invokables: {
+              fn: ['fn', '@ember/helper'],
+              on: ['on', '@ember/modifier'],
+              and: ['and', '@cardstack/boxel-ui/helpers'],
+              bool: ['bool', '@cardstack/boxel-ui/helpers'],
+              eq: ['eq', '@cardstack/boxel-ui/helpers'],
+              gt: ['gt', '@cardstack/boxel-ui/helpers'],
+              lt: ['lt', '@cardstack/boxel-ui/helpers'],
+              not: ['not', '@cardstack/boxel-ui/helpers'],
+              or: ['or', '@cardstack/boxel-ui/helpers'],
+              add: ['add', '@cardstack/boxel-ui/helpers'],
+              subtract: ['subtract', '@cardstack/boxel-ui/helpers'],
+            },
+          },
+        ],
+      },
+    },
     // node files
     {
       files: [
