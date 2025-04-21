@@ -210,9 +210,9 @@ export function constructHistory(
       }
     }
 
-    // @ts-ignore TODO: Element implicitly has an 'any' type because expression of type '"m.relates_to"' can't be used to index type
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      // @ts-ignore TODO: Element implicitly has an 'any' type because expression of type '"m.relates_to"' can't be used to index type
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       eventId = event.content['m.relates_to']!.event_id!;
       event.event_id = eventId;
     }
