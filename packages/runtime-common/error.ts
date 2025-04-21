@@ -24,6 +24,25 @@ export interface SerializedError {
   stack?: string;
 }
 
+export interface CardErrorJSONAPI {
+  id?: string; // 404 errors won't necessarily have an id
+  status: number;
+  title: string;
+  message: string;
+  realm: string | undefined;
+  meta: {
+    lastKnownGoodHtml: string | null;
+    cardTitle: string | null;
+    scopedCssUrls: string[];
+    stack: string | null;
+  };
+  additionalErrors?: (CardError | Error)[] | null;
+}
+
+export interface CardErrorsJSONAPI {
+  errors: CardErrorJSONAPI[];
+}
+
 export class CardError extends Error implements SerializedError {
   message: string;
   status: number;
