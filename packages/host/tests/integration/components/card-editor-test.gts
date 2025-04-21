@@ -17,6 +17,7 @@ import {
   baseRealm,
   GetCardsContextName,
   GetCardContextName,
+  GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 import { Realm } from '@cardstack/runtime-common/realm';
@@ -27,6 +28,7 @@ import CardEditor from '@cardstack/host/components/card-editor';
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import CreateCardModal from '@cardstack/host/components/create-card-modal';
 
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 
@@ -63,6 +65,11 @@ class GetCardsContextProvider extends GlimmerComponent<{
   // @ts-ignore "getCards" is declared but not used
   private get getCards() {
     return getSearch;
+  }
+  @provide(GetCardCollectionContextName)
+  // @ts-ignore "getCardCollection" is declared but not used
+  private get getCardCollection() {
+    return getCardCollection;
   }
 }
 

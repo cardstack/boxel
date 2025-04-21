@@ -111,7 +111,7 @@ export default class AppListingHeader extends GlimmerComponent<AppListingHeaderA
         }
         .app-name {
           margin: 0;
-          font: 700 var(--boxel-font-lg);
+          font: 600 var(--boxel-font-lg);
           letter-spacing: var(--boxel-lsp-sm);
         }
         .publisher {

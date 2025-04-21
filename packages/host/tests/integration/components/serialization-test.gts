@@ -4090,7 +4090,7 @@ module('Integration | serialization', function (hooks) {
     });
 
     let store = this.owner.lookup('service:store') as StoreService;
-    let captainMango = await store.peek(`${testRealmURL}Captain/mango`);
+    let captainMango = await store.get(`${testRealmURL}Captain/mango`);
     let mangoTheBoat = (captainMango as Captain).createEponymousBoat();
 
     assert.deepEqual(

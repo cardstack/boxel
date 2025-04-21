@@ -1,3 +1,5 @@
+import { on } from '@ember/modifier';
+import { getOwner } from '@ember/owner';
 import { scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
@@ -5,9 +7,10 @@ import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { dropTask } from 'ember-concurrency';
+import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
-import { Resource } from 'ember-resources';
+
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
 import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
@@ -16,16 +19,21 @@ import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
 
+import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
 import {
+  type HtmlTagGroup,
   extractCodeData,
+  parseHtmlContent,
   wrapLastTextNodeInStreamingTextSpan,
 } from '@cardstack/host/lib/formatted-message/utils';
 
+import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
+import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
 
 export interface CodeData {
@@ -36,15 +44,13 @@ export interface CodeData {
 }
 
 interface FormattedMessageSignature {
-  html: string;
-  monacoSDK: MonacoSDK;
-  renderCodeBlocks: boolean;
-  isStreaming: boolean;
-}
-
-interface HtmlTagGroup {
-  type: 'pre_tag' | 'non_pre_tag';
-  content: string;
+  Element: HTMLDivElement;
+  Args: {
+    html: SafeString;
+    monacoSDK: MonacoSDK;
+    renderCodeBlocks: boolean;
+    isStreaming: boolean;
+  };
 }
 
 function sanitize(html: string): SafeString {
@@ -57,6 +63,15 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   @service private declare commandService: CommandService;
   @tracked htmlGroups: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
 
+  @tracked codePatchActions: TrackedArray<CodePatchAction> = new TrackedArray(
+    [],
+  );
+
+  @tracked applyAllCodePatchTasksState:
+    | 'ready'
+    | 'applying'
+    | 'applied'
+    | 'failed' = 'ready';
   // When html is streamed, we need to update htmlParts accordingly,
   // but only the parts that have changed so that we don't needlesly re-render
   // parts of the message that haven't changed. Parts are: <pre> html code, and
@@ -93,7 +108,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     }
   };
 
-  private onHtmlUpdate = (html: string) => {
+  private onHtmlUpdate = (html: SafeString) => {
     // The reason why reacting to html argument this way is because we want to
     // have full control of when the @html argument changes so that we can
     // properly fragment it into htmlParts, and in our reactive structure, only update
@@ -101,12 +116,78 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
     // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
     scheduleOnce('afterRender', () => {
-      this.updateHtmlGroups(html);
+      this.updateHtmlGroups(html.toString());
     });
   };
 
   private isLastHtmlGroup = (index: number) => {
     return index === this.htmlGroups.length - 1;
+  };
+
+  private createCodePatchAction = (codeData: CodeData) => {
+    let codePatchAction = new CodePatchAction(getOwner(this)!, codeData);
+    this.codePatchActions.push(codePatchAction);
+    return codePatchAction;
+  };
+
+  private get isApplyAllButtonDisplayed() {
+    return this.codePatchActions.length > 1 && !this.args.isStreaming;
+  }
+
+  private applyAllCodePatchTasks = dropTask(async () => {
+    this.applyAllCodePatchTasksState = 'applying';
+    let unappliedCodePatchActions = this.codePatchActions.filter(
+      (codePatchAction) => codePatchAction.patchCodeTaskState !== 'applied',
+    );
+
+    if (unappliedCodePatchActions.length === 0) {
+      this.applyAllCodePatchTasksState = 'applied';
+      return;
+    }
+
+    unappliedCodePatchActions.forEach((codePatchAction) => {
+      codePatchAction.patchCodeTaskState = 'applying';
+    });
+
+    let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions.reduce(
+      (acc, codePatchAction) => {
+        acc[codePatchAction.fileUrl] = [
+          ...(acc[codePatchAction.fileUrl] || []),
+          codePatchAction,
+        ];
+        return acc;
+      },
+      {} as Record<string, CodePatchAction[]>,
+    );
+
+    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+      this.commandService.commandContext,
+    );
+
+    // TODO: Handle possible errors (fetching source, patching, saving source)
+    // Handle in CS-8369
+    for (let fileUrl in codePatchActionsGroupedByFileUrl) {
+      let source = await this.cardService.getSource(new URL(fileUrl));
+      let patchedCode = source;
+      for (let codePatchAction of codePatchActionsGroupedByFileUrl[fileUrl]) {
+        let { resultContent: patchedCodeResult } =
+          await applySearchReplaceBlockCommand.execute({
+            fileContent: patchedCode,
+            codeBlock: codePatchAction.searchReplaceBlock,
+          });
+        patchedCode = patchedCodeResult;
+      }
+      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
+      codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
+        codePatchAction.patchCodeTaskState = 'applied';
+      });
+    }
+
+    this.applyAllCodePatchTasksState = 'applied';
+  });
+
+  sanitizeSafeString = (html: SafeString) => {
+    return sanitize(html.toString());
   };
 
   <template>
@@ -150,7 +231,11 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
                         <actions.copyCode
                           @code={{codeDiffResource.modifiedCode}}
                         />
-                        <actions.applyCodePatch />
+                        <actions.applyCodePatch
+                          @codePatchAction={{this.createCodePatchAction
+                            codeData
+                          }}
+                        />
                       </codeBlock.actions>
                       <codeBlock.diffEditor
                         @originalCode={{codeDiffResource.originalCode}}
@@ -177,14 +262,32 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
             {{/if}}
           {{/if}}
         {{/each}}
+
+        {{#if this.isApplyAllButtonDisplayed}}
+          <div class='code-patch-actions'>
+            <ApplyButton
+              {{on 'click' (perform this.applyAllCodePatchTasks)}}
+              @state={{this.applyAllCodePatchTasksState}}
+              data-test-apply-all-code-patches-button
+            >
+              Accept All
+            </ApplyButton>
+          </div>
+        {{/if}}
       </div>
     {{else}}
       <div class='message'>
-        {{sanitize @html}}
+        {{this.sanitizeSafeString @html}}
       </div>
     {{/if}}
 
     <style scoped>
+      .code-patch-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: var(--boxel-sp-xs);
+        margin-top: var(--boxel-sp);
+      }
       .message {
         position: relative;
       }
@@ -232,8 +335,8 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 interface HtmlDidUpdateSignature {
   Args: {
     Named: {
-      html: string;
-      onHtmlUpdate: (html: string) => void;
+      html: SafeString;
+      onHtmlUpdate: (html: SafeString) => void;
     };
   };
 }
@@ -246,94 +349,4 @@ class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
   ) {
     onHtmlUpdate(html);
   }
-}
-
-function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
-  const result: HtmlTagGroup[] = [];
-
-  // Regular expression to match <pre> tags and their content
-  const regex = /(<pre[\s\S]*?<\/pre>)|([\s\S]+?)(?=<pre|$)/g;
-
-  let match;
-  while ((match = regex.exec(htmlString)) !== null) {
-    if (match[1]) {
-      // This is a code block (pre tag)
-      result.push({
-        type: 'pre_tag',
-        content: match[1],
-      });
-    } else if (match[2] && match[2].trim() !== '') {
-      // This is non <pre> tag HTML
-      result.push({
-        type: 'non_pre_tag',
-        content: match[2],
-      });
-    }
-  }
-
-  return result;
-}
-
-interface CodeDiffResourceArgs {
-  named: {
-    fileUrl?: string | null;
-    searchReplaceBlock?: string | null;
-  };
-}
-
-export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
-  @tracked fileUrl: string | undefined | null;
-  @tracked originalCode: string | undefined | null;
-  @tracked modifiedCode: string | undefined | null;
-  @tracked searchReplaceBlock: string | undefined | null;
-
-  @service private declare cardService: CardService;
-  @service private declare commandService: CommandService;
-
-  modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
-    let { fileUrl, searchReplaceBlock } = named;
-    this.fileUrl = fileUrl;
-    this.searchReplaceBlock = searchReplaceBlock;
-
-    this.load.perform();
-  }
-
-  get isDataLoaded() {
-    return !!this.originalCode || !!this.modifiedCode;
-  }
-
-  private load = restartableTask(async () => {
-    let { fileUrl, searchReplaceBlock } = this;
-    if (!fileUrl || !searchReplaceBlock) {
-      return;
-    }
-    let result = await this.cardService.getSource(new URL(fileUrl));
-    this.originalCode = result;
-    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
-      this.commandService.commandContext,
-    );
-
-    let { resultContent: patchedCode } =
-      await applySearchReplaceBlockCommand.execute({
-        fileContent: this.originalCode,
-        codeBlock: searchReplaceBlock,
-      });
-    this.modifiedCode = patchedCode;
-  });
-}
-
-function getCodeDiffResultResource(
-  parent: object,
-  fileUrl?: string | null,
-  searchReplaceBlock?: string | null,
-) {
-  if (!fileUrl || !searchReplaceBlock) {
-    throw new Error('fileUrl and searchReplaceBlock are required');
-  }
-  return CodeDiffResource.from(parent, () => ({
-    named: {
-      fileUrl,
-      searchReplaceBlock,
-    },
-  }));
 }

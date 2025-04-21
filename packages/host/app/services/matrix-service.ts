@@ -30,7 +30,6 @@ import {
   baseRealm,
   LooseCardResource,
   logger,
-  markdownToHtml,
   ResolvedCodeRef,
   isCardInstance,
 } from '@cardstack/runtime-common';
@@ -41,7 +40,6 @@ import {
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
@@ -99,6 +97,7 @@ import { type SerializedState as OperatorModeSerializedState } from './operator-
 import type CardService from './card-service';
 import type CommandService from './command-service';
 import type LoaderService from './loader-service';
+import type LoggerService from './logger-service';
 import type MatrixSDKLoader from './matrix-sdk-loader';
 import type { ExtendedClient, ExtendedMatrixSDK } from './matrix-sdk-loader';
 import type MessageService from './message-service';
@@ -126,6 +125,7 @@ export type OperatorModeContext = {
 
 export default class MatrixService extends Service {
   @service declare private loaderService: LoaderService;
+  @service declare private loggerService: LoggerService;
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
   @service declare private realm: RealmService;
@@ -181,7 +181,13 @@ export default class MatrixService extends Service {
 
   constructor(owner: Owner) {
     super(owner);
+    this.setLoggerLevelFromEnvironment();
     this.#ready = this.loadState.perform();
+  }
+
+  private setLoggerLevelFromEnvironment() {
+    // This will pick up the level if it’s in LOG_LEVELS
+    logger('matrix');
   }
 
   private addEventReadReceipt(eventId: string, receipt: { readAt: Date }) {
@@ -754,29 +760,25 @@ export default class MatrixService extends Service {
     clientGeneratedId = uuidv4(),
     context?: OperatorModeContext,
   ): Promise<void> {
-    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(body));
-
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
     let submode = context?.submode;
-    if (submode === 'interact') {
-      let mappings = await basicMappings(this.loaderService.loader);
-      // Open cards are attached automatically
-      // If they are not attached, the user is not allowing us to
-      // modify them
-      attachedOpenCards = attachedCards.filter((c) =>
-        (context?.openCardIds ?? []).includes(c.id),
+    let mappings = await basicMappings(this.loaderService.loader);
+    // Open cards are attached automatically
+    // If they are not attached, the user is not allowing us to
+    // modify them
+    attachedOpenCards = attachedCards.filter((c) =>
+      (context?.openCardIds ?? []).includes(c.id),
+    );
+    // Generate tool calls for patching currently open cards permitted for modification
+    for (let attachedOpenCard of attachedOpenCards) {
+      let patchSpec = generateJsonSchemaForCardType(
+        attachedOpenCard.constructor as typeof CardDef,
+        this.cardAPI,
+        mappings,
       );
-      // Generate tool calls for patching currently open cards permitted for modification
-      for (let attachedOpenCard of attachedOpenCards) {
-        let patchSpec = generateJsonSchemaForCardType(
-          attachedOpenCard.constructor as typeof CardDef,
-          this.cardAPI,
-          mappings,
-        );
-        if (this.realm.canWrite(attachedOpenCard.id)) {
-          tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
-        }
+      if (this.realm.canWrite(attachedOpenCard.id)) {
+        tools.push(getPatchTool(attachedOpenCard.id, patchSpec));
       }
     }
 
@@ -789,7 +791,6 @@ export default class MatrixService extends Service {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: body || '',
       format: 'org.matrix.custom.html',
-      formatted_body: html,
       clientGeneratedId,
       data: {
         attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
@@ -893,7 +894,7 @@ export default class MatrixService extends Service {
       await Promise.all(
         defaultSkills.map(async (skillCardURL) => {
           let maybeCard =
-            await this.store.peek<SkillCardModule.SkillCard>(skillCardURL);
+            await this.store.get<SkillCardModule.SkillCard>(skillCardURL);
           return isCardInstance(maybeCard) ? maybeCard : undefined;
         }),
       )

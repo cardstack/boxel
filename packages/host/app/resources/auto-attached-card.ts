@@ -5,7 +5,10 @@ import { Resource } from 'ember-resources';
 
 import { TrackedSet } from 'tracked-built-ins';
 
-import { isCardInstance } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  realmURL as realmURLSymbol,
+} from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -52,7 +55,6 @@ export class AutoAttachment extends Resource<Args> {
       attachedCardIds: string[] | undefined,
       removedCardIds: string[] | undefined,
     ) => {
-      let api = await this.cardService.getAPI();
       this.cardIds.clear();
       for (let item of topMostStackItems) {
         if (!item.url) {
@@ -64,9 +66,9 @@ export class AutoAttachment extends Resource<Args> {
         if (attachedCardIds?.includes(item.url)) {
           continue;
         }
-        let card = await this.store.peek(item.url);
+        let card = await this.store.get(item.url);
         if (card && isCardInstance(card)) {
-          let realmURL = card[api.realmURL];
+          let realmURL = card[realmURLSymbol];
           if (realmURL && item.url === `${realmURL.href}index`) {
             continue;
           }

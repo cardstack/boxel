@@ -24,14 +24,17 @@ import {
   CardContextName,
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
   Deferred,
   codeRefWithAbsoluteURL,
   moduleFrom,
   RealmPaths,
   isCardInstance,
   CardError,
+  realmURL as realmURLSymbol,
   type getCard,
   type getCards,
+  type getCardCollection,
   type Actions,
   type CatalogActions,
   type CardActions,
@@ -161,6 +164,8 @@ interface CardToDelete {
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
 
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
@@ -306,7 +311,7 @@ export default class InteractSubmode extends Component {
           };
         } else {
           let cardUrl = card instanceof URL ? card : new URL(card as string);
-          let loadedCard = await here.store.peek(cardUrl.href);
+          let loadedCard = await here.store.get(cardUrl.href);
           if (isCardInstance(loadedCard)) {
             cardToDelete = {
               id: loadedCard.id,
@@ -575,7 +580,7 @@ export default class InteractSubmode extends Component {
         if (!destinationIndexCardUrl) {
           throw new Error(`destination index card has no URL`);
         }
-        let destinationIndexCard = await this.store.peek(
+        let destinationIndexCard = await this.store.get(
           destinationIndexCardUrl,
         );
         if (!isCardInstance(destinationIndexCard)) {
@@ -583,8 +588,7 @@ export default class InteractSubmode extends Component {
             `destination index card ${destinationIndexCardUrl} is not a card`,
           );
         }
-        let destinationRealmURL =
-          await this.cardService.getRealmURL(destinationIndexCard);
+        let destinationRealmURL = destinationIndexCard[realmURLSymbol];
         if (!destinationRealmURL) {
           throw new Error('Could not determine the copy destination realm');
         }
@@ -637,7 +641,7 @@ export default class InteractSubmode extends Component {
           selectedCards.map((cardDefOrId: CardDefOrId) => {
             if (typeof cardDefOrId === 'string') {
               // WARNING This card is not part of the identity map!
-              return this.store.peek(cardDefOrId);
+              return this.store.get(cardDefOrId);
             }
             return cardDefOrId;
           }),
@@ -788,6 +792,7 @@ export default class InteractSubmode extends Component {
       actions: this.publicAPI(this, 0),
       getCard: this.getCard,
       getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
       store: this.store,
       // TODO: should we include this here??
       commandContext: this.commandService.commandContext,

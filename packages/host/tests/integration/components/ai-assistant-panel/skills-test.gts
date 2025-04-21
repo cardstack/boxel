@@ -379,7 +379,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
 
-    console.log(getRoomEvents(roomId));
     const initialCardFragmentEvents = getRoomEvents(roomId).filter(
       (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
     );

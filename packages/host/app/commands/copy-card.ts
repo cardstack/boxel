@@ -1,6 +1,10 @@
 import { service } from '@ember/service';
 
-import { isCardInstance, isResolvedCodeRef } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  isResolvedCodeRef,
+  realmURL,
+} from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -56,7 +60,7 @@ export default class CopyCardCommand extends HostBaseCommand<
         )}`,
       );
     }
-    let newCard = await this.store.peek(maybeId);
+    let newCard = await this.store.get(maybeId);
     if (!isCardInstance(newCard)) {
       throw new Error(
         `unable to get instance ${maybeId}: ${JSON.stringify(newCard, null, 2)}`,
@@ -84,9 +88,9 @@ export default class CopyCardCommand extends HostBaseCommand<
       let item =
         this.operatorModeStateService.topMostStackItems()[targetStackIndex];
       if (item.url) {
-        let topCard = await this.store.peek(item.url);
+        let topCard = await this.store.get(item.url);
         if (isCardInstance(topCard)) {
-          let url = await this.cardService.getRealmURL(topCard);
+          let url = topCard[realmURL];
           // open card might be from a realm in which we don't have write permissions
           if (url && this.realm.canWrite(url.href)) {
             return url.href;

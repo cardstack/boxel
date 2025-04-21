@@ -7,16 +7,16 @@ import { tracked } from '@glimmer/tracking';
 
 import { consume } from 'ember-provide-consume-context';
 
-import { trackedFunction } from 'ember-resources/util/function';
-
-import { TrackedArray } from 'tracked-built-ins';
-
 import { BoxelButton } from '@cardstack/boxel-ui/components';
 import { eq, gt } from '@cardstack/boxel-ui/helpers';
 
 import { ArrowLeft, ArrowRight } from '@cardstack/boxel-ui/icons';
 
-import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
+import {
+  type getCardCollection,
+  GetCardCollectionContextName,
+  realmURL as realmURLSymbol,
+} from '@cardstack/runtime-common';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -47,7 +47,7 @@ export default class CopyButton extends Component<Signature> {
   <template>
     {{consumeContext this.makeCardResources}}
     {{#if (gt this.stacks.length 1)}}
-      {{#if this.hasLoadedTopMostCards}}
+      {{#if this.topMostCardCollection.isLoaded}}
         {{#if this.state}}
           <BoxelButton
             class='copy-button'
@@ -113,35 +113,25 @@ export default class CopyButton extends Component<Signature> {
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
   @service private declare loaderService: LoaderService;
   @service private declare cardService: CardService;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @tracked private topMostCardCollectionResource:
-    | { value: TrackedArray<ReturnType<getCard>> | null }
+  @tracked private topMostCardCollection:
+    | ReturnType<getCardCollection>
     | undefined;
 
   private makeCardResources = () => {
-    this.topMostCardCollectionResource = trackedFunction(
+    this.topMostCardCollection = this.getCardCollection(
       this,
       () =>
-        new TrackedArray(
-          this.operatorModeStateService
-            .topMostStackItems()
-            .map((item) => this.getCard(this, () => item.url)),
-        ),
+        this.operatorModeStateService
+          .topMostStackItems()
+          .map((i) => i.url)
+          .filter(Boolean) as string[],
     );
   };
-
-  private get topMostCardResources() {
-    return this.topMostCardCollectionResource?.value ?? new TrackedArray();
-  }
-
-  private get hasLoadedTopMostCards() {
-    return this.topMostCardResources.length === 0
-      ? true
-      : this.topMostCardResources.every((r) => r.isLoaded);
-  }
 
   private get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
@@ -161,18 +151,13 @@ export default class CopyButton extends Component<Signature> {
       return undefined;
     }
 
-    let indexCardIndicies = this.topMostCardResources.reduce(
-      (indexCards, item, index) => {
-        if (!item?.card) {
-          return indexCards;
-        }
-        let realmURL = item.card[item.api.realmURL];
+    let indexCardIndicies = (this.topMostCardCollection?.cards ?? []).reduce(
+      (indexCards, card, index) => {
+        let realmURL = card[realmURLSymbol];
         if (!realmURL) {
-          throw new Error(
-            `could not determine realm URL for card ${item.card.id}`,
-          );
+          throw new Error(`could not determine realm URL for card ${card.id}`);
         }
-        if (item.card.id === `${realmURL.href}index`) {
+        if (card.id === `${realmURL.href}index`) {
           return [...indexCards, index];
         }
         return indexCards;
@@ -196,9 +181,9 @@ export default class CopyButton extends Component<Signature> {
         }
         // eslint-disable-next-line no-case-declarations
         let sourceCard =
-          this.topMostCardResources[
+          this.topMostCardCollection?.cards[
             indexCardIndicies[0] === LEFT ? RIGHT : LEFT
-          ].card;
+          ];
         if (!sourceCard) {
           return undefined;
         }

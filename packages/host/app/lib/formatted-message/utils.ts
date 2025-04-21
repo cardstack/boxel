@@ -1,5 +1,7 @@
 import { SafeString, htmlSafe } from '@ember/template';
 
+import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
+
 import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
 
 import {
@@ -8,28 +10,29 @@ import {
 } from '../search-replace-block-parsing';
 
 export function extractCodeData(preElementString: string): CodeData {
-  let emptyCodeData: CodeData = {
-    language: null,
-    fileUrl: null,
-    searchReplaceBlock: null,
-    code: null,
-  };
+  // We are creating a new element in the dom
+  // so that we can easily parse the content of the top level <pre> tags.
+  // Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that
+  // it's trivial to get its contents, compared to parsing the htmlString.
+  let tempContainer = document.createElement('div');
+  tempContainer.innerHTML = preElementString;
+  let preElement = tempContainer.querySelector('pre');
 
-  if (!preElementString) {
-    return emptyCodeData;
+  if (!preElement) {
+    tempContainer.remove();
+    return {
+      fileUrl: null,
+      code: null,
+      language: null,
+      searchReplaceBlock: null,
+    };
   }
 
-  const languageMatch = preElementString.match(
-    new RegExp('data-code-language="([^"]+)"'),
-  );
-  const language = languageMatch ? languageMatch[1] : null;
-  const contentMatch = preElementString.match(/<pre[^>]*>([\s\S]*?)<\/pre>/);
-  let content = contentMatch ? contentMatch[1] : null;
+  let language = preElement.getAttribute('data-code-language') || 'text';
 
-  if (!content) {
-    return emptyCodeData;
-  }
-
+  let content = preElement.innerHTML;
+  // Decode HTML entities to handle special characters like < and >
+  content = unescapeHtml(content);
   let parsedContent = parseSearchReplace(content);
 
   // Transform the incomplete search/replace block into a format for streaming,
@@ -72,6 +75,7 @@ export function extractCodeData(preElementString: string): CodeData {
     contentWithoutFileUrl = lines.slice(fileUrlIndex + 1).join('\n');
   }
 
+  tempContainer.remove();
   return {
     language: language ?? '',
     code: adjustedContentForStreamedContentInMonacoEditor || content,
@@ -109,4 +113,51 @@ export function wrapLastTextNodeInStreamingTextSpan(
     lastTextNode.replaceWith(span);
   }
   return htmlSafe(doc.body.innerHTML);
+}
+
+export interface HtmlTagGroup {
+  type: 'pre_tag' | 'non_pre_tag';
+  content: string;
+}
+
+export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
+  let result: HtmlTagGroup[] = [];
+
+  // Create a temporary DOM element to parse the HTML string.
+  // This approach allows us to:
+  // 1. Properly identify and separate pre and non-pre tags
+  // 2. Handle nested HTML structures correctly
+  // 3. Preserve the original HTML structure of each tag
+  let doc = document.createElement('div');
+  doc.innerHTML = htmlString;
+
+  Array.from(doc.childNodes).forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      let textContent = node.textContent?.trim() || '';
+      if (textContent) {
+        result.push({
+          type: 'non_pre_tag',
+          content: textContent,
+        });
+      }
+    } else if (node.nodeType === Node.ELEMENT_NODE) {
+      let element = node as HTMLElement;
+      let tagName = element.tagName.toLowerCase();
+
+      if (tagName === 'pre') {
+        result.push({
+          type: 'pre_tag',
+          content: element.outerHTML,
+        });
+      } else {
+        result.push({
+          type: 'non_pre_tag',
+          content: element.outerHTML,
+        });
+      }
+    }
+  });
+
+  doc.remove();
+  return result;
 }
