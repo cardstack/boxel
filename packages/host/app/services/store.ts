@@ -951,7 +951,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 }
 
-function formattedError(
+export function formattedError(
   url: string | undefined,
   error: any,
   err?: CardError | Partial<CardErrorJSONAPI>,

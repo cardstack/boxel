@@ -23,6 +23,7 @@ interface Signature {
     viewInCodeMode?: true;
     title?: string;
   };
+  Element: HTMLElement;
 }
 
 export default class CardErrorDetail extends Component<Signature> {
@@ -42,7 +43,11 @@ export default class CardErrorDetail extends Component<Signature> {
   });
 
   <template>
-    <Accordion class='error-detail {{if this.showErrorDetail "open"}}' as |A|>
+    <Accordion
+      class='error-detail {{if this.showErrorDetail "open"}}'
+      ...attributes
+      as |A|
+    >
       <A.Item
         data-test-error-detail-toggle
         @onClick={{fn this.toggleDetail 'schema'}}
@@ -50,7 +55,7 @@ export default class CardErrorDetail extends Component<Signature> {
       >
         <:title>
           <ExclamationCircle class='error-icon' />
-          An error was encountered on this card:
+          An error was encountered:
           <span data-test-error-title>
             {{if @title @title @error.title}}
           </span>

@@ -37,6 +37,7 @@ import {
   type LocalPath,
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
+  type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteURL } from '@cardstack/runtime-common/code-ref';
 
@@ -54,6 +55,8 @@ import ModalContainer from '../modal-container';
 import RealmDropdown, { type RealmDropdownItem } from '../realm-dropdown';
 
 import WithKnownRealmsLoaded from '../with-known-realms-loaded';
+
+import CardErrorDetail from './card-error-detail';
 
 import type CardService from '../../services/card-service';
 import type CommandService from '../../services/command-service';
@@ -199,9 +202,11 @@ export default class CreateFileModal extends Component<Signature> {
               {{/if}}
             {{/if}}
             {{#if this.saveError}}
-              <div class='error-message' data-test-error-message>
-                {{this.saveError}}
-              </div>
+              <CardErrorDetail
+                class='create-file-error-detail'
+                @error={{this.saveError}}
+                data-test-error-container
+              />
             {{/if}}
           </:content>
           <:footer>
@@ -269,10 +274,16 @@ export default class CreateFileModal extends Component<Signature> {
     <style scoped>
       .create-file-modal {
         --horizontal-gap: var(--boxel-sp-xs);
+        --stack-card-footer-height: auto;
       }
       .create-file-modal > :deep(.boxel-modal__inner) {
         display: flex;
       }
+      .create-file-modal :deep(.dialog-box__content) {
+        display: flex;
+        flex-direction: column;
+      }
+
       :deep(.create-file) {
         height: 32rem;
       }
@@ -325,9 +336,8 @@ export default class CreateFileModal extends Component<Signature> {
         text-transform: uppercase;
         letter-spacing: var(--boxel-lsp-lg);
       }
-      .error-message {
-        color: var(--boxel-error-100);
-        margin-top: var(--boxel-sp-lg);
+      .create-file-error-detail {
+        margin-top: var(--boxel-sp);
       }
     </style>
   </template>
@@ -345,7 +355,7 @@ export default class CreateFileModal extends Component<Signature> {
   @tracked private fileName = '';
   @tracked private hasUserEditedFileName = false;
   @tracked private fileNameError: string | undefined;
-  @tracked private saveError: string | undefined;
+  @tracked private saveError: CardErrorJSONAPI | undefined;
   @tracked private currentRequest:
     | {
         fileType: FileType;
@@ -679,7 +689,7 @@ export class ${className} extends ${exportName} {
     } catch (e: any) {
       let fieldOrCard = isField ? 'field' : 'card';
       console.log(`Error saving ${fieldOrCard} definition`, e);
-      this.saveError = `Error creating ${fieldOrCard} definition: ${e.message}`;
+      this.saveError = e;
     }
   });
 
@@ -758,12 +768,13 @@ export class ${className} extends ${exportName} {
         this.selectedRealmURL.href,
       );
       if (typeof maybeId !== 'string') {
-        throw new Error(maybeId.message);
+        let error = maybeId;
+        throw error;
       }
       this.currentRequest.newFileDeferred.fulfill(new URL(`${maybeId}.json`));
     } catch (e: any) {
       console.log('Error saving', e);
-      this.saveError = `Error creating card instance: ${e.message}`;
+      this.saveError = e;
     }
   });
 }
