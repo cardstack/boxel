@@ -182,7 +182,7 @@ export class SearchResource extends Resource<Args> {
             }
             await this.store.flush();
             return collectionDoc.data
-              .map((r) => this.store.peek(r.id))
+              .map((r) => this.store.peek(r.id!)) // all results will have id's
               .filter((i) => isCardInstance(i)) as CardDef[];
           }),
         ),

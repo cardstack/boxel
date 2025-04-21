@@ -318,7 +318,7 @@ module(basename(__filename), function () {
 
             assert.strictEqual(response.status, 201, 'HTTP 201 status');
             let doc = response.body as SingleCardDocument;
-            id = doc.data.id;
+            id = doc.data.id!;
           }
 
           {

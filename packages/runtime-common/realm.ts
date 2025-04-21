@@ -1972,6 +1972,7 @@ export class Realm {
     await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
+    delete data.data.lid;
     delete data.included;
     for (let relationship of Object.values(data.data.relationships ?? {})) {
       delete relationship.data;
