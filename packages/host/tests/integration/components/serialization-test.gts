@@ -1789,10 +1789,18 @@ module('Integration | serialization', function (hooks) {
             links: {
               self: `${testRealmURL}Person/hassan`,
             },
+            data: {
+              id: `${testRealmURL}Person/hassan`,
+              type: 'card',
+            },
           },
           favorite: {
             links: {
               self: `${testRealmURL}Person/hassan`,
+            },
+            data: {
+              id: `${testRealmURL}Person/hassan`,
+              type: 'card',
             },
           },
         },
@@ -3748,15 +3756,27 @@ module('Integration | serialization', function (hooks) {
             links: {
               self: `${testRealmURL}Certificate/0`,
             },
+            data: {
+              id: `${testRealmURL}Certificate/0`,
+              type: 'card',
+            },
           },
           'posts.0.author.certificate': {
             links: {
               self: `${testRealmURL}Certificate/1`,
             },
+            data: {
+              id: `${testRealmURL}Certificate/1`,
+              type: 'card',
+            },
           },
           'posts.1.author.certificate': {
             links: {
               self: `${testRealmURL}Certificate/2`,
+            },
+            data: {
+              id: `${testRealmURL}Certificate/2`,
+              type: 'card',
             },
           },
         },
@@ -4294,10 +4314,18 @@ module('Integration | serialization', function (hooks) {
               links: {
                 self: `${testRealmURL}Pet/mango`,
               },
+              data: {
+                id: `${testRealmURL}Pet/mango`,
+                type: 'card',
+              },
             },
             'pets.1': {
               links: {
                 self: `${testRealmURL}Pet/vanGogh`,
+              },
+              data: {
+                id: `${testRealmURL}Pet/vanGogh`,
+                type: 'card',
               },
             },
           },
@@ -4704,8 +4732,24 @@ module('Integration | serialization', function (hooks) {
             firstName: 'Hassan',
           },
           relationships: {
-            'pets.0': { links: { self: `${testRealmURL}Pet/mango` } },
-            'pets.1': { links: { self: `${testRealmURL}Pet/vanGogh` } },
+            'pets.0': {
+              links: {
+                self: `${testRealmURL}Pet/mango`,
+              },
+              data: {
+                id: `${testRealmURL}Pet/mango`,
+                type: 'card',
+              },
+            },
+            'pets.1': {
+              links: {
+                self: `${testRealmURL}Pet/vanGogh`,
+              },
+              data: {
+                id: `${testRealmURL}Pet/vanGogh`,
+                type: 'card',
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -5366,8 +5410,20 @@ module('Integration | serialization', function (hooks) {
           attributes: { firstName: 'Burcu' },
           relationships: {
             friend: { links: { self: `${testRealmURL}Friend/hassan` } },
-            'friendPets.0': { links: { self: `${testRealmURL}Pet/mango` } },
-            'friendPets.1': { links: { self: `${testRealmURL}Pet/vanGogh` } },
+            'friendPets.0': {
+              links: { self: `${testRealmURL}Pet/mango` },
+              data: {
+                id: `${testRealmURL}Pet/mango`,
+                type: 'card',
+              },
+            },
+            'friendPets.1': {
+              links: { self: `${testRealmURL}Pet/vanGogh` },
+              data: {
+                id: `${testRealmURL}Pet/vanGogh`,
+                type: 'card',
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
