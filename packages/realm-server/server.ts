@@ -161,7 +161,7 @@ export class RealmServer {
           Object.values(SupportedMimeType)
             // Actually, we want to use HTTP caching for executable modules which
             // are requested with the "*/*" accept header
-            .filter((m) => m === '*/*')
+            .filter((m) => m !== '*/*')
             .includes(mimeType as SupportedMimeType)
         ) {
           ctx.set('Cache-Control', 'no-store, no-cache, must-revalidate');
