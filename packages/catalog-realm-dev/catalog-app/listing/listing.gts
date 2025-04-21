@@ -117,8 +117,11 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       );
     }
     if (this.args.model.examples) {
+      const sourceCards = this.args.model.examples.map((example) => ({
+        sourceCard: example,
+      }));
       await this.args.context?.actions?.copyCards?.(
-        this.args.model.examples,
+        sourceCards,
         realmUrl,
         this.args.model.name
           ? camelCase(`${this.args.model.name}Examples`)
@@ -133,39 +136,37 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
     // Copy the gts file based on the attached spec's moduleHref
     for (const spec of this.args.model?.specs ?? []) {
-      if (spec.specType !== 'field') {
-        const absoluteModulePath = spec.moduleHref;
-        const relativeModulePath = spec.ref.module;
-        const normalizedPath = relativeModulePath.split('/').slice(1).join('/');
+      const absoluteModulePath = spec.moduleHref;
+      const relativeModulePath = spec.ref.module;
+      const normalizedPath = relativeModulePath.split('/').slice(1).join('/');
 
-        const targetUrl = new URL(normalizedPath, realmUrl).href;
-        const targetFilePath = targetUrl.concat('.gts');
+      const targetUrl = new URL(normalizedPath, realmUrl).href;
+      const targetFilePath = targetUrl.concat('.gts');
 
-        await this.args.context?.actions?.copySource?.(
-          absoluteModulePath,
-          targetFilePath,
-        );
-        copyMeta.push({
-          sourceCodeRef: {
-            module: absoluteModulePath,
-            name: spec.ref.name,
-          },
-          targetCodeRef: {
-            module: targetUrl,
-            name: spec.ref.name,
-          },
-        });
-      }
+      await this.args.context?.actions?.copySource?.(
+        absoluteModulePath,
+        targetFilePath,
+      );
+
+      copyMeta.push({
+        sourceCodeRef: {
+          module: absoluteModulePath,
+          name: spec.ref.name,
+        },
+        targetCodeRef: {
+          module: targetUrl,
+          name: spec.ref.name,
+        },
+      });
     }
 
     if (this.args.model.examples) {
       // Create serialized objects for each example with modified adoptsFrom
-      const copyCardsWithCodeRef: CopyCardsWithCodeRef[] = [];
-      await Promise.all(
+      const results = await Promise.all(
         this.args.model.examples.map(async (instance: CardDef) => {
           let adoptsFrom = instance[meta]?.adoptsFrom;
           if (!adoptsFrom) {
-            return;
+            return null;
           }
           let exampleCodeRef = instance.id
             ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
@@ -176,22 +177,28 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           }
           let maybeCopyMeta = copyMeta.find(
             (meta) =>
-              meta.sourceCodeRef.module === exampleCodeRef.module &&
-              meta.sourceCodeRef.name === exampleCodeRef.name,
+              meta.sourceCodeRef.module ===
+                (exampleCodeRef as ResolvedCodeRef).module &&
+              meta.sourceCodeRef.name ===
+                (exampleCodeRef as ResolvedCodeRef).name,
           );
           if (maybeCopyMeta) {
-            copyCardsWithCodeRef.push({
+            return {
               sourceCard: instance,
               codeRef: maybeCopyMeta.targetCodeRef,
-            });
+            };
           }
+          return null;
         }),
       );
+      const copyCardsWithCodeRef = results.filter(
+        (result) => result !== null,
+      ) as CopyCardsWithCodeRef[];
       await this.args.context?.actions?.copyCards?.(
         copyCardsWithCodeRef,
         realmUrl,
         this.args.model.name
-          ? camelCase(`${this.args.model.name}NewerExamples`)
+          ? camelCase(`${this.args.model.name}InstallExamples`)
           : 'ListingExamples',
       );
     }
@@ -685,15 +692,4 @@ function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {
     },
     {} as Record<SpecType, Spec[]>,
   );
-}
-
-function normalizePath(absolutePath: string, realmPath: string): string {
-  const absoluteUrl = new URL(absolutePath);
-  const realmUrl = new URL(realmPath);
-
-  // Get the pathname and remove the realm pathname
-  const relativePath = absoluteUrl.pathname.slice(realmUrl.pathname.length);
-
-  // Remove leading slash if present
-  return relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
 }

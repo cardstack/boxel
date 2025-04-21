@@ -23,6 +23,5 @@ export default class CopySourceCommand extends HostBaseCommand<
     const fromRealmUrl = new URL(input.fromRealmUrl);
     const toRealmUrl = new URL(input.toRealmUrl);
     await this.cardService.copySource(fromRealmUrl, toRealmUrl);
-    // await this.cardService.saveSource()
   }
 }

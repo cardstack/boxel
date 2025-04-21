@@ -370,15 +370,11 @@ export default class InteractSubmode extends Component {
         return await here._copySource.perform(fromUrl, toUrl);
       },
       copyCards: async (
-        cardsWithNewCodeRef: CopyCardsWithCodeRef[],
+        cards: CopyCardsWithCodeRef[],
         targetRealm: string,
         directoryName?: string,
       ): Promise<CardDef[]> => {
-        return await here._copyCards.perform(
-          cardsWithNewCodeRef,
-          targetRealm,
-          directoryName,
-        );
+        return await here._copyCards.perform(cards, targetRealm, directoryName);
       },
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
@@ -540,7 +536,7 @@ export default class InteractSubmode extends Component {
 
   private _copyCards = dropTask(
     async (
-      cardsWithNewCodeRef: CopyCardsWithCodeRef[],
+      cards: CopyCardsWithCodeRef[],
       targetRealm: string,
       directoryName?: string,
     ) => {
@@ -549,7 +545,7 @@ export default class InteractSubmode extends Component {
         ? new URL(`${capitalize(directoryName)}-${uuidv4()}/`, targetRealm).href
         : targetRealm;
       return await Promise.all(
-        cardsWithNewCodeRef.map(async (cardWithNewCodeRef) => {
+        cards.map(async (cardWithNewCodeRef) => {
           let newCard = await new CopyCardCommand(commandContext).execute({
             sourceCard: cardWithNewCodeRef.sourceCard,
             targetUrl,
