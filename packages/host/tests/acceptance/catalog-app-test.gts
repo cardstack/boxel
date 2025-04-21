@@ -170,6 +170,38 @@ module('Acceptance | catalog app tests', function (hooks) {
         .dom('[data-test-file="mortgage-calculator/mortgage-calculator.gts"]')
         .exists('mortgage-calculator.gts file exists')
         .hasClass('selected', 'mortgage-calculator.gts file is selected');
+
+      // able to see example install successfully, eg: MortgageCalculatorInstallExamples-uuid
+      await waitFor(
+        '[data-test-directory^="MortgageCalculatorInstallExamples-"]',
+      );
+      const element = document.querySelector(
+        '[data-test-directory^="MortgageCalculatorInstallExamples-"]',
+      );
+      const fullPath = element?.getAttribute('data-test-directory');
+      await click(`[data-test-directory="${fullPath}"]`);
+
+      assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
+
+      await waitFor(`[data-test-directory="${fullPath}MortgageCalculator/"]`);
+      await click(`[data-test-directory="${fullPath}MortgageCalculator/"]`);
+
+      await waitFor(
+        `[data-test-file^="${fullPath}MortgageCalculator/"][data-test-file$=".json"]`,
+      );
+      await click(
+        `[data-test-file^="${fullPath}MortgageCalculator/"][data-test-file$=".json"]`,
+      );
+
+      assert
+        .dom(
+          `[data-test-file^="${fullPath}MortgageCalculator/"][data-test-file$=".json"]`,
+        )
+        .exists('MortgageCalculatorInstallExamples with uuid instance exists')
+        .hasClass(
+          'selected',
+          'MortgageCalculatorInstallExamples with uuid instance is selected',
+        );
     });
   });
 });
