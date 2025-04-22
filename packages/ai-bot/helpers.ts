@@ -236,8 +236,7 @@ export function constructHistory(
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   // If the aibot is awaiting command results, it should not respond yet.
-  let lastEventExcludingCommandResults = findLast(
-    history,
+  let lastEventExcludingCommandResults = history.findLast(
     (event) => event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   );
 
@@ -268,8 +267,7 @@ function getEnabledSkills(
   eventlist: DiscreteMatrixEvent[],
   cardFragments: Map<string, CardFragmentContent>,
 ): LooseCardResource[] {
-  let skillsConfigEvent = findLast(
-    eventlist,
+  let skillsConfigEvent = eventlist.findLast(
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
   if (!skillsConfigEvent) {
@@ -403,8 +401,7 @@ export async function loadCurrentlyAttachedFiles(
     error: string | undefined;
   }[]
 > {
-  let lastMessageEventByUser = findLast(
-    history,
+  let lastMessageEventByUser = history.findLast(
     (event) => event.sender !== aiBotUserId,
   );
 
@@ -575,8 +572,7 @@ export function getToolChoice(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): ToolChoice {
-  const lastUserMessage = findLast(
-    history,
+  const lastUserMessage = history.findLast(
     (event) => event.sender !== aiBotUserId,
   );
 
@@ -822,8 +818,7 @@ export const isCommandResultStatusApplied = (event?: MatrixEvent) => {
 };
 
 function getModel(eventlist: DiscreteMatrixEvent[]): string {
-  let activeLLMEvent = findLast(
-    eventlist,
+  let activeLLMEvent = eventlist.findLast(
     (event) => event.type === APP_BOXEL_ACTIVE_LLM,
   ) as ActiveLLMEvent;
   if (!activeLLMEvent) {
@@ -843,16 +838,4 @@ export function isCommandResultEvent(
     event.content['m.relates_to']?.rel_type ===
       APP_BOXEL_COMMAND_RESULT_REL_TYPE
   );
-}
-
-function findLast<T>(
-  array: T[],
-  predicate: (item: T) => boolean,
-): T | undefined {
-  for (let i = array.length - 1; i >= 0; i--) {
-    if (predicate(array[i])) {
-      return array[i];
-    }
-  }
-  return undefined;
 }
