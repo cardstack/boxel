@@ -69,7 +69,7 @@
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "babel-plugin-ember-template-compilation": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "ember-source": "catalog:",
     "ember-template-imports": "catalog:",
     "ember-template-lint": "catalog:",

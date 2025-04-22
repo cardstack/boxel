@@ -33,7 +33,7 @@
     "@types/tmp": "catalog:",
     "@types/uuid": "catalog:",
     "@types/yargs": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "date-fns": "catalog:",
     "decorator-transforms": "catalog:",
     "eslint-plugin-qunit": "catalog:",

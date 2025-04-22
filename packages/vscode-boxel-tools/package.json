@@ -273,7 +273,7 @@
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "@vscode/vsce": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "esbuild": "catalog:",
     "eslint": "catalog:",
     "typescript": "catalog:"

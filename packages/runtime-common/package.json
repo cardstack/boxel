@@ -61,7 +61,7 @@
     "@types/dompurify": "catalog:",
     "@types/js-string-escape": "catalog:",
     "@types/qunit": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "dompurify": "catalog:",
     "ember-cli-htmlbars": "catalog:"
   },

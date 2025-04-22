@@ -23,7 +23,7 @@
     "@types/fs-extra": "catalog:",
     "@types/qunit": "catalog:",
     "@types/sinonjs__fake-timers": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "fs-extra": "catalog:",
     "qunit": "catalog:"
   },

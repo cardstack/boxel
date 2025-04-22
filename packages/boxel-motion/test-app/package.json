@@ -49,7 +49,7 @@
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "broccoli-asset-rev": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "ember-a11y-testing": "catalog:",
     "ember-auto-import": "catalog:",
     "ember-cli": "catalog:",

@@ -83,7 +83,7 @@
     "broccoli-source": "catalog:",
     "buffer": "catalog:",
     "camelcase": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "crypto-browserify": "catalog:",
     "date-fns": "catalog:",
     "decorator-transforms": "catalog:",

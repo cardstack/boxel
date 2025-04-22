@@ -13,7 +13,7 @@
     "@glint/template": "catalog:",
     "@types/flat": "catalog:",
     "@types/lodash": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "ember-cli-htmlbars": "catalog:",
     "ember-concurrency": "catalog:",
     "ember-css-url": "catalog:",

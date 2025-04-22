@@ -9,7 +9,7 @@
     "@cardstack/runtime-common": "workspace:*",
     "@types/lodash": "catalog:",
     "chess.js": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "ember-concurrency": "catalog:",
     "ember-modifier": "catalog:",
     "ember-template-lint": "catalog:",
