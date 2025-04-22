@@ -71,11 +71,12 @@ class CarouselComponent extends GlimmerComponent<Signature> {
       throw new Error('No valid example found to preview');
     }
 
-    this.args.context?.actions?.viewCard?.(this.args.examples[0]);
+    this.args.context?.actions?.viewCard?.(this.args.examples![0]);
   }
 
   @action
-  updateCurrentIndex(index: number) {
+  updateCurrentIndex(index: number, e: MouseEvent) {
+    e.stopPropagation();
     if (index < 0 || index >= this.totalSlides) {
       return;
     }
@@ -85,10 +86,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
   <template>
     <div class='carousel'>
       {{#if this.hasExample}}
-        <div
-          class='preview-button-container'
-          {{on 'click' this.stopPropagation}}
-        >
+        <div class='preview-button-container'>
           <BoxelButton
             @kind='secondary-dark'
             class='preview-button'
@@ -116,10 +114,15 @@ class CarouselComponent extends GlimmerComponent<Signature> {
       </div>
 
       {{#if this.hasMultipleSlides}}
-        <div class='carousel-nav' {{on 'click' this.stopPropagation}}>
+        <div
+          class='carousel-nav'
+          role='presentation'
+          {{on 'mouseenter' this.stopPropagation}}
+        >
           <div
             class='carousel-arrow carousel-arrow-prev'
             {{on 'click' (fn this.updateCurrentIndex this.prevIndex)}}
+            role='button'
             aria-label='Previous slide'
           >
             &#10094;
@@ -127,6 +130,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           <div
             class='carousel-arrow carousel-arrow-next'
             {{on 'click' (fn this.updateCurrentIndex this.nextIndex)}}
+            role='button'
             aria-label='Next slide'
           >
             &#10095;
@@ -135,16 +139,21 @@ class CarouselComponent extends GlimmerComponent<Signature> {
       {{/if}}
 
       {{#if this.hasMultipleSlides}}
-        <ul class='carousel-dots' {{on 'click' this.stopPropagation}}>
+        <div
+          class='carousel-dots'
+          role='presentation'
+          {{on 'mouseenter' this.stopPropagation}}
+        >
           {{#each @items as |_ index|}}
-            <li
+            <div
               class='carousel-dot
                 {{if (eq this.currentIndex index) "is-active"}}'
               {{on 'click' (fn this.updateCurrentIndex index)}}
+              role='button'
               aria-label='Go to slide {{add index 1}}'
             />
           {{/each}}
-        </ul>
+        </div>
       {{/if}}
     </div>
 
@@ -239,8 +248,6 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           transform: translateY(-50%);
         }
         .carousel-dots {
-          list-style: none;
-          padding-inline-start: 0;
           position: absolute;
           bottom: 5px;
           left: 50%;
