@@ -1,5 +1,7 @@
 'use strict';
 
+const MISSING_INVOKABLES_CONFIG = require('../../eslint/missing-invokables-config');
+
 module.exports = {
   root: true,
   parser: '@typescript-eslint/parser',
@@ -35,6 +37,40 @@ module.exports = {
     ],
   },
   overrides: [
+    {
+      files: ['**/*.gts'],
+      parser: 'ember-eslint-parser',
+      parserOptions: {
+        ecmaVersion: 'latest',
+        sourceType: 'module',
+        requireConfigFile: false,
+        babelOptions: {
+          plugins: [
+            [
+              '@babel/plugin-proposal-decorators',
+              { decoratorsBeforeExport: true },
+            ],
+          ],
+        },
+        warnOnUnsupportedTypeScriptVersion: false,
+      },
+      plugins: ['ember', '@cardstack/boxel'],
+      extends: [
+        'eslint:recommended',
+        'plugin:@typescript-eslint/recommended',
+        'plugin:ember/recommended',
+        'plugin:ember/recommended-gts',
+        'plugin:prettier/recommended',
+        'plugin:qunit-dom/recommended',
+        'plugin:@cardstack/boxel/recommended',
+      ],
+      rules: {
+        '@cardstack/boxel/template-missing-invokable': [
+          'error',
+          { invokables: MISSING_INVOKABLES_CONFIG.invokables },
+        ],
+      },
+    },
     // node files
     {
       files: [

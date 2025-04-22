@@ -1,0 +1,71 @@
+{
+  "name": "@cardstack/eslint-plugin-boxel",
+  "version": "0.1.0",
+  "description": "ESLint plugin for Boxel-specific rules",
+  "main": "lib/index.js",
+  "directories": {
+    "test": "test",
+    "rules": "rules"
+  },
+  "files": [
+    "lib"
+  ],
+  "exports": {
+    ".": "./lib/index.js",
+    "./config/*": "./lib/config/*.js"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "start": "pnpm test:watch",
+    "test": "vitest run",
+    "test:coverage": "vitest --coverage",
+    "test:watch": "vitest",
+    "update:eslint-docs": "eslint-doc-generator",
+    "update": "node ./scripts/update-rules.js && pnpm run update:eslint-docs",
+    "debug:eslint": "node ./scripts/eslint-debug.js"
+  },
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "eslint-plugin",
+    "boxel"
+  ],
+  "author": "Cardstack",
+  "license": "MIT",
+  "peerDependencies": {
+    "eslint": "^8.57.1"
+  },
+  "dependencies": {
+    "ember-eslint-parser": "^0.5.9",
+    "requireindex": "^1.2.0"
+  },
+  "devDependencies": {
+    "@babel/eslint-parser": "^7.27.0",
+    "@babel/plugin-proposal-class-properties": "^7.18.6",
+    "@eslint/eslintrc": "^2.1.4",
+    "@eslint/js": "^8.57.1",
+    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/parser": "^7.18.0",
+    "eslint": "^8.57.1",
+    "eslint-doc-generator": "^1.7.1",
+    "eslint-plugin-eslint-comments": "^3.2.0",
+    "eslint-plugin-eslint-plugin": "^5.5.1",
+    "eslint-plugin-filenames": "^1.3.2",
+    "eslint-plugin-import": "^2.31.0",
+    "eslint-plugin-markdown": "^5.1.0",
+    "eslint-plugin-n": "^17.17.0",
+    "eslint-plugin-prettier": "^5.2.6",
+    "eslint-plugin-unicorn": "^51.0.1",
+    "prettier": "^3.5.3",
+    "typescript": "~5.1.6",
+    "vite": "^6.3.2",
+    "vitest": "^2.1.9"
+  },
+  "engines": {
+    "node": ">= 18"
+  },
+  "volta": {
+    "extends": "../../package.json"
+  }
+}

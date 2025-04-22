@@ -77,6 +77,7 @@ export class BoxelTriggerWrapper extends Component<TriggerSignature> {
   </template>
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
   <template>
     <BoxelTriggerWrapper @placeholder={{@placeholder}} @select={{@select}}>
