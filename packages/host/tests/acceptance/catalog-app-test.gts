@@ -185,10 +185,10 @@ module('Acceptance | catalog app tests', function (hooks) {
 
       assert
         .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
-        .exists('MortgageCalculatorInstallExamples with uuid instance exists')
+        .exists('Mortgage Calculator Example with uuid instance exists')
         .hasClass(
           'selected',
-          'MortgageCalculatorInstallExamples with uuid instance is selected',
+          'Mortgage Calculator Example with uuid instance is selected',
         );
     });
   });

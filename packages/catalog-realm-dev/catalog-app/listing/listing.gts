@@ -25,6 +25,7 @@ import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { v4 as uuidv4 } from 'uuid';
+import { deburr } from 'lodash';
 
 import {
   Accordion,
@@ -50,13 +51,15 @@ interface CopyMeta {
   targetCodeRef: ResolvedCodeRef;
 }
 
-function getNewPackageName(modulePath: string) {
-  if (!modulePath) {
+function getNewPackageName(listingName?: string) {
+  if (!listingName) {
     return '';
   }
-  const normalizedPath = modulePath.split('/').slice(1).join('/');
-  const pacakageName = normalizedPath.split('/')[0];
-  const newPackageName = `${pacakageName}-${uuidv4()}`;
+  // sanitize the listing name, eg: Blog App -> blog-app
+  const sanitizedListingName = deburr(listingName.toLocaleLowerCase())
+    .replace(/ /g, '-')
+    .replace(/'/g, '');
+  const newPackageName = `${sanitizedListingName}-${uuidv4()}`;
   return newPackageName;
 }
 
@@ -111,9 +114,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       (spec: Spec) => spec.specType !== 'field',
     );
 
-    const newModulePath = getNewPackageName(
-      specsWithoutFields[0].ref.module,
-    ).concat('/');
+    const newModulePath = getNewPackageName(this.args.model?.name).concat('/');
     const targetUrl = new URL(newModulePath, realmUrl).href;
 
     for (const spec of specsWithoutFields) {
@@ -137,12 +138,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _install = task(async (realmUrl: string) => {
-    const specsToCopy: Spec[] = this.args.model?.specs ?? [];
     const copyMeta: CopyMeta[] = [];
 
-    const newModulePath = getNewPackageName(specsToCopy[0].ref.module).concat(
-      '/',
-    );
+    const newModulePath = getNewPackageName(this.args.model?.name).concat('/');
     const targetUrl = new URL(newModulePath, realmUrl).href;
 
     // Copy the gts file based on the attached spec's moduleHref
