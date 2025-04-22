@@ -262,12 +262,26 @@ Common issues are:
           );
         }
 
+        let chunkHandlingError: string | undefined;
         let generationId: string | undefined;
         const runner = assistant
           .getResponse(promptParts)
           .on('chunk', async (chunk, snapshot) => {
             generationId = chunk.id;
-            await responder.onChunk(chunk, snapshot);
+
+            let chunkHandlingResults = await responder.onChunk(chunk, snapshot);
+            let chunkHandlingResultsError = chunkHandlingResults.find(
+              (result) =>
+                result &&
+                'errorMessage' in result &&
+                result.errorMessage != null,
+            ) as { errorMessage: string } | undefined;
+
+            if (chunkHandlingResultsError) {
+              chunkHandlingError = chunkHandlingResultsError.errorMessage;
+
+              runner.abort(); // Will not read any more chunks, and will throw an error where the await responder.finalize() is called
+            }
           })
           .on('error', async (error) => {
             await responder.onError(error);
@@ -277,7 +291,11 @@ Common issues are:
           await runner.finalChatCompletion();
           await responder.finalize();
         } catch (error) {
-          await responder.onError(error as OpenAIError);
+          if (chunkHandlingError) {
+            await responder.onError(chunkHandlingError); // for example event too large error
+          } else {
+            await responder.onError(error as OpenAIError);
+          }
         } finally {
           if (generationId) {
             assistant.trackAiUsageCost(senderMatrixUserId, generationId);
