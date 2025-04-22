@@ -57,8 +57,8 @@
     "eslint-plugin-n": "^17.17.0",
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-unicorn": "^51.0.1",
-    "prettier": "^3.5.3",
-    "typescript": "~5.1.6",
+    "prettier": "^3.5.2",
+    "typescript": "~5.8.3",
     "vite": "^6.3.2",
     "vitest": "^2.1.9"
   },

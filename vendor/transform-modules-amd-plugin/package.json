@@ -10,7 +10,7 @@
   "license": "MIT",
   "dependencies": {
     "@babel/helper-module-transforms": "^7.18.9",
-    "@babel/helper-plugin-utils": "^7.0.0",
+    "@babel/helper-plugin-utils": "^7.12.13",
     "babel-plugin-dynamic-import-node": "^2.3.3"
   },
   "peerDependencies": {
