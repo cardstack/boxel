@@ -1077,8 +1077,19 @@ We are one!
     assert.dom('[data-test-submode-switcher=code]').exists();
 
     // verify that command result event was created correctly
-    await waitUntil(() => getRoomIds().length > 0);
-    let message = getRoomEvents(roomId).pop()!;
+    await waitUntil(
+      () =>
+        getRoomIds().length > 0 &&
+        getRoomEvents(roomId).find(
+          (m) =>
+            m.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        ),
+    );
+    let message = getRoomEvents(roomId).find(
+      (m) =>
+        m.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    )!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
