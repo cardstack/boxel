@@ -44,7 +44,7 @@
     "@cardstack/runtime-common": "workspace:*",
     "@ember/optional-features": "^2.0.0",
     "@ember/string": "^3.1.1",
-    "@ember/test-helpers": "^3.2.0",
+    "@ember/test-helpers": "^3.3.1",
     "@ember/test-waiters": "^3.0.2",
     "@embroider/compat": "^3.5.5",
     "@embroider/core": "^3.4.14",
@@ -176,7 +176,7 @@
     "typescript": "~5.1.6",
     "uuid": "^9.0.1",
     "wait-for-localhost-cli": "^3.2.0",
-    "webpack": "^5.89.0"
+    "webpack": "^5.99.6"
   },
   "engines": {
     "node": ">= 18"
