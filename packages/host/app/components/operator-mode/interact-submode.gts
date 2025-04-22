@@ -14,7 +14,6 @@ import { provide, consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
-import { v4 as uuidv4 } from 'uuid';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
 import { cn, eq, lt, gt, and } from '@cardstack/boxel-ui/helpers';
@@ -376,10 +375,9 @@ export default class InteractSubmode extends Component {
       },
       copyCards: async (
         cards: CopyCardsWithCodeRef[],
-        targetRealm: string,
-        directoryName?: string,
+        targetUrl: string,
       ): Promise<CardDef[]> => {
-        return await here._copyCards.perform(cards, targetRealm, directoryName);
+        return await here._copyCards.perform(cards, targetUrl);
       },
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
@@ -540,15 +538,8 @@ export default class InteractSubmode extends Component {
   });
 
   private _copyCards = dropTask(
-    async (
-      cards: CopyCardsWithCodeRef[],
-      targetRealm: string,
-      directoryName?: string,
-    ) => {
+    async (cards: CopyCardsWithCodeRef[], targetUrl: string) => {
       let { commandContext } = this.commandService;
-      let targetUrl = directoryName
-        ? new URL(`${capitalize(directoryName)}-${uuidv4()}/`, targetRealm).href
-        : targetRealm;
       return await Promise.all(
         cards.map(async (cardWithNewCodeRef) => {
           let newCard = await new CopyCardCommand(commandContext).execute({
@@ -951,5 +942,3 @@ export default class InteractSubmode extends Component {
 const neighborStackTooltipMessage = (side: 'left' | 'right') => {
   return `Open a card to the ${side} of the current card`;
 };
-
-const capitalize = (str: string) => str[0].toUpperCase() + str.slice(1);

@@ -4,16 +4,15 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "CardList",
-        "module": "../components/card-list"
+        "name": "FeaturedImageField",
+        "module": "../blog-app/fields/featured-image"
       },
-      "specType": "component",
+      "specType": "field",
       "containedExamples": [],
-      "title": "Card List",
-      "description": "Spec for Card List component",
+      "title": "FeaturedImageField",
+      "description": null,
       "thumbnailURL": null
     },
-    "relationships": {},
     "meta": {
       "adoptsFrom": {
         "module": "https://cardstack.com/base/spec",

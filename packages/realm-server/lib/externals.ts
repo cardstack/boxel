@@ -5,6 +5,7 @@ import * as lodash from 'lodash';
 import * as dateFns from 'date-fns';
 import * as ethers from 'ethers';
 import { VirtualNetwork } from '@cardstack/runtime-common';
+import * as uuid from 'uuid';
 
 export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('@cardstack/runtime-common', runtime);
@@ -136,6 +137,7 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule('ethers', ethers);
   virtualNetwork.shimModule('super-fast-md5', { md5: (_data: string) => {} });
   virtualNetwork.shimModule('matrix-js-sdk', {});
+  virtualNetwork.shimModule('uuid', uuid);
 
   virtualNetwork.shimAsyncModule({
     prefix: '@cardstack/boxel-host/commands/',
