@@ -2,9 +2,8 @@ import GlimmerComponent from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { TrackedSet, TrackedMap } from 'tracked-built-ins';
+import { TrackedMap } from 'tracked-built-ins';
 import { tracked } from '@glimmer/tracking';
-import { and } from '@cardstack/boxel-ui/helpers';
 
 import {
   type CardContext,
@@ -43,12 +42,12 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
 
     if (!this.cardResources.has(card.url)) {
       const cardId = removeFileExtension(card.url);
-      const result = await this.args.context?.getCard(this, () => cardId);
+      const result = this.args.context?.getCard(this, () => cardId);
 
-      if (!result) {
+      if (!result?.card) {
         return;
       }
-      this.cardResources.set(card.url, result);
+      this.cardResources.set(card.url, result.card);
     }
   }
 
@@ -56,7 +55,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
     return (cardUrl: string) => {
       return (
         this.cardResources.has(cardUrl) &&
-        this.cardResources.get(cardUrl)?.card != null
+        this.cardResources.get(cardUrl) != null
       );
     };
   }
@@ -64,7 +63,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
   @action
   getCardComponent(cardUrl: string) {
     const resource = this.cardResources.get(cardUrl);
-    return resource?.card ? getComponent(resource.card) : null;
+    return resource ? getComponent(resource) : null;
   }
 
   <template>
