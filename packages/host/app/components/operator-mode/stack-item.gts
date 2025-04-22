@@ -32,11 +32,7 @@ import {
 import { MenuItem, getContrastColor } from '@cardstack/boxel-ui/helpers';
 import { cssVar, optional, not } from '@cardstack/boxel-ui/helpers';
 
-import {
-  ExclamationCircle,
-  IconTrash,
-  IconLink,
-} from '@cardstack/boxel-ui/icons';
+import { IconTrash, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Actions,
@@ -61,14 +57,12 @@ import { type StackItem } from '@cardstack/host/lib/stack-item';
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
-import { htmlComponent } from '../../lib/html-component';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
 import Preview from '../preview';
 
 import CardError from './card-error';
-import CardErrorDetail from './card-error-detail';
 
 import OperatorModeOverlays from './operator-mode-overlays';
 
@@ -351,34 +345,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.cardResource?.cardError;
   }
 
-  @cached
-  private get lastKnownGoodHtml() {
-    if (this.cardError?.meta.lastKnownGoodHtml) {
-      this.loadScopedCSS.perform();
-      return htmlComponent(this.cardError.meta.lastKnownGoodHtml);
-    }
-    return undefined;
-  }
-
-  @cached
-  private get cardErrorSummary() {
-    if (!this.cardError) {
-      return undefined;
-    }
-    return this.cardError.status === 404 &&
-      // a missing link error looks a lot like a missing card error
-      this.cardError.message?.includes('missing')
-      ? `Link Not Found`
-      : this.cardError.title;
-  }
-
-  private get cardErrorTitle() {
-    if (!this.cardError) {
-      return undefined;
-    }
-    return `Card Error: ${this.cardErrorSummary}`;
-  }
-
   private get isWideFormat() {
     if (!this.card) {
       return false;
@@ -404,16 +370,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
     return cardDef.headerColor as string;
   }
-
-  private loadScopedCSS = restartableTask(async () => {
-    if (this.cardError?.meta.scopedCssUrls) {
-      await Promise.all(
-        this.cardError.meta.scopedCssUrls.map((cssModuleUrl) =>
-          this.loaderService.loader.import(cssModuleUrl),
-        ),
-      );
-    }
-  });
 
   private doneEditing = () => {
     let item = this.args.item;
@@ -571,6 +527,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   };
 
+  private get cardErrorHeaderOptions() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return {
+      isTopCard: this.isTopCard,
+      moreOptionsMenuItems: this.moreOptionsMenuItemsForErrorCard,
+      onClose: this.isBuried ? this.closeItem.perform() : undefined,
+    };
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     <div
@@ -598,13 +565,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <span class='loading__message'>Loading card...</span>
           </div>
         {{else if this.cardError}}
-          <CardHeader
-            @cardTypeDisplayName={{this.cardErrorTitle}}
-            @cardTypeIcon={{ExclamationCircle}}
-            @isTopCard={{this.isTopCard}}
-            @moreOptionsMenuItems={{this.moreOptionsMenuItemsForErrorCard}}
-            @onClose={{unless this.isBuried (perform this.closeItem)}}
-            class='stack-item-header stack-item-header-error'
+          <CardError
+            @error={{this.cardError}}
+            @viewInCodeMode={{true}}
+            @headerOptions={{this.cardErrorHeaderOptions}}
+            class='stack-item-header'
             style={{cssVar
               boxel-card-header-icon-container-min-width=(if
                 this.isBuried '50px' '95px'
@@ -629,18 +594,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
               )
             }}
             data-test-stack-card-header
-          />
-          <div class='stack-item-content card-error' data-test-card-error>
-            {{#if this.lastKnownGoodHtml}}
-              <this.lastKnownGoodHtml />
-            {{else}}
-              <CardError />
-            {{/if}}
-          </div>
-          <CardErrorDetail
-            @error={{this.cardError}}
-            @title={{this.cardErrorSummary}}
-            @viewInCodeMode={{true}}
           />
         {{else if this.card}}
           {{this.setWindowTitle}}
@@ -796,9 +749,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         min-width: 100%;
         gap: var(--boxel-sp-xxs);
       }
-      .stack-item-header-error {
-        color: var(--boxel-error-300);
-      }
 
       .stack-item-content {
         overflow: auto;
@@ -845,13 +795,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify: center;
         align-items: center;
-      }
-      .card-error {
-        flex: 2;
-        opacity: 0.4;
-        border-radius: 0;
-        box-shadow: none;
-        overflow: auto;
       }
     </style>
   </template>

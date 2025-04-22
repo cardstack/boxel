@@ -19,7 +19,7 @@ import type CommandService from '../../services/command-service';
 interface Signature {
   Args: {
     error: CardErrorJSONAPI;
-    viewInCodeMode?: true;
+    viewInCodeMode?: boolean;
     title?: string;
   };
   Element: HTMLElement;

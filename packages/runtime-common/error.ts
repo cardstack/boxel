@@ -102,7 +102,7 @@ export function formattedError(
       ? `Received HTTP ${errorStatus} from server ${
           error.responseText ?? ''
         }`.trim()
-      : `${error.message}: ${error.stack}`);
+      : error.message);
 
   return {
     errors: [

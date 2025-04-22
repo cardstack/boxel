@@ -4,22 +4,15 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
-import { cached } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
 
 import {
   CardContainer,
-  CardHeader,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
-import {
-  Eye,
-  ExclamationCircle,
-  IconCode,
-  IconLink,
-} from '@cardstack/boxel-ui/icons';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Query,
@@ -40,9 +33,7 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import { CardDef, FieldDef, Format } from 'https://cardstack.com/base/card-api';
 
-import { htmlComponent } from '../../../../lib/html-component';
 import CardError from '../../card-error';
-import CardErrorDetail from '../../card-error-detail';
 import FormatChooser from '../format-chooser';
 
 import PlaygroundPreview from './playground-preview';
@@ -86,19 +77,7 @@ export default class PlaygroundContent extends Component<Signature> {
               @displayBoundaries={{true}}
               data-test-error-container
             >
-              <CardHeader
-                class='error-header'
-                @cardTypeDisplayName='Card Error: {{@cardError.title}}'
-                @cardTypeIcon={{ExclamationCircle}}
-              />
-              <div class='card-error' data-test-card-error>
-                {{#if this.lastKnownGoodHtml}}
-                  <this.lastKnownGoodHtml />
-                {{else}}
-                  <CardError @cardCreationError={{not @cardError.id}} />
-                {{/if}}
-              </div>
-              <CardErrorDetail @error={{@cardError}} />
+              <CardError @error={{@cardError}} />
             </CardContainer>
           {{else if card}}
             <div
@@ -323,25 +302,4 @@ export default class PlaygroundContent extends Component<Signature> {
   private get canWriteRealm() {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
-
-  @cached
-  private get lastKnownGoodHtml() {
-    let lastKnownGoodHtml = this.args.cardError?.meta.lastKnownGoodHtml;
-    if (lastKnownGoodHtml) {
-      this.loadScopedCSS.perform();
-      return htmlComponent(lastKnownGoodHtml);
-    }
-    return undefined;
-  }
-
-  private loadScopedCSS = task(async () => {
-    let scopedCssUrls = this.args.cardError?.meta.scopedCssUrls;
-    if (scopedCssUrls) {
-      await Promise.all(
-        scopedCssUrls.map((cssModuleUrl) =>
-          this.loaderService.loader.import(cssModuleUrl),
-        ),
-      );
-    }
-  });
 }
