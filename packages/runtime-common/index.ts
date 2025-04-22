@@ -22,6 +22,7 @@ export { Deferred } from './deferred';
 export {
   CardError,
   isCardError,
+  formattedError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
 } from './error';

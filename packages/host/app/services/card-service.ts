@@ -4,6 +4,7 @@ import Service, { service } from '@ember/service';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  formattedError,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -20,8 +21,6 @@ import type {
   SerializeOpts,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-
-import { formattedError } from './store';
 
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';

@@ -12,8 +12,6 @@ import mergeWith from 'lodash/mergeWith';
 
 import { stringify } from 'qs';
 
-import status from 'statuses';
-
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -23,11 +21,11 @@ import {
   isCardCollectionDocument,
   Deferred,
   delay,
-  isCardError,
   mergeRelationships,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
   logger,
+  formattedError,
   type Store as StoreInterface,
   type Query,
   type PatchData,
@@ -37,7 +35,6 @@ import {
   type SingleCardDocument,
   type LooseSingleCardDocument,
   type LooseCardResource,
-  type CardError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
 } from '@cardstack/runtime-common';
@@ -973,84 +970,6 @@ export default class StoreService extends Service implements StoreInterface {
       waiter.endAsync(token);
     }
   }
-}
-
-export function formattedError(
-  url: string | undefined,
-  error: any,
-  err?: CardError | Partial<CardErrorJSONAPI>,
-): CardErrorsJSONAPI {
-  if (isCardError(err)) {
-    let cardError;
-    let meta: CardErrorJSONAPI['meta'] | undefined;
-    let message: string | undefined;
-    let additionalError = err.additionalErrors?.[0];
-
-    if (additionalError && 'errorDetail' in additionalError) {
-      cardError = additionalError.errorDetail;
-      let { lastKnownGoodHtml, scopedCssUrls, cardTitle } = additionalError;
-      meta = {
-        lastKnownGoodHtml,
-        scopedCssUrls,
-        stack: cardError.stack ?? err.stack ?? error.stack ?? null,
-        cardTitle,
-      };
-    } else if (isCardError(additionalError)) {
-      cardError = additionalError;
-    } else {
-      message = additionalError?.message;
-      cardError = err;
-    }
-
-    return {
-      errors: [
-        {
-          id: url,
-          message: message ?? cardError.message,
-          status: cardError.status,
-          title:
-            cardError.title ??
-            status.message[cardError.status] ??
-            cardError.message,
-          realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-          meta: meta ?? {
-            lastKnownGoodHtml: null,
-            scopedCssUrls: [],
-            stack: cardError.stack ?? err.stack ?? error.stack ?? null,
-            cardTitle: null,
-          },
-          additionalErrors: cardError.additionalErrors,
-        },
-      ],
-    };
-  }
-
-  let errorStatus = err?.status ?? error.status;
-  let errorMessage =
-    err?.message ??
-    (errorStatus
-      ? `Received HTTP ${errorStatus} from server ${
-          error.responseText ?? ''
-        }`.trim()
-      : `${error.message}: ${error.stack}`);
-
-  return {
-    errors: [
-      {
-        id: url,
-        status: errorStatus ?? '500',
-        title: err?.title ?? status.message[errorStatus] ?? errorMessage,
-        message: errorMessage,
-        realm: err?.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
-        meta: err?.meta ?? {
-          lastKnownGoodHtml: null,
-          scopedCssUrls: [],
-          stack: error.stack ?? null,
-          cardTitle: null,
-        },
-      },
-    ],
-  };
 }
 
 function processCardError(
