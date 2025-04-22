@@ -4,16 +4,23 @@ import { action } from '@ember/object';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
+import { cached } from '@glimmer/tracking';
 
+import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
 import { task } from 'ember-concurrency';
 
-import { LoadingIndicator } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
+import {
+  CardContainer,
+  CardHeader,
+  LoadingIndicator,
+} from '@cardstack/boxel-ui/components';
+import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
   type Query,
   type ResolvedCodeRef,
+  type CardErrorJSONAPI,
   specRef,
 } from '@cardstack/runtime-common';
 
@@ -29,6 +36,9 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 
 import { CardDef, FieldDef, Format } from 'https://cardstack.com/base/card-api';
 
+import { htmlComponent } from '../../../../lib/html-component';
+import CardError from '../../card-error';
+import CardErrorDetail from '../../card-error-detail';
 import FormatChooser from '../format-chooser';
 
 import PlaygroundPreview from './playground-preview';
@@ -55,6 +65,8 @@ interface Signature {
     isFieldDef?: boolean;
     card?: CardDef;
     field?: FieldDef;
+    cardError?: CardErrorJSONAPI;
+    cardCreationError?: boolean;
   };
 }
 
@@ -64,7 +76,27 @@ export default class PlaygroundContent extends Component<Signature> {
     <section class='playground-panel' data-test-playground-panel>
       <div class='playground-panel-content'>
         {{#let (if @isFieldDef @field @card) as |card|}}
-          {{#if card}}
+          {{#if @cardError}}
+            <CardContainer
+              class='error-container'
+              @displayBoundaries={{true}}
+              data-test-error-container
+            >
+              <CardHeader
+                class='error-header'
+                @cardTypeDisplayName='Card Error: {{@cardError.title}}'
+                @cardTypeIcon={{ExclamationCircle}}
+              />
+              <div class='card-error' data-test-card-error>
+                {{#if this.lastKnownGoodHtml}}
+                  <this.lastKnownGoodHtml />
+                {{else}}
+                  <CardError @cardCreationError={{not @cardError.id}} />
+                {{/if}}
+              </div>
+              <CardErrorDetail @error={{@cardError}} />
+            </CardContainer>
+          {{else if card}}
             <div
               class='preview-area'
               data-test-field-preview-card={{@isFieldDef}}
@@ -138,6 +170,22 @@ export default class PlaygroundContent extends Component<Signature> {
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
         overflow: auto;
+      }
+      .error-container {
+        flex-grow: 1;
+        display: grid;
+        grid-template-rows: max-content;
+        margin-left: calc(-1 * var(--boxel-sp));
+        width: calc(100% + calc(2 * var(--boxel-sp)));
+      }
+      .card-error {
+        opacity: 0.4;
+      }
+      .error-header {
+        color: var(--boxel-error-300);
+        min-height: var(--boxel-form-control-height);
+        background-color: var(--boxel-100);
+        box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
       }
     </style>
   </template>
@@ -271,4 +319,25 @@ export default class PlaygroundContent extends Component<Signature> {
   private get canWriteRealm() {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
+
+  @cached
+  private get lastKnownGoodHtml() {
+    let lastKnownGoodHtml = this.args.cardError?.meta.lastKnownGoodHtml;
+    if (lastKnownGoodHtml) {
+      this.loadScopedCSS.perform();
+      return htmlComponent(lastKnownGoodHtml);
+    }
+    return undefined;
+  }
+
+  private loadScopedCSS = task(async () => {
+    let scopedCssUrls = this.args.cardError?.meta.scopedCssUrls;
+    if (scopedCssUrls) {
+      await Promise.all(
+        scopedCssUrls.map((cssModuleUrl) =>
+          this.loaderService.loader.import(cssModuleUrl),
+        ),
+      );
+    }
+  });
 }

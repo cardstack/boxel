@@ -5,6 +5,8 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   localId,
+  LooseSingleCardDocument,
+  isNotLoadedError,
   type Loader,
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
@@ -657,5 +659,48 @@ module('Unit | identity-context garbage collection', function (hooks) {
       hassan,
       'card instance is returned',
     );
+  });
+
+  test('can handle encountering a NotLoaded error in an instance during garbage collection', async function (assert) {
+    let { identityContext } = await setupTest();
+    let doc: LooseSingleCardDocument = {
+      data: {
+        id: `${testRealmURL}wu`,
+        type: 'card',
+        attributes: {
+          name: 'Wu',
+        },
+        relationships: {
+          bestFriend: {
+            links: { self: `${testRealmURL}not-loaded` },
+            // this is what a NotLoaded error looks like: a relationship data.id
+            // that has no associated included resource
+            data: {
+              id: `${testRealmURL}not-loaded`,
+              type: 'card',
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person',
+          },
+        },
+      },
+    };
+    let instance = await api.createFromSerialized(doc.data, doc, undefined, {
+      identityContext,
+    });
+
+    try {
+      (instance as any).bestFriend;
+      throw new Error('expected NotLoadedError');
+    } catch (err) {
+      assert.true(isNotLoadedError(err), 'instance has NotLoaded error');
+    }
+
+    // success is not throwing
+    identityContext.sweep(api);
   });
 });

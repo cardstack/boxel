@@ -1,94 +1,53 @@
-import {
-  waitFor,
-  waitUntil,
-  fillIn,
-  click,
-  typeIn,
-  focus,
-  RenderingTestContext,
-} from '@ember/test-helpers';
+import { fillIn, typeIn, focus, settled } from '@ember/test-helpers';
+
 import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
-import {
-  PermissionsContextName,
-  type Permissions,
-  baseRealm,
-} from '@cardstack/runtime-common';
-import { Loader } from '@cardstack/runtime-common/loader';
-import { Realm } from '@cardstack/runtime-common/realm';
-
-import CardCatalogModal from '@cardstack/host/components/card-catalog/modal';
-import CardEditor from '@cardstack/host/components/card-editor';
+import { type Realm } from '@cardstack/runtime-common';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
-import CreateCardModal from '@cardstack/host/components/create-card-modal';
-
-import { CardDef } from 'https://cardstack.com/base/card-api';
+import OperatorMode from '@cardstack/host/components/operator-mode/container';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
-  testRealmURL,
-  setupCardLogs,
-  setupLocalIndexing,
-  saveCard,
-  setupIntegrationTestRealm,
-  provideConsumeContext,
   lookupLoaderService,
+  testRealmURL,
+  setupIntegrationTestRealm,
+  setupLocalIndexing,
+  setupOnSave,
+  type TestContextWithSave,
 } from '../../helpers';
+import {
+  BigIntegerField,
+  NumberField,
+  field,
+  contains,
+  CardDef,
+  setupBaseRealm,
+} from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let cardApi: typeof import('https://cardstack.com/base/card-api');
-
-let loader: Loader;
-
 module('Integration | text-input-validator', function (hooks) {
   let realm: Realm;
   setupRenderingTest(hooks);
+  setupBaseRealm(hooks);
   setupLocalIndexing(hooks);
+  setupOnSave(hooks);
 
-  let mockMatrixUtils = setupMockMatrix(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
 
-  async function loadCard(url: string): Promise<CardDef> {
-    let { createFromSerialized, recompute } = cardApi;
-    let result = await realm.realmIndexQueryEngine.cardDocument(new URL(url));
-    if (!result || result.type === 'error') {
-      throw new Error(
-        `cannot get instance ${url} from the index: ${
-          result ? result.error.errorDetail.message : 'not found'
-        }`,
-      );
-    }
-    let card = await createFromSerialized<typeof CardDef>(
-      result.doc.data,
-      result.doc,
-      new URL(result.doc.data.id),
-    );
-    await recompute(card, { loadFields: true });
-    return card;
-  }
-
-  hooks.beforeEach(async function (this: RenderingTestContext) {
-    let permissions: Permissions = {
-      canWrite: true,
-      canRead: true,
-    };
-    provideConsumeContext(PermissionsContextName, permissions);
-
-    loader = lookupLoaderService().loader;
-
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    let bigInteger: typeof import('https://cardstack.com/base/big-integer');
-    cardApi = await loader.import(`${baseRealm.url}card-api`);
-    bigInteger = await loader.import(`${baseRealm.url}big-integer`);
-
-    let { field, contains, CardDef } = cardApi;
-    let { default: BigIntegerField } = bigInteger;
-    let { default: NumberField } = (await loader.import(
-      `${baseRealm.url}number`,
-    )) as typeof import('https://cardstack.com/base/number');
+  hooks.beforeEach(async function () {
+    let loader = lookupLoaderService().loader;
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeStateService;
 
     class Sample extends CardDef {
       static displayName = 'Sample';
@@ -96,49 +55,36 @@ module('Integration | text-input-validator', function (hooks) {
       @field anotherBigInt = contains(BigIntegerField);
       @field someNumber = contains(NumberField);
     }
+
     ({ realm } = await setupIntegrationTestRealm({
       loader,
       mockMatrixUtils,
       contents: {
         'sample.gts': { Sample },
-        'Sample/1.json': {
-          data: {
-            type: 'card',
-            id: `${testRealmURL}Sample/1`,
-            attributes: {
-              someBigInt: null,
-              anotherBigInt: '123',
-              someNumber: 0,
-            },
-            meta: {
-              adoptsFrom: {
-                module: `${testRealmURL}sample`,
-                name: 'Sample',
-              },
-            },
-          },
-        },
+        'Sample/1.json': new Sample({
+          someBigInt: null,
+          anotherBigInt: '123',
+          someNumber: 0,
+        }),
       },
     }));
-  });
 
-  setupCardLogs(
-    hooks,
-    async () => await loader.import(`${baseRealm.url}card-api`),
-  );
+    operatorModeStateService.restore({
+      stacks: [[{ id: `${testRealmURL}Sample/1`, format: 'edit' }]],
+    });
 
-  test('when user fills field with invalid values, the input box should show invalid state', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Sample/1`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
+        noop = () => {};
         <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
+          <OperatorMode @onClose={{this.noop}} />
           <CardPrerender />
         </template>
       },
     );
+  });
+
+  test('when user fills field with invalid values, the input box should show invalid state', async function (assert) {
     await fillIn(
       '[data-test-field="someBigInt"] [data-test-boxel-input]',
       'a-string-text',
@@ -154,17 +100,6 @@ module('Integration | text-input-validator', function (hooks) {
   });
 
   test('when user starts typing adding wrong input to the correct input, the input box should show invalid state and error message', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Sample/1`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
-          <CardPrerender />
-        </template>
-      },
-    );
     await fillIn(
       '[data-test-field="someBigInt"] [data-test-boxel-input]',
       '1000000',
@@ -184,17 +119,6 @@ module('Integration | text-input-validator', function (hooks) {
   });
 
   test('if json contains undeserializable values, the input box should show empty input box', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Sample/1`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
-          <CardPrerender />
-        </template>
-      },
-    );
     assert
       .dom('[data-test-field="anotherBigInt"] [data-test-boxel-input]')
       .hasText('');
@@ -208,18 +132,11 @@ module('Integration | text-input-validator', function (hooks) {
       .doesNotExist();
   });
 
-  test('when a user inserts wrong input and saves, it should not save the value', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Sample/1`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
-          <CardPrerender />
-        </template>
-      },
-    );
+  test<TestContextWithSave>('when a user inserts wrong input and saves, it should not save the value', async function (assert) {
+    assert.expect(2); // expect 2 instead of 3 because this should not run `onSave`
+    this.onSave(() => {
+      assert.ok(false, 'does not save wrong input');
+    });
     await fillIn(
       '[data-test-field="anotherBigInt"] [data-test-boxel-input]',
       'invalid-big-int',
@@ -232,32 +149,22 @@ module('Integration | text-input-validator', function (hooks) {
     assert
       .dom('[data-test-field="anotherBigInt"] input[aria-invalid="true"]')
       .exists();
-
-    await click('[data-test-save-card]');
-    await waitUntil(() => !document.querySelector('[data-test-saving]'));
-
-    assert.dom('[data-test-field="anotherBigInt"]').includesText('123'); // Unchanged
-
-    assert.equal((card as any).anotherBigInt, 123); // Unchanged
   });
 
   // -- below here are happy path test --
-  test('when user inserts field with correct values and saves, the saved document should insert a serialized value into the field', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Sample/1`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
-          <CardPrerender />
-        </template>
-      },
-    );
+  test<TestContextWithSave>('when user inserts field with correct values and saves, the saved document should insert a serialized value into the field', async function (assert) {
+    assert.expect(4);
+    this.onSave((_url, json) => {
+      if (typeof json === 'string') {
+        throw new Error('expected JSON save data');
+      }
+      assert.strictEqual(json.data.attributes?.someBigInt, '333');
+    });
     await fillIn(
       '[data-test-field="someBigInt"] [data-test-boxel-input]',
       '333',
     );
+    assert.dom('[data-test-field="someBigInt"] input').hasValue('333');
     assert
       .dom(
         '[data-test-field="someBigInt"] [data-test-boxel-input-error-message]',
@@ -266,64 +173,46 @@ module('Integration | text-input-validator', function (hooks) {
     assert
       .dom('[data-test-field="someBigInt"] input[aria-invalid="true"]')
       .doesNotExist();
-    await click('[data-test-save-card]');
-    await waitUntil(() => !document.querySelector('[data-test-saving]'));
-    await assert.dom('[data-test-field="someBigInt"]').containsText('333');
   });
 
   test('when user starts with empty field, the input box should NOT show invalid state', async function (assert) {
     // 'when user starts typing inserting correct input, the input box should show valid state',
-    let card = await loadCard(`${testRealmURL}Sample/1`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
-          <CardPrerender />
-        </template>
-      },
-    );
     await focus('[data-test-field="someBigInt"] [data-test-boxel-input]');
     assert
       .dom('[data-test-field="someBigInt"] input[aria-invalid="true"]')
       .doesNotExist();
   });
 
-  test('if we modify a model from outside the input box, the input box should update with new value', async function (assert) {
+  test<TestContextWithSave>('if we modify a model from outside the input box, the input box should update with new value', async function (assert) {
     //a use case for this test is for exmplae, populating the fields with valid values once the user hits a button "fill in"
-    let card = await loadCard(`${testRealmURL}Sample/1`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
-          <CardPrerender />
-        </template>
-      },
-    );
-    (card as any).someBigInt = '444';
-    await saveCard(card, `${testRealmURL}Sample/1`, loader);
-    await waitFor('[data-test-field="someBigInt"]');
-    await assert
+    const cardId = `${testRealmURL}Sample/1`;
+    assert
+      .dom('[data-test-field="someBigInt"] [data-test-boxel-input]')
+      .hasNoValue();
+    let card = await realm.realmIndexQueryEngine.cardDocument(new URL(cardId));
+    if (card?.type !== 'doc' || !card.doc.data.attributes) {
+      throw new Error('Search result did not return expected card doc');
+    }
+    assert.strictEqual(card.doc.data.attributes.someBigInt, null);
+    card.doc.data.attributes.someBigInt = '444';
+
+    await realm.write('Sample/1.json', JSON.stringify(card.doc));
+    await settled();
+    assert
+      .dom('[data-test-field="someBigInt"] [data-test-boxel-input]')
+      .hasValue('444');
+
+    card = await realm.realmIndexQueryEngine.cardDocument(new URL(cardId));
+    if (card?.type !== 'doc') {
+      throw new Error('Search result for card is not type doc');
+    }
+    assert.strictEqual(card.doc.data.attributes?.someBigInt, '444');
+    assert
       .dom('[data-test-field="someBigInt"] [data-test-boxel-input]')
       .hasValue('444');
   });
 
   test('number input validation gymnastics', async function (assert) {
-    let card = await loadCard(`${testRealmURL}Sample/1`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <CardEditor @card={{card}} />
-          <CardCatalogModal />
-          <CreateCardModal />
-          <CardPrerender />
-        </template>
-      },
-    );
-
     await fillIn('[data-test-field="someNumber"] [data-test-boxel-input]', '');
     assert
       .dom(

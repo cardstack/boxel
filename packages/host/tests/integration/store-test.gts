@@ -23,7 +23,7 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import IdentityContext from '@cardstack/host/lib/gc-identity-context';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type StoreService from '@cardstack/host/services/store';
-import { type CardError } from '@cardstack/host/services/store';
+import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
 
 import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -176,7 +176,7 @@ module('Integration | Store', function (hooks) {
     let error = store.peek(`${testRealmURL}Person/hassan`);
     assert.false(isCardInstance(error), 'error is not a card instance');
     assert.ok(
-      (error as CardError).message.includes('intentional error thrown'),
+      (error as CardErrorJSONAPI).message.includes('intentional error thrown'),
       'error message is correct',
     );
   });

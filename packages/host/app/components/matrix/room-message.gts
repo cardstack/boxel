@@ -181,10 +181,24 @@ export default class RoomMessage extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service declare commandService: CommandService;
 
+  knownErrorMessagePrefixes: { [errorMessagePrefix: string]: string }[] = [
+    {
+      'MatrixError: [413] event too large':
+        'Response from the AI assistant was too large to process',
+    },
+  ];
+
   @cached
   private get errorMessage() {
     if (this.message.errorMessage) {
-      return this.message.errorMessage;
+      let humanFriendlyErrorMessage = null;
+      for (let errorMessagePrefix of this.knownErrorMessagePrefixes) {
+        let key = Object.keys(errorMessagePrefix)[0];
+        if (this.message.errorMessage.startsWith(key)) {
+          humanFriendlyErrorMessage = errorMessagePrefix[key];
+        }
+      }
+      return humanFriendlyErrorMessage || this.message.errorMessage;
     }
     if (this.streamingTimeout) {
       return 'This message was processing for too long. Please try again.';

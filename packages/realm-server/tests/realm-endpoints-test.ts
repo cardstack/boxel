@@ -8,6 +8,7 @@ import {
   baseRealm,
   loadCard,
   Realm,
+  SupportedMimeType,
   type LooseSingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
@@ -150,6 +151,67 @@ module(basename(__filename), function () {
         }
         await closeServer(testRealmHttpServer2);
       },
+    });
+
+    test('can set response ETag and Cache-Control headers for module request', async function (assert) {
+      let response = await request
+        .get(`/person`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.ok(response.headers['etag'], 'ETag header is present');
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'public, max-age=0',
+        'cache control header is set correctly',
+      );
+    });
+
+    test('can set response Cache-Control header for card source request', async function (assert) {
+      let response = await request
+        .get(`/person.gts`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'no-store, no-cache, must-revalidate',
+        'cache control header is set correctly',
+      );
+    });
+
+    test('can set response Cache-Control header for card json request', async function (assert) {
+      let response = await request
+        .get(`/hassan`)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'no-store, no-cache, must-revalidate',
+        'cache control header is set correctly',
+      );
+    });
+
+    test('can set response Cache-Control header for json api request', async function (assert) {
+      let response = await request
+        .get(`/_info`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'no-store, no-cache, must-revalidate',
+        'cache control header is set correctly',
+      );
     });
 
     test('can dynamically load a card definition from own realm', async function (assert) {

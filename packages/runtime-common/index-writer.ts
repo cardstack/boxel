@@ -202,7 +202,7 @@ export class Batch {
             ...entry.pristine_doc,
             id: this.copiedRealmURL(
               sourceRealmURL,
-              new URL(entry.pristine_doc.id),
+              new URL(entry.pristine_doc.id!), // these will always have an ID
             ).href,
           }
         : entry.pristine_doc;
