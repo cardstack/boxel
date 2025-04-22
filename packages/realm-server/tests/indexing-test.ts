@@ -1,4 +1,4 @@
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
 import {
   baseRealm,
@@ -594,14 +594,14 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('can recover from a module sequence error', async function (assert) {
+    test('can recover from a module sequence error', async function (assert) {
       // introduce errors into 2 gts file with first module has dependency on second module
       await realm.write(
         'pet.gts',
         `
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
-          import { Name } from "./name";
+          import { Name } from "./name"; // this is missing
           export class Pet extends CardDef {
             @field name = contains(Name);
           }
@@ -621,10 +621,10 @@ module(basename(__filename), function () {
       await realm.write(
         'name.gts',
         `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
 
-          export class Name extends CardDef {
+          export class Name extends FieldDef {
             @field firstName = contains(StringCard);
             @field lastName = contains(StringCard);
           }
@@ -648,8 +648,8 @@ module(basename(__filename), function () {
           instancesIndexed: 1,
           instanceErrors: 1,
           moduleErrors: 0,
-          modulesIndexed: 2,
-          totalIndexEntries: 10,
+          modulesIndexed: 3,
+          totalIndexEntries: 13,
         },
         'indexed correct number of files',
       );
@@ -666,7 +666,7 @@ module(basename(__filename), function () {
       );
     });
 
-    skip('can successfully create instance after module sequence error is resolved', async function (assert) {
+    test('can successfully create instance after module sequence error is resolved', async function (assert) {
       // First create pet.gts that depends on name.gts which doesn't exist yet
       await realm.write(
         'pet.gts',
@@ -697,10 +697,10 @@ module(basename(__filename), function () {
       await realm.write(
         'name.gts',
         `
-          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
           import StringCard from "https://cardstack.com/base/string";
     
-          export class Name extends CardDef {
+          export class Name extends FieldDef {
             @field firstName = contains(StringCard);
             @field lastName = contains(StringCard);
           }

@@ -81,6 +81,10 @@ class Assistant {
   }
 
   getResponse(prompt: PromptParts) {
+    if (!prompt.model) {
+      throw new Error('Model is required');
+    }
+
     // Sending tools to models that don't support them results in an error
     // from openrouter.
     if (
@@ -284,7 +288,7 @@ Common issues are:
           return await assistant.setTitle(
             room.roomId,
             promptParts.history,
-            event as CommandResultEvent,
+            event as unknown as CommandResultEvent,
           );
         }
         return;
@@ -325,7 +329,11 @@ Common issues are:
         cardFragments,
         client,
       );
-      return await assistant.setTitle(room.roomId, history, event);
+      return await assistant.setTitle(
+        room.roomId,
+        history,
+        event as unknown as CommandResultEvent,
+      );
     } catch (e) {
       log.error(e);
       Sentry.captureException(e);
