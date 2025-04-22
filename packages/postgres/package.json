@@ -4,17 +4,17 @@
   "license": "MIT",
   "dependencies": {
     "@cardstack/runtime-common": "workspace:*",
-    "@sentry/node": "^8.31.0",
-    "@types/fs-extra": "~11.0.4",
-    "@types/pg": "^8.11.5",
-    "fs-extra": "~11.3.0",
-    "node-pg-migrate": "^6.2.2",
-    "pg": "^8.11.5",
-    "ts-node": "^10.9.2"
+    "@sentry/node": "catalog:",
+    "@types/fs-extra": "catalog:",
+    "@types/pg": "catalog:",
+    "fs-extra": "catalog:",
+    "node-pg-migrate": "catalog:",
+    "pg": "catalog:",
+    "ts-node": "catalog:"
   },
   "devDependencies": {
     "concurrently": "^8.2.2",
-    "sql-parser-cst": "^0.28.0"
+    "sql-parser-cst": "catalog:"
   },
   "scripts": {
     "start:pg": "./scripts/start-pg.sh",

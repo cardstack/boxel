@@ -5,7 +5,7 @@
   "dependencies": {
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "stripe": "^17.2.1"
+    "stripe": "catalog:"
   },
   "devDependencies": {
     "concurrently": "^8.0.1"

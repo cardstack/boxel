@@ -7,13 +7,13 @@
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@types/lodash": "^4.17.15",
-    "chess.js": "1.0.0-beta.8",
+    "@types/lodash": "catalog:",
+    "chess.js": "catalog:",
     "concurrently": "^8.2.2",
-    "ember-concurrency": "^4.0.2",
-    "ember-modifier": "^4.1.0",
-    "ember-template-lint": "^5.11.2",
-    "tracked-built-ins": "^3.3.0"
+    "ember-concurrency": "catalog:",
+    "ember-modifier": "catalog:",
+    "ember-template-lint": "catalog:",
+    "tracked-built-ins": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

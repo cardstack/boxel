@@ -8,8 +8,8 @@
   },
   "keywords": [],
   "devDependencies": {
-    "ember-template-lint": "^5.11.2",
-    "ember-template-recast": "^6.1.5"
+    "ember-template-lint": "catalog:",
+    "ember-template-recast": "catalog:"
   },
   "author": "",
   "license": "MIT",
