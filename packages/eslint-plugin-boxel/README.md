@@ -4,25 +4,15 @@ ESLint plugin for Boxel-specific rules
 
 ## Installation
 
-You'll first need to install [ESLint](https://eslint.org/):
-
-```sh
-pnpm i eslint --save-dev
-```
-
-Next, install `eslint-plugin-boxel`:
-
-```sh
-pnpm install eslint-plugin-boxel --save-dev
-```
+This is currently only for use within the Boxel monorepo. In the future, we expect to publish an installable package for use elsewhere.
 
 ## Usage
 
-Add `boxel` to the plugins section of your `.eslintrc` configuration file:
+Add `@cardstack/boxel` to the plugins section of your `.eslintrc` configuration file:
 
 ```json
 {
-  "plugins": ["boxel"]
+  "plugins": ["@cardstack/boxel"]
 }
 ```
 
@@ -31,7 +21,7 @@ Then configure the rules you want to use under the rules section:
 ```json
 {
   "rules": {
-    "boxel/rule-name": "error"
+    "@cardstack/boxel/rule-name": "error"
   }
 }
 ```
@@ -49,5 +39,4 @@ Then configure the rules you want to use under the rules section:
 
 <!-- end auto-generated rules list -->
 
-<!-- TODO: Add rule documentation as rules are developed -->
-```
+Development note: after adding a new rule, run `pnpm update` to re-generate docs and recommended-rules list
