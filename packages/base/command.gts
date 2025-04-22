@@ -30,6 +30,8 @@ export class CopyCardInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
   @field targetUrl = contains(StringField);
   @field targetStackIndex = contains(NumberField);
+  @field realm = contains(StringField);
+  @field codeRef = contains(CodeRefField);
 }
 
 export class CopyCardResult extends CardDef {

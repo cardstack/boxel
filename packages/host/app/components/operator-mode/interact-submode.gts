@@ -41,6 +41,8 @@ import {
   type CodeRef,
   type LooseSingleCardDocument,
   isResolvedCodeRef,
+  type ResolvedCodeRef,
+  type CopyCardsWithCodeRef,
 } from '@cardstack/runtime-common';
 import { loadCard } from '@cardstack/runtime-common/code-ref';
 
@@ -362,14 +364,18 @@ export default class InteractSubmode extends Component {
       create: async (spec: Spec, targetRealm: string) => {
         await here._createFromSpec.perform(spec, targetRealm);
       },
-      copy: async (card: CardDef, targetRealm: string) => {
-        return await here._copy.perform(card, targetRealm);
+      copy: async (
+        card: CardDef,
+        targetRealm: string,
+        codeRef?: ResolvedCodeRef,
+      ) => {
+        return await here._copy.perform(card, targetRealm, codeRef);
       },
       copySource: async (fromUrl: string, toUrl: string) => {
         return await here._copySource.perform(fromUrl, toUrl);
       },
       copyCards: async (
-        cards: CardDef[],
+        cards: CopyCardsWithCodeRef[],
         targetRealm: string,
         directoryName?: string,
       ): Promise<CardDef[]> => {
@@ -509,14 +515,21 @@ export default class InteractSubmode extends Component {
     });
   });
 
-  private _copy = dropTask(async (sourceCard: CardDef, targetRealm: string) => {
-    let { commandContext } = this.commandService;
-    let newCard = await new CopyCardCommand(commandContext).execute({
-      sourceCard,
-      targetUrl: targetRealm,
-    });
-    return newCard;
-  });
+  private _copy = dropTask(
+    async (
+      sourceCard: CardDef,
+      targetRealm: string,
+      codeRef?: ResolvedCodeRef,
+    ) => {
+      let { commandContext } = this.commandService;
+      let newCard = await new CopyCardCommand(commandContext).execute({
+        sourceCard,
+        targetUrl: targetRealm,
+        codeRef,
+      });
+      return newCard;
+    },
+  );
 
   private _copySource = task(async (fromUrl: string, toUrl: string) => {
     let { commandContext } = this.commandService;
@@ -527,17 +540,23 @@ export default class InteractSubmode extends Component {
   });
 
   private _copyCards = dropTask(
-    async (cards: CardDef[], targetRealm: string, directoryName?: string) => {
+    async (
+      cards: CopyCardsWithCodeRef[],
+      targetRealm: string,
+      directoryName?: string,
+    ) => {
       let { commandContext } = this.commandService;
       let targetUrl = directoryName
         ? new URL(`${capitalize(directoryName)}-${uuidv4()}/`, targetRealm).href
         : targetRealm;
       return await Promise.all(
-        cards.map((card) => {
-          return new CopyCardCommand(commandContext).execute({
-            sourceCard: card,
+        cards.map(async (cardWithNewCodeRef) => {
+          let newCard = await new CopyCardCommand(commandContext).execute({
+            sourceCard: cardWithNewCodeRef.sourceCard,
             targetUrl,
+            codeRef: cardWithNewCodeRef.codeRef,
           });
+          return newCard;
         }),
       );
     },

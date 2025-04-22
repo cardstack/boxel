@@ -1,4 +1,5 @@
 import { CardResource } from './card-document';
+import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -417,12 +418,17 @@ export interface CardActions {
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
 }
 
+export interface CopyCardsWithCodeRef {
+  sourceCard: CardDef;
+  codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
+}
+
 export interface CatalogActions {
   create: (spec: Spec, targetRealm: string) => void;
   copy: (card: CardDef, targetRealm: string) => Promise<CardDef>;
   copySource: (fromUrl: string, toUrl: string) => Promise<void>;
   copyCards: (
-    cards: CardDef[],
+    cards: CopyCardsWithCodeRef[],
     targetRealm: string,
     directoryName?: string,
   ) => Promise<CardDef[]>;
