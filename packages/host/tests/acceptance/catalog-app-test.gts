@@ -105,16 +105,12 @@ module('Acceptance | catalog app tests', function (hooks) {
         },
       });
       assert.ok(
-        result.cardIds.some((id) =>
-          id.includes(`${testRealmURL}MortgageCalculator`),
+        result.cardIds.some(
+          (id) =>
+            id.includes(`${testRealmURL}mortgage-calculator`) &&
+            id.includes('MortgageCalculator'),
         ),
         'Listing should create a new instance from the example',
-      );
-      assert.ok(
-        result.cardIds.some((id) =>
-          id.includes(`${testRealmURL}MortgageCalculatorExample`),
-        ),
-        'Listing should copy the example from the listing',
       );
     });
 
@@ -154,49 +150,41 @@ module('Acceptance | catalog app tests', function (hooks) {
 
       await waitForCodeEditor();
 
-      await waitFor('[data-test-directory="mortgage-calculator/"]');
-      await click('[data-test-directory="mortgage-calculator/"]');
-      assert
-        .dom('[data-test-directory="mortgage-calculator/"] .icon')
-        .hasClass('open');
-
-      await waitFor(
-        '[data-test-file="mortgage-calculator/mortgage-calculator.gts"]',
-      );
-      await click(
-        '[data-test-file="mortgage-calculator/mortgage-calculator.gts"]',
-      );
-      assert
-        .dom('[data-test-file="mortgage-calculator/mortgage-calculator.gts"]')
-        .exists('mortgage-calculator.gts file exists')
-        .hasClass('selected', 'mortgage-calculator.gts file is selected');
-
-      // able to see example install successfully, eg: MortgageCalculatorInstallExamples-uuid
-      await waitFor(
-        '[data-test-directory^="MortgageCalculatorInstallExamples-"]',
-      );
+      await waitFor('[data-test-directory^="mortgage-calculator-"]');
       const element = document.querySelector(
-        '[data-test-directory^="MortgageCalculatorInstallExamples-"]',
+        '[data-test-directory^="mortgage-calculator-"]',
       );
       const fullPath = element?.getAttribute('data-test-directory');
       await click(`[data-test-directory="${fullPath}"]`);
 
       assert.dom(`[data-test-directory="${fullPath}"] .icon`).hasClass('open');
 
-      await waitFor(`[data-test-directory="${fullPath}MortgageCalculator/"]`);
-      await click(`[data-test-directory="${fullPath}MortgageCalculator/"]`);
+      const filePath = `${fullPath}mortgage-calculator.gts`;
+      await waitFor(`[data-test-file="${filePath}"]`);
+      await click(`[data-test-file="${filePath}"]`);
+      assert
+        .dom(`[data-test-file="${filePath}"]`)
+        .exists('mortgage-calculator.gts file exists')
+        .hasClass('selected', 'mortgage-calculator.gts file is selected');
+
+      // able to see example install successfully
+      const examplePath = `${fullPath}MortgageCalculator/`;
+      await waitFor(`[data-test-directory="${examplePath}"]`);
+      await click(`[data-test-directory="${examplePath}"]`);
+
+      assert
+        .dom(`[data-test-directory="${examplePath}"] .icon`)
+        .hasClass('open');
 
       await waitFor(
-        `[data-test-file^="${fullPath}MortgageCalculator/"][data-test-file$=".json"]`,
+        `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
       );
       await click(
-        `[data-test-file^="${fullPath}MortgageCalculator/"][data-test-file$=".json"]`,
+        `[data-test-file^="${examplePath}"][data-test-file$=".json"]`,
       );
 
       assert
-        .dom(
-          `[data-test-file^="${fullPath}MortgageCalculator/"][data-test-file$=".json"]`,
-        )
+        .dom(`[data-test-file^="${examplePath}"][data-test-file$=".json"]`)
         .exists('MortgageCalculatorInstallExamples with uuid instance exists')
         .hasClass(
           'selected',
