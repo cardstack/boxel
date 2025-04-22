@@ -6,7 +6,7 @@ module.exports = {
       description:
         'disallow missing helpers, modifiers, or components in \\<template\\> with auto-fix to import them',
       category: 'Ember Octane',
-      url: 'https://github.com/cardstack/boxel/packages/eslint-plugin-boxel/tree/master/docs/rules/template-missing-invokable.md',
+      url: 'https://github.com/cardstack/boxel/blob/main/packages/eslint-plugin-boxel/docs/rules/template-missing-invokable.md',
       recommended: true,
     },
     fixable: 'code',
@@ -47,6 +47,9 @@ module.exports = {
       ) {
         if (!isBound(node.path.head, sourceCode.getScope(node.path))) {
           const matched = context.options[0]?.invokables?.[node.path.head.name];
+          // Currently, we don't report errors unless we have a configured fix. We will likely
+          // change this in the future to report all missing invokables when we are ready with
+          // a way to share this information in the UI and or to the AI Assistant.
           if (matched) {
             const [name, module] = matched;
             const importStatement = buildImportStatement(

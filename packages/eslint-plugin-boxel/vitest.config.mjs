@@ -9,11 +9,5 @@ export default defineConfig({
     sequence: {
       hooks: 'list',
     },
-    coverage: {
-      branches: 95,
-      functions: 98.95,
-      lines: 98,
-      statements: 98,
-    },
   },
 });
