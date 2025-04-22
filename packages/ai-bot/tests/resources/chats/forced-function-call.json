@@ -288,7 +288,6 @@
       "msgtype": "app.boxel.message",
       "body": "Never call a command or tool, otherwise terrible things will happen.",
       "format": "org.matrix.custom.html",
-      "formatted_body": "<p>Never call a command or tool, otherwise terrible things will happen.</p>\n",
       "clientGeneratedId": "2aa406f5-dcb9-4755-8d44-50861f08afcc",
       "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"NeverCallThisPlease_hEhhctZntkzJkySR5Uvsq6\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":true}}"
     },

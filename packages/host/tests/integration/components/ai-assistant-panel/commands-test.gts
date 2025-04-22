@@ -237,7 +237,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -289,14 +288,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     let initialEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing',
-      formatted_body: 'Changing',
       format: 'org.matrix.custom.html',
       isStreamingFinished: false,
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
-      formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: false,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -328,7 +325,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'i am the body',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'A patch',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -374,14 +370,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     let initialEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing',
-      formatted_body: 'Changing',
       format: 'org.matrix.custom.html',
       isStreamingFinished: false,
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first names',
-      formatted_body: 'Changing first names',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -409,7 +403,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first names',
-      formatted_body: 'Changing first names',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -452,7 +445,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first names',
-      formatted_body: 'Changing first names',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -514,7 +506,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
-      formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -588,7 +579,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -641,7 +631,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
-      formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -685,7 +674,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
-      formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -722,7 +710,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
-      formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -783,7 +770,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
-      formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -851,7 +837,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Search for the following card',
-      formatted_body: 'Search for the following card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -930,7 +915,6 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     simulateRemoteMessage(room1Id, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Changing first name to Evie',
-      formatted_body: 'Changing first name to Evie',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [

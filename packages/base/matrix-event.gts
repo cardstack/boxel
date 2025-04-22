@@ -117,7 +117,6 @@ export interface MessageEvent extends BaseMatrixEvent {
     msgtype: 'm.text';
     format: 'org.matrix.custom.html';
     body: string;
-    formatted_body: string;
     isStreamingFinished: boolean;
     errorMessage?: string;
   };
@@ -131,7 +130,7 @@ export interface MessageEvent extends BaseMatrixEvent {
 
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: CardMessageContent | CardFragmentContent;
+  content: CardMessageContent | CardFragmentContent | CommandDefinitionsContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -168,7 +167,6 @@ export interface CardMessageContent {
   msgtype: typeof APP_BOXEL_MESSAGE_MSGTYPE;
   format: 'org.matrix.custom.html';
   body: string;
-  formatted_body: string;
   isStreamingFinished?: boolean;
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
   [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequest>[];
@@ -187,11 +185,14 @@ export interface CardMessageContent {
     skillCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      tools: Tool[];
+      tools?: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
       requireToolCall?: boolean;
+      functions: Tool['function'][];
     };
+    cardEventId?: string;
+    card?: LooseSingleCardDocument;
   };
 }
 
@@ -202,7 +203,6 @@ export interface CardFragmentContent {
   };
   msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE;
   format: typeof APP_BOXEL_CARD_FORMAT;
-  formatted_body: string;
   body: string;
   errorMessage?: string;
   data: {
