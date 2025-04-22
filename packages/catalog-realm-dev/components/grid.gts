@@ -27,7 +27,6 @@ interface CardsGridSignature {
 }
 
 export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
-  @tracked hydratedCard: string | null = null;
   @tracked cardResources: TrackedMap<string, CardDef>;
 
   constructor(owner: unknown, args: CardsGridSignature['Args']) {
@@ -42,14 +41,11 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       return;
     }
 
-    this.hydratedCard = card.url;
-
     if (!this.cardResources.has(card.url)) {
       const cardId = removeFileExtension(card.url);
       const result = await this.args.context?.getCard(this, () => cardId);
 
       if (!result) {
-        this.hydratedCard = null;
         return;
       }
       this.cardResources.set(card.url, result);
@@ -59,7 +55,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
   get isHydrated() {
     return (cardUrl: string) => {
       return (
-        this.hydratedCard === cardUrl &&
         this.cardResources.has(cardUrl) &&
         this.cardResources.get(cardUrl)?.card != null
       );
