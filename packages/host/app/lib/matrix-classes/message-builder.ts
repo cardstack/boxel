@@ -93,20 +93,25 @@ export default class MessageBuilder {
 
   get attachedCardIds() {
     let content = this.event.content as CardMessageContent;
-    // Safely skip over cases that don't have attached cards or a data type
-    let cardDocs = content.data?.attachedCardsEventIds
-      ? content.data.attachedCardsEventIds.map((eventId) =>
-          this.builderContext.serializedCardFromFragments(eventId),
-        )
-      : [];
     let attachedCardIds: string[] = [];
-    cardDocs.map((c) => {
-      if (c.data.id) {
-        attachedCardIds.push(c.data.id);
+    if (content.data?.attachedCardsEventIds) {
+      // Safely skip over cases that don't have attached cards or a data type
+      let cardDocs = content.data?.attachedCardsEventIds
+        ? content.data.attachedCardsEventIds.map((eventId) =>
+            this.builderContext.serializedCardFromFragments(eventId),
+          )
+        : [];
+
+      cardDocs.map((c) => {
+        if (c.data.id) {
+          attachedCardIds.push(c.data.id);
+        }
+      });
+      if (attachedCardIds.length < cardDocs.length) {
+        throw new Error(`cannot handle cards in room without an ID`);
       }
-    });
-    if (attachedCardIds.length < cardDocs.length) {
-      throw new Error(`cannot handle cards in room without an ID`);
+    } else if (content.data?.attachedCards) {
+      attachedCardIds = content.data.attachedCards.map((c) => c.sourceUrl);
     }
     return attachedCardIds;
   }

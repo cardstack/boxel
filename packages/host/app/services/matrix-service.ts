@@ -641,7 +641,7 @@ export default class MatrixService extends Service {
     });
   }
 
-  async downloadCardFileDef(cardFileDef: SerializedFile) {
+  async downloadCardFileDef(cardFileDef: FileAPI.SerializedFile) {
     return this.cardFileDefManager.downloadCardFileDef(cardFileDef);
   }
 
@@ -794,7 +794,11 @@ export default class MatrixService extends Service {
       }
     }
 
-    let cardFileDefs = await this.cardFileDefManager.uploadCards(attachedCards);
+    let cardFileDefs =
+      await this.cardFileDefManager.uploadCardsAndUpdateCommandDefinitions(
+        attachedCards,
+        roomId,
+      );
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,

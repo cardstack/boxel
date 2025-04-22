@@ -93,10 +93,9 @@ export default class MessageCommand {
           this.commandResultCardEventId,
         );
       } else if (this.commandResultFileDef) {
-        let content = await this.matrixService.downloadCardFileDef(
+        cardDoc = await this.matrixService.downloadCardFileDef(
           this.commandResultFileDef,
         );
-        cardDoc = JSON.parse(content) as LooseSingleCardDocument;
       }
       return cardDoc;
     } catch {

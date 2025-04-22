@@ -594,7 +594,7 @@ export default class Room extends Component<Signature> {
       // which should be consistent.
       let aTitle = a.cardId || a.skillEventId;
       let bTitle = b.cardId || b.skillEventId;
-      return aTitle.localeCompare(bTitle);
+      return aTitle?.localeCompare(bTitle ?? '') ?? 0;
     });
   }
 

@@ -5,6 +5,7 @@ import { inject as service } from '@ember/service';
 import { md5 } from 'super-fast-md5';
 
 import {
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   baseRealm,
   codeRefWithAbsoluteURL,
   getClass,
@@ -15,7 +16,7 @@ import {
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
-import type { relativeTo, CardDef } from 'https://cardstack.com/base/card-api';
+import { relativeTo, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
   FileDef,
@@ -56,6 +57,121 @@ export default class CardFileDefManager {
     private readonly getCardAPI: () => typeof CardAPI,
   ) {
     setOwner(this, owner);
+  }
+
+  async uploadCardsAndUpdateCommandDefinitions(
+    cards: CardDef[],
+    roomId: string,
+  ): Promise<void> {
+    const cardFileDefs = await this.uploadCards(cards);
+    const skillCards = cards.filter((card) => isSkillCard in card);
+    const roomResource = this.matrixService.roomResourcesCache.get(roomId);
+    const roomSkills = roomResource?.skills ?? [];
+    const updatedSkillFileDefs: FileDef[] = [];
+    const updatedCommandFileDefs: FileDef[] = [];
+    for (const skillCard of skillCards) {
+      let matchingRoomSkill = roomSkills.find(
+        (roomSkill) => roomSkill.cardId === skillCard.id,
+      );
+      if (matchingRoomSkill) {
+        let commandDefinitions = (skillCard as SkillCardModule.SkillCard)
+          .commands;
+        if (commandDefinitions.length) {
+          let commandDefFileDefs =
+            await this.uploadCommandDefinitions(commandDefinitions);
+          updatedSkillFileDefs.push(
+            cardFileDefs.find((fileDef) => fileDef.sourceUrl === skillCard.id)!,
+          );
+          updatedCommandFileDefs.push(...commandDefFileDefs);
+        }
+      }
+    }
+    if (updatedSkillFileDefs.length || updatedCommandFileDefs.length) {
+      await this.matrixService.updateStateEvent(
+        roomId,
+        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+        '',
+        async (currentSkillsConfig) => {
+          const enabledCards = [...(currentSkillsConfig.enabledCards || [])];
+          const newEnabledCards = updatedSkillFileDefs
+            .map((fileDef) => fileDef.serialize())
+            .filter(
+              (newCard) =>
+                !enabledCards.some(
+                  (existingCard) =>
+                    existingCard.sourceUrl === newCard.sourceUrl,
+                ),
+            );
+          const updatedEnabledCards = [...enabledCards, ...newEnabledCards].map(
+            (card) => {
+              const matchingFileDef = updatedSkillFileDefs.find(
+                (fileDef) => fileDef.sourceUrl === card.sourceUrl,
+              );
+              if (matchingFileDef) {
+                return { ...card, url: matchingFileDef.url };
+              }
+              return card;
+            },
+          );
+
+          const disabledCards = [...(currentSkillsConfig.disabledCards || [])];
+          const newDisabledCards = updatedSkillFileDefs
+            .map((fileDef) => fileDef.serialize())
+            .filter(
+              (newCard) =>
+                !enabledCards.some(
+                  (existingCard) =>
+                    existingCard.sourceUrl === newCard.sourceUrl,
+                ),
+            );
+          const updatedDisabledCards = [
+            ...disabledCards,
+            ...newDisabledCards,
+          ].map((card) => {
+            const matchingFileDef = updatedSkillFileDefs.find(
+              (fileDef) => fileDef.sourceUrl === card.sourceUrl,
+            );
+            if (matchingFileDef) {
+              return { ...card, url: matchingFileDef.url };
+            }
+            return card;
+          });
+
+          let commandDefinitions = [
+            ...(currentSkillsConfig.commandDefinitions || []),
+          ];
+          const newCommandDefinitions = updatedCommandFileDefs
+            .map((fileDef) => fileDef.serialize())
+            .filter(
+              (newCommandDefinition) =>
+                !commandDefinitions.some(
+                  (commandDefinition) =>
+                    commandDefinition.sourceUrl ===
+                    newCommandDefinition.sourceUrl,
+                ),
+            );
+          const updatedCommandDefinitions = [
+            ...commandDefinitions,
+            ...newCommandDefinitions,
+          ].map((cmd) => {
+            const matchingFileDef = updatedCommandFileDefs.find(
+              (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
+            );
+            if (matchingFileDef) {
+              return { ...cmd, url: matchingFileDef.url };
+            }
+            return cmd;
+          });
+          return {
+            enabledCards: updatedEnabledCards,
+            disabledCards: updatedDisabledCards,
+            commandDefinitions: updatedCommandDefinitions,
+          };
+        },
+      );
+    }
+
+    return cardFileDefs;
   }
 
   async uploadCards(cards: CardDef[]): Promise<FileDef[]> {

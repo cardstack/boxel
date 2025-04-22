@@ -1055,14 +1055,7 @@ test.describe('Room messages', () => {
         e.type === 'm.room.message' &&
         e.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE,
     );
-    let cardFragmentEvents = events.filter(
-      (e) =>
-        e.type === 'm.room.message' &&
-        e.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE &&
-        !e.content.data.nextFragment,
-    );
     expect(messageEvents.length).toEqual(3);
-    expect(cardFragmentEvents.length).toEqual(2);
   });
 
   test('it escapes html code sent by the user', async ({ page }) => {

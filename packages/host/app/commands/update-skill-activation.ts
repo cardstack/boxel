@@ -43,7 +43,7 @@ export default class UpdateSkillActivationCommand extends HostBaseCommand<
           );
 
           if (!skillFileDef) {
-            return;
+            return newSkillsConfig;
           }
 
           if (isActive) {
