@@ -980,34 +980,43 @@ export function formattedError(
   error: any,
   err?: CardError | Partial<CardErrorJSONAPI>,
 ): CardErrorsJSONAPI {
-  let errorStatus = err?.status ?? error.status;
-  let errorMessage = err?.message ?? error.message;
-  let title: string | undefined;
-
-  if (errorStatus === 404 && errorMessage?.includes('missing')) {
-    // a missing link error looks a lot like a missing card error
-    title = 'Link Not Found';
-  }
-
   if (isCardError(err)) {
+    let cardError;
+    let meta: CardErrorJSONAPI['meta'] | undefined;
+    let message: string | undefined;
     let additionalError = err.additionalErrors?.[0];
-    let cardError = isCardError(additionalError) ? additionalError : err;
+
+    if (additionalError && 'errorDetail' in additionalError) {
+      cardError = additionalError.errorDetail;
+      let { lastKnownGoodHtml, scopedCssUrls, cardTitle } = additionalError;
+      meta = {
+        lastKnownGoodHtml,
+        scopedCssUrls,
+        stack: cardError.stack ?? err.stack ?? error.stack ?? null,
+        cardTitle,
+      };
+    } else if (isCardError(additionalError)) {
+      cardError = additionalError;
+    } else {
+      message = additionalError?.message;
+      cardError = err;
+    }
+
     return {
       errors: [
         {
           id: url,
-          message: cardError.message,
+          message: message ?? cardError.message,
           status: cardError.status,
           title:
-            title ??
             cardError.title ??
             status.message[cardError.status] ??
             cardError.message,
           realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-          meta: {
+          meta: meta ?? {
             lastKnownGoodHtml: null,
             scopedCssUrls: [],
-            stack: cardError.stack ?? null,
+            stack: cardError.stack ?? err.stack ?? error.stack ?? null,
             cardTitle: null,
           },
           additionalErrors: cardError.additionalErrors,
@@ -1016,47 +1025,27 @@ export function formattedError(
     };
   }
 
-  if (err) {
-    let message = err.message?.length
-      ? err.message
-      : errorStatus
-        ? `Received HTTP ${errorStatus} from server`
-        : `${error.message}: ${error.stack}`;
-    return {
-      errors: [
-        {
-          id: url,
-          message,
-          status: errorStatus ?? 500,
-          title: title ?? err.title ?? status.message[errorStatus] ?? message,
-          realm: err.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
-          meta: err.meta ?? {
-            lastKnownGoodHtml: null,
-            scopedCssUrls: [],
-            stack: error.stack ?? null,
-            cardTitle: null,
-          },
-        },
-      ],
-    };
-  }
+  let errorStatus = err?.status ?? error.status;
+  let errorMessage =
+    err?.message ??
+    (errorStatus
+      ? `Received HTTP ${errorStatus} from server ${
+          error.responseText ?? ''
+        }`.trim()
+      : `${error.message}: ${error.stack}`);
 
   return {
     errors: [
       {
         id: url,
-        status: errorStatus ?? 500,
-        title: title ?? status.message[errorStatus] ?? error.message,
-        message: error.status
-          ? `Received HTTP ${error.status} from server ${
-              error.responseText ?? ''
-            }`.trim()
-          : `${error.message}: ${error.stack}`,
-        realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-        meta: {
+        status: errorStatus ?? '500',
+        title: err?.title ?? status.message[errorStatus] ?? errorMessage,
+        message: errorMessage,
+        realm: err?.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
+        meta: err?.meta ?? {
           lastKnownGoodHtml: null,
           scopedCssUrls: [],
-          stack: null,
+          stack: error.stack ?? null,
           cardTitle: null,
         },
       },

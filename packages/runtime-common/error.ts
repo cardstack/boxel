@@ -1,6 +1,7 @@
 import { getReasonPhrase } from 'http-status-codes';
 import { createResponse } from './create-response';
 import { RequestContext } from './realm';
+import type { SearchResultError } from './realm-index-query-engine';
 
 export interface ErrorDetails {
   status?: number;
@@ -36,7 +37,7 @@ export interface CardErrorJSONAPI {
     scopedCssUrls: string[];
     stack: string | null;
   };
-  additionalErrors?: (CardError | Error)[] | null;
+  additionalErrors?: (CardError | SearchResultError['error'] | Error)[] | null;
 }
 
 export interface CardErrorsJSONAPI {
@@ -50,7 +51,8 @@ export class CardError extends Error implements SerializedError {
   source?: ErrorDetails['source'];
   responseText?: string;
   isCardError: true = true;
-  additionalErrors: (CardError | Error)[] | null = null;
+  additionalErrors: (CardError | SearchResultError['error'] | Error)[] | null =
+    null;
   deps?: string[];
 
   constructor(
