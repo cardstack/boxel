@@ -377,9 +377,9 @@ export function getRelevantCards(
     }
   }
   // Return the cards in a consistent manner
-  let sortedCards = Array.from(attachedCardMap.values()).sort((a, b) => {
-    return a.id.localeCompare(b.id);
-  });
+  let sortedCards = Array.from(attachedCardMap.values())
+    .filter((card) => card.id) // Only include cards with valid IDs
+    .sort((a, b) => a.id.localeCompare(b.id));
 
   return {
     mostRecentlyAttachedCard: mostRecentlyAttachedCard,
