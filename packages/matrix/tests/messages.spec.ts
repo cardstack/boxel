@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { registerUser } from '../docker/synapse';
+import { Credentials, registerUser } from '../docker/synapse';
 import {
   login,
   logout,
@@ -28,19 +28,17 @@ import {
   startServer as startRealmServer,
   type IsolatedRealmServer,
 } from '../helpers/isolated-realm-server';
-import {
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_MESSAGE_MSGTYPE,
-} from '../helpers/matrix-constants';
+import { APP_BOXEL_MESSAGE_MSGTYPE } from '../helpers/matrix-constants';
 
 test.describe('Room messages', () => {
   let synapse: SynapseInstance;
   let realmServer: IsolatedRealmServer;
+  let userCred: Credentials;
   test.beforeEach(async () => {
     test.setTimeout(120_000);
     synapse = await synapseStart();
     await registerRealmUsers(synapse);
-    await registerUser(synapse, 'user1', 'pass');
+    userCred = await registerUser(synapse, 'user1', 'pass');
     realmServer = await startRealmServer();
     await setupUserSubscribed('@user1:localhost', realmServer);
   });
@@ -228,56 +226,6 @@ test.describe('Room messages', () => {
     ).toContainText('my');
   });
 
-  test('can add a card that is over 65K to a message (i.e. split card into multiple matrix events)', async ({
-    page,
-  }) => {
-    const testCard = `${appURL}/big-card`; // this is a 153KB card
-    await login(page, 'user1', 'pass', { url: appURL });
-    await page.locator(`[data-test-room-settled]`).waitFor();
-    await page.locator('[data-test-choose-card-btn]').click();
-    await page
-      .locator(
-        `[data-test-realm="Test Workspace A"] [data-test-show-more-cards]`,
-      )
-      .click();
-    await page.locator(`[data-test-select="${testCard}"]`).click();
-    await page.locator('[data-test-card-catalog-go-button]').click();
-    await expect(
-      page.locator(`[data-test-attached-card="${testCard}"]`),
-    ).toContainText('Big Card');
-
-    await page.locator('[data-test-message-field]').fill('This is a big card');
-    await page.locator('[data-test-send-message-btn]').click();
-    await assertMessages(page, [
-      {
-        from: 'user1',
-        message: 'This is a big card',
-        cards: [{ id: testCard, title: 'Big Card' }],
-      },
-    ]);
-
-    // peek into the matrix events and confirm there are multiple card fragments
-    let messages = await getRoomEvents();
-    let cardFragments = messages.filter(
-      (message) =>
-        message.type === 'm.room.message' &&
-        message.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-    );
-    expect(cardFragments.length).toStrictEqual(4);
-    let lastFragmentIndex = messages.findIndex(
-      (m) => m === cardFragments[cardFragments.length - 1],
-    );
-    let boxelMessage = messages[lastFragmentIndex + 1];
-    let boxelMessageData = JSON.parse(boxelMessage.content.data);
-    // the card fragment events need to come before the boxel message event they
-    // are used in, and the boxel message should point to the first fragment
-    expect(boxelMessageData.attachedCardsEventIds).toMatchObject([
-      // card fragments are posted in reverse order so we can fashion the
-      // nextFragment property, so the item at the end is the first fragment
-      cardFragments[cardFragments.length - 1].event_id,
-    ]);
-  });
-
   test('it can strip out base64 image fields from cards sent in messages', async ({
     page,
   }) => {
@@ -310,12 +258,19 @@ test.describe('Room messages', () => {
     ]);
 
     let messages = await getRoomEvents();
-    let message = messages[messages.length - 2];
+    let message = messages[messages.length - 1];
     let messageData = JSON.parse(message.content.data);
-    let serializeCard = JSON.parse(messageData.cardFragment);
+    let cardText = await (
+      await fetch(messageData.attachedCards[0].url, {
+        headers: {
+          Authorization: `Bearer ${userCred.accessToken}`,
+        },
+      })
+    ).text();
+    let card = JSON.parse(cardText);
 
-    expect(serializeCard.data.attributes.name).toStrictEqual('Mango the Puppy');
-    expect(serializeCard.data.attributes.picture).toBeUndefined();
+    expect(card.data.attributes.name).toStrictEqual('Mango the Puppy');
+    expect(card.data.attributes.picture).toBeUndefined();
   });
 
   test('can send only a card as a message', async ({ page }) => {

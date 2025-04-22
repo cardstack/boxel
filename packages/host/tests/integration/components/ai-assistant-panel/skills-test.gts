@@ -277,7 +277,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
   }
 
   //TODO: This test must be fixed once CS-7970 is implemented
-  test.skip('same skill card added twice with no changes results in no-op', async function (assert) {
+  skip('same skill card added twice with no changes results in no-op', async function (assert) {
     const roomId = await renderAiAssistantPanel(
       `${testRealmURL}Person/fadhlan`,
     );

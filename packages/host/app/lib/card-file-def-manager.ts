@@ -62,7 +62,7 @@ export default class CardFileDefManager {
   async uploadCardsAndUpdateCommandDefinitions(
     cards: CardDef[],
     roomId: string,
-  ): Promise<void> {
+  ): Promise<FileDef[]> {
     const cardFileDefs = await this.uploadCards(cards);
     const skillCards = cards.filter((card) => isSkillCard in card);
     const roomResource = this.matrixService.roomResourcesCache.get(roomId);
