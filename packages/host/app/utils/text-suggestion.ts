@@ -3,7 +3,7 @@ import a from 'indefinite';
 import {
   CodeRef,
   getPlural,
-  loadCard,
+  loadCardDef,
   Loader,
 } from '@cardstack/runtime-common';
 import {
@@ -74,7 +74,7 @@ function titleText(cardDisplayName: string, cardNoun: CardNoun, opts?: Opts) {
 }
 
 async function getCardDisplayName(loader: Loader, codeRef: CodeRef) {
-  let card = await loadCard(codeRef, { loader });
+  let card = await loadCardDef(codeRef, { loader });
   return card.displayName;
 }
 
