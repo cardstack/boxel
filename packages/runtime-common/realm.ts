@@ -441,14 +441,17 @@ export class Realm {
   ): Promise<WriteResult[]>;
   async write(
     pathOrFiles: LocalPath | Map<LocalPath, string>,
-    contents: string,
-    clientRequestId?: string | null,
+    contentsOrClientRequestId: string,
+    maybeClientRequestId?: string | null,
   ): Promise<WriteResult[]> {
     let files = new Map<LocalPath, string>();
+    let clientRequestId: string | undefined | null;
     if (typeof pathOrFiles === 'string') {
-      files.set(pathOrFiles, contents);
+      files.set(pathOrFiles, contentsOrClientRequestId);
+      clientRequestId = maybeClientRequestId ?? null;
     } else {
       files = pathOrFiles;
+      clientRequestId = contentsOrClientRequestId ?? null;
     }
     await this.indexing();
     let results: WriteResult[] = [];
