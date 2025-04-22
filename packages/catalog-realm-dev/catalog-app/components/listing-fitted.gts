@@ -118,7 +118,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           display: flex;
           align-items: end;
           flex-direction: column;
-          flex-wrap: wrap;
           gap: var(--boxel-sp-sm);
         }
         .card-title {
@@ -144,11 +143,17 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         }
         .card-tags {
           color: var(--boxel-400);
-          font-size: var(--boxel-font-size-sm);
+          font: 500 var(--boxel-font-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          flex: 1 1 auto;
+          overflow: hidden;
         }
         .card-remix-button {
           --boxel-button-font: 600 var(--boxel-font-sm);
           margin-left: auto;
+          flex: 0 0 auto;
         }
       }
 

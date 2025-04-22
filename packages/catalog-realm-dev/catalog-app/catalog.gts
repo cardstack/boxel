@@ -37,6 +37,7 @@ import { CardsGrid } from '../components/grid';
 
 import CatalogLayout from './layouts/catalog-layout';
 
+import BookOpen from '@cardstack/boxel-icons/book-open';
 import LayoutGridPlusIcon from '@cardstack/boxel-icons/layout-grid-plus';
 import {
   Grid3x3 as GridIcon,
@@ -68,63 +69,104 @@ interface ShowcaseViewArgs {
 
 class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
   <template>
-    <div class='showcase-display-container' ...attributes>
-      <CardsDisplaySection class='showcase-cards-display'>
-        <:intro>
-          <div class='intro-title'>
-            <h2>Start Here</h2>
-            <p>The starter stack — Install these first</p>
-          </div>
-          <p class='intro-description'>These are the foundational tools we think
-            every builder should have. Whether you're just exploring or setting
-            up your workspace for serious work, start with these must-haves.</p>
-        </:intro>
-        <:content>
-          <CardsIntancesGrid
-            @cards={{@startHereListings}}
-            @context={{@context}}
-          />
-        </:content>
-      </CardsDisplaySection>
+    <header class='showcase-header'>
+      <BookOpen width='45' height='45' role='presentation' />
+      <h1 class='showcase-header-title'>
+        Boxel Catalog:
+        <br />
+        <span class='showcase-header-highlight'>Discover & Remix the Best</span>
+      </h1>
+      <p class='showcase-header-description'>Curated apps & tools for creators,
+        coders, and curious minds.</p>
+    </header>
 
-      <CardsDisplaySection class='new-this-week-cards-display'>
-        <:intro>
-          <div class='intro-title'>
-            <h2>New this Week</h2>
-            <p>Hand-picked by our editors — What's buzzing right now</p>
-          </div>
-          <p class='intro-description'>These new entries have caught the
-            community's eye, whether for creative flair, clever utility, or just
-            plain polish.</p>
-        </:intro>
-        <:content>
-          <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} />
-        </:content>
-      </CardsDisplaySection>
+    <div class='showcase-center-div' ...attributes>
+      <div class='showcase-display-container'>
+        <CardsDisplaySection class='showcase-cards-display'>
+          <:intro>
+            <h2 class='intro-title'>Starter stack — Begin Here</h2>
+            <p class='intro-description'>These are the foundational tools we
+              think every builder should have. Whether you're just exploring or
+              setting up your workspace for serious work, start with these
+              must-haves.</p>
+          </:intro>
+          <:content>
+            <CardsIntancesGrid
+              @cards={{@startHereListings}}
+              @context={{@context}}
+            />
+          </:content>
+        </CardsDisplaySection>
 
-      <CardsDisplaySection class='featured-cards-display'>
-        <:intro>
-          <div class='intro-title'>
-            <h2>Feature Collection</h2>
-          </div>
-          <p class='intro-description'>A hand-picked duo of focused, flexible
-            tools for personal</p>
-        </:intro>
-        <:content>
-          <CardsIntancesGrid
-            @cards={{@featuredListings}}
-            @context={{@context}}
-          />
-        </:content>
-      </CardsDisplaySection>
+        <CardsDisplaySection class='new-this-week-cards-display'>
+          <:intro>
+            <h2 class='intro-title'>Editor's Picks – What's Hot This Week</h2>
+            <p class='intro-description'>These new entries have caught the
+              community's eye, whether for creative flair, clever utility, or
+              just plain polish.
+            </p>
+          </:intro>
+          <:content>
+            <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} />
+          </:content>
+        </CardsDisplaySection>
+
+        <CardsDisplaySection class='featured-cards-display'>
+          <:intro>
+            <h2 class='intro-title'>Feature Collection – Personal Organization</h2>
+            <p class='intro-description'>A hand-picked duo of focused, flexible
+              tools for personal project management.</p>
+          </:intro>
+          <:content>
+            <CardsIntancesGrid
+              @cards={{@featuredListings}}
+              @context={{@context}}
+            />
+          </:content>
+        </CardsDisplaySection>
+      </div>
     </div>
 
     <style scoped>
-      h2,
-      p {
-        margin-block: 0;
-        margin-bottom: var(--boxel-sp);
+      .showcase-header {
+        padding: var(--boxel-sp-lg);
+        background-color: var(--boxel-light);
+        border-radius: var(--boxel-border-radius);
+        position: relative;
+        overflow: hidden;
       }
+      .showcase-header > * {
+        position: relative;
+        z-index: 1;
+      }
+      .showcase-header-title {
+        font: 600 var(--boxel-font-xl);
+        line-height: 1.2;
+        margin-block: 0;
+        margin-bottom: 1rem;
+      }
+      .showcase-header-description {
+        margin-block: 0;
+        font: 400 var(--boxel-font);
+      }
+      .showcase-header-highlight {
+        background: -webkit-linear-gradient(
+          left,
+          var(--boxel-red) 0%,
+          var(--boxel-purple) 20%,
+          var(--boxel-dark) 100%
+        );
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+      }
+
+      .showcase-center-div {
+        display: table;
+        margin: 0 auto;
+        width: 100%;
+        max-width: 900px;
+      }
+
       .showcase-display-container {
         display: flex;
         flex-direction: column;
@@ -132,34 +174,34 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
         container-name: showcase-display-container;
         container-type: inline-size;
       }
+      .showcase-display-container > * + * {
+        border-top: 1px solid #999999;
+      }
       .showcase-cards-display :deep(.cards),
       .featured-cards-display :deep(.cards) {
-        --grid-view-height: 390px;
+        --grid-view-height: 440px;
         grid-template-columns: repeat(2, 1fr);
       }
       .new-this-week-cards-display :deep(.cards) {
-        --grid-view-height: 270px;
+        --grid-view-height: 320px;
         grid-template-columns: repeat(4, 1fr);
       }
 
       .intro-title {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-      }
-      .intro-title h2 {
-        font: 600 var(--boxel-font-xl);
-      }
-      .intro-title p {
-        font: var(--boxel-font-lg);
-        font-style: italic;
+        font: 600 var(--boxel-font-lg);
+        color: var(--boxel-light);
       }
       .intro-description {
-        font: var(--boxel-font);
+        font: 400 var(--boxel-font);
+        color: var(--boxel-light);
+        margin-bottom: var(--boxel-sp-xl);
       }
 
       @container showcase-display-container (inline-size <= 768px) {
+        .showcase-cards-display :deep(.cards),
+        .featured-cards-display :deep(.cards) {
+          --grid-view-height: 380px;
+        }
         .new-this-week-cards-display :deep(.cards) {
           grid-template-columns: repeat(2, 1fr);
         }
@@ -555,6 +597,15 @@ class Isolated extends Component<typeof Catalog> {
         --layout-sidebar-background-color: var(--boxel-100);
         --layout-content-padding: var(--boxel-sp-xl);
       }
+      /* CSS Varible can't support linear-gradient, so we need to use !important to override the default value */
+      .catalog-layout.showcase {
+        background: linear-gradient(
+          165deg,
+          var(--boxel-red) 0%,
+          var(--boxel-purple) 20%,
+          var(--boxel-dark) 100%
+        ) !important;
+      }
 
       /* Sidebar */
       .sidebar-content {
@@ -573,7 +624,7 @@ class Isolated extends Component<typeof Catalog> {
         container-type: inline-size;
       }
       .content-area-container.showcase {
-        max-width: 800px;
+        max-width: 1200px;
         margin: 0 auto;
       }
 
@@ -644,7 +695,7 @@ export class Catalog extends CardDef {
   static icon = LayoutGridPlusIcon;
   static isolated = Isolated;
   static prefersWideFormat = true;
-  static headerColor = '#00ebac';
+  static headerColor = '#6638ff';
   @field realmName = contains(StringField, {
     computeVia: function (this: Catalog) {
       return this[realmInfo]?.name;
