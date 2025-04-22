@@ -570,7 +570,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
 export class Listing extends CardDef {
   static displayName = 'Listing';
-  static headerColor = '#00ebac';
+  static headerColor = '#6638ff';
   @field name = contains(StringField);
   @field summary = contains(MarkdownField);
   @field specs = linksToMany(() => Spec);
