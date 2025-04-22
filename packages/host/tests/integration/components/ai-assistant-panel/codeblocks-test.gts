@@ -203,8 +203,6 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
-        formatted_body:
-          'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
@@ -225,7 +223,6 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'this is another message',
-        formatted_body: 'this is another message',
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
@@ -254,8 +251,6 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
-        formatted_body:
-          'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
@@ -280,7 +275,6 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'this is another message',
-        formatted_body: 'this is another message',
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
@@ -367,7 +361,6 @@ You can use these in your HTML documents to display formatted text, code snippet
       '@aibot:localhost',
       {
         body: messageWithNestedPreTags,
-        formatted_body: messageWithNestedPreTags,
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
@@ -475,7 +468,6 @@ And another code block without language specified:
       '@aibot:localhost',
       {
         body: messageWithHtmlOutsideBackticks,
-        formatted_body: messageWithHtmlOutsideBackticks,
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
@@ -537,7 +529,6 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
       '@aibot:localhost',
       {
         body: messageWithHtmlInBackticksNoLang,
-        formatted_body: messageWithHtmlInBackticksNoLang,
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
@@ -624,7 +615,6 @@ Above code blocks are now complete`;
       '@aibot:localhost',
       {
         body: messageWithSearchAndReplaceBlock,
-        formatted_body: messageWithSearchAndReplaceBlock,
         msgtype: 'org.text',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,

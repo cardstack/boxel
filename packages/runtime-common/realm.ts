@@ -1231,6 +1231,7 @@ export class Realm {
     let { lastModified } = await this.write(
       localPath,
       JSON.stringify(fileSerialization, null, 2),
+      request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let newURL = fileURL.href.replace(/\.json$/, '');
     let entry = await this.#realmIndexQueryEngine.cardDocument(
@@ -1971,6 +1972,7 @@ export class Realm {
     await api.flushLogs();
     let data: LooseSingleCardDocument = api.serializeCard(card); // this strips out computeds
     delete data.data.id; // the ID is derived from the filename, so we don't serialize it on disk
+    delete data.data.lid;
     delete data.included;
     for (let relationship of Object.values(data.data.relationships ?? {})) {
       delete relationship.data;

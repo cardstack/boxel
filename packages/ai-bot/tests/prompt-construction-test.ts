@@ -20,9 +20,8 @@ import {
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   Tool,
-  CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
-import { EventStatus } from 'matrix-js-sdk';
+import { EventStatus, MatrixClient } from 'matrix-js-sdk';
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import { readFileSync } from 'fs-extra';
 import * as path from 'path';
@@ -65,7 +64,6 @@ module('getModifyPrompt', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           isStreamingFinished: true,
         },
         sender: '@user:localhost',
@@ -78,7 +76,13 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const result = await getModifyPrompt(history, '@ai-bot:localhost');
+    const result = await getModifyPrompt(
+      history,
+      '@ai-bot:localhost',
+      undefined,
+      undefined,
+      {} as MatrixClient,
+    );
 
     // Should have a system prompt and a user prompt
     assert.equal(result.length, 2);
@@ -92,6 +96,7 @@ module('getModifyPrompt', () => {
 
   test('should generate a more structured response if the user uploads a card', async () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '1',
@@ -100,7 +105,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             context: {
               tools: [],
@@ -136,7 +140,13 @@ module('getModifyPrompt', () => {
       },
     ];
 
-    const result = await getModifyPrompt(history, '@ai-bot:localhost');
+    const result = await getModifyPrompt(
+      history,
+      '@ai-bot:localhost',
+      undefined,
+      undefined,
+      {} as MatrixClient,
+    );
 
     // Should include the body as well as the card
     assert.equal(result.length, 2);
@@ -170,7 +180,6 @@ module('getModifyPrompt', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           isStreamingFinished: true,
         },
         sender: '@user:localhost',
@@ -184,7 +193,13 @@ module('getModifyPrompt', () => {
     ];
 
     try {
-      await getModifyPrompt(history, 'ai-bot');
+      await getModifyPrompt(
+        history,
+        'ai-bot',
+        undefined,
+        undefined,
+        {} as MatrixClient,
+      );
       assert.notOk(true, 'should have raised an exception');
     } catch (e) {
       assert.equal(
@@ -196,6 +211,7 @@ module('getModifyPrompt', () => {
 
   test('Gets only the latest version of cards uploaded', () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -203,7 +219,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             attachedCards: [
               {
@@ -249,6 +264,7 @@ module('getModifyPrompt', () => {
         event_id: '1',
         status: EventStatus.SENT,
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -256,7 +272,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
-          formatted_body: 'set the location to home',
           data: {
             attachedCards: [
               {
@@ -331,6 +346,7 @@ module('getModifyPrompt', () => {
 
   test('Safely manages cases with no cards', () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -338,7 +354,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: [],
@@ -356,6 +371,7 @@ module('getModifyPrompt', () => {
         event_id: '1',
         status: EventStatus.SENT,
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -363,7 +379,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
-          formatted_body: 'set the location to home',
           data: {
             context: {
               openCardIds: [],
@@ -389,6 +404,7 @@ module('getModifyPrompt', () => {
 
   test('downloads attached files', async () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '1',
@@ -397,7 +413,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey I am attaching a couple of files',
-          formatted_body: 'Hey I am attaching a couple of files',
           data: {
             context: {
               tools: [],
@@ -434,7 +449,6 @@ module('getModifyPrompt', () => {
         content: {
           body: 'Ok. What do you want me to do with these files?',
           msgtype: 'm.text',
-          formatted_body: 'Ok. What do you want me to do with these files?',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
         },
@@ -447,6 +461,7 @@ module('getModifyPrompt', () => {
         room_id: 'room1',
         status: EventStatus.SENT,
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '1',
@@ -455,8 +470,6 @@ module('getModifyPrompt', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Nevermind, those files are now outdated, I am attaching new ones',
-          formatted_body:
-            'Nevermind, those files are now outdated, I am attaching new ones',
           data: {
             context: {
               tools: [],
@@ -535,7 +548,7 @@ module('getModifyPrompt', () => {
       '@aibot:localhost',
       undefined,
       undefined,
-      { getAccessToken: () => 'fake-access-token' },
+      { getAccessToken: () => 'fake-access-token' } as MatrixClient,
     );
 
     assert.equal(
@@ -560,6 +573,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
 
   test('Gets uploaded cards if no shared context', () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '1',
@@ -568,7 +582,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -610,6 +623,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
 
   test('Gets multiple uploaded cards', () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '1',
@@ -618,7 +632,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -653,6 +666,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         },
         status: EventStatus.SENT,
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '2',
@@ -661,7 +675,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -703,6 +716,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
 
   test('Gets multiple uploaded cards in the system prompt', async () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '1',
@@ -711,7 +725,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -746,6 +759,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         },
         status: EventStatus.SENT,
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '2',
@@ -754,7 +768,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             attachedCards: [
               {
@@ -790,7 +803,13 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         status: EventStatus.SENT,
       },
     ];
-    const fullPrompt = await getModifyPrompt(history, '@aibot:localhost');
+    const fullPrompt = await getModifyPrompt(
+      history,
+      '@aibot:localhost',
+      undefined,
+      undefined,
+      {} as MatrixClient,
+    );
     const systemMessage = fullPrompt.find(
       (message) => message.role === 'system',
     );
@@ -808,6 +827,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
 
   test('If a user stops sharing their context keep it in the system prompt', () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -815,7 +835,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             attachedCards: [
               {
@@ -867,7 +886,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         sender: '@ian:localhost',
         content: {
           body: 'Just a regular message',
-          formatted_body: 'Just a regular message',
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
@@ -889,15 +907,11 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
     assert.equal(attachedCards.length, 1);
     assert.equal(
       attachedCards[0],
-      (history[0].content as CardMessageContent).data.attachedCards?.[0][
-        'data'
-      ],
+      (history[0].content as { data: any }).data.attachedCards?.[0]['data'],
     );
     assert.equal(
       mostRecentlyAttachedCard,
-      (history[0].content as CardMessageContent).data.attachedCards?.[0][
-        'data'
-      ],
+      (history[0].content as { data: any }).data.attachedCards?.[0]['data'],
     );
   });
 
@@ -910,9 +924,9 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
+              // @ts-expect-error old format
               openCards: [
                 {
                   data: {
@@ -999,6 +1013,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
 
   test('Create patch function calls when there is a cardSpec', () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -1006,7 +1021,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
@@ -1080,6 +1094,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
 
   test('Adds the "unable to edit cards" only if there are attached cards and no tools', async () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -1087,7 +1102,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/drafts/Author/1'],
@@ -1134,26 +1148,27 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         ...event,
         content: {
           ...event.content,
-          data: JSON.stringify(event.content.data),
+          data: JSON.stringify((event.content as { data: any }).data),
         },
-      }));
+      })) as DiscreteMatrixEvent[];
     };
 
     const { messages } = await getPromptParts(
       historyWithStringifiedData(history),
       '@aibot:localhost',
+      {} as MatrixClient,
     );
 
     let nonEditableCardsMessage =
       'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
 
     assert.ok(
-      messages[0].content.includes(nonEditableCardsMessage),
+      messages![0].content!.includes(nonEditableCardsMessage),
       'System message should include the "unable to edit cards" message when there are attached cards and no tools, and no attached files',
     );
 
     // Now add a tool
-    history[0].content.data.context.tools = [
+    (history[0].content as { data: any }).data.context.tools = [
       getPatchTool('http://localhost:4201/drafts/Author/1', {
         attributes: { firstName: { type: 'string' } },
       }),
@@ -1162,17 +1177,18 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
     const { messages: messages2 } = await getPromptParts(
       historyWithStringifiedData(history),
       '@aibot:localhost',
+      {} as MatrixClient,
     );
 
     assert.ok(
-      !messages2[0].content.includes(nonEditableCardsMessage),
+      !messages2![0].content!.includes(nonEditableCardsMessage),
       'System message should not include the "unable to edit cards" message when there are attached cards and a tool',
     );
 
     // Now remove cards, tools, and add an attached file
-    history[0].content.data.context.openCardIds = [];
-    history[0].content.data.context.tools = [];
-    history[0].content.data.attachedFiles = [
+    (history[0].content as { data: any }).data.context.openCardIds = [];
+    (history[0].content as { data: any }).data.context.tools = [];
+    (history[0].content as { data: any }).data.attachedFiles = [
       {
         url: 'https://example.com/file.txt',
         sourceUrl: 'https://example.com/file.txt',
@@ -1185,16 +1201,18 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
     const { messages: messages3 } = await getPromptParts(
       historyWithStringifiedData(history),
       '@aibot:localhost',
+      {} as MatrixClient,
     );
 
     assert.ok(
-      !messages3[0].content.includes(nonEditableCardsMessage),
+      !messages3![0].content!.includes(nonEditableCardsMessage),
       'System message should not include the "unable to edit cards" message when there is an attached file',
     );
   });
 
   test('Gets only the latest functions', () => {
     const history: DiscreteMatrixEvent[] = [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -1202,7 +1220,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the name to dave',
-          formatted_body: '<p>set the name to dave</p>\n',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
@@ -1226,6 +1243,7 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         event_id: '1',
         status: EventStatus.SENT,
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -1233,7 +1251,6 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'set the location to home',
-          formatted_body: 'set the location to home',
           data: {
             context: {
               openCardIds: ['http://localhost:4201/experiments/Meeting/2'],
@@ -1315,8 +1332,9 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
       ),
     );
 
-    const result = (await getPromptParts(eventList, '@ai-bot:localhost'))
-      .messages!;
+    const result = (
+      await getPromptParts(eventList, '@ai-bot:localhost', {} as MatrixClient)
+    ).messages!;
     assert.equal(result.length, 2);
     assert.equal(result[0].role, 'system');
     assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
@@ -1344,24 +1362,27 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
       ),
     );
 
-    const result = (await getPromptParts(eventList, '@ai-bot:localhost'))
-      .messages;
+    const result = (
+      await getPromptParts(eventList, '@ai-bot:localhost', {} as MatrixClient)
+    ).messages;
 
     const { attachedCards } = getRelevantCards(eventList, '@ai-bot:localhost');
     assert.equal(attachedCards.length, 1);
 
-    assert.equal(result[0].role, 'system');
-    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.equal(result?.[0]?.role, 'system');
+    assert.true(result?.[0]?.content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      result[0].content?.includes(
+      result?.[0]?.content?.includes(
         'If the user wants the data they see edited, AND the patchCard function is available',
       ),
     );
     assert.true(
-      result[0].content?.includes('Use pirate colloquialism when responding.'),
+      result?.[0]?.content?.includes(
+        'Use pirate colloquialism when responding.',
+      ),
     );
     assert.true(
-      result[0].content?.includes(
+      result?.[0]?.content?.includes(
         'attributes":{"appTitle":"Radio Episode Tracker for Nerds"',
       ),
     );
@@ -1377,13 +1398,17 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         'utf-8',
       ),
     );
-    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
-    assert.true(messages.length > 0);
-    assert.true(messages[0].role === 'system');
-    let systemPrompt = messages[0].content;
-    assert.true(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(systemPrompt?.includes('SKILL_1'));
-    assert.true(systemPrompt?.includes('SKILL_2'));
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      {} as MatrixClient,
+    );
+    assert.true(messages!.length > 0);
+    assert.true(messages![0]!.role === 'system');
+    let systemPrompt = messages![0]!.content;
+    assert.true(systemPrompt!.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(systemPrompt!.includes('SKILL_1'));
+    assert.true(systemPrompt!.includes('SKILL_2'));
   });
 
   test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
@@ -1396,13 +1421,17 @@ file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 4
         'utf-8',
       ),
     );
-    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
-    assert.true(messages.length > 0);
-    assert.true(messages[0].role === 'system');
-    let systemPrompt = messages[0].content;
-    assert.false(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(systemPrompt?.includes('SKILL_1'));
-    assert.false(systemPrompt?.includes('SKILL_2'));
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      {} as MatrixClient,
+    );
+    assert.true(messages!.length > 0);
+    assert.true(messages![0]!.role === 'system');
+    let systemPrompt = messages![0]!.content;
+    assert.false(systemPrompt!.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(systemPrompt!.includes('SKILL_1'));
+    assert.false(systemPrompt!.includes('SKILL_2'));
   });
 });
 
@@ -1416,11 +1445,15 @@ test('should support skill cards without ids', async () => {
       'utf-8',
     ),
   );
-  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
-  assert.equal(messages.length, 2);
-  assert.equal(messages[0].role, 'system');
-  assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-  assert.true(messages[0].content?.includes('Skill Instructions'));
+  const { messages } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
+  assert.equal(messages!.length, 2);
+  assert.equal(messages![0]!.role, 'system');
+  assert.true(messages![0]!.content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+  assert.true(messages![0]!.content?.includes('Skill Instructions'));
 });
 
 test('Has the skill card specified by the last state update, even if there are other skill cards with the same id', async () => {
@@ -1433,12 +1466,16 @@ test('Has the skill card specified by the last state update, even if there are o
       'utf-8',
     ),
   );
-  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
-  assert.true(messages.length > 0);
-  assert.equal(messages[0].role, 'system');
-  assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-  assert.false(messages[0].content?.includes('SKILL_INSTRUCTIONS_V1'));
-  assert.true(messages[0].content?.includes('SKILL_INSTRUCTIONS_V2'));
+  const { messages } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
+  assert.true(messages!.length > 0);
+  assert.equal(messages![0]!.role, 'system');
+  assert.true(messages![0]!.content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+  assert.false(messages![0]!.content?.includes('SKILL_INSTRUCTIONS_V1'));
+  assert.true(messages![0]!.content?.includes('SKILL_INSTRUCTIONS_V2'));
 });
 
 test('if tool calls are required, ensure they are set', async () => {
@@ -1452,10 +1489,11 @@ test('if tool calls are required, ensure they are set', async () => {
   const { messages, tools, toolChoice } = await getPromptParts(
     eventList,
     '@ai-bot:localhost',
+    {} as MatrixClient,
   );
-  assert.equal(messages.length, 2);
-  assert.equal(messages[1].role, 'user');
-  assert.true(tools.length === 1);
+  assert.equal(messages!.length, 2);
+  assert.equal(messages![1]!.role, 'user');
+  assert.true(tools!.length === 1);
   assert.deepEqual(toolChoice, {
     type: 'function',
     function: {
@@ -1466,6 +1504,7 @@ test('if tool calls are required, ensure they are set', async () => {
 
 test('Return host result of tool call back to open ai', async () => {
   const history: DiscreteMatrixEvent[] = [
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     {
       type: 'm.room.message',
       room_id: 'room-id-1',
@@ -1474,7 +1513,6 @@ test('Return host result of tool call back to open ai', async () => {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'search for the following card instances',
         format: 'org.matrix.custom.html',
-        formatted_body: '<p>search for the following card instances</p>\n',
         clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
@@ -1588,8 +1626,6 @@ test('Return host result of tool call back to open ai', async () => {
       content: {
         body: 'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
         msgtype: 'm.text',
-        formatted_body:
-          'It looks like you want to search for card instances based on the "Author" card you provided. Just for clarity, would you like to search for more cards based on the "Author" module type or something else specific?\n\nFor example, do you want to find all card instances of type "Author" or a different type of card/module?',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
         'm.relates_to': {
@@ -1605,6 +1641,7 @@ test('Return host result of tool call back to open ai', async () => {
       event_id: 'message-event-id-1',
       status: EventStatus.SENT,
     },
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     {
       type: 'm.room.message',
       room_id: 'room-id-1',
@@ -1613,7 +1650,6 @@ test('Return host result of tool call back to open ai', async () => {
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         body: 'yes module type',
         format: 'org.matrix.custom.html',
-        formatted_body: '<p>yes module type</p>\n',
         clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
         data: {
           attachedCardsEventIds: ['attched-card-event-id'],
@@ -1743,6 +1779,7 @@ test('Return host result of tool call back to open ai', async () => {
       event_id: '$FO2XfB0xFiTpm5FmOUiWQqFh_DPQSr4zix41Vj3eqNc',
       status: EventStatus.SENT,
     },
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     {
       type: 'm.room.message',
       room_id: 'room-id-1',
@@ -1750,7 +1787,6 @@ test('Return host result of tool call back to open ai', async () => {
       content: {
         body: "Search for card instances of type 'Author'",
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        formatted_body: "Search for card instances of type 'Author'",
         format: 'org.matrix.custom.html',
         [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
           {
@@ -1767,6 +1803,47 @@ test('Return host result of tool call back to open ai', async () => {
             },
           },
         ],
+        data: {
+          context: {
+            tools: [],
+            submode: undefined,
+          },
+          cardEventId: 'command-event-id-1',
+          card: {
+            data: {
+              type: 'card',
+              attributes: {
+                title: 'Search Results',
+                description: 'Here are the search results',
+                results: [
+                  {
+                    data: {
+                      type: 'card',
+                      id: 'http://localhost:4201/drafts/Author/1',
+                      attributes: {
+                        firstName: 'Alice',
+                        lastName: 'Enwunder',
+                        photo: null,
+                        body: 'Alice is a software engineer at Google.',
+                        description: null,
+                        thumbnailURL: null,
+                      },
+                      meta: {
+                        adoptsFrom: { module: '../author', name: 'Author' },
+                      },
+                    },
+                  },
+                ],
+              },
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/search-results',
+                  name: 'SearchResults',
+                },
+              },
+            },
+          },
+        },
       },
       origin_server_ts: 1722242849094,
       unsigned: {
@@ -1776,6 +1853,7 @@ test('Return host result of tool call back to open ai', async () => {
       event_id: 'command-event-id-1',
       status: EventStatus.SENT,
     },
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     {
       type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
       room_id: 'room-id-1',
@@ -1835,7 +1913,13 @@ test('Return host result of tool call back to open ai', async () => {
     },
   ];
   const tools = getTools(history, [], '@ai-bot:localhost');
-  const result = await getModifyPrompt(history, '@ai-bot:localhost', tools);
+  const result = await getModifyPrompt(
+    history,
+    '@ai-bot:localhost',
+    tools,
+    [],
+    {} as MatrixClient,
+  );
   assert.equal(result[5].role, 'tool');
   assert.equal(result[5].tool_call_id, 'tool-call-id-1');
   const expected = `Command applied, with result card: {"data":{"type":"card","attributes":{"title":"Search Results","description":"Here are the search results","results":[{"data":{"type":"card","id":"http://localhost:4201/drafts/Author/1","attributes":{"firstName":"Alice","lastName":"Enwunder","photo":null,"body":"Alice is a software engineer at Google.","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}]},"meta":{"adoptsFrom":{"module":"https://cardstack.com/base/search-results","name":"SearchResults"}}}}.`;
@@ -1857,12 +1941,13 @@ test('Tools remain available in prompt parts even when not in last message', asy
   const { messages, tools } = await getPromptParts(
     eventList,
     '@aibot:localhost',
+    {} as MatrixClient,
   );
-  assert.true(tools.length > 0, 'Should have tools available');
-  assert.true(messages.length > 0, 'Should have messages');
+  assert.true(tools!.length > 0, 'Should have tools available');
+  assert.true(messages!.length > 0, 'Should have messages');
 
   // Verify that the tools array contains the expected functions
-  const alertTool = tools.find(
+  const alertTool = tools!.find(
     (tool) => tool.function?.name === 'AlertTheUser_pcDFLKJ9auSJQfSovb3LT2',
   );
   assert.ok(alertTool, 'Should have AlertTheUser function available');
@@ -1879,7 +1964,11 @@ test('Tools are not required unless they are in the last message', async () => {
     ),
   );
 
-  const { toolChoice } = await getPromptParts(eventList, '@aibot:localhost');
+  const { toolChoice } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
   assert.equal(toolChoice, 'auto');
 });
 
@@ -1894,7 +1983,11 @@ test('Tools can be required to be called if done so in the last message', async 
     ),
   );
 
-  const { toolChoice } = await getPromptParts(eventList, '@aibot:localhost');
+  const { toolChoice } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
   assert.deepEqual(toolChoice, {
     type: 'function',
     function: {
@@ -1914,7 +2007,11 @@ test('Tools calls are connected to their results', async () => {
     ),
   );
 
-  const { messages } = await getPromptParts(eventList, '@aibot:localhost');
+  const { messages } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
   // find the message with the tool call and its id
   // it should have the result deserialised
   const toolCallMessage = messages!.find((message) => message.role === 'tool');
@@ -1933,7 +2030,11 @@ test('Does not respond to first tool call result when two tool calls were made',
     ),
   );
 
-  const { shouldRespond } = await getPromptParts(eventList, '@aibot:localhost');
+  const { shouldRespond } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
   assert.strictEqual(
     shouldRespond,
     false,
@@ -1952,6 +2053,7 @@ test('Responds to second tool call result when two tool calls were made', async 
   const { shouldRespond, messages } = await getPromptParts(
     eventList,
     '@aibot:localhost',
+    {} as MatrixClient,
   );
   assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
   // tool call results should be deserialised
@@ -1977,14 +2079,19 @@ test('Tools on enabled skills are available in prompt', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/enabled-skill-with-commands.json'),
+      'utf-8',
     ),
   );
 
-  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
-  assert.true(tools.length > 0, 'Should have tools available');
+  const { tools } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
+  assert.true(tools!.length > 0, 'Should have tools available');
 
   // Verify that the tools array contains the command from the skill
-  const switchSubmodeTool = tools.find(
+  const switchSubmodeTool = tools!.find(
     (tool) => tool.function?.name === 'switch-submode_dd88',
   );
   assert.ok(
@@ -1997,12 +2104,17 @@ test('No tools are available if skill is not enabled', async () => {
   const eventList: DiscreteMatrixEvent[] = JSON.parse(
     readFileSync(
       path.join(__dirname, 'resources/chats/disabled-skill-with-commands.json'),
+      'utf-8',
     ),
   );
 
-  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
+  const { tools } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
   // we should not have any tools available
-  assert.true(tools.length == 0, 'Should not have tools available');
+  assert.true(tools!.length == 0, 'Should not have tools available');
 });
 
 test('Uses updated command definitions when skill card is updated', async () => {
@@ -2012,14 +2124,19 @@ test('Uses updated command definitions when skill card is updated', async () => 
         __dirname,
         'resources/chats/updated-skill-command-definitions.json',
       ),
+      'utf-8',
     ),
   );
 
-  const { tools } = await getPromptParts(eventList, '@aibot:localhost');
-  assert.true(tools.length > 0, 'Should have tools available');
+  const { tools } = await getPromptParts(
+    eventList,
+    '@aibot:localhost',
+    {} as MatrixClient,
+  );
+  assert.true(tools!.length > 0, 'Should have tools available');
 
   // Verify that the tools array contains the updated command definition
-  const updatedCommandTool = tools.find(
+  const updatedCommandTool = tools!.find(
     (tool) => tool.function?.name === 'switch-submode_dd88',
   );
   assert.ok(
@@ -2029,11 +2146,15 @@ test('Uses updated command definitions when skill card is updated', async () => 
 
   // Verify updated properties are present (description indicates V2)
   assert.true(
-    updatedCommandTool.function?.description.includes('COMMAND_DESCRIPTION_V2'),
+    updatedCommandTool!.function?.description.includes(
+      'COMMAND_DESCRIPTION_V2',
+    ),
     'Should use updated command description',
   );
   assert.false(
-    updatedCommandTool.function?.description.includes('COMMAND_DESCRIPTION_V1'),
+    updatedCommandTool!.function?.description.includes(
+      'COMMAND_DESCRIPTION_V1',
+    ),
     'Should not include old command description',
   );
 });
@@ -2050,7 +2171,11 @@ module('set model in prompt', () => {
       ),
     );
 
-    const { model } = await getPromptParts(eventList, '@aibot:localhost');
+    const { model } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      {} as MatrixClient,
+    );
     assert.strictEqual(model, DEFAULT_LLM);
   });
 
@@ -2062,7 +2187,11 @@ module('set model in prompt', () => {
       ),
     );
 
-    const { model } = await getPromptParts(eventList, '@aibot:localhost');
+    const { model } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      {} as MatrixClient,
+    );
     assert.strictEqual(model, 'google/gemini-pro-1.5');
   });
 });

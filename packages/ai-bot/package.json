@@ -1,9 +1,9 @@
 {
   "name": "@cardstack/ai-bot",
   "dependencies": {
-    "@cardstack/runtime-common": "workspace:*",
-    "@cardstack/postgres": "workspace:*",
     "@cardstack/billing": "workspace:*",
+    "@cardstack/postgres": "workspace:*",
+    "@cardstack/runtime-common": "workspace:*",
     "@sentry/node": "^8.31.0",
     "@types/lodash": "^4.17.15",
     "@types/node": "^18.18.5",
@@ -15,19 +15,24 @@
     "qunit": "^2.18.0",
     "stream-chain": "^2.2.5",
     "stream-json": "^1.8.0",
-    "ts-node": "^10.9.1",
-    "typescript": "~5.1.6"
+    "ts-node": "^10.9.2",
+    "typescript": "~5.8.3"
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "^11.2.2",
     "@types/fs-extra": "~11.0.4",
     "@types/qunit": "^2.19.12",
     "@types/sinonjs__fake-timers": "^8.1.5",
+    "concurrently": "^8.0.1",
     "fs-extra": "~11.3.0",
     "qunit": "^2.18.0"
   },
   "scripts": {
-    "lint": "eslint . --cache --ext ts",
+    "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
+    "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
+    "lint:js": "eslint . --cache",
+    "lint:js:fix": "eslint . --fix",
+    "lint:glint": "glint",
     "start": "NODE_NO_WARNINGS=1 ts-node --transpileOnly main",
     "start:development": "NODE_NO_WARNINGS=1 PGDATABASE=boxel PGPORT=5435 ts-node --transpileOnly main",
     "test": "NODE_NO_WARNINGS=1 qunit --require ts-node/register/transpile-only tests/index.ts",

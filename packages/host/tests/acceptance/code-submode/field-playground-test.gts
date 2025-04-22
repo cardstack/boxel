@@ -1106,7 +1106,7 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         },
       }));
       assert.strictEqual(matching.length, 1);
-      assert.ok(matching[0].id.startsWith(`${additionalRealmURL}Spec/`));
+      assert.ok(matching[0].id!.startsWith(`${additionalRealmURL}Spec/`));
 
       // TODO: Bug: spec panel does not show the newly created spec
       // await toggleSpecPanel();
