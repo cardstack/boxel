@@ -1,7 +1,7 @@
 FROM node:20.19.1-slim
 ARG CI=1
 RUN apt-get update && apt-get install -y postgresql
-RUN npm install -g pnpm@8.10.5
+RUN npm install -g pnpm@10.19.0
 WORKDIR /boxel
 COPY . .
 RUN pnpm install --frozen-lockfile
