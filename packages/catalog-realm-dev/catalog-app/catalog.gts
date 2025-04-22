@@ -135,20 +135,6 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
         position: relative;
         overflow: hidden;
       }
-      .showcase-header::after {
-        content: '';
-        position: absolute;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        left: 0;
-        background:
-          linear-gradient(to right, var(--boxel-light), transparent),
-          url('https://i.imgur.com/qaRVBfW.png') no-repeat right;
-        background-size: cover;
-        pointer-events: none;
-        z-index: 0;
-      }
       .showcase-header > * {
         position: relative;
         z-index: 1;
