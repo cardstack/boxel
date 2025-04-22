@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "boom": {
+        "title": null
+      },
+      "title": "Bam Bam",
+      "description": "",
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../boom-pet",
+        "name": "BoomPet"
+      }
+    }
+  }
+}

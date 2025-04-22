@@ -31,7 +31,6 @@
       "msgtype": "app.boxel.cardFragment",
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
-      "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/test-skill\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Test skill instructions\\\",\\\"title\\\":\\\"Test Skill\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
     "origin_server_ts": 1722374020000,
@@ -80,7 +79,6 @@
       "msgtype": "app.boxel.cardFragment",
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
-      "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/test-skill\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Test skill instructions with updated commands\\\",\\\"commands\\\":[{\\\"codeRef\\\":{\\\"name\\\":\\\"default\\\",\\\"module\\\":\\\"@cardstack/boxel-host/commands/switch-submode\\\"},\\\"requiresApproval\\\":false,\\\"functionName\\\":\\\"switch-submode_dd88\\\"}],\\\"title\\\":\\\"Test Skill\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
     "origin_server_ts": 1722374060000,

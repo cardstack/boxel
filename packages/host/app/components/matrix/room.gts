@@ -637,7 +637,7 @@ export default class Room extends Component<Signature> {
     let myLastMessage = myMessages[myMessages.length - 1];
 
     this.doSendMessage.perform(
-      myLastMessage.message,
+      myLastMessage.body,
       myLastMessage!.attachedCardIds || [],
       myLastMessage.attachedFiles,
       true,

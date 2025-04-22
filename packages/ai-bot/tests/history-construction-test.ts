@@ -97,7 +97,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         sender: 'John',
         room_id: 'room1',
@@ -128,7 +127,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         room_id: 'room1',
         unsigned: {
@@ -145,7 +143,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'yo',
-          formatted_body: 'yo',
         },
         room_id: 'room1',
         unsigned: {
@@ -162,7 +159,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
-          formatted_body: 'hola',
         },
         room_id: 'room1',
         unsigned: {
@@ -188,7 +184,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         room_id: 'room1',
         unsigned: {
@@ -205,7 +200,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
-          formatted_body: 'hola',
         },
         room_id: 'room1',
         unsigned: {
@@ -222,7 +216,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'yo',
-          formatted_body: 'yo',
         },
         room_id: 'room1',
         unsigned: {
@@ -251,7 +244,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'yo',
-          formatted_body: 'yo',
         },
         sender: 'user1',
         origin_server_ts: 1629876543210,
@@ -268,7 +260,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         sender: 'user2',
         origin_server_ts: 1629876543220,
@@ -285,7 +276,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         sender: 'user3',
         origin_server_ts: 1629876543230,
@@ -307,7 +297,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
-          formatted_body: 'hola',
         },
         sender: 'user3',
         origin_server_ts: 1629876543240,
@@ -324,7 +313,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'aloha',
-          formatted_body: 'aloha',
         },
         sender: 'user5',
         origin_server_ts: 1629876543250,
@@ -346,7 +334,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         sender: 'user2',
         origin_server_ts: 1629876543220,
@@ -367,7 +354,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
-          formatted_body: 'hola',
         },
         sender: 'user3',
         origin_server_ts: 1629876543240,
@@ -384,7 +370,6 @@ module('constructHistory', (hooks) => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'aloha',
-          formatted_body: 'aloha',
         },
         sender: 'user5',
         origin_server_ts: 1629876543250,
@@ -409,7 +394,6 @@ module('constructHistory', (hooks) => {
         content: {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
-          formatted_body: '',
           body: '',
           data: JSON.stringify({
             cardFragment: `ry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
@@ -431,7 +415,6 @@ module('constructHistory', (hooks) => {
         content: {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
-          formatted_body: '',
           body: '',
           data: JSON.stringify({
             cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Ter`,
@@ -454,7 +437,6 @@ module('constructHistory', (hooks) => {
         content: {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
-          formatted_body: '',
           body: '',
           data: JSON.stringify({
             cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Mango","lastName":"Abdel-Rahman"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
@@ -477,7 +459,6 @@ module('constructHistory', (hooks) => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: JSON.stringify({
             context: {
               functions: [],
@@ -510,7 +491,6 @@ module('constructHistory', (hooks) => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             context: {
               functions: [],
@@ -579,7 +559,6 @@ module('constructHistory', (hooks) => {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
           body: 'card fragment 1 of 1',
-          formatted_body: 'card fragment 1 of 1',
           // data should be a JSON string
           data: {
             cardFragment:
