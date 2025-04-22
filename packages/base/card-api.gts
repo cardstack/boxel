@@ -980,23 +980,23 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     if (isLocalResourceID(value.data)) {
       throw new Error(`lid is not supported in deserialization`);
     }
-    if (!value.data?.id) {
-      throw new Error('linksTo field deserialization requires a data.id');
-    }
     if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
-    let cachedInstance = identityContext.get(value.data.id);
-    if (cachedInstance) {
-      cachedInstance[isSavedInstance] = true;
-      return cachedInstance as BaseInstanceType<CardT>;
+    let cachedInstance: CardDef | undefined;
+    if (value.data?.id) {
+      cachedInstance = identityContext.get(value.data.id);
+      if (cachedInstance) {
+        cachedInstance[isSavedInstance] = true;
+        return cachedInstance as BaseInstanceType<CardT>;
+      }
     }
     //links.self is used to tell the consumer of this payload how to get the resource via HTTP. data.id is used to tell the
     //consumer of this payload how to get the resource from the side loaded included bucket. we need to strictly only
     //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
     //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
     //that means that the serialization is incorrect and is not JSON-API compliant.
-    let resource = resourceFrom(doc, value.data.id);
+    let resource = resourceFrom(doc, value.data?.id);
     if (!resource) {
       if (loadedValue !== undefined) {
         return loadedValue;
