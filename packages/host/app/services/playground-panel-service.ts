@@ -33,6 +33,10 @@ export default class PlaygroundPanelService extends Service {
     fieldIndex: number | undefined,
   ) => {
     this.playgroundSelections[moduleId] = { cardId, format, fieldIndex };
+    this.setStorage();
+  };
+
+  setStorage = () => {
     window.localStorage.setItem(
       PlaygroundSelections,
       JSON.stringify(this.playgroundSelections),
@@ -41,5 +45,15 @@ export default class PlaygroundPanelService extends Service {
 
   getSelection = (moduleId: string) => {
     return this.playgroundSelections[moduleId];
+  };
+
+  removeSelectionsByCardId = (cardId: string) => {
+    let foundItems = Object.entries(this.playgroundSelections).filter(
+      ([_key, val]) => val.cardId === cardId,
+    );
+    if (foundItems.length) {
+      foundItems.map((item) => delete this.playgroundSelections[item[0]]);
+      this.setStorage();
+    }
   };
 }

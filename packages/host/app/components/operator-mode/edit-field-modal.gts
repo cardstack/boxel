@@ -23,7 +23,7 @@ import { bool, cssVar } from '@cardstack/boxel-ui/helpers';
 
 import {
   chooseCard,
-  loadCard,
+  loadCardDef,
   identifyCard,
   specRef,
   CodeRef,
@@ -128,7 +128,7 @@ export default class EditFieldModal extends Component<Signature> {
       this.isFieldDef = true;
 
       try {
-        this.fieldCard = await loadCard(ref, {
+        this.fieldCard = await loadCardDef(ref, {
           loader: this.loaderService.loader,
         });
       } catch (error) {
@@ -158,7 +158,7 @@ export default class EditFieldModal extends Component<Signature> {
       ref = fieldCardType as typeof ref;
     }
 
-    this.fieldCard = await loadCard(ref, {
+    this.fieldCard = await loadCardDef(ref, {
       loader: this.loaderService.loader,
     });
 
@@ -184,7 +184,7 @@ export default class EditFieldModal extends Component<Signature> {
     if (specId) {
       let spec = await this.store.get<Spec>(specId);
       if (spec && isCardInstance<Spec>(spec)) {
-        this.fieldCard = await loadCard(spec.ref, {
+        this.fieldCard = await loadCardDef(spec.ref, {
           loader: this.loaderService.loader,
           relativeTo: new URL(specId),
         });

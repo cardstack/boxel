@@ -489,6 +489,10 @@ export class RoomResource extends Resource<Args> {
   private getEffectiveEventId(
     event: MessageEvent | CardMessageEvent | CommandResultEvent,
   ) {
+    if (!('m.relates_to' in event.content)) {
+      return event.event_id;
+    }
+
     return event.content['m.relates_to']?.rel_type === 'm.replace' ||
       event.content['m.relates_to']?.rel_type ===
         APP_BOXEL_COMMAND_RESULT_REL_TYPE

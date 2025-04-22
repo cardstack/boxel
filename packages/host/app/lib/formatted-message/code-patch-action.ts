@@ -45,7 +45,11 @@ export class CodePatchAction {
           codeBlock: this.searchReplaceBlock,
         });
 
-      await this.cardService.saveSource(new URL(this.fileUrl), patchedCode);
+      await this.cardService.saveSource(
+        new URL(this.fileUrl),
+        patchedCode,
+        'bot-patch',
+      );
 
       this.patchCodeTaskState = 'applied';
     } catch (error) {

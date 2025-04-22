@@ -23,9 +23,11 @@ import {
   isCardCollectionDocument,
   Deferred,
   delay,
+  isCardError,
   mergeRelationships,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
+  logger,
   type Store as StoreInterface,
   type Query,
   type PatchData,
@@ -35,8 +37,9 @@ import {
   type SingleCardDocument,
   type LooseSingleCardDocument,
   type LooseCardResource,
-  type CardErrorJSONAPI as CardError,
-  type CardErrorsJSONAPI as CardErrors,
+  type CardError,
+  type CardErrorJSONAPI,
+  type CardErrorsJSONAPI,
 } from '@cardstack/runtime-common';
 
 import {
@@ -62,9 +65,11 @@ import type MessageService from './message-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
-export { CardError, CardSaveSubscriber };
+export { CardErrorJSONAPI, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
+
+const realmEventsLogger = logger('realm:events');
 
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
@@ -80,7 +85,8 @@ export default class StoreService extends Service implements StoreInterface {
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
-  private inflightCards: Map<string, Promise<CardDef | CardError>> = new Map();
+  private inflightCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
+    new Map();
   private identityContext = new IdentityContext(this.referenceCount);
 
   // This is used for tests
@@ -175,7 +181,7 @@ export default class StoreService extends Service implements StoreInterface {
     doc: LooseSingleCardDocument,
     relativeTo: URL | undefined,
     realm?: string,
-  ): Promise<string | CardError> {
+  ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let cardOrError = await this.getInstance({
         urlOrDoc: doc,
@@ -230,11 +236,11 @@ export default class StoreService extends Service implements StoreInterface {
     return instance;
   }
 
-  peek<T extends CardDef>(id: string): T | CardError | undefined {
+  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
     return this.identityContext.getInstanceOrError(id) as T | undefined;
   }
 
-  async get<T extends CardDef>(id: string): Promise<T | CardError> {
+  async get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI> {
     return await this.getInstance<T>({ urlOrDoc: id });
   }
 
@@ -475,24 +481,45 @@ export default class StoreService extends Service implements StoreInterface {
       }
       let instance = this.identityContext.get(invalidation);
       if (instance) {
-        // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
-        // the inputs with past values. This can happen if the user makes edits in the time between the auto
-        // save request and the arrival realm event.
-        if (
-          !event.clientRequestId ||
-          !this.cardService.clientRequestIds.has(event.clientRequestId)
-        ) {
-          this.reloadTask.perform(instance);
-        } else {
-          if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
-            console.debug(
-              'ignoring invalidation for card because clientRequestId is ours',
-              event,
+        // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
+        // overwriting the inputs with past values. This can happen if the user makes edits in the time between
+        // the auto save request and the arrival realm event.
+
+        let clientRequestId = event.clientRequestId;
+        let reloadFile = false;
+
+        if (!clientRequestId) {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${invalidation} because event has no clientRequestId`,
+          );
+        } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
+          if (clientRequestId.startsWith('instance:')) {
+            realmEventsLogger.debug(
+              `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+            );
+          } else {
+            reloadFile = true;
+            realmEventsLogger.debug(
+              `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
             );
           }
+        } else {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
+            Array.from(this.cardService.clientRequestIds.values()),
+          );
+        }
+
+        if (reloadFile) {
+          this.reloadTask.perform(instance);
         }
       } else if (!this.identityContext.get(invalidation)) {
         // load the card using just the ID because we don't have a running card on hand
+        realmEventsLogger.debug(
+          `reloading file resource ${invalidation} because it is not found in the identity context`,
+        );
         this.loadInstanceTask.perform(invalidation);
       }
     }
@@ -514,7 +541,7 @@ export default class StoreService extends Service implements StoreInterface {
   );
 
   private reloadTask = task(async (instance: CardDef) => {
-    let maybeReloadedInstance: CardDef | CardError | undefined;
+    let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
     let isDelete = false;
     try {
       await this.reloadInstance(instance);
@@ -555,7 +582,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async trackSavedInstance(
     operation: 'start-tracking' | 'stop-tracking',
-    instanceOrError: CardDef | CardError,
+    instanceOrError: CardDef | CardErrorJSONAPI,
   ) {
     if (!instanceOrError.id) {
       return;
@@ -601,14 +628,14 @@ export default class StoreService extends Service implements StoreInterface {
     realm?: string; // used for new cards
     opts?: { noCache?: boolean };
   }) {
-    let deferred: Deferred<CardDef | CardError> | undefined;
+    let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
     let url = asURL(urlOrDoc);
     if (url) {
       let working = this.inflightCards.get(url);
       if (working) {
         return working as Promise<T>;
       }
-      deferred = new Deferred<CardDef | CardError>();
+      deferred = new Deferred<CardDef | CardErrorJSONAPI>();
       this.inflightCards.set(url, deferred.promise);
     }
     try {
@@ -948,55 +975,113 @@ export default class StoreService extends Service implements StoreInterface {
   }
 }
 
-function processCardError(url: string | undefined, error: any): CardErrors {
+function formattedError(
+  url: string | undefined,
+  error: any,
+  err?: CardError | Partial<CardErrorJSONAPI>,
+): CardErrorsJSONAPI {
+  let errorStatus = err?.status ?? error.status;
+  let errorMessage = err?.message ?? error.message;
+  let title: string | undefined;
+
+  if (errorStatus === 404 && errorMessage?.includes('missing')) {
+    // a missing link error looks a lot like a missing card error
+    title = 'Link Not Found';
+  }
+
+  if (isCardError(err)) {
+    let additionalError = err.additionalErrors?.[0];
+    let cardError = isCardError(additionalError) ? additionalError : err;
+    return {
+      errors: [
+        {
+          id: url,
+          message: cardError.message,
+          status: cardError.status,
+          title:
+            title ??
+            cardError.title ??
+            status.message[cardError.status] ??
+            cardError.message,
+          realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+          meta: {
+            lastKnownGoodHtml: null,
+            scopedCssUrls: [],
+            stack: cardError.stack ?? null,
+            cardTitle: null,
+          },
+          additionalErrors: cardError.additionalErrors,
+        },
+      ],
+    };
+  }
+
+  if (err) {
+    let message = err.message?.length
+      ? err.message
+      : errorStatus
+        ? `Received HTTP ${errorStatus} from server`
+        : `${error.message}: ${error.stack}`;
+    return {
+      errors: [
+        {
+          id: url,
+          message,
+          status: errorStatus ?? 500,
+          title: title ?? err.title ?? status.message[errorStatus] ?? message,
+          realm: err.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
+          meta: err.meta ?? {
+            lastKnownGoodHtml: null,
+            scopedCssUrls: [],
+            stack: error.stack ?? null,
+            cardTitle: null,
+          },
+        },
+      ],
+    };
+  }
+
+  return {
+    errors: [
+      {
+        id: url,
+        status: errorStatus ?? 500,
+        title: title ?? status.message[errorStatus] ?? error.message,
+        message: error.status
+          ? `Received HTTP ${error.status} from server ${
+              error.responseText ?? ''
+            }`.trim()
+          : `${error.message}: ${error.stack}`,
+        realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+        meta: {
+          lastKnownGoodHtml: null,
+          scopedCssUrls: [],
+          stack: null,
+          cardTitle: null,
+        },
+      },
+    ],
+  };
+}
+
+function processCardError(
+  url: string | undefined,
+  error: any,
+): CardErrorsJSONAPI {
   try {
-    let errorResponse = JSON.parse(error.responseText) as CardErrors;
-    return errorResponse;
+    let errorResponse = JSON.parse(error.responseText);
+    return formattedError(url, error, errorResponse.errors?.[0]);
   } catch (parseError) {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        return {
-          errors: [
-            {
-              id: url,
-              status: 404,
-              title: 'Card Not Found',
-              message: `The card ${url} does not exist`,
-              realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-              meta: {
-                lastKnownGoodHtml: null,
-                scopedCssUrls: [],
-                stack: null,
-                cardTitle: null,
-              },
-            },
-          ],
-        };
+        return formattedError(url, error, {
+          status: 404,
+          title: 'Card Not Found',
+          message: `The card ${url} does not exist`,
+        });
       default:
-        return {
-          errors: [
-            {
-              id: url,
-              status: error.status ?? 500,
-              title: error.status
-                ? status.message[error.status]
-                : error.message,
-              message: error.status
-                ? `Received HTTP ${error.status} from server ${
-                    error.responseText ?? ''
-                  }`.trim()
-                : `${error.message}: ${error.stack}`,
-              realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-              meta: {
-                lastKnownGoodHtml: null,
-                scopedCssUrls: [],
-                stack: null,
-                cardTitle: null,
-              },
-            },
-          ],
-        };
+        return formattedError(url, error);
     }
   }
 }
