@@ -684,7 +684,11 @@ export class ${className} extends ${exportName} {
     src.push(`}`);
 
     try {
-      await this.cardService.saveSource(url, src.join('\n').trim());
+      await this.cardService.saveSource(
+        url,
+        src.join('\n').trim(),
+        'create-file',
+      );
       this.currentRequest.newFileDeferred.fulfill(url);
     } catch (e: any) {
       let fieldOrCard = isField ? 'field' : 'card';

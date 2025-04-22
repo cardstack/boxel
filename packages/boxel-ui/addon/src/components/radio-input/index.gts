@@ -70,7 +70,7 @@ export default class RadioInput extends Component<Signature> {
           white-space: nowrap;
         }
 
-        /* Div container inside the fieldset component. Use \`display: contents\` to move
+        /* Div container inside the fieldset component. Use display: contents to move
     these styles up when that css property is more widely available. */
         .boxel-radio-fieldset__container {
           display: flex;

@@ -22,6 +22,8 @@ import type MessageService from '../services/message-service';
 import type NetworkService from '../services/network';
 
 const log = logger('resource:file');
+const realmEventsLogger = logger('realm:events');
+
 const utf8 = new TextDecoder();
 const encoder = new TextEncoder();
 
@@ -214,8 +216,44 @@ class _FileResource extends Resource<Args> {
       let normalizedURL = this.url.endsWith('.json')
         ? this.url.replace(/\.json$/, '')
         : this.url;
+
       if (invalidations.includes(normalizedURL)) {
-        this.read.perform();
+        realmEventsLogger.trace(
+          `file resource ${normalizedURL} processing invalidation`,
+          event,
+        );
+
+        let clientRequestId = event.clientRequestId;
+        let reloadFile = false;
+
+        if (!clientRequestId) {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${normalizedURL} because realm event has no clientRequestId`,
+          );
+        } else if (clientRequestId.startsWith('editor:')) {
+          if (this.cardService.clientRequestIds.has(clientRequestId)) {
+            realmEventsLogger.debug(
+              `ignoring because request id is contained in known clientRequestIds`,
+              event.clientRequestId,
+            );
+          } else {
+            reloadFile = true;
+            realmEventsLogger.debug(
+              `reloading file resource ${normalizedURL} because request id is ${clientRequestId}, not contained within known clientRequestIds`,
+              Object.keys(this.cardService.clientRequestIds),
+            );
+          }
+        } else if (clientRequestId.startsWith('bot-patch:')) {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${normalizedURL} because request id is ${clientRequestId}`,
+          );
+        }
+
+        if (reloadFile) {
+          this.read.perform();
+        }
       }
     });
   });
@@ -225,6 +263,7 @@ class _FileResource extends Resource<Args> {
       let response = await this.cardService.saveSource(
         new URL(this._url),
         content,
+        'editor',
       );
       if (this.innerState.state === 'not-found') {
         // TODO think about the "unauthorized" scenario

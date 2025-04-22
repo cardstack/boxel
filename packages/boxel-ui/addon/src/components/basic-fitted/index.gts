@@ -16,6 +16,7 @@ interface Signature {
   Element: HTMLDivElement;
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export default class BasicFitted extends Component<Signature> {
   <template>
     <div class='fitted-template' ...attributes>
