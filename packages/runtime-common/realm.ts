@@ -3,6 +3,7 @@ import {
   makeCardTypeSummaryDoc,
   transformResultsToPrerenderedCardsDoc,
   type SingleCardDocument,
+  type CardResource,
 } from './card-document';
 import { Loader } from './loader';
 import { RealmPaths, LocalPath, join } from './paths';
@@ -20,7 +21,6 @@ import {
   executableExtensions,
   hasExecutableExtension,
   isNode,
-  isSingleCardDocument,
   logger,
   fetchUserPermissions,
   insertPermissions,
@@ -190,6 +190,7 @@ export interface MatrixConfig {
 }
 
 interface WriteResult {
+  path: LocalPath;
   lastModified: number;
 }
 
@@ -429,18 +430,38 @@ export class Realm {
     return this.#adapter.createJWT(claims, expiration, this.#realmSecretSeed);
   }
 
-  // TODO update to write to multiple paths
   async write(
     path: LocalPath,
     contents: string,
     clientRequestId?: string | null,
-  ): Promise<WriteResult> {
-    let url = this.paths.fileURL(path);
-    this.sendIndexInitiationEvent(url.href);
+  ): Promise<WriteResult[]>;
+  async write(
+    files: Map<LocalPath, string>,
+    clientRequestId?: string | null,
+  ): Promise<WriteResult[]>;
+  async write(
+    pathOrFiles: LocalPath | Map<LocalPath, string>,
+    contents: string,
+    clientRequestId?: string | null,
+  ): Promise<WriteResult[]> {
+    let files = new Map<LocalPath, string>();
+    if (typeof pathOrFiles === 'string') {
+      files.set(pathOrFiles, contents);
+    } else {
+      files = pathOrFiles;
+    }
     await this.indexing();
-    await this.trackOwnWrite(path);
-    let results = await this.#adapter.write(path, contents);
-    await this.#realmIndexUpdater.update(url, {
+    let results: WriteResult[] = [];
+    let urls: URL[] = [];
+    for (let [path, content] of files) {
+      let url = this.paths.fileURL(path);
+      this.sendIndexInitiationEvent(url.href);
+      await this.trackOwnWrite(path);
+      let { lastModified } = await this.#adapter.write(path, content);
+      results.push({ path, lastModified });
+      urls.push(url);
+    }
+    await this.#realmIndexUpdater.update(urls, {
       onInvalidation: (invalidatedURLs: URL[]) => {
         this.broadcastRealmEvent({
           eventName: 'index',
@@ -508,7 +529,7 @@ export class Realm {
     this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
-    await this.#realmIndexUpdater.update(url, {
+    await this.#realmIndexUpdater.update([url], {
       delete: true,
       onInvalidation: (invalidatedURLs: URL[]) => {
         this.broadcastRealmEvent({
@@ -980,7 +1001,7 @@ export class Realm {
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
-    let { lastModified } = await this.write(
+    let [{ lastModified }] = await this.write(
       this.paths.local(new URL(request.url)),
       await request.text(),
       request.headers.get('X-Boxel-Client-Request-Id'),
@@ -1188,52 +1209,86 @@ export class Realm {
         requestContext,
       );
     }
-    let { data: resource } = json;
-    if (!isCardResource(resource)) {
+    let { data: primaryResource, included: maybeIncluded } = json;
+    if (!isCardResource(primaryResource)) {
       return badRequest(
         `Request body is not valid card JSON-API`,
         requestContext,
       );
     }
-
-    let name: string;
-    if ('name' in resource.meta.adoptsFrom) {
-      // new instances are created in a folder named after the card if it has an
-      // exported name
-      name = resource.meta.adoptsFrom.name;
-    } else {
-      name = 'cards';
-    }
-
-    let fileURL = this.paths.fileURL(
-      `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
-    );
-    let localPath = this.paths.local(fileURL);
-    let fileSerialization: LooseSingleCardDocument | undefined;
-    // TODO update to serialize and write any side loaded resources that need to
-    // be created
-    try {
-      fileSerialization = await this.fileSerialization(
-        merge(json, { data: { meta: { realmURL: this.url } } }),
-        fileURL,
-      );
-    } catch (err: any) {
-      if (err.message.startsWith('field validation error')) {
-        return badRequest(err.message, requestContext);
-      } else {
-        return systemError({
+    if (maybeIncluded) {
+      if (!Array.isArray(maybeIncluded)) {
+        return badRequest(
+          `Request body is not valid card JSON-API: included is not array`,
           requestContext,
-          message: err.message,
-          additionalError: err,
-        });
+        );
+      }
+      for (let sideLoadedResource of maybeIncluded) {
+        if (!isCardResource(sideLoadedResource)) {
+          return badRequest(
+            `Request body is not valid card JSON-API: side-loaded data is not a valid card resource`,
+            requestContext,
+          );
+        }
       }
     }
-    let { lastModified } = await this.write(
-      localPath,
-      JSON.stringify(fileSerialization, null, 2),
+    let files = new Map<LocalPath, string>();
+    let included = (maybeIncluded ?? []) as CardResource[];
+    let resources = [primaryResource, ...included];
+    let primaryResourceURL: URL | undefined;
+    for (let [i, resource] of resources.entries()) {
+      if (i > 0 && typeof resource.lid !== 'string') {
+        continue;
+      }
+      let name =
+        'name' in resource.meta.adoptsFrom
+          ? resource.meta.adoptsFrom.name
+          : 'cards';
+
+      let fileURL = this.paths.fileURL(
+        `/${join(new URL(this.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
+      );
+      if (i === 0) {
+        primaryResourceURL = fileURL;
+      }
+
+      promoteLocalIdsToRemoteIds({
+        resource,
+        included,
+        realmURL: new URL(this.url),
+      });
+      let fileSerialization: LooseSingleCardDocument | undefined;
+      try {
+        fileSerialization = await this.fileSerialization(
+          { data: merge(resource, { meta: { realmURL: this.url } }) },
+          fileURL,
+        );
+      } catch (err: any) {
+        if (err.message.startsWith('field validation error')) {
+          return badRequest(err.message, requestContext);
+        } else {
+          return systemError({
+            requestContext,
+            message: err.message,
+            additionalError: err,
+          });
+        }
+      }
+      let localPath = this.paths.local(fileURL);
+      files.set(localPath, JSON.stringify(fileSerialization, null, 2));
+    }
+    if (!primaryResourceURL) {
+      return systemError({
+        requestContext,
+        message: `unable to determine URL of the primary resource from request payload`,
+      });
+    }
+    let [{ lastModified }] = await this.write(
+      files,
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
-    let newURL = fileURL.href.replace(/\.json$/, '');
+
+    let newURL = primaryResourceURL.href.replace(/\.json$/, '');
     let entry = await this.#realmIndexQueryEngine.cardDocument(
       new URL(newURL),
       {
@@ -1294,33 +1349,56 @@ export class Realm {
       });
     }
     let { doc: original } = originalMaybeError;
-    let originalClone = cloneDeep(original);
-    delete originalClone.data.meta.lastModified;
+    let originalClone = cloneDeep(original.data);
+    delete originalClone.meta.lastModified;
 
-    let patch = await request.json();
-    if (!isSingleCardDocument(patch)) {
+    let { data: patch, included: maybeIncluded } = await request.json();
+    if (!isCardResource(patch)) {
       return badRequest(
         `The request body was not a card document`,
         requestContext,
       );
     }
+    if (maybeIncluded) {
+      if (!Array.isArray(maybeIncluded)) {
+        return badRequest(
+          `Request body is not valid card JSON-API: included is not array`,
+          requestContext,
+        );
+      }
+      for (let sideLoadedResource of maybeIncluded) {
+        if (!isCardResource(sideLoadedResource)) {
+          return badRequest(
+            `Request body is not valid card JSON-API: side-loaded data is not a valid card resource`,
+            requestContext,
+          );
+        }
+      }
+    }
     if (
-      internalKeyFor(patch.data.meta.adoptsFrom, url) !==
-      internalKeyFor(originalClone.data.meta.adoptsFrom, url)
+      internalKeyFor(patch.meta.adoptsFrom, url) !==
+      internalKeyFor(originalClone.meta.adoptsFrom, url)
     ) {
       return badRequest(
         `Cannot change card instance type to ${JSON.stringify(
-          patch.data.meta.adoptsFrom,
+          patch.meta.adoptsFrom,
         )}`,
         requestContext,
       );
     }
+    let included = (maybeIncluded ?? []) as CardResource[];
 
-    delete (patch as any).data.type;
-    delete (patch as any).data.meta.realmInfo;
-    delete (patch as any).data.meta.realmURL;
+    delete (patch as any).type;
+    delete (patch as any).meta.realmInfo;
+    delete (patch as any).meta.realmURL;
 
-    let card = mergeWith(
+    promoteLocalIdsToRemoteIds({
+      resource: patch,
+      included,
+      realmURL: new URL(this.url),
+    });
+
+    let primaryResource = mergeWith(
       originalClone,
       patch,
       (_objectValue: any, sourceValue: any) => {
@@ -1331,41 +1409,66 @@ export class Realm {
       },
     );
 
-    if (card.data.relationships || patch.data.relationships) {
+    if (primaryResource.relationships || patch.relationships) {
       let merged = mergeRelationships(
-        card.data.relationships,
-        patch.data.relationships,
+        primaryResource.relationships,
+        patch.relationships,
       );
 
       if (merged && Object.keys(merged).length !== 0) {
-        card.data.relationships = merged;
+        primaryResource.relationships = merged;
       }
     }
 
-    delete (card as any).data.id; // don't write the ID to the file
-    let path: LocalPath = `${localPath}.json`;
-    let fileSerialization: LooseSingleCardDocument | undefined;
-    // TODO update to serialize and write any side loaded resources that need to
-    // be created
-    try {
-      fileSerialization = await this.fileSerialization(
-        merge(card, { data: { meta: { realmURL: this.url } } }),
-        url,
-      );
-    } catch (err: any) {
-      if (err.message.startsWith('field validation error')) {
-        return badRequest(err.message, requestContext);
-      } else {
-        return systemError({
-          requestContext,
-          message: err.message,
-          additionalError: err,
+    delete (primaryResource as any).id; // don't write the ID to the file
+    let files = new Map<LocalPath, string>();
+    let resources = [primaryResource, ...included];
+    for (let [i, resource] of resources.entries()) {
+      if (i > 0 && typeof resource.lid !== 'string') {
+        continue;
+      }
+      let name =
+        'name' in resource.meta.adoptsFrom
+          ? resource.meta.adoptsFrom.name
+          : 'cards';
+      let fileURL =
+        i === 0
+          ? new URL(`${url}.json`)
+          : this.paths.fileURL(
+              `/${join(new URL(this.url).pathname, name, (resource.lid ?? uuidV4()) + '.json')}`,
+            );
+      // we already did this one
+      if (i !== 0) {
+        promoteLocalIdsToRemoteIds({
+          resource,
+          included,
+          realmURL: new URL(this.url),
         });
       }
+      let fileSerialization: LooseSingleCardDocument | undefined;
+      try {
+        fileSerialization = await this.fileSerialization(
+          {
+            data: merge(resource, { meta: { realmURL: this.url } }),
+          },
+          fileURL,
+        );
+      } catch (err: any) {
+        if (err.message.startsWith('field validation error')) {
+          return badRequest(err.message, requestContext);
+        } else {
+          return systemError({
+            requestContext,
+            message: err.message,
+            additionalError: err,
+          });
+        }
+      }
+      let path = this.paths.local(fileURL);
+      files.set(path, JSON.stringify(fileSerialization, null, 2));
     }
-    let { lastModified } = await this.write(
-      path,
-      JSON.stringify(fileSerialization, null, 2),
+    let [{ lastModified }] = await this.write(
+      files,
       request.headers.get('X-Boxel-Client-Request-Id'),
     );
     let instanceURL = url.href.replace(/\.json$/, '');
@@ -2011,7 +2114,7 @@ export class Realm {
     this.#updateItems = [];
     for (let { operation, url } of items) {
       this.sendIndexInitiationEvent(url.href);
-      await this.#realmIndexUpdater.update(url, {
+      await this.#realmIndexUpdater.update([url], {
         onInvalidation: (invalidatedURLs: URL[]) => {
           this.broadcastRealmEvent({
             eventName: 'index',
@@ -2134,6 +2237,50 @@ export interface CardDefinitionResource {
       };
     };
   };
+}
+
+function promoteLocalIdsToRemoteIds({
+  resource,
+  realmURL,
+  included,
+}: {
+  resource: CardResource;
+  included: CardResource[];
+  realmURL: URL;
+}) {
+  if (!resource.relationships) {
+    return;
+  }
+  let relationships = resource.relationships;
+
+  function makeSelfLink(field: string, lid: string) {
+    let sideLoadedResource = included.find((i) => i.lid === lid);
+    if (!sideLoadedResource) {
+      throw new Error(`Could not find local id ${lid} in "included" resources`);
+    }
+    let name =
+      'name' in sideLoadedResource.meta.adoptsFrom
+        ? sideLoadedResource.meta.adoptsFrom.name
+        : 'cards';
+    relationships[field].links = {
+      self: paths.fileURL(`${name}/${lid}`).href,
+    };
+  }
+
+  let paths = new RealmPaths(realmURL);
+  for (let [fieldName, value] of Object.entries(resource.relationships)) {
+    if ('data' in value && value.data) {
+      if (Array.isArray(value.data)) {
+        for (let [i, item] of value.data.entries()) {
+          if ('lid' in item) {
+            makeSelfLink(`${fieldName}.${i}`, item.lid);
+          }
+        }
+      } else if ('lid' in value.data) {
+        makeSelfLink(fieldName, value.data.lid);
+      }
+    }
+  }
 }
 
 function assertRealmPermissions(

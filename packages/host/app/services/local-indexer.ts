@@ -10,7 +10,7 @@ export default class LocalIndexer extends Service {
   setup(
     _fromScratch: (realmURL: URL) => Promise<IndexResults>,
     _incremental: (
-      url: URL,
+      urls: URL[],
       realmURL: URL,
       operation: 'update' | 'delete',
       ignoreData: Record<string, string>,
