@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:18.6.0-slim
+FROM node:20.19.1-slim
 ARG worker_script
 ENV worker_script=$worker_script
 
