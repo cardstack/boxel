@@ -429,8 +429,7 @@ export interface CatalogActions {
   copySource: (fromUrl: string, toUrl: string) => Promise<void>;
   copyCards: (
     cards: CopyCardsWithCodeRef[],
-    targetRealm: string,
-    directoryName?: string,
+    targetUrl: string,
   ) => Promise<CardDef[]>;
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>

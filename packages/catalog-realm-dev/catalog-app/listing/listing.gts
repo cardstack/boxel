@@ -24,7 +24,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
-import { camelCase } from 'lodash';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   Accordion,
@@ -48,6 +48,16 @@ import { Tag } from './tag';
 interface CopyMeta {
   sourceCodeRef: ResolvedCodeRef;
   targetCodeRef: ResolvedCodeRef;
+}
+
+function getNewPackageName(modulePath: string) {
+  if (!modulePath) {
+    return '';
+  }
+  const normalizedPath = modulePath.split('/').slice(1).join('/');
+  const pacakageName = normalizedPath.split('/')[0];
+  const newPackageName = `${pacakageName}-${uuidv4()}`;
+  return newPackageName;
 }
 
 class EmbeddedTemplate extends Component<typeof Listing> {
@@ -97,17 +107,18 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
   _use = task(async (realmUrl: string) => {
     const specsToCopy: Spec[] = this.args.model?.specs ?? [];
-
-    await Promise.all(
-      specsToCopy
-        .filter(
-          // Field type is not supported yet
-          (spec: Spec) => spec.specType !== 'field',
-        )
-        .map((spec: Spec) =>
-          this.args.context?.actions?.create?.(spec, realmUrl),
-        ),
+    const specsWithoutFields = specsToCopy.filter(
+      (spec: Spec) => spec.specType !== 'field',
     );
+
+    const newModulePath = getNewPackageName(
+      specsWithoutFields[0].ref.module,
+    ).concat('/');
+    const targetUrl = new URL(newModulePath, realmUrl).href;
+
+    for (const spec of specsWithoutFields) {
+      await this.args.context?.actions?.create?.(spec, targetUrl);
+    }
 
     if (this.args.model instanceof SkillListing) {
       await Promise.all(
@@ -120,28 +131,28 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       const sourceCards = this.args.model.examples.map((example) => ({
         sourceCard: example,
       }));
-      await this.args.context?.actions?.copyCards?.(
-        sourceCards,
-        realmUrl,
-        this.args.model.name
-          ? camelCase(`${this.args.model.name}Examples`)
-          : 'ListingExamples',
-      );
+      await this.args.context?.actions?.copyCards?.(sourceCards, targetUrl);
     }
     this.createdInstances = true;
   });
 
   _install = task(async (realmUrl: string) => {
+    const specsToCopy: Spec[] = this.args.model?.specs ?? [];
     const copyMeta: CopyMeta[] = [];
+
+    const newModulePath = getNewPackageName(specsToCopy[0].ref.module).concat(
+      '/',
+    );
+    const targetUrl = new URL(newModulePath, realmUrl).href;
 
     // Copy the gts file based on the attached spec's moduleHref
     for (const spec of this.args.model?.specs ?? []) {
       const absoluteModulePath = spec.moduleHref;
       const relativeModulePath = spec.ref.module;
-      const normalizedPath = relativeModulePath.split('/').slice(1).join('/');
-
-      const targetUrl = new URL(normalizedPath, realmUrl).href;
-      const targetFilePath = targetUrl.concat('.gts');
+      const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
+      const newPath = newModulePath.concat(normalizedPath);
+      const fileTargetUrl = new URL(newPath, realmUrl).href;
+      const targetFilePath = fileTargetUrl.concat('.gts');
 
       await this.args.context?.actions?.copySource?.(
         absoluteModulePath,
@@ -154,7 +165,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           name: spec.ref.name,
         },
         targetCodeRef: {
-          module: targetUrl,
+          module: targetFilePath,
           name: spec.ref.name,
         },
       });
@@ -196,10 +207,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       ) as CopyCardsWithCodeRef[];
       await this.args.context?.actions?.copyCards?.(
         copyCardsWithCodeRef,
-        realmUrl,
-        this.args.model.name
-          ? camelCase(`${this.args.model.name}InstallExamples`)
-          : 'ListingExamples',
+        targetUrl,
       );
     }
 
