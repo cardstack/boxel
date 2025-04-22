@@ -15,14 +15,14 @@ import {
 import CalendarCog from '@cardstack/boxel-icons/calendar-cog';
 import BlogIcon from '@cardstack/boxel-icons/notebook';
 
-import { setBackgroundImage } from '../components/layout';
+import { setBackgroundImage } from './components/layout';
 
 import { Author } from './author';
 import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { BlogCategory, categoryStyle } from './blog-category';
 import { User } from './user';
 import { markdownToHtml } from '@cardstack/runtime-common';
-import { FeaturedImageField } from '../fields/featured-image';
+import { FeaturedImageField } from './fields/featured-image';
 
 class EmbeddedTemplate extends Component<typeof BlogPost> {
   <template>

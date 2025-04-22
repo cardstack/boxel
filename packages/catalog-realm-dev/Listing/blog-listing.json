@@ -15,62 +15,62 @@
     "relationships": {
       "specs.0": {
         "links": {
-          "self": "../Spec/author"
+          "self": "../Spec/user"
         }
       },
       "specs.1": {
         "links": {
-          "self": "../Spec/blog-app"
+          "self": "../Spec/blog-app-featured-image"
         }
       },
       "specs.2": {
         "links": {
-          "self": "../Spec/blog-category"
+          "self": "../Spec/blog-app-contact-link"
         }
       },
       "specs.3": {
         "links": {
-          "self": "../Spec/blog-post"
+          "self": "../Spec/blog-app-card-list"
         }
       },
       "specs.4": {
         "links": {
-          "self": "../Spec/review-blog"
+          "self": "../Spec/blog-app-grid"
         }
       },
       "specs.5": {
         "links": {
-          "self": "../Spec/user"
+          "self": "../Spec/blog-app-sort"
         }
       },
       "specs.6": {
         "links": {
-          "self": "../Spec/sort"
+          "self": "../Spec/blog-app-layout"
         }
       },
       "specs.7": {
         "links": {
-          "self": "../Spec/layout"
+          "self": "../Spec/author"
         }
       },
       "specs.8": {
         "links": {
-          "self": "../Spec/card-list"
+          "self": "../Spec/blog-category"
         }
       },
       "specs.9": {
         "links": {
-          "self": "../Spec/grid"
+          "self": "../Spec/blog-post"
         }
       },
       "specs.10": {
         "links": {
-          "self": "../Spec/featured-image"
+          "self": "../Spec/review-blog"
         }
       },
       "specs.11": {
         "links": {
-          "self": "../Spec/contact-link"
+          "self": "../Spec/blog-app"
         }
       },
       "publisher": {

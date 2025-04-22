@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "Layout",
-        "module": "../components/layout"
+        "name": "CardList",
+        "module": "../blog-app/components/card-list"
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Layout",
-      "description": "Spec for Layout component",
+      "title": "Card List",
+      "description": "Spec for Card List component",
       "thumbnailURL": null
     },
     "relationships": {},

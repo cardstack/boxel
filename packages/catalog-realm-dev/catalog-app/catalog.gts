@@ -33,7 +33,7 @@ import CardsDisplaySection, {
   CardsIntancesGrid,
 } from './components/cards-display-section';
 
-import { CardsGrid } from '../components/grid';
+import { CardsGrid } from './components/grid';
 
 import CatalogLayout from './layouts/catalog-layout';
 

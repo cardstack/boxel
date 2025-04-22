@@ -4,13 +4,13 @@
     "attributes": {
       "readMe": null,
       "ref": {
-        "name": "Sort",
-        "module": "../components/sort"
+        "name": "Layout",
+        "module": "../blog-app/components/layout"
       },
       "specType": "component",
       "containedExamples": [],
-      "title": "Sort",
-      "description": "Spec for Sort component",
+      "title": "Layout",
+      "description": "Spec for Layout component",
       "thumbnailURL": null
     },
     "relationships": {},

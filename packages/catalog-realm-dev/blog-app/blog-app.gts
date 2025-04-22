@@ -24,10 +24,10 @@ import {
   type SortOption,
   sortByCardTitleAsc,
   SortMenu,
-} from '../components/sort';
-import { CardList } from '../components/card-list';
-import { CardsGrid } from '../components/grid';
-import { TitleGroup, Layout, type LayoutFilter } from '../components/layout';
+} from './components/sort';
+import { CardList } from './components/card-list';
+import { CardsGrid } from './components/grid';
+import { TitleGroup, Layout, type LayoutFilter } from './components/layout';
 
 import {
   BasicFitted,
