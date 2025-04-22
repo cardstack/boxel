@@ -2604,14 +2604,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
   let loadedValues = getDataBucket(instance);
   let values = (await Promise.all(
-    Object.entries(
-      {
-        ...resource.attributes,
-        ...nonNestedRelationships,
-        ...linksToManyRelationships,
-        ...(resource.id !== undefined ? { id: resource.id } : {}),
-      } ?? {},
-    ).map(async ([fieldName, value]) => {
+    Object.entries({
+      ...resource.attributes,
+      ...nonNestedRelationships,
+      ...linksToManyRelationships,
+      ...(resource.id !== undefined ? { id: resource.id } : {}),
+    }).map(async ([fieldName, value]) => {
       let field = getField(card, fieldName);
       if (!field) {
         // This happens when the instance has a field that is not in the definition. It can happen when

@@ -21,10 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
       - uses: ./.github/actions/init
-      - name: Lint AI Bot
-        if: always()
-        run: pnpm run lint
-        working-directory: packages/ai-bot
+
       - name: Lint Boxel Motion
         # This addition to each step causes the job to proceed even if one lint job fails so we can see all errors
         if: always()
@@ -122,3 +119,7 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/vscode-boxel-tools
+      - name: Lint AI Bot
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/ai-bot
