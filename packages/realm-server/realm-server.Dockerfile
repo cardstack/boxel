@@ -7,7 +7,7 @@ ENV realm_server_script=$realm_server_script
 WORKDIR /realm-server
 
 RUN apt-get update && apt-get install -y ca-certificates curl unzip postgresql jq rsync
-RUN npm install -g pnpm@10.19.0
+RUN npm install -g pnpm@10.9.0
 
 COPY pnpm-lock.yaml ./
 
