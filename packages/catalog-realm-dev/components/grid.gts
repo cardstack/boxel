@@ -53,10 +53,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
 
   get isHydrated() {
     return (cardUrl: string) => {
-      return (
-        this.cardResources.has(cardUrl) &&
-        this.cardResources.get(cardUrl) != null
-      );
+      return this.cardResources.has(cardUrl);
     };
   }
 
