@@ -269,7 +269,7 @@
     "@glint/environment-ember-template-imports": "catalog:",
     "@glint/template": "catalog:",
     "@types/node": "catalog:",
-    "@types/vscode": "catalog:",
+    "@types/vscode": "^1.73.0",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "@vscode/vsce": "catalog:",
