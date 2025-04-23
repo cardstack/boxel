@@ -16,13 +16,8 @@ import AnimationsService from './services/animations.ts';
 
 export {
   AnimationContext,
-  AnimationDefinition,
   AnimationsService,
-  AnimationTimeline,
-  Changeset,
   FPS,
-  IContext,
-  ISpriteModifier,
   OrchestrationMatrix,
   SpringBehavior,
   Sprite, // model
@@ -31,4 +26,12 @@ export {
   StaticBehavior,
   TweenBehavior,
   WaitBehavior,
+};
+
+export type {
+  AnimationDefinition,
+  AnimationTimeline,
+  Changeset,
+  IContext,
+  ISpriteModifier,
 };
