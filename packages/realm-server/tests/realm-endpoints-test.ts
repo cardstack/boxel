@@ -451,7 +451,6 @@ module(basename(__filename), function () {
         'index',
         'incremental-index-initiation',
       );
-
       let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
 
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {
