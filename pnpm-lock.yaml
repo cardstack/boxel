@@ -2163,6 +2163,9 @@ importers:
       '@types/diff':
         specifier: ^5.0.2
         version: 5.0.2
+      '@types/eslint':
+        specifier: 8.56.5
+        version: 8.56.5
       '@types/flat':
         specifier: ^5.0.5
         version: 5.0.5
