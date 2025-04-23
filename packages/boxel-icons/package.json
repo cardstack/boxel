@@ -52,7 +52,7 @@
     "@embroider/macros": "^1.16.5",
     "@rollup/plugin-babel": "catalog:",
     "@tsconfig/ember": "3.0.1",
-    "@typescript-eslint/eslint-plugin": "^7.16.1",
+    "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "babel-plugin-ember-template-compilation": "^2.3.0",
     "concurrently": "^8.0.1",

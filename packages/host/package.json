@@ -75,7 +75,7 @@
     "@types/rsvp": "catalog:",
     "@types/statuses": "catalog:",
     "@types/uuid": "catalog:",
-    "@typescript-eslint/eslint-plugin": "^7.16.1",
+    "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "broccoli-asset-rev": "catalog:",
     "broccoli-merge-trees": "catalog:",

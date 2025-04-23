@@ -82,7 +82,7 @@
     "@tsconfig/ember": "3.0.1",
     "@types/lodash": "^4.14.182",
     "@types/pluralize": "catalog:",
-    "@typescript-eslint/eslint-plugin": "^7.16.1",
+    "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "babel-plugin-ember-template-compilation": "^2.2.1",
     "concurrently": "^8.0.1",

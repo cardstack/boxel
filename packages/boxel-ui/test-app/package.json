@@ -46,7 +46,7 @@
     "@types/htmlbars-inline-precompile": "catalog:",
     "@types/qunit": "^2.11.3",
     "@types/rsvp": "catalog:",
-    "@typescript-eslint/eslint-plugin": "^7.16.1",
+    "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "broccoli-asset-rev": "catalog:",
     "broccoli-merge-trees": "catalog:",
