@@ -90,6 +90,9 @@
   "engines": {
     "node": "12.* || >= 14"
   },
+  "volta": {
+    "extends": "../../package.json"
+  },
   "publishConfig": {
     "registry": "https://registry.npmjs.org"
   },
