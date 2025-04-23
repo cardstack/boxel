@@ -123,7 +123,7 @@
     "ember-moment": "catalog:",
     "ember-page-title": "^8.2.3",
     "ember-provide-consume-context": "catalog:",
-    "ember-qunit": "^8.0.1",
+    "ember-qunit": "catalog:",
     "ember-resolver": "^11.0.1",
     "ember-resources": "catalog:",
     "ember-route-template": "catalog:",

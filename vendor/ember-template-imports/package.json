@@ -67,7 +67,7 @@
     "ember-load-initializers": "catalog:",
     "ember-maybe-import-regenerator": "catalog:",
     "ember-page-title": "^6.2.1",
-    "ember-qunit": "^5.1.2",
+    "ember-qunit": "catalog:",
     "ember-resolver": "^8.0.2",
     "ember-source": "catalog:",
     "ember-source-channel-url": "catalog:",
