@@ -86,7 +86,7 @@ catalog:
   "@types/matrix-js-sdk": ^11.0.1
   "@types/mime-types": ^2.1.1
   "@types/ms": ^0.7.34
-  "@types/node": ^18.19.39
+  "@types/node": ^20.17.30
   "@types/pg": ^8.11.5
   "@types/pluralize": ^0.0.30
   "@types/qs": ^6.9.17
