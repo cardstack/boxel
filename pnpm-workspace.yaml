@@ -173,7 +173,7 @@ catalog:
   eslint-plugin-unicorn: ^51.0.1
   ethers: ^6.6.2
   fast-json-stable-stringify: ^2.1.0
-  fastboot: ^4.1.0
+  fastboot: 4.1.0
   file-loader: ^6.2.0
   filesize: ^10.0.12
   flat: ^5.0.2
