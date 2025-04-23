@@ -24,7 +24,7 @@ import {
 import {
   codeRefWithAbsoluteURL,
   Loader,
-  loadCard,
+  loadCardDef,
   isResolvedCodeRef,
   isPrimitive,
 } from '@cardstack/runtime-common';
@@ -71,7 +71,7 @@ class Isolated extends Component<typeof Spec> {
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCard(this.args.model.ref, {
+          let cardDef = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
@@ -324,7 +324,7 @@ class Fitted extends Component<typeof Spec> {
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let card = await loadCard(this.args.model.ref, {
+          let card = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
@@ -588,7 +588,7 @@ class Edit extends Component<typeof Spec> {
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCard(this.args.model.ref, {
+          let cardDef = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });

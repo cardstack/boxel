@@ -40,7 +40,7 @@ import {
   isCardDef,
   isFieldDef,
   internalKeyFor,
-  loadCard,
+  loadCardDef,
 } from '@cardstack/runtime-common';
 import {
   codeRefWithAbsoluteURL,
@@ -499,7 +499,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         ref = maybeAbsoluteRef;
       }
       try {
-        let SpecKlass = await loadCard(specRef, {
+        let SpecKlass = await loadCardDef(specRef, {
           loader: this.loaderService.loader,
         });
         let card = new SpecKlass({

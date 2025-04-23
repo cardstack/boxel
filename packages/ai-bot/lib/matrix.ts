@@ -26,6 +26,7 @@ export interface MatrixClient {
   ): Promise<{ event_id: string }>;
 
   setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
+  getAccessToken(): string | null;
 }
 
 export async function sendMatrixEvent(

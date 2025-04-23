@@ -6,6 +6,7 @@ interface Signature {
   Element: SVGElement;
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export default class CircleSpinner extends Component<Signature> {
   <template>
     <IconCircle class='circle-spinner' ...attributes />

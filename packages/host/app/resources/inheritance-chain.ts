@@ -5,7 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { task } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
 
-import { type Loader, loadCard } from '@cardstack/runtime-common';
+import { type Loader, loadCardDef } from '@cardstack/runtime-common';
 
 import { CardType, Type } from '@cardstack/host/resources/card-type';
 
@@ -70,7 +70,7 @@ export class InheritanceChainResource extends Resource<Args> {
       while (cardType.super) {
         cardType = cardType.super;
 
-        let superCard = await loadCard(cardType.codeRef, {
+        let superCard = await loadCardDef(cardType.codeRef, {
           loader: loader,
           relativeTo: new URL(url), // because the module can be relative
         });
