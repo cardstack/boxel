@@ -27,7 +27,7 @@
   },
   "peerDependencies": {
     "ember-provide-consume-context": "^0.7.0",
-    "ember-source": "~5.4.0"
+    "ember-source": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

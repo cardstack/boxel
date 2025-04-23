@@ -36,7 +36,7 @@
     "diff": "catalog:",
     "ember-concurrency-async-plugin": "workspace:*",
     "ember-eslint-parser": "0.5.9",
-    "ember-source": "~5.4.0",
+    "ember-source": "catalog:",
     "eslint": "^8.52.0",
     "flat": "catalog:",
     "glimmer-scoped-css": "^0.8.0",

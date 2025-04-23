@@ -127,7 +127,7 @@
     "ember-resolver": "^11.0.1",
     "ember-resources": "catalog:",
     "ember-route-template": "catalog:",
-    "ember-source": "~5.4.0",
+    "ember-source": "catalog:",
     "ember-template-imports": "catalog:",
     "ember-template-lint": "^5.11.2",
     "ember-test-selectors": "catalog:",

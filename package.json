@@ -62,7 +62,7 @@
     "@typescript-eslint/parser": "catalog:",
     "ember-cli-htmlbars": "catalog:",
     "ember-resources": "catalog:",
-    "ember-source": "~5.4.0",
+    "ember-source": "catalog:",
     "ember-template-imports": "catalog:",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^8.4.0",
