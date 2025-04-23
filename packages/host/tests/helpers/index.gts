@@ -208,7 +208,7 @@ class MockLocalIndexer extends Service {
   #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
   #incremental:
     | ((
-        url: URL,
+        urls: URL[],
         realmURL: URL,
         operation: 'update' | 'delete',
         ignoreData: Record<string, string>,
@@ -217,7 +217,7 @@ class MockLocalIndexer extends Service {
   setup(
     fromScratch: (realmURL: URL) => Promise<IndexResults>,
     incremental: (
-      url: URL,
+      urls: URL[],
       realmURL: URL,
       operation: 'update' | 'delete',
       ignoreData: Record<string, string>,
