@@ -58,7 +58,7 @@
     "eslint-plugin-prettier": "^5.2.6",
     "eslint-plugin-unicorn": "catalog:",
     "prettier": "^3.5.3",
-    "typescript": "~5.1.6",
+    "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
   },

@@ -276,6 +276,6 @@
     "concurrently": "^8.0.1",
     "esbuild": "catalog:",
     "eslint": "^8.57.1",
-    "typescript": "~5.1.6"
+    "typescript": "catalog:"
   }
 }

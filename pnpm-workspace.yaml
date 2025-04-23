@@ -240,6 +240,7 @@ catalog:
   svgo: 3.0.2
   testem-multi-reporter: ^1.2.0
   tmp: ^0.2.1
+  typescript: ^5.8.3
   typescript-memoize: ^1.1.1
   uuid: ^9.0.1
   validate-peer-dependencies: ^1.1.0

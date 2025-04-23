@@ -68,7 +68,7 @@
     "testem": "^3.10.1",
     "tmp": "catalog:",
     "ts-node": "^10.9.1",
-    "typescript": "~5.1.6",
+    "typescript": "catalog:",
     "typescript-memoize": "catalog:",
     "uuid": "catalog:",
     "wait-for-localhost-cli": "catalog:",
