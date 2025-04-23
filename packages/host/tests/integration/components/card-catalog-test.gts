@@ -211,7 +211,7 @@ module('Integration | card-catalog', function (hooks) {
 
   module('realm filters', function () {
     test('displays all realms by default', async function (assert) {
-      assert.dom('[data-test-realm]').exists({ count: 2 });
+      assert.dom('[data-test-realm]').exists({ count: 3 });
       assert
         .dom(`[data-test-realm="${realmName}"] [data-test-results-count]`)
         .hasText('6 results');

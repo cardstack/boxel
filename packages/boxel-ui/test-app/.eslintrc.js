@@ -1,6 +1,6 @@
 'use strict';
 
-const MISSING_INVOKABLES_CONFIG = require('../../../eslint/missing-invokables-config');
+const MISSING_INVOKABLES_CONFIG = require('../../runtime-common/etc/eslint/missing-invokables-config');
 
 module.exports = {
   root: true,

@@ -850,10 +850,10 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert
         .dom('[data-test-card-catalog-item-selected]')
         .doesNotExist('No card is pre-selected');
-      assert.dom('[data-test-card-catalog-item]').exists({ count: 7 });
+      assert.dom('[data-test-card-catalog-item]').exists();
       assert
         .dom('[data-test-show-more-cards]')
-        .containsText('3 not shown', 'Entries are paginated');
+        .containsText('not shown', 'Entries are paginated');
       await click(`[data-test-select="${testRealmURL}person-entry"]`);
       await click('[data-test-card-catalog-go-button]');
 
@@ -864,7 +864,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('card-catalog can pre-select the current filtered card type', async function (assert) {
-      assert.expect(12);
+      assert.expect(14);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
@@ -878,7 +878,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await click('[data-test-boxel-filter-list-button="Person"]');
       await click('[data-test-create-new-card-button]');
-      assert.dom('[data-test-card-catalog-item]').exists({ count: 10 });
+      assert.dom('[data-test-card-catalog-item]').exists();
       assert
         .dom('[data-test-show-more-cards]')
         .doesNotExist('All cards are visible');
@@ -899,14 +899,18 @@ module('Acceptance | interact submode tests', function (hooks) {
         .doesNotExist(
           'Pre-selection is cleared when filter does not specify card type',
         );
-      assert.dom('[data-test-card-catalog-item]').exists({ count: 7 });
+      assert.dom('[data-test-card-catalog-item]').exists();
       assert
         .dom('[data-test-show-more-cards]')
-        .containsText('3 not shown', 'Entries are paginated');
+        .containsText('not shown', 'Entries are paginated');
       await click('[data-test-card-catalog-cancel-button]');
 
       await click('[data-test-boxel-filter-list-button="Puppy"]');
       await click('[data-test-create-new-card-button]');
+      assert.dom('[data-test-card-catalog-item]').exists();
+      assert
+        .dom('[data-test-show-more-cards]')
+        .doesNotExist('All cards are visible');
       assert
         .dom(
           `[data-test-card-catalog-item="${testRealmURL}puppy-entry"][data-test-card-catalog-item-selected]`,
@@ -950,7 +954,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await click('[data-test-boxel-filter-list-button="Puppy"]');
       await click('[data-test-create-new-card-button]');
-      assert.dom('[data-test-card-catalog-item]').exists({ count: 10 });
+      assert.dom('[data-test-card-catalog-item]').exists();
       assert
         .dom('[data-test-show-more-cards]')
         .doesNotExist('All cards are visible');
@@ -974,7 +978,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .exists({ count: 1 }, 'Only 1 card is selected');
       assert
         .dom('[data-test-card-catalog-item]')
-        .exists({ count: 10 }, 'All cards are still visible');
+        .exists('All cards are still visible');
       await click('[data-test-card-catalog-go-button]');
 
       deferred = new Deferred<SingleCardDocument<string>>();

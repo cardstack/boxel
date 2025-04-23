@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "BlogPost",
+        "module": "../blog-app/blog-post"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Blog Post",
+      "description": "Spec for Blog Post card",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "linkedExamples.0": {
+        "links": {
+          "self": "../blog-app/BlogPost/ultimate-guide-remote-work"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
