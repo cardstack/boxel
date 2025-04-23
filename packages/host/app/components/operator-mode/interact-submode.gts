@@ -30,6 +30,7 @@ import {
   RealmPaths,
   isCardInstance,
   CardError,
+  loadCardDef,
   realmURL as realmURLSymbol,
   type getCard,
   type getCards,
@@ -43,7 +44,6 @@ import {
   type ResolvedCodeRef,
   type CopyCardsWithCodeRef,
 } from '@cardstack/runtime-common';
-import { loadCard } from '@cardstack/runtime-common/code-ref';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import CopySourceCommand from '@cardstack/host/commands/copy-source';
@@ -503,7 +503,7 @@ export default class InteractSubmode extends Component {
     if (!isResolvedCodeRef(ref)) {
       throw new Error('ref is not a resolved code ref');
     }
-    let Klass = await loadCard(ref, {
+    let Klass = await loadCardDef(ref, {
       loader: this.loaderService.loader,
     });
     let card = new Klass({}) as CardDef;
