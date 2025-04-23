@@ -2,14 +2,13 @@ import GlimmerComponent from '@glimmer/component';
 import { action } from '@ember/object';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
-import { TrackedMap } from 'tracked-built-ins';
 import { tracked } from '@glimmer/tracking';
 
 import {
   type CardContext,
   type BaseDef,
-  type CardDef,
 } from 'https://cardstack.com/base/card-api';
+import { and } from '@cardstack/boxel-ui/helpers';
 
 import { type Query, type PrerenderedCard } from '@cardstack/runtime-common';
 
@@ -26,42 +25,22 @@ interface CardsGridSignature {
 }
 
 export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
-  @tracked cardResources: TrackedMap<string, CardDef>;
-
-  constructor(owner: unknown, args: CardsGridSignature['Args']) {
-    super(owner, args);
-    this.cardResources = new TrackedMap<string, CardDef>();
-  }
+  @tracked hydratedCardId: string | undefined;
+  cardResource = this.args.context?.getCard(this, () => this.hydratedCardId);
 
   @action
-  async hydrateCard(card: PrerenderedCard) {
-    if (!card?.url) {
-      throw new Error('Card URL is required');
+  async hydrateCard(card: PrerenderedCard | undefined) {
+    if (!card) {
+      this.hydratedCardId = undefined;
       return;
     }
-
-    if (!this.cardResources.has(card.url)) {
-      const cardId = removeFileExtension(card.url);
-      const result = this.args.context?.getCard(this, () => cardId);
-
-      if (!result?.card) {
-        return;
-      }
-      this.cardResources.set(card.url, result.card);
-    }
+    const cardId = removeFileExtension(card.url);
+    this.hydratedCardId = cardId;
   }
 
-  get isHydrated() {
-    return (cardUrl: string) => {
-      return this.cardResources.has(cardUrl);
-    };
-  }
-
-  @action
-  getCardComponent(cardUrl: string) {
-    const resource = this.cardResources.get(cardUrl);
-    return resource ? getComponent(resource) : null;
-  }
+  isHydrated = (cardUrl: string) => {
+    return removeFileExtension(cardUrl) == this.hydratedCardId;
+  };
 
   <template>
     <ul
@@ -86,23 +65,32 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
               <li
                 class='{{@selectedView}}-view-container'
                 data-test-card-url={{card.url}}
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
               >
-                {{#if (this.isHydrated card.url)}}
-                  {{#let (this.getCardComponent card.url) as |Component|}}
-                    <CardContainer
-                      class='card'
-                      {{@context.cardComponentModifier
-                        cardId=card.url
-                        format='data'
-                        fieldType=undefined
-                        fieldName=undefined
-                      }}
-                      data-test-cards-grid-item={{removeFileExtension card.url}}
-                      data-cards-grid-item={{removeFileExtension card.url}}
-                    >
-                      <Component />
-                    </CardContainer>
-                  {{/let}}
+                {{#if
+                  (and (this.isHydrated card.url) this.cardResource.isLoaded)
+                }}
+                  {{#if this.cardResource.card}}
+                    {{#let
+                      (getComponent this.cardResource.card)
+                      as |Component|
+                    }}
+                      <CardContainer
+                        class='card'
+                        data-test-cards-grid-item={{removeFileExtension
+                          card.url
+                        }}
+                        data-cards-grid-item={{removeFileExtension card.url}}
+                      >
+                        <Component />
+                      </CardContainer>
+                    {{/let}}
+                  {{/if}}
                 {{else}}
                   <CardContainer
                     class='card'
@@ -110,6 +98,7 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                     data-test-cards-grid-item={{removeFileExtension card.url}}
                     data-cards-grid-item={{removeFileExtension card.url}}
                     {{on 'mouseenter' (fn this.hydrateCard card)}}
+                    {{on 'mouseleave' (fn this.hydrateCard undefined)}}
                   >
                     <card.component />
                   </CardContainer>
