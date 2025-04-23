@@ -1,5 +1,7 @@
 'use strict';
 
+const MISSING_INVOKABLES_CONFIG = require('../runtime-common/etc/eslint/missing-invokables-config');
+
 module.exports = {
   root: true,
   env: {
@@ -66,7 +68,7 @@ module.exports = {
         },
         warnOnUnsupportedTypeScriptVersion: false,
       },
-      plugins: ['ember', 'window-mock'],
+      plugins: ['ember', 'window-mock', '@cardstack/boxel'],
       extends: [
         'eslint:recommended',
         'plugin:@typescript-eslint/recommended',
@@ -74,6 +76,7 @@ module.exports = {
         'plugin:ember/recommended-gts',
         'plugin:prettier/recommended',
         'plugin:qunit-dom/recommended',
+        'plugin:@cardstack/boxel/recommended',
       ],
       rules: {
         '@typescript-eslint/no-empty-function': 'off',
@@ -93,9 +96,12 @@ module.exports = {
         'ember/no-tracked-properties-from-args': 'off',
         'ember/no-runloop': 'off',
         'node/no-deprecated-api': 'off',
-        'deprecation/deprecation': 'off',
         'window-mock/mock-window-only': 'error',
         'window-mock/wrapped-setup-helpers-only': 'error',
+        '@cardstack/boxel/template-missing-invokable': [
+          'error',
+          { invokables: MISSING_INVOKABLES_CONFIG.invokables },
+        ],
       },
     },
     // node files

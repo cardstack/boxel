@@ -29,7 +29,7 @@ import {
   primitive,
   identifyCard,
   isCardInstance as _isCardInstance,
-  loadCard,
+  loadCardDef,
   humanReadable,
   maybeURL,
   maybeRelativeURL,
@@ -2490,7 +2490,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   let {
     meta: { adoptsFrom },
   } = resource;
-  let card: typeof BaseDef | undefined = await loadCard(adoptsFrom, {
+  let card: typeof BaseDef | undefined = await loadCardDef(adoptsFrom, {
     loader: myLoader(),
     relativeTo,
   });
@@ -2604,14 +2604,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
   let loadedValues = getDataBucket(instance);
   let values = (await Promise.all(
-    Object.entries(
-      {
-        ...resource.attributes,
-        ...nonNestedRelationships,
-        ...linksToManyRelationships,
-        ...(resource.id !== undefined ? { id: resource.id } : {}),
-      } ?? {},
-    ).map(async ([fieldName, value]) => {
+    Object.entries({
+      ...resource.attributes,
+      ...nonNestedRelationships,
+      ...linksToManyRelationships,
+      ...(resource.id !== undefined ? { id: resource.id } : {}),
+    }).map(async ([fieldName, value]) => {
       let field = getField(card, fieldName);
       if (!field) {
         // This happens when the instance has a field that is not in the definition. It can happen when
@@ -2738,7 +2736,7 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
     );
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let card: typeof BaseDef | undefined = await loadCard(
+    let card: typeof BaseDef | undefined = await loadCardDef(
       resource.meta.adoptsFrom,
       {
         loader: myLoader(),

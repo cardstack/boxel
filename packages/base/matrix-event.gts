@@ -130,7 +130,7 @@ export interface MessageEvent extends BaseMatrixEvent {
 
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: CardMessageContent | CardFragmentContent;
+  content: CardMessageContent | CardFragmentContent | CommandDefinitionsContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -185,11 +185,14 @@ export interface CardMessageContent {
     skillCards?: LooseSingleCardDocument[];
     context: {
       openCardIds?: string[];
-      tools: Tool[];
+      tools?: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
       requireToolCall?: boolean;
+      functions: Tool['function'][];
     };
+    cardEventId?: string;
+    card?: LooseSingleCardDocument;
   };
 }
 

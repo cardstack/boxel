@@ -15,7 +15,7 @@ import {
   trimExecutableExtension,
   hasExecutableExtension,
   SupportedMimeType,
-  loadCard,
+  loadCardDef,
   identifyCard,
   moduleFrom,
   isCardDef,
@@ -430,16 +430,23 @@ export class CurrentRun {
       log.warn(
         `${jobIdentity(this.#jobInfo)} encountered error loading module "${url.href}": ${err.message}`,
       );
-      let deps = await (
-        await this.loaderService.loader.getConsumedModules(url.href)
-      ).filter((u) => u !== url.href);
+      let depsSet = new Set(
+        await (
+          await this.loaderService.loader.getConsumedModules(url.href)
+        ).filter((u) => u !== url.href),
+      );
+      if (isCardError(err) && err.deps) {
+        for (let dep of err.deps) {
+          depsSet.add(dep);
+        }
+      }
       await this.batch.updateEntry(url, {
         type: 'error',
         error: {
-          status: 500,
+          status: err.status ?? 500,
           message: `encountered error loading module "${url.href}": ${err.message}`,
           additionalErrors: null,
-          deps,
+          deps: [...depsSet],
         },
       });
       return;
@@ -618,7 +625,7 @@ export class CurrentRun {
       // instances when there is no last known good state
       if (!typesMaybeError) {
         try {
-          let cardType = (await loadCard(resource.meta.adoptsFrom, {
+          let cardType = (await loadCardDef(resource.meta.adoptsFrom, {
             loader: this.loaderService.loader,
             relativeTo: instanceURL,
           })) as typeof CardDef;
@@ -675,10 +682,12 @@ export class CurrentRun {
               : { message: `${uncaughtError.message}` },
         };
         error.error.deps = [
-          ...moduleDeps,
-          ...(uncaughtError instanceof CardError
-            ? (uncaughtError.deps ?? [])
-            : []),
+          ...new Set([
+            ...moduleDeps,
+            ...(uncaughtError instanceof CardError
+              ? (uncaughtError.deps ?? [])
+              : []),
+          ]),
         ];
       } else if (typesMaybeError?.type === 'error') {
         error = { type: 'error', error: typesMaybeError.error };
@@ -751,7 +760,7 @@ export class CurrentRun {
         let loadedCard: typeof CardAPI.CardDef,
           loadedCardRef: CodeRef | undefined;
         try {
-          let maybeCard = await loadCard(fullRef, {
+          let maybeCard = await loadCardDef(fullRef, {
             loader: this.loaderService.loader,
           });
           if (!isCardDef(maybeCard)) {

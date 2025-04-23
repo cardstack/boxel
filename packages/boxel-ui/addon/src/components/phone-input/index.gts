@@ -159,6 +159,7 @@ export interface SelectedItemSignature {
   Element: HTMLDivElement;
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 class PhoneSelectedItem extends Component<SelectedItemSignature> {
   <template>
     <div>

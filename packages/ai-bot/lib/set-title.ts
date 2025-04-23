@@ -105,6 +105,7 @@ export const getLatestCommandApplyMessage = (
   if (!event) {
     return [];
   }
+  // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
   let eventContent = event.getContent() as
     | CommandResultWithOutputContent
     | CommandResultWithNoOutputContent;
@@ -119,9 +120,13 @@ export const getLatestCommandApplyMessage = (
     history,
     aiBotUserId,
   );
+  // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
   let commandRequest = commandSourceEvent.content[
     APP_BOXEL_COMMAND_REQUESTS_KEY
-  ].find((cr: CommandRequest) => cr.id === eventContent.data.commandRequestId);
+  ].find((cr: CommandRequest) => {
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
+    cr.id === eventContent.data.commandRequestId;
+  });
   let args = JSON.stringify(commandRequest.content.data.toolCall);
   let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(
     mostRecentlyAttachedCard,

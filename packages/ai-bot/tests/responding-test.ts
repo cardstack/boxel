@@ -10,6 +10,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
+import OpenAI from 'openai';
 
 class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
@@ -61,6 +62,10 @@ class FakeMatrixClient implements MatrixClient {
     this.sentEvents = [];
     this.eventId = 0;
   }
+
+  getAccessToken() {
+    return 'fake-access-token';
+  }
 }
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
@@ -88,6 +93,7 @@ function chunkWithReasoning(
     choices: [
       {
         delta: {
+          // @ts-ignore  Type '{ reasoning: string; }' is not assignable to type 'Delta'.
           reasoning: reasoning,
         },
         finish_reason: null,
