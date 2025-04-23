@@ -16,6 +16,8 @@ type Handler = (
 ) => Promise<Response>;
 
 export type Method = 'GET' | 'QUERY' | 'POST' | 'PATCH' | 'DELETE' | 'HEAD';
+
+/* eslint-disable @typescript-eslint/no-duplicate-enum-values */
 export enum SupportedMimeType {
   CardJson = 'application/vnd.card+json',
   CardSource = 'application/vnd.card+source',
@@ -27,9 +29,11 @@ export enum SupportedMimeType {
   EventStream = 'text/event-stream',
   HTML = 'text/html',
   JSONAPI = 'application/vnd.api+json',
+  JSON = 'application/json',
   CardTypeSummary = 'application/json',
   All = '*/*',
 }
+/* eslint-enable @typescript-eslint/no-duplicate-enum-values */
 
 function isHTTPMethod(method: unknown): method is Method {
   if (typeof method !== 'string') {

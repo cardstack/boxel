@@ -9,7 +9,7 @@ import {
   Deferred,
   identifyCard,
   apiFor,
-  loadCard,
+  loadCardDef,
   baseCardRef,
   type CodeRef,
   type CardResource,
@@ -54,7 +54,7 @@ export async function getTypes(instance: CardDef): Promise<string[]> {
   let fullRef: CodeRef = ref;
   while (fullRef) {
     let loadedCard, loadedCardRef;
-    loadedCard = await loadCard(fullRef, { loader });
+    loadedCard = await loadCardDef(fullRef, { loader });
     loadedCardRef = identifyCard(loadedCard);
     if (!loadedCardRef) {
       throw new Error(`could not identify card ${loadedCard.name}`);

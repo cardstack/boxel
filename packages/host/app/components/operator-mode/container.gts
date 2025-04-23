@@ -85,7 +85,7 @@ export default class OperatorModeContainer extends Component<Signature> {
 
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
-      await this.cardService.saveSource(url, content);
+      await this.cardService.saveSource(url, content, 'editor');
     });
   });
 

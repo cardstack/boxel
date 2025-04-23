@@ -42,16 +42,16 @@
     "ember-cli-htmlbars": "^6.3.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.3",
+    "@babel/core": "^7.26.10",
     "@ember/optional-features": "^2.0.0",
-    "@ember/test-helpers": "^2.2.0",
+    "@ember/test-helpers": "^3.3.1",
     "@embroider/test-setup": "^0.47.2",
     "@glimmer/component": "^1.1.2",
     "@glimmer/tracking": "^1.0.3",
     "@types/line-column": "^1.0.0",
     "@types/string.prototype.matchall": "^4.0.1",
-    "@typescript-eslint/eslint-plugin": "^5.5.0",
-    "@typescript-eslint/parser": "^5.5.0",
+    "@typescript-eslint/eslint-plugin": "^7.16.1",
+    "@typescript-eslint/parser": "^7.18.0",
     "babel-eslint": "^10.1.0",
     "broccoli-asset-rev": "^3.0.0",
     "ember-auto-import": "^2.7.2",
@@ -69,13 +69,13 @@
     "ember-page-title": "^6.2.1",
     "ember-qunit": "^5.1.2",
     "ember-resolver": "^8.0.2",
-    "ember-source": "~3.27.0",
+    "ember-source": "~5.4.1",
     "ember-source-channel-url": "^3.0.0",
     "ember-template-lint": "^2.18.1",
     "ember-try": "^1.4.0",
-    "eslint": "^7.20.0",
+    "eslint": "^8.57.1",
     "eslint-config-prettier": "^7.2.0",
-    "eslint-plugin-ember": "^10.2.0",
+    "eslint-plugin-ember": "^12.5.0",
     "eslint-plugin-node": "^11.1.0",
     "eslint-plugin-prettier": "^3.3.1",
     "loader.js": "^4.7.0",
@@ -85,7 +85,7 @@
     "qunit-dom": "^1.6.0",
     "release-it": "^14.2.1",
     "typescript": "^5.1.6",
-    "webpack": "^5.89.0"
+    "webpack": "^5.99.6"
   },
   "engines": {
     "node": "12.* || >= 14"

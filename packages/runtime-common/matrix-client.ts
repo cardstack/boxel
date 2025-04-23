@@ -301,11 +301,21 @@ export class MatrixClient {
       throw new Error(`Missing matrix access token`);
     }
     let response = await this.request('_matrix/client/v3/account/whoami');
-    let json = (await response.json()) as {
-      user_id: string;
-      device_id: string;
-    };
-    if (!response.ok) {
+    let json:
+      | {
+          user_id: string;
+          device_id: string;
+        }
+      | undefined;
+    let text = await response.text();
+    try {
+      json = JSON.parse(text);
+    } catch (e) {
+      throw new Error(
+        `unable to parse response from ${this.matrixURL.href}_matrix/client/v3/account/whoami, response was not JSON: ${text}`,
+      );
+    }
+    if (!json || !response.ok) {
       return undefined;
     } else {
       return json.user_id;

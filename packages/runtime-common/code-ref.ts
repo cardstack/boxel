@@ -84,7 +84,7 @@ export function isCardDef(
         'Loader is required to check if a code ref is a card def',
       );
     }
-    return loadCard(cardOrCodeRef, { loader })
+    return loadCardDef(cardOrCodeRef, { loader })
       .then((card) => isCardDef(card))
       .catch(() => false);
   }
@@ -127,7 +127,7 @@ export async function getClass(ref: ResolvedCodeRef, loader: Loader) {
   return module[ref.name];
 }
 
-export async function loadCard(
+export async function loadCardDef(
   ref: CodeRef,
   opts: { loader: Loader; relativeTo?: URL },
 ): Promise<typeof BaseDef> {
@@ -139,10 +139,10 @@ export async function loadCard(
     );
     maybeCard = module[ref.name];
   } else if (ref.type === 'ancestorOf') {
-    let child = await loadCard(ref.card, opts);
+    let child = await loadCardDef(ref.card, opts);
     maybeCard = getAncestor(child);
   } else if (ref.type === 'fieldOf') {
-    let parent = await loadCard(ref.card, opts);
+    let parent = await loadCardDef(ref.card, opts);
     let field = getField(parent, ref.field);
     maybeCard = field?.card;
   } else {
