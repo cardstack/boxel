@@ -138,7 +138,7 @@ export default class StoreService extends Service implements StoreInterface {
     );
     if (currentReferenceCount <= 0) {
       if (currentReferenceCount < 0) {
-        console.error(
+        console.trace(
           `WARNING: current reference count for ${id} is negative: ${this.referenceCount.get(id)}`,
         );
       }
