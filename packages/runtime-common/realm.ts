@@ -309,7 +309,7 @@ export class Realm {
     this.#dbAdapter = dbAdapter;
 
     this.#router = new Router(new URL(url))
-      .post('/', SupportedMimeType.CardJson, this.createCard.bind(this))
+      .post('(/|/.+/)', SupportedMimeType.CardJson, this.createCard.bind(this))
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
@@ -1217,7 +1217,7 @@ export class Realm {
     }
 
     let fileURL = this.paths.fileURL(
-      `/${join(new URL(this.url).pathname, name, uuidV4() + '.json')}`,
+      `/${join(new URL(request.url).pathname, name, uuidV4() + '.json')}`,
     );
     let localPath = this.paths.local(fileURL);
     let fileSerialization: LooseSingleCardDocument | undefined;
@@ -1225,7 +1225,7 @@ export class Realm {
     // be created
     try {
       fileSerialization = await this.fileSerialization(
-        merge(json, { data: { meta: { realmURL: this.url } } }),
+        merge(json, { data: { meta: { realmURL: request.url } } }),
         fileURL,
       );
     } catch (err: any) {

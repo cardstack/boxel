@@ -1,6 +1,10 @@
 import { service } from '@ember/service';
 
-import { isCardInstance, realmURL } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  isResolvedCodeRef,
+  realmURL,
+} from '@cardstack/runtime-common';
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
@@ -35,12 +39,18 @@ export default class CopyCardCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CopyCardInput,
   ): Promise<BaseCommandModule.CopyCardResult> {
-    const realmUrl = await this.determineTargetRealmUrl(input);
+    const targetUrl = await this.determineTargetUrl(input);
     let doc = await this.cardService.serializeCard(input.sourceCard, {
       useAbsoluteURL: true,
     });
     delete doc.data.id;
-    let maybeId = await this.store.create(doc, undefined, realmUrl);
+    if (input.codeRef) {
+      if (!isResolvedCodeRef(input.codeRef)) {
+        throw new Error('codeRef is not resolved');
+      }
+      doc.data.meta.adoptsFrom = input.codeRef;
+    }
+    let maybeId = await this.store.create(doc, undefined, targetUrl);
     if (typeof maybeId !== 'string') {
       throw new Error(
         `unable to save copied card instance: ${JSON.stringify(
@@ -61,18 +71,17 @@ export default class CopyCardCommand extends HostBaseCommand<
     return new CopyCardResult({ newCard });
   }
 
-  private async determineTargetRealmUrl({
+  private async determineTargetUrl({
     targetStackIndex,
-    targetRealmUrl,
+    targetUrl,
   }: BaseCommandModule.CopyCardInput) {
-    if (targetRealmUrl !== undefined && targetStackIndex !== undefined) {
+    if (targetUrl !== undefined && targetStackIndex !== undefined) {
       console.warn(
-        'Both targetStackIndex and targetRealmUrl are set; only one should be set; using targetRealmUrl',
+        'Both targetStackIndex and targetUrl are set; only one should be set; using targetUrl',
       );
     }
-    let realmUrl = targetRealmUrl;
-    if (realmUrl) {
-      return realmUrl;
+    if (targetUrl) {
+      return targetUrl;
     }
     if (targetStackIndex !== undefined) {
       // use existing card in stack to determine realm url,

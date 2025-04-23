@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "address": {
+        "addressLine1": "Livarska Ulica 10",
+        "addressLine2": null,
+        "city": null,
+        "state": null,
+        "postalCode": null,
+        "country": {
+          "name": "Slovenia",
+          "code": "SI"
+        },
+        "poBoxNumber": null
+      },
+      "mapWidth": 600,
+      "mapHeight": 400,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../map",
+        "name": "Map"
+      }
+    }
+  }
+}
