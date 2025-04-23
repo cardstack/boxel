@@ -21,7 +21,6 @@ import {
 } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
-import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
@@ -29,10 +28,9 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
-import RealmServerService from './realm-server';
-import StoreService from './store';
-
 import type LoaderService from './loader-service';
+import type RealmServerService from './realm-server';
+import type StoreService from './store';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -42,13 +40,13 @@ type GenericCommand = Command<
 >;
 
 export default class CommandService extends Service {
-  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
   @service declare private loaderService: LoaderService;
   @service declare private realm: Realm;
   @service declare private realmServer: RealmServerService;
   currentlyExecutingCommandRequestIds = new TrackedSet<string>();
+  executedCommandRequestIds = new TrackedSet<string>();
   private commandProcessingEventQueue: string[] = [];
   private flushCommandProcessingQueue: Promise<void> | undefined;
 
@@ -142,6 +140,9 @@ export default class CommandService extends Service {
         if (this.currentlyExecutingCommandRequestIds.has(messageCommand.id!)) {
           continue;
         }
+        if (this.executedCommandRequestIds.has(messageCommand.id!)) {
+          continue;
+        }
         if (messageCommand.commandResultCardEventId) {
           continue;
         }
@@ -211,19 +212,17 @@ export default class CommandService extends Service {
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
           );
         }
-        await this.operatorModeStateService.patchCard.perform(
-          payload?.attributes?.cardId,
-          {
-            attributes: payload?.attributes?.patch?.attributes,
-            relationships: payload?.attributes?.patch?.relationships,
-          },
-        );
+        await this.store.patch(payload?.attributes?.cardId, {
+          attributes: payload?.attributes?.patch?.attributes,
+          relationships: payload?.attributes?.patch?.relationships,
+        });
       } else {
         // Unrecognized command. This can happen if a programmatically-provided command is no longer available due to a browser refresh.
         throw new Error(
           `Unrecognized command: ${command.name}. This command may have been associated with a previous browser session.`,
         );
       }
+      this.executedCommandRequestIds.add(commandRequestId!);
       await this.matrixService.sendCommandResultEvent(
         command.message.roomId,
         eventId,
@@ -237,7 +236,7 @@ export default class CommandService extends Service {
           : e instanceof Error
             ? e
             : new Error('Command failed.');
-      console.warn(error);
+      console.error(error);
       await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
       this.matrixService.failedCommandState.set(commandRequestId!, error);
     } finally {

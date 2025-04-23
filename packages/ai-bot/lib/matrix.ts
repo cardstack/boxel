@@ -26,6 +26,7 @@ export interface MatrixClient {
   ): Promise<{ event_id: string }>;
 
   setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
+  getAccessToken(): string | null;
 }
 
 export async function sendMatrixEvent(
@@ -65,23 +66,12 @@ export async function sendMessageEvent(
     ...{
       body,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: body,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
     },
     ...data,
   };
-  if (eventIdToReplace) {
-    contentObject['m.new_content'] = {
-      body,
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: body,
-      format: 'org.matrix.custom.html',
-      [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
-    };
-  }
   return await sendMatrixEvent(
     client,
     roomId,
@@ -103,7 +93,7 @@ export async function sendErrorEvent(
     await sendMessageEvent(
       client,
       roomId,
-      'There was an error processing your request, please try again later',
+      'There was an error processing your request, please try again later.',
       eventIdToReplace,
       {
         isStreamingFinished: true,

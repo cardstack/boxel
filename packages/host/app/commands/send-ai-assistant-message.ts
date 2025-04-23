@@ -2,14 +2,12 @@ import { service } from '@ember/service';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { markdownToHtml } from '@cardstack/runtime-common';
 import {
   basicMappings,
   generateJsonSchemaForCardType,
   getPatchTool,
 } from '@cardstack/runtime-common/helpers/ai';
 
-import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 import { APP_BOXEL_MESSAGE_MSGTYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
@@ -52,7 +50,6 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
   ): Promise<BaseCommandModule.SendAiAssistantMessageResult> {
     let { commandService, loaderService, matrixService } = this;
     let roomId = input.roomId;
-    let html = markdownToHtml(escapeHtmlOutsideCodeBlocks(input.prompt));
     let mappings = await basicMappings(loaderService.loader);
     let tools = [];
     let requireToolCall = input.requireCommandCall ?? false;
@@ -121,7 +118,6 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: input.prompt || '',
       format: 'org.matrix.custom.html',
-      formatted_body: html,
       clientGeneratedId,
       data: {
         attachedFiles: files?.map((file: FileDef) => file.serialize()),

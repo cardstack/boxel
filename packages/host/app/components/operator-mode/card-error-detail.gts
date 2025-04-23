@@ -13,13 +13,13 @@ import perform from 'ember-concurrency/helpers/perform';
 import { Accordion, Button } from '@cardstack/boxel-ui/components';
 
 import SwitchSubmodeCommand from '../../commands/switch-submode';
-import { type CardError } from '../../services/store';
+import { type CardErrorJSONAPI } from '../../services/store';
 
 import type CommandService from '../../services/command-service';
 
 interface Signature {
   Args: {
-    error: CardError;
+    error: CardErrorJSONAPI;
     viewInCodeMode?: true;
     title?: string;
   };
@@ -51,7 +51,9 @@ export default class CardErrorDetail extends Component<Signature> {
         <:title>
           <ExclamationCircle class='error-icon' />
           An error was encountered on this card:
-          <span data-test-error-title>{{@title}}</span>
+          <span data-test-error-title>
+            {{if @title @title @error.title}}
+          </span>
         </:title>
         <:content>
           {{#if @viewInCodeMode}}
@@ -93,6 +95,9 @@ export default class CardErrorDetail extends Component<Signature> {
         overflow: auto;
         margin-top: auto;
         max-height: fit-content;
+      }
+      .error-detail :deep(.accordion-item) {
+        height: auto;
       }
       @media (min-height: 800px) {
         .error-detail {

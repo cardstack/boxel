@@ -18,14 +18,15 @@ import { or, not, and } from '@cardstack/boxel-ui/helpers';
 import {
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
 } from '@cardstack/runtime-common';
 
 import Auth from '@cardstack/host/components/matrix/auth';
 import PaymentSetup from '@cardstack/host/components/matrix/payment-setup';
 import CodeSubmode from '@cardstack/host/components/operator-mode/code-submode';
 import InteractSubmode from '@cardstack/host/components/operator-mode/interact-submode';
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
-
 import { getSearch } from '@cardstack/host/resources/search';
 
 import MessageService from '@cardstack/host/services/message-service';
@@ -76,9 +77,15 @@ export default class OperatorModeContainer extends Component<Signature> {
     return getSearch;
   }
 
+  @provide(GetCardCollectionContextName)
+  // @ts-ignore "getCardCollection" is declared but not used
+  private get getCardCollection() {
+    return getCardCollection;
+  }
+
   private saveSource = task(async (url: URL, content: string) => {
     await this.withTestWaiters(async () => {
-      await this.cardService.saveSource(url, content);
+      await this.cardService.saveSource(url, content, 'editor');
     });
   });
 

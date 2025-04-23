@@ -194,7 +194,7 @@ export default class SearchSheet extends Component<Signature> {
     if (!this.searchKeyAsURL) {
       return;
     }
-    let card = await this.store.peek(this.searchKeyAsURL);
+    let card = await this.store.get(this.searchKeyAsURL);
     return {
       card,
     };

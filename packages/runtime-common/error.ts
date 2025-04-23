@@ -24,6 +24,25 @@ export interface SerializedError {
   stack?: string;
 }
 
+export interface CardErrorJSONAPI {
+  id?: string; // 404 errors won't necessarily have an id
+  status: number;
+  title: string;
+  message: string;
+  realm: string | undefined;
+  meta: {
+    lastKnownGoodHtml: string | null;
+    cardTitle: string | null;
+    scopedCssUrls: string[];
+    stack: string | null;
+  };
+  additionalErrors?: (CardError | Error)[] | null;
+}
+
+export interface CardErrorsJSONAPI {
+  errors: CardErrorJSONAPI[];
+}
+
 export class CardError extends Error implements SerializedError {
   message: string;
   status: number;
@@ -94,9 +113,14 @@ export class CardError extends Error implements SerializedError {
         Array.isArray(maybeErrorJSON.errors) &&
         maybeErrorJSON.errors.length > 0
       ) {
-        return CardError.fromSerializableError(maybeErrorJSON.errors[0]);
+        let error = CardError.fromSerializableError(maybeErrorJSON.errors[0]);
+        if (response.status === 404) {
+          error.deps = [response.url];
+        }
+
+        return error;
       }
-      return new CardError(
+      let error = new CardError(
         `unable to fetch ${url}${!maybeErrorJSON ? ': ' + text : ''}`,
         {
           title: response.statusText,
@@ -104,6 +128,10 @@ export class CardError extends Error implements SerializedError {
           responseText: text,
         },
       );
+      if (response.status === 404) {
+        error.deps = [response.url];
+      }
+      return error;
     }
     throw new CardError(
       `tried to create a card error from a successful fetch response from ${url}, status ${

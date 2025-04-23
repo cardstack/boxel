@@ -40,14 +40,17 @@ import {
   type Permissions,
   type getCard,
   type getCards,
+  type getCardCollection,
   cardTypeDisplayName,
   PermissionsContextName,
   RealmURLContextName,
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
   Deferred,
   cardTypeIcon,
   CommandContext,
+  realmURL,
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
@@ -114,6 +117,8 @@ type StackItemCardContext = Omit<CardContext, 'prerenderedCardSearchComponent'>;
 export default class OperatorModeStackItem extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
 
   @service private declare cardService: CardService;
   @service private declare environmentService: EnvironmentService;
@@ -143,8 +148,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   @provide(RealmURLContextName)
   get realmURL() {
-    let api = this.cardResource?.api;
-    return api && this.card ? this.card[api.realmURL] : undefined;
+    return this.card ? this.card[realmURL] : undefined;
   }
 
   cardTracker = new ElementTracker();
@@ -160,9 +164,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.item.url, {
-      isAutoSaved: true,
-    });
+    this.cardResource = this.getCard(this, () => this.args.item.url);
   };
 
   private get url() {
@@ -250,6 +252,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       commandContext: this.args.commandContext,
       getCard: this.getCard,
       getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
       store: this.store,
     };
   }

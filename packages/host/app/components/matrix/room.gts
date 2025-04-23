@@ -98,6 +98,7 @@ export default class Room extends Component<Signature> {
         )}}
         data-test-room-name={{@roomResource.name}}
         data-test-room={{@roomId}}
+        data-room-id={{@roomId}}
       >
         <AiAssistantConversation
           @registerConversationScroller={{this.registerConversationScroller}}
@@ -632,7 +633,7 @@ export default class Room extends Component<Signature> {
     let myLastMessage = myMessages[myMessages.length - 1];
 
     this.doSendMessage.perform(
-      myLastMessage.message,
+      myLastMessage.body,
       myLastMessage!.attachedCardIds || [],
       myLastMessage.attachedFiles,
       true,
@@ -752,13 +753,18 @@ export default class Room extends Component<Signature> {
         this.matrixService.messagesToSend.set(this.args.roomId, undefined);
         this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
+      let openCardIds =
+        this.operatorModeStateService.getOpenCardIds(
+          this.args.selectedCardRef,
+        ) || [];
+      for (let cardId of this.autoAttachedCardIds) {
+        if (!openCardIds.includes(cardId)) {
+          openCardIds.push(cardId);
+        }
+      }
       let context = {
         submode: this.operatorModeStateService.state.submode,
-        openCardIds: this.operatorModeStateService
-          .topMostStackItems()
-          .filter((stackItem) => stackItem)
-          .map((stackItem) => stackItem.url)
-          .filter(Boolean) as string[],
+        openCardIds: openCardIds ?? [],
       };
       try {
         if (files?.length) {
@@ -771,7 +777,7 @@ export default class Room extends Component<Signature> {
           // elsewhere in our app.
           cards = (
             await Promise.all(
-              (cardsOrIds as string[]).map((id) => this.store.peek(id)),
+              (cardsOrIds as string[]).map((id) => this.store.get(id)),
             )
           )
             .filter(Boolean)
@@ -809,9 +815,17 @@ export default class Room extends Component<Signature> {
 
   private get autoAttachedCardIds() {
     if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      return this.playgroundPanelCardId
-        ? new TrackedSet([this.playgroundPanelCardId])
-        : new TrackedSet<string>();
+      // also get the card ids of the cards that are open in code mode
+      let cardIds = new TrackedSet<string>();
+      if (this.autoAttachedFileUrl?.endsWith('.json')) {
+        // remove the json extension. TODO: is there a way of getting the actual card id
+        let cardId = this.autoAttachedFileUrl.replace(/\.json$/, '');
+        cardIds.add(cardId);
+      }
+      if (this.playgroundPanelCardId) {
+        cardIds.add(this.playgroundPanelCardId);
+      }
+      return cardIds;
     }
 
     return this.autoAttachmentResource.cardIds;
@@ -857,7 +871,7 @@ export default class Room extends Component<Signature> {
       this.commandService.commandContext,
     );
 
-    let skillCard = await this.store.peek<SkillCard>(cardId);
+    let skillCard = await this.store.get<SkillCard>(cardId);
     if (skillCard && isCardInstance(skillCard)) {
       await addSkillsToRoomCommand.execute({
         roomId: this.args.roomId,

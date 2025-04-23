@@ -29,16 +29,22 @@ import {
   primitive,
   identifyCard,
   isCardInstance as _isCardInstance,
-  loadCard,
+  loadCardDef,
   humanReadable,
   maybeURL,
   maybeRelativeURL,
   CodeRef,
   CommandContext,
   uuidv4,
+  realmURL,
+  localId,
+  formats,
+  isLocalResourceID,
+  type Format,
   type Meta,
   type CardFields,
   type Relationship,
+  type ResourceID,
   type LooseCardResource,
   type LooseSingleCardDocument,
   type CardDocument,
@@ -48,6 +54,7 @@ import {
   type ResolvedCodeRef,
   type getCard,
   type getCards,
+  type getCardCollection,
   type Store,
 } from '@cardstack/runtime-common';
 import type { ComponentLike } from '@glint/template';
@@ -68,7 +75,7 @@ interface CardOrFieldTypeIconSignature {
 
 export type CardOrFieldTypeIcon = ComponentLike<CardOrFieldTypeIconSignature>;
 
-export { primitive, isField, type BoxComponent };
+export { localId, realmURL, primitive, isField, type BoxComponent };
 export const serialize = Symbol.for('cardstack-serialize');
 export const deserialize = Symbol.for('cardstack-deserialize');
 export const useIndexBasedKey = Symbol.for('cardstack-use-index-based-key');
@@ -78,9 +85,7 @@ export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
-export const realmURL = Symbol.for('cardstack-realm-url');
 export const meta = Symbol.for('cardstack-meta');
-export const localId = Symbol.for('cardstack-local-id');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
@@ -104,14 +109,7 @@ export type FieldsTypeFor<T extends BaseDef> = {
       ? FieldsTypeFor<T[Field]>
       : unknown);
 };
-export const formats: Format[] = [
-  'isolated',
-  'embedded',
-  'fitted',
-  'edit',
-  'atom',
-];
-export type Format = 'isolated' | 'embedded' | 'fitted' | 'edit' | 'atom';
+export { formats, type Format };
 export type FieldType = 'contains' | 'containsMany' | 'linksTo' | 'linksToMany';
 export type FieldFormats = {
   ['fieldDef']: Format;
@@ -152,6 +150,7 @@ export interface CardContext<T extends CardDef = CardDef> {
   prerenderedCardSearchComponent: any;
   getCard: getCard<T>;
   getCards: getCards;
+  getCardCollection: getCardCollection;
   store: Store;
 }
 
@@ -278,6 +277,8 @@ export async function flushLogs() {
 export interface IdentityContext {
   get(url: string): CardDef | undefined;
   set(url: string, instance: CardDef): void;
+  setNonTracked(id: string, instance: CardDef): void;
+  makeTracked(id: string): void;
 }
 
 type JSONAPIResource =
@@ -293,8 +294,10 @@ type JSONAPIResource =
     };
 
 export interface JSONAPISingleResourceDocument {
-  data: Partial<JSONAPIResource> & { id?: string; type: string };
-  included?: (Partial<JSONAPIResource> & { id: string; type: string })[];
+  data: Partial<JSONAPIResource> & { type: string } & { id?: string } & {
+    lid?: string;
+  };
+  included?: (Partial<JSONAPIResource> & ResourceID)[];
 }
 
 export interface Field<
@@ -375,11 +378,14 @@ function resourceFrom(
   resourceId: string | undefined,
 ): LooseCardResource | undefined {
   if (doc == null) {
-    return undefined;
+    return;
   }
   let data: CardResource[];
   if (isSingleCardDocument(doc)) {
-    if (resourceId == null) {
+    if (resourceId === undefined) {
+      return undefined;
+    }
+    if (resourceId === null) {
       return doc.data;
     }
     data = [doc.data];
@@ -895,35 +901,45 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         },
       };
     }
-    // TODO add support for visited without an id
-    visited.add(value.id);
+    if (visited.has(value[localId])) {
+      return {
+        relationships: {
+          [this.name]: {
+            data: { type: 'card', lid: value[localId] },
+          },
+        },
+      };
+    }
+
+    visited.add(value.id ?? value[localId]);
 
     let serialized = callSerializeHook(this.card, value, doc, visited, opts) as
       | (JSONAPIResource & { id: string; type: string })
       | null;
     if (serialized) {
-      // TODO this goes away
-      if (!value[isSavedInstance]) {
-        throw new Error(
-          `the linksTo field '${this.name}' cannot be serialized with an unsaved card`,
-        );
-      }
       let resource: JSONAPIResource = {
         relationships: {
           [this.name]: {
-            // TODO add support for unsaved card
-            links: {
-              self: makeRelativeURL(value.id, opts),
-            },
-            // we also write out the data form of the relationship
-            // which correlates to the included resource
-            data: { type: 'card', id: value.id },
+            ...(value[isSavedInstance]
+              ? {
+                  links: {
+                    self: makeRelativeURL(value.id, opts),
+                  },
+                  data: { type: 'card', id: value.id },
+                }
+              : {
+                  data: { type: 'card', lid: value[localId] },
+                }),
           },
         },
       };
       if (
-        !(doc.included ?? []).find((r) => r.id === value.id) &&
-        doc.data.id !== value.id
+        (!(doc.included ?? []).find((r) => 'id' in r && r.id === value.id) &&
+          doc.data.id !== value.id) ||
+        (!(doc.included ?? []).find(
+          (r) => 'lid' in r && r.lid === value[localId],
+        ) &&
+          doc.data.lid !== value[localId])
       ) {
         doc.included = doc.included ?? [];
         doc.included.push(serialized);
@@ -956,6 +972,14 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         }' cannot deserialize non-relationship value ${JSON.stringify(value)}`,
       );
     }
+    if (Array.isArray(value.data)) {
+      throw new Error(
+        `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
+      );
+    }
+    if (isLocalResourceID(value.data)) {
+      throw new Error(`lid is not supported in deserialization`);
+    }
     if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
@@ -966,8 +990,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       cachedInstance[isSavedInstance] = true;
       return cachedInstance as BaseInstanceType<CardT>;
     }
-    let resourceId = new URL(value.links.self, relativeTo).href;
-    let resource = resourceFrom(doc, resourceId);
+    //links.self is used to tell the consumer of this payload how to get the resource via HTTP. data.id is used to tell the
+    //consumer of this payload how to get the resource from the side loaded included bucket. we need to strictly only
+    //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
+    //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
+    //that means that the serialization is incorrect and is not JSON-API compliant.
+    let resource = resourceFrom(doc, value.data?.id);
     if (!resource) {
       if (loadedValue !== undefined) {
         return loadedValue;
@@ -1021,7 +1049,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   ): Promise<BaseInstanceType<CardT> | undefined> {
     let deserialized = getDataBucket(instance as BaseDef);
     let identityContext =
-      identityContexts.get(instance as BaseDef) ?? new Map();
+      identityContexts.get(instance as BaseDef) ?? new SimpleIdentityContext();
     // taking advantage of the identityMap regardless of whether loadFields is set
     let fieldValue = identityContext.get(e.reference as string);
 
@@ -1074,6 +1102,12 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
           null,
           2,
         )}`,
+      );
+    }
+
+    if (!json.data.id) {
+      throw new Error(
+        `should never get here: the document from the card we just fetched, ${reference}, did not have an id`,
       );
     }
 
@@ -1253,32 +1287,47 @@ class LinksToMany<FieldT extends CardDefConstructor>
         };
         return;
       }
-      // TODO add support for when value is unsaved and has no id
-      visited.add(value.id);
-      let serialized: JSONAPIResource & { id: string; type: string } =
-        callSerializeHook(this.card, value, doc, visited, opts);
-      if (!value[isSavedInstance]) {
-        // TODO this goes away
-        throw new Error(
-          `the linksToMany field '${this.name}' cannot be serialized with an unsaved card`,
-        );
+      if (visited.has(value[localId])) {
+        relationships[`${this.name}\.${i}`] = {
+          data: { type: 'card', lid: value[localId] },
+        };
+        return;
       }
+
+      visited.add(value.id ?? value[localId]);
+      let serialized: JSONAPIResource & ResourceID = callSerializeHook(
+        this.card,
+        value,
+        doc,
+        visited,
+        opts,
+      );
       if (serialized.meta && Object.keys(serialized.meta).length === 0) {
         delete serialized.meta;
       }
       if (
-        !(doc.included ?? []).find((r) => r.id === value.id) &&
-        doc.data.id !== value.id
+        (!(doc.included ?? []).find((r) => 'id' in r && r.id === value.id) &&
+          doc.data.id !== value.id) ||
+        (!(doc.included ?? []).find(
+          (r) => 'lid' in r && r.lid === value[localId],
+        ) &&
+          doc.data.lid !== value[localId])
       ) {
         doc.included = doc.included ?? [];
         doc.included.push(serialized);
       }
-      // TODO add support for unsaved card
+
       relationships[`${this.name}\.${i}`] = {
-        links: {
-          self: makeRelativeURL(value.id, opts),
-        },
-        data: { type: 'card', id: value.id },
+        ...(value[isSavedInstance]
+          ? {
+              links: {
+                self: makeRelativeURL(value.id, opts),
+              },
+              data: { type: 'card', id: value.id },
+            }
+          : {
+              data: { type: 'card', lid: value[localId] },
+            }),
       };
     });
 
@@ -1310,7 +1359,16 @@ class LinksToMany<FieldT extends CardDefConstructor>
             )}`,
           );
         }
-        if (value.links.self == null) {
+        if (Array.isArray(value.data)) {
+          throw new Error(
+            `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
+          );
+        }
+        if (isLocalResourceID(value.data)) {
+          throw new Error(`lid is not supported in deserialization`);
+        }
+        // TODO support lid (e,g, value.links will not exist in this case)
+        if (value.links?.self == null) {
           return null;
         }
         let cachedInstance = identityContext.get(
@@ -1320,12 +1378,12 @@ class LinksToMany<FieldT extends CardDefConstructor>
           cachedInstance[isSavedInstance] = true;
           return cachedInstance;
         }
-        let resourceId = new URL(
-          value.links.self,
-          !Array.isArray(doc.data) && 'id' in doc.data && doc.data.id
-            ? doc.data.id
-            : relativeTo,
-        ).href;
+        //links.self is used to tell the consumer of this payload how to get the resource via HTTP. data.id is used to tell the
+        //consumer of this payload how to get the resource from the side loaded included bucket. we need to strictly only
+        //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
+        //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
+        //that means that the serialization is incorrect and is not JSON-API compliant.
+        let resourceId = value.data?.id;
         if (loadedValues && Array.isArray(loadedValues)) {
           let loadedValue = loadedValues.find(
             (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
@@ -1433,7 +1491,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
   ): Promise<T[] | undefined> {
     let result: T[] | undefined;
     let fieldValues: CardDef[] = [];
-    let identityContext = identityContexts.get(instance) ?? new Map();
+    let identityContext =
+      identityContexts.get(instance) ?? new SimpleIdentityContext();
 
     for (let ref of e.reference) {
       // taking advantage of the identityMap regardless of whether loadFields is set
@@ -1510,6 +1569,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
               null,
               2,
             )}`,
+          );
+        }
+        if (!json.data.id) {
+          throw new Error(
+            `should never get here: the document from the card we just fetched, ${reference}, did not have an id`,
           );
         }
         let fieldInstance = (await createFromSerialized(
@@ -2357,7 +2421,7 @@ function serializeCardResource(
       type: 'card',
       meta: { adoptsFrom },
     },
-    model.id ? { id: model.id } : undefined,
+    model.id ? { id: model.id } : { lid: model[localId] },
   );
 }
 
@@ -2366,7 +2430,10 @@ export function serializeCard(
   opts?: SerializeOpts,
 ): LooseSingleCardDocument {
   let doc = {
-    data: { type: 'card', ...(model.id != null ? { id: model.id } : {}) },
+    data: {
+      type: 'card',
+      ...(model.id != null ? { id: model.id } : { lid: model[localId] }),
+    },
   };
   let modelRelativeTo = model[relativeTo];
   let data = serializeCardResource(model, doc, {
@@ -2419,11 +2486,11 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   relativeTo: URL | undefined,
   opts?: { identityContext?: IdentityContext },
 ): Promise<BaseInstanceType<T>> {
-  let identityContext = opts?.identityContext ?? new Map();
+  let identityContext = opts?.identityContext ?? new SimpleIdentityContext();
   let {
     meta: { adoptsFrom },
   } = resource;
-  let card: typeof BaseDef | undefined = await loadCard(adoptsFrom, {
+  let card: typeof BaseDef | undefined = await loadCardDef(adoptsFrom, {
     loader: myLoader(),
     relativeTo,
   });
@@ -2439,54 +2506,11 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   ) as BaseInstanceType<T>;
 }
 
-// Crawls all fields for cards and populates the identityContext
-function buildIdentityContext(
-  instance: CardDef | FieldDef,
-  identityContext: IdentityContext = new Map(),
-  visited: WeakSet<CardDef | FieldDef> = new WeakSet(),
-) {
-  if (instance == null || visited.has(instance)) {
-    return identityContext;
-  }
-  visited.add(instance);
-  let fields = getFields(instance);
-  for (let fieldName of Object.keys(fields)) {
-    let value = peekAtField(instance, fieldName);
-    if (value == null) {
-      continue;
-    }
-    if (Array.isArray(value)) {
-      for (let item of value) {
-        if (value == null) {
-          continue;
-        }
-        if (isCard(item)) {
-          identityContext.set(item.id, item);
-        }
-        if (isCardOrField(item)) {
-          buildIdentityContext(item, identityContext, visited);
-        }
-      }
-    } else {
-      if (isCard(value) && value.id) {
-        identityContext.set(value.id, value);
-      }
-      if (isCardOrField(value)) {
-        buildIdentityContext(value, identityContext, visited);
-      }
-    }
-  }
-  return identityContext;
-}
-
 export async function updateFromSerialized<T extends BaseDefConstructor>(
   instance: BaseInstanceType<T>,
   doc: LooseSingleCardDocument,
-  identityContext?: IdentityContext,
+  identityContext: IdentityContext = new SimpleIdentityContext(),
 ): Promise<BaseInstanceType<T>> {
-  if (!identityContext) {
-    identityContext = buildIdentityContext(instance);
-  }
   identityContexts.set(instance, identityContext);
   if (!instance[relativeTo] && doc.data.id) {
     instance[relativeTo] = new URL(doc.data.id);
@@ -2510,7 +2534,7 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
   data: T extends { [primitive]: infer P } ? P : LooseCardResource,
   doc: LooseSingleCardDocument | CardDocument | undefined,
   _relativeTo: URL | undefined,
-  identityContext: IdentityContext = new Map(),
+  identityContext: IdentityContext = new SimpleIdentityContext(),
 ): Promise<BaseInstanceType<T>> {
   let resource: LooseCardResource | undefined;
   if (isCardResource(data)) {
@@ -2549,8 +2573,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
   doc: LooseSingleCardDocument | CardDocument,
   identityContext: IdentityContext,
 ): Promise<BaseInstanceType<T>> {
+  // because our store uses a tracked map for its identity map all the assembly
+  // work that we are doing to deserialize the instance below is "live". so we
+  // add the actual instance silently in a non-tracked way and only track it at
+  // the very end.
   if (resource.id != null) {
-    identityContext.set(resource.id, instance as CardDef); // the instance must be a composite card since we are updating it from a resource
+    identityContext.setNonTracked(resource.id, instance as CardDef);
   }
   let deferred = new Deferred<BaseDef>();
   let card = Reflect.getPrototypeOf(instance)!.constructor as T;
@@ -2576,14 +2604,12 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
   let loadedValues = getDataBucket(instance);
   let values = (await Promise.all(
-    Object.entries(
-      {
-        ...resource.attributes,
-        ...nonNestedRelationships,
-        ...linksToManyRelationships,
-        ...(resource.id !== undefined ? { id: resource.id } : {}),
-      } ?? {},
-    ).map(async ([fieldName, value]) => {
+    Object.entries({
+      ...resource.attributes,
+      ...nonNestedRelationships,
+      ...linksToManyRelationships,
+      ...(resource.id !== undefined ? { id: resource.id } : {}),
+    }).map(async ([fieldName, value]) => {
       let field = getField(card, fieldName);
       if (!field) {
         // This happens when the instance has a field that is not in the definition. It can happen when
@@ -2654,6 +2680,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
     }
   }
 
+  // now we make the instance "live" after it's all constructed
+  if (resource.id != null) {
+    identityContext.makeTracked(resource.id);
+  }
+
   deferred.fulfill(instance);
   return instance;
 }
@@ -2705,7 +2736,7 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
     );
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let card: typeof BaseDef | undefined = await loadCard(
+    let card: typeof BaseDef | undefined = await loadCardDef(
       resource.meta.adoptsFrom,
       {
         loader: myLoader(),
@@ -3201,4 +3232,18 @@ export function getCardMeta<K extends keyof CardResourceMeta>(
   metaKey: K,
 ): CardResourceMeta[K] | undefined {
   return card[meta]?.[metaKey] as CardResourceMeta[K] | undefined;
+}
+
+class SimpleIdentityContext implements IdentityContext {
+  #instances: Map<string, CardDef> = new Map();
+  get(id: string) {
+    return this.#instances.get(id);
+  }
+  set(id: string, instance: CardDef) {
+    return this.#instances.set(id, instance);
+  }
+  setNonTracked(id: string, instance: CardDef) {
+    return this.#instances.set(id, instance);
+  }
+  makeTracked(_id: string) {}
 }

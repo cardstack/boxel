@@ -21,7 +21,7 @@ import {
   getPlural,
   type ResolvedCodeRef,
   Loader,
-  loadCard,
+  loadCardDef,
 } from '@cardstack/runtime-common';
 import { IconTrash } from '@cardstack/boxel-ui/icons';
 import { TemplateOnlyComponent } from '@ember/component/template-only';
@@ -142,7 +142,7 @@ class ContainsManyEditor extends GlimmerComponent<ContainsManyEditorSignature> {
     let newValue: FieldDef | null =
       primitive in this.args.field.card ? null : new this.args.field.card();
     if (this.args.typeConstraint) {
-      let subclassField = await loadCard(this.args.typeConstraint, {
+      let subclassField = await loadCardDef(this.args.typeConstraint, {
         loader: myLoader(),
       });
       newValue = new subclassField();

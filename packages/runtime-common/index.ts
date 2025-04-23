@@ -1,4 +1,5 @@
 import { CardResource } from './card-document';
+import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -10,7 +11,7 @@ export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
 
 export interface LooseSingleCardDocument {
   data: LooseCardResource;
-  included?: CardResource<Saved>[];
+  included?: CardResource[];
 }
 
 export type PatchData = {
@@ -19,7 +20,12 @@ export type PatchData = {
 };
 
 export { Deferred } from './deferred';
-export { CardError } from './error';
+export {
+  CardError,
+  isCardError,
+  type CardErrorJSONAPI,
+  type CardErrorsJSONAPI,
+} from './error';
 
 export interface ResourceObject {
   type: string;
@@ -81,6 +87,7 @@ export * from './scoped-css';
 export * from './utils';
 export * from './authorization-middleware';
 export * from './query';
+export * from './formats';
 export { mergeRelationships } from './merge-relationships';
 export { makeLogDefinitions, logger } from './log';
 export { RealmPaths, Loader, type LocalPath };
@@ -120,8 +127,6 @@ export type {
   RealmSession,
 } from './realm';
 
-import type { Saved } from './card-document';
-
 import type { CodeRef } from './code-ref';
 export type { CodeRef };
 
@@ -133,7 +138,9 @@ export type {
   CardFields,
   SingleCardDocument,
   Relationship,
+  ResourceID,
   Meta,
+  Saved,
   CardResourceMeta,
 } from './card-document';
 export type { JWTPayload } from './realm-auth-client';
@@ -145,6 +152,7 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
   isCardDocumentString,
+  isLocalResourceID,
 } from './card-document';
 export { sanitizeHtml } from './dompurify-runtime';
 export { markedSync, markdownToHtml } from './marked-sync';
@@ -157,6 +165,7 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type Spec } from 'https://cardstack.com/base/spec';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
 
@@ -246,22 +255,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   return await chooser.chooseFile<T>();
 }
 
-export interface CardErrorsJSONAPI {
-  errors: {
-    id?: string; // 404 errors won't necessarily have an id
-    status: number;
-    title: string;
-    message: string;
-    realm: string | undefined;
-    meta: {
-      lastKnownGoodHtml: string | null;
-      cardTitle: string | null;
-      scopedCssUrls: string[];
-      stack: string | null;
-    };
-  }[];
-}
-export type CardErrorJSONAPI = CardErrorsJSONAPI['errors'][0];
+import { type CardErrorJSONAPI } from './error';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
@@ -271,21 +265,25 @@ export type AutoSaveState = {
 };
 export type getCard<T extends CardDef = CardDef> = (
   parent: object,
-  url: () => string | undefined,
-  opts?: {
-    isLive?: boolean;
-    isAutoSaved?: boolean;
-  },
+  id: () => string | undefined,
 ) => // This is a duck type of the CardResource
 {
-  card: T | undefined;
-  isLoaded: boolean;
   id: string | undefined;
-  autoSaveState: AutoSaveState | undefined;
+  card: T | undefined;
   cardError: CardErrorJSONAPI | undefined;
-  api: typeof CardAPI;
+  isLoaded: boolean;
+  autoSaveState: AutoSaveState | undefined;
 };
-
+export type getCardCollection<T extends CardDef = CardDef> = (
+  parent: object,
+  ids: () => string[] | undefined,
+) => // This is a duck type of the CardResource
+{
+  ids: string[] | undefined;
+  cards: T[];
+  cardErrors: CardErrorJSONAPI[];
+  isLoaded: boolean;
+};
 export type getCards<T extends CardDef = CardDef> = (
   parent: object,
   getQuery: () => Query | undefined,
@@ -316,15 +314,15 @@ export interface Store {
       doNotPersist?: true;
     },
   ): Promise<T>;
-  peek<T extends CardDef>(url: string): Promise<T | CardErrorJSONAPI>;
+  peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
-  patch(
-    instance: CardDef,
-    doc: LooseSingleCardDocument,
+  patch<T extends CardDef>(
+    id: string,
     patchData: PatchData,
-  ): Promise<void>;
+  ): Promise<T | undefined>;
   search(query: Query, realmURL: URL): Promise<CardDef[]>;
-  getSaveState(instance: CardDef): AutoSaveState | undefined;
+  getSaveState(id: string): AutoSaveState | undefined;
 }
 
 export interface CardCatalogQuery extends Query {
@@ -387,7 +385,7 @@ export interface SearchQuery {
   isLoading: boolean;
 }
 
-export interface Actions {
+export interface CardActions {
   createCard: (
     ref: CodeRef,
     relativeTo: URL | undefined,
@@ -419,6 +417,26 @@ export interface Actions {
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
 }
+
+export interface CopyCardsWithCodeRef {
+  sourceCard: CardDef;
+  codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
+}
+
+export interface CatalogActions {
+  create: (spec: Spec, targetRealm: string) => void;
+  copy: (card: CardDef, targetRealm: string) => Promise<CardDef>;
+  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
+  copyCards: (
+    cards: CopyCardsWithCodeRef[],
+    targetUrl: string,
+  ) => Promise<CardDef[]>;
+  allRealmsInfo: () => Promise<
+    Record<string, { canWrite: boolean; info: RealmInfo }>
+  >;
+}
+
+export type Actions = CardActions & CatalogActions;
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {

@@ -126,7 +126,7 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Wait for ember-cli to be ready
-        run: pnpm npx wait-for-localhost 4200
+        run: timeout 3m pnpm npx wait-for-localhost 4200
         working-directory: packages/host
       - name: Start realm servers
         run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests &> /tmp/server.log &
@@ -258,6 +258,7 @@ jobs:
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",
+            "realm-endpoints/lint-test.ts",
             "realm-endpoints/mtimes-test.ts",
             "realm-endpoints/permissions-test.ts",
             "realm-endpoints/search-test.ts",
@@ -286,7 +287,7 @@ jobs:
           NODE_OPTIONS: --max_old_space_size=4096
         working-directory: packages/host
       - name: Wait for ember-cli to be ready
-        run: pnpm npx wait-for-localhost 4200
+        run: timeout 3m pnpm npx wait-for-localhost 4200
         working-directory: packages/realm-server
       - name: Start realm servers
         run: pnpm start:all &> /tmp/server.log &

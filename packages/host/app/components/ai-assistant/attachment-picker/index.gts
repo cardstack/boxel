@@ -7,8 +7,6 @@ import { restartableTask } from 'ember-concurrency';
 
 import { consume } from 'ember-provide-consume-context';
 
-import { trackedFunction } from 'ember-resources/util/function';
-
 import { TrackedSet } from 'tracked-built-ins';
 
 import { AddButton, Tooltip, Pill } from '@cardstack/boxel-ui/components';
@@ -19,8 +17,8 @@ import {
   baseCardRef,
   isCardInstance,
   chooseFile,
-  GetCardContextName,
-  type getCard,
+  GetCardCollectionContextName,
+  type getCardCollection,
 } from '@cardstack/runtime-common';
 
 import CardPill from '@cardstack/host/components/card-pill';
@@ -186,12 +184,11 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     </style>
   </template>
 
-  @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
 
   @tracked areAllItemsDisplayed = false;
-  @tracked private cardCollectionResource:
-    | { value: ReturnType<getCard>[] | null }
-    | undefined;
+  @tracked private cardCollection: ReturnType<getCardCollection> | undefined;
 
   @action
   private toggleViewAllAttachedCards() {
@@ -199,9 +196,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   }
 
   private makeCardResources = () => {
-    this.cardCollectionResource = trackedFunction(this, () =>
-      this.cardIds.map((id) => this.getCard(this, () => id)),
-    );
+    this.cardCollection = this.getCardCollection(this, () => this.cardIds);
   };
 
   private isCard = (item: CardDef | FileDef): item is CardDef => {
@@ -221,17 +216,11 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
   }
 
   private get isLoaded() {
-    return this.cardResources.length === 0
-      ? true
-      : this.cardResources.every((r) => r.isLoaded);
+    return this.cardCollection?.isLoaded;
   }
 
   private get cards() {
-    return this.cardResources.map((r) => r.card).filter(Boolean) as CardDef[];
-  }
-
-  private get cardResources() {
-    return this.cardCollectionResource?.value ?? [];
+    return this.cardCollection?.cards ?? [];
   }
 
   private get cardIds() {

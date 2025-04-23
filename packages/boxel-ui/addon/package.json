@@ -69,12 +69,13 @@
     "typescript": "~5.1.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.24.3",
+    "@babel/core": "^7.26.10",
     "@babel/plugin-proposal-decorators": "^7.22.10",
     "@babel/plugin-transform-class-properties": "^7.22.5",
     "@babel/plugin-transform-class-static-block": "^7.22.11",
     "@babel/plugin-transform-typescript": "^7.22.15",
     "@babel/runtime": "^7.22.11",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@embroider/addon-dev": "^8.0.0",
     "@embroider/macros": "~1.16.5",
     "@rollup/plugin-babel": "^6.0.4",
@@ -82,15 +83,15 @@
     "@types/lodash": "^4.14.182",
     "@types/pluralize": "^0.0.30",
     "@typescript-eslint/eslint-plugin": "^7.16.1",
-    "@typescript-eslint/parser": "^7.16.1",
+    "@typescript-eslint/parser": "^7.18.0",
     "babel-plugin-ember-template-compilation": "^2.2.1",
     "concurrently": "^8.0.1",
     "ember-template-imports": "^4.1.1",
     "ember-template-lint": "^5.11.2",
     "ember-template-lint-plugin-prettier": "^5.0.0",
-    "eslint": "^8.56.0",
+    "eslint": "^8.57.1",
     "eslint-config-prettier": "^8.6.0",
-    "eslint-plugin-ember": "^11.4.2",
+    "eslint-plugin-ember": "^12.5.0",
     "eslint-plugin-n": "^15.6.0",
     "eslint-plugin-prettier": "^5.0.0",
     "glimmer-scoped-css": "^0.8.0",
@@ -106,7 +107,7 @@
     "typescript": "^5.1.6"
   },
   "engines": {
-    "node": "14.* || 16.* || >= 18"
+    "node": "20"
   },
   "volta": {
     "extends": "../../../package.json"

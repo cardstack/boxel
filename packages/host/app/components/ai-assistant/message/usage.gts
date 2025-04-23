@@ -1,5 +1,6 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -12,7 +13,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import AiAssistantMessage, { AiAssistantConversation } from './index';
 export default class AiAssistantMessageUsage extends Component {
-  @tracked formattedMessage = 'Hello, world';
+  @tracked message = 'Hello, world';
   @tracked reasoningContent = null;
   @tracked datetime = new Date(2024, 0, 3, 12, 30);
   @tracked isFromAssistant = false;
@@ -53,7 +54,7 @@ export default class AiAssistantMessageUsage extends Component {
             @registerConversationScroller={{this.noop}}
           >
             <AiAssistantMessage
-              @formattedMessage={{this.formattedMessage}}
+              @messageHTML={{htmlSafe this.message}}
               @reasoningContent={{this.reasoningContent}}
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
@@ -95,10 +96,10 @@ export default class AiAssistantMessageUsage extends Component {
           @value={{this.datetimeAsString}}
         />
         <Args.String
-          @name='formattedMessage'
+          @name='messageHTML'
           @description='The message to display, as an html-safe string'
-          @onInput={{fn (mut this.formattedMessage)}}
-          @value={{this.formattedMessage}}
+          @onInput={{fn (mut this.message)}}
+          @value={{this.message}}
         />
         <Args.String
           @name='reasoningContent'
@@ -135,7 +136,9 @@ export default class AiAssistantMessageUsage extends Component {
             @registerConversationScroller={{this.noop}}
           >
             <AiAssistantMessage
-              @formattedMessage={{'Please copy edit this message to make it more human.'}}
+              @messageHTML={{htmlSafe
+                'Please copy edit this message to make it more human.'
+              }}
               @datetime={{this.twoMinutesAgo}}
               @isFromAssistant={{false}}
               @index={{0}}
@@ -150,7 +153,9 @@ export default class AiAssistantMessageUsage extends Component {
               @isStreaming={{false}}
             />
             <AiAssistantMessage
-              @formattedMessage={{'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'}}
+              @messageHTML={{htmlSafe
+                'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
+              }}
               @index={{1}}
               @eventId={{'125'}}
               @monacoSDK={{this.noopMonacoSDK}}

@@ -37,6 +37,7 @@
         "../base/**",
         "../seed-realm/**",
         "../catalog-realm/**",
+        "../catalog-realm-dev/**",
         "../boxel-ui/addon/**"
       ]
     }

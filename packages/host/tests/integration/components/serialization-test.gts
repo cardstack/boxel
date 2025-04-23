@@ -8,8 +8,9 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   NotLoaded,
-  type LooseSingleCardDocument,
   PermissionsContextName,
+  localId,
+  type LooseSingleCardDocument,
   type Permissions,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -636,6 +637,7 @@ module('Integration | serialization', function (hooks) {
     let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
+        lid: hassan[localId],
         type: 'card',
         attributes: {
           firstName: 'Hassan',
@@ -685,6 +687,122 @@ module('Integration | serialization', function (hooks) {
               },
               data: {
                 id: `${testRealmURL}Toy/spookyToiletPaper`,
+                type: 'card',
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Pet',
+            },
+          },
+        },
+      ],
+    });
+  });
+
+  test('can serialize a linksTo relationship with an unsaved card', async function (assert) {
+    class Toy extends CardDef {
+      @field title = contains(StringField, {
+        computeVia: function (this: Toy) {
+          return this.description;
+        },
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
+    class Pet extends CardDef {
+      @field firstName = contains(StringField);
+      @field favoriteToy = linksTo(Toy);
+      @field title = contains(StringField, {
+        computeVia: function (this: Pet) {
+          return this.firstName;
+        },
+      });
+      @field description = contains(StringField, { computeVia: () => 'Pet' });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field pet = linksTo(Pet);
+      @field title = contains(StringField, {
+        computeVia: function (this: Person) {
+          return this.firstName;
+        },
+      });
+      @field description = contains(StringField, {
+        computeVia: () => 'Person',
+      });
+      @field thumbnailURL = contains(StringField, { computeVia: () => null });
+    }
+
+    await setupIntegrationTestRealm({
+      loader,
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person, Pet, Toy },
+      },
+    });
+
+    let spookyToiletPaper = new Toy({
+      description: 'Toilet paper ghost: Poooo!',
+    });
+    let mango = new Pet({
+      firstName: 'Mango',
+      favoriteToy: spookyToiletPaper,
+    });
+    let hassan = new Person({
+      firstName: 'Hassan',
+      pet: mango,
+    });
+
+    let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
+    assert.deepEqual(serialized, {
+      data: {
+        lid: hassan[localId],
+        type: 'card',
+        attributes: {
+          firstName: 'Hassan',
+        },
+        relationships: {
+          pet: {
+            data: {
+              lid: mango[localId],
+              type: 'card',
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person',
+          },
+        },
+      },
+      included: [
+        {
+          lid: spookyToiletPaper[localId],
+          type: 'card',
+          attributes: {
+            description: 'Toilet paper ghost: Poooo!',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}test-cards`,
+              name: 'Toy',
+            },
+          },
+        },
+        {
+          lid: mango[localId],
+          type: 'card',
+          attributes: {
+            firstName: 'Mango',
+          },
+          relationships: {
+            favoriteToy: {
+              data: {
+                lid: spookyToiletPaper[localId],
                 type: 'card',
               },
             },
@@ -925,6 +1043,7 @@ module('Integration | serialization', function (hooks) {
     let payload = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
+        lid: hassan[localId],
         type: 'card',
         attributes: {
           firstName: 'Hassan',
@@ -982,6 +1101,7 @@ module('Integration | serialization', function (hooks) {
     let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
+        lid: hassan[localId],
         type: 'card',
         attributes: {
           firstName: 'Hassan',
@@ -1006,6 +1126,7 @@ module('Integration | serialization', function (hooks) {
     serialized = serializeCard(mango, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
+        lid: mango[localId],
         type: 'card',
         attributes: {
           firstName: 'Mango',
@@ -1220,6 +1341,7 @@ module('Integration | serialization', function (hooks) {
     let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
+        lid: hassan[localId],
         type: 'card',
         attributes: {
           firstName: 'Hassan',
@@ -1264,6 +1386,51 @@ module('Integration | serialization', function (hooks) {
           },
         },
       ],
+    });
+  });
+
+  test('can serialize an unsaved linksTo relationship that points to itself', async function (assert) {
+    class Person extends CardDef {
+      @field firstName = contains(StringField);
+      @field friend = linksTo(() => Person);
+    }
+
+    await setupIntegrationTestRealm({
+      loader,
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person },
+      },
+    });
+
+    let mango = new Person({ firstName: 'Mango' });
+    mango.friend = mango;
+    let serialized = serializeCard(mango, { includeUnrenderedFields: true });
+    assert.deepEqual(serialized, {
+      data: {
+        lid: mango[localId],
+        type: 'card',
+        attributes: {
+          firstName: 'Mango',
+          description: null,
+          thumbnailURL: null,
+          title: null,
+        },
+        relationships: {
+          friend: {
+            data: {
+              lid: mango[localId],
+              type: 'card',
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person',
+          },
+        },
+      },
     });
   });
 
@@ -1341,39 +1508,6 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(friend.firstName, 'Mango');
   });
 
-  test('throws when serializing a linksTo relationship to an unsaved card', async function (assert) {
-    class Pet extends CardDef {
-      @field firstName = contains(StringField);
-    }
-    class Person extends CardDef {
-      @field firstName = contains(StringField);
-      @field pet = linksTo(Pet);
-    }
-
-    await setupIntegrationTestRealm({
-      loader,
-      mockMatrixUtils,
-      contents: {
-        'test-cards.gts': { Person, Pet },
-      },
-    });
-
-    let mango = new Pet({ firstName: 'Mango' });
-    let hassan = new Person({ firstName: 'Hassan', pet: mango });
-
-    try {
-      serializeCard(hassan, { includeUnrenderedFields: true });
-      throw new Error(`expected error not thrown`);
-    } catch (err: any) {
-      assert.ok(
-        err.message.match(
-          /field 'pet' cannot be serialized with an unsaved card/,
-        ),
-        'cannot serialize a linksTo relationship to an unsaved card',
-      );
-    }
-  });
-
   test('can serialize a contains field that has a nested linksTo field', async function (assert) {
     class Toy extends CardDef {
       @field title = contains(StringField, {
@@ -1435,6 +1569,7 @@ module('Integration | serialization', function (hooks) {
     let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
+        lid: hassan[localId],
         type: 'card',
         attributes: {
           firstName: 'Hassan',
@@ -1558,6 +1693,7 @@ module('Integration | serialization', function (hooks) {
     let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
+        lid: hassan[localId],
         type: 'card',
         attributes: {
           firstName: 'Hassan',
@@ -1686,6 +1822,7 @@ module('Integration | serialization', function (hooks) {
     let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
     assert.deepEqual(serialized, {
       data: {
+        lid: hassan[localId],
         type: 'card',
         attributes: {
           firstName: 'Hassan',
@@ -1789,10 +1926,18 @@ module('Integration | serialization', function (hooks) {
             links: {
               self: `${testRealmURL}Person/hassan`,
             },
+            data: {
+              id: `${testRealmURL}Person/hassan`,
+              type: 'card',
+            },
           },
           favorite: {
             links: {
               self: `${testRealmURL}Person/hassan`,
+            },
+            data: {
+              id: `${testRealmURL}Person/hassan`,
+              type: 'card',
             },
           },
         },
@@ -2158,6 +2303,7 @@ module('Integration | serialization', function (hooks) {
       serializeCard(helloWorld, { includeUnrenderedFields: true }),
       {
         data: {
+          lid: helloWorld[localId],
           type: 'card',
           attributes: {
             title: 'First Post',
@@ -2248,6 +2394,7 @@ module('Integration | serialization', function (hooks) {
       });
       assert.deepEqual(serialized.data, {
         type: 'card',
+        lid: burcu[localId],
         attributes: {
           firstName: 'Burcu',
           title: null,
@@ -2447,6 +2594,7 @@ module('Integration | serialization', function (hooks) {
       });
       assert.deepEqual(serialized, {
         data: {
+          lid: person[localId],
           type: 'card',
           attributes: {
             firstName: 'Burcu',
@@ -2788,6 +2936,7 @@ module('Integration | serialization', function (hooks) {
       payload,
       {
         data: {
+          lid: firstPost[localId],
           type: 'card',
           attributes: {
             title: 'First Post',
@@ -2852,6 +3001,7 @@ module('Integration | serialization', function (hooks) {
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
+        lid: firstPost[localId],
         type: 'card',
         attributes: {
           title: 'First Post',
@@ -2917,6 +3067,7 @@ module('Integration | serialization', function (hooks) {
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
+        lid: firstPost[localId],
         type: 'card',
         attributes: {
           title: 'First Post',
@@ -3015,6 +3166,7 @@ module('Integration | serialization', function (hooks) {
     let payload = serializeCard(firstPost, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
+        lid: firstPost[localId],
         type: 'card',
         attributes: {
           title: 'First Post',
@@ -3132,6 +3284,7 @@ module('Integration | serialization', function (hooks) {
     let payload = serializeCard(group, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
+        lid: group[localId],
         type: 'card',
         attributes: {
           people: [
@@ -3259,6 +3412,7 @@ module('Integration | serialization', function (hooks) {
     let payload = serializeCard(group, { includeUnrenderedFields: true });
     assert.deepEqual(payload, {
       data: {
+        lid: group[localId],
         type: 'card',
         attributes: {
           people: [
@@ -3473,6 +3627,7 @@ module('Integration | serialization', function (hooks) {
       serializeCard(person, { includeUnrenderedFields: true }),
       {
         data: {
+          lid: person[localId],
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -3546,6 +3701,7 @@ module('Integration | serialization', function (hooks) {
       serializeCard(post, { includeUnrenderedFields: true }),
       {
         data: {
+          lid: post[localId],
           type: 'card',
           attributes: {
             title: 'Things I Want to Chew',
@@ -3647,6 +3803,7 @@ module('Integration | serialization', function (hooks) {
       serializeCard(blog, { includeUnrenderedFields: true }),
       {
         data: {
+          lid: blog[localId],
           type: 'card',
           attributes: {
             posts: [
@@ -3748,15 +3905,27 @@ module('Integration | serialization', function (hooks) {
             links: {
               self: `${testRealmURL}Certificate/0`,
             },
+            data: {
+              id: `${testRealmURL}Certificate/0`,
+              type: 'card',
+            },
           },
           'posts.0.author.certificate': {
             links: {
               self: `${testRealmURL}Certificate/1`,
             },
+            data: {
+              id: `${testRealmURL}Certificate/1`,
+              type: 'card',
+            },
           },
           'posts.1.author.certificate': {
             links: {
               self: `${testRealmURL}Certificate/2`,
+            },
+            data: {
+              id: `${testRealmURL}Certificate/2`,
+              type: 'card',
             },
           },
         },
@@ -3838,6 +4007,7 @@ module('Integration | serialization', function (hooks) {
       serializeCard(blog, { includeUnrenderedFields: true }),
       {
         data: {
+          lid: blog[localId],
           type: 'card',
           attributes: {
             editor: {
@@ -3986,6 +4156,7 @@ module('Integration | serialization', function (hooks) {
     });
     assert.deepEqual(withoutComputeds, {
       data: {
+        lid: mango[localId],
         type: 'card',
         attributes: {
           birthdate: '2019-10-30',
@@ -4005,6 +4176,7 @@ module('Integration | serialization', function (hooks) {
     });
     assert.deepEqual(withComputeds, {
       data: {
+        lid: mango[localId],
         type: 'card',
         attributes: {
           birthdate: '2019-10-30',
@@ -4090,13 +4262,14 @@ module('Integration | serialization', function (hooks) {
     });
 
     let store = this.owner.lookup('service:store') as StoreService;
-    let captainMango = await store.peek(`${testRealmURL}Captain/mango`);
+    let captainMango = await store.get(`${testRealmURL}Captain/mango`);
     let mangoTheBoat = (captainMango as Captain).createEponymousBoat();
 
     assert.deepEqual(
       serializeCard(mangoTheBoat, { includeUnrenderedFields: true }),
       {
         data: {
+          lid: mangoTheBoat[localId],
           type: 'card',
           attributes: {
             description: null,
@@ -4152,6 +4325,7 @@ module('Integration | serialization', function (hooks) {
       serializeCard(mangoThePet, { includeUnrenderedFields: true }),
       {
         data: {
+          lid: mangoThePet[localId],
           type: 'card',
           attributes: {
             description: null,
@@ -4213,6 +4387,7 @@ module('Integration | serialization', function (hooks) {
       let serialized = serializeCard(hassan);
       assert.deepEqual(serialized, {
         data: {
+          lid: hassan[localId],
           type: 'card',
           attributes: {
             description: null,
@@ -4266,6 +4441,93 @@ module('Integration | serialization', function (hooks) {
       });
     });
 
+    test('can serialize a linksToMany relationship with unsaved links', async function (assert) {
+      class Pet extends CardDef {
+        @field firstName = contains(StringField);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+      }
+      class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pets = linksToMany(Pet);
+        @field title = contains(StringField, {
+          computeVia: function (this: Person) {
+            return this.firstName;
+          },
+        });
+      }
+      await setupIntegrationTestRealm({
+        loader,
+        mockMatrixUtils,
+        contents: {
+          'test-cards.gts': { Person, Pet },
+        },
+      });
+      let mango = new Pet({
+        firstName: 'Mango',
+      });
+      let vanGogh = new Pet({
+        firstName: 'Van Gogh',
+      });
+      let hassan = new Person({
+        firstName: 'Hassan',
+        pets: [mango, vanGogh],
+      });
+
+      let serialized = serializeCard(hassan);
+      assert.deepEqual(serialized, {
+        data: {
+          lid: hassan[localId],
+          type: 'card',
+          attributes: {
+            description: null,
+            firstName: 'Hassan',
+            thumbnailURL: null,
+          },
+          relationships: {
+            'pets.0': {
+              data: { lid: mango[localId], type: 'card' },
+            },
+            'pets.1': {
+              data: { lid: vanGogh[localId], type: 'card' },
+            },
+          },
+          meta: {
+            adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+          },
+        },
+        included: [
+          {
+            lid: mango[localId],
+            type: 'card',
+            attributes: {
+              description: null,
+              firstName: 'Mango',
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            },
+          },
+          {
+            lid: vanGogh[localId],
+            type: 'card',
+            attributes: {
+              description: null,
+              firstName: 'Van Gogh',
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Pet' },
+            },
+          },
+        ],
+      });
+    });
+
     test('can deserialize a linksToMany relationship', async function (assert) {
       class Pet extends CardDef {
         @field firstName = contains(StringField);
@@ -4294,10 +4556,18 @@ module('Integration | serialization', function (hooks) {
               links: {
                 self: `${testRealmURL}Pet/mango`,
               },
+              data: {
+                id: `${testRealmURL}Pet/mango`,
+                type: 'card',
+              },
             },
             'pets.1': {
               links: {
                 self: `${testRealmURL}Pet/vanGogh`,
+              },
+              data: {
+                id: `${testRealmURL}Pet/vanGogh`,
+                type: 'card',
               },
             },
           },
@@ -4451,6 +4721,7 @@ module('Integration | serialization', function (hooks) {
       let serialized = serializeCard(hassan);
       assert.deepEqual(serialized, {
         data: {
+          lid: hassan[localId],
           type: 'card',
           attributes: {
             description: null,
@@ -4577,6 +4848,7 @@ module('Integration | serialization', function (hooks) {
       let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
       assert.deepEqual(serialized, {
         data: {
+          lid: hassan[localId],
           type: 'card',
           attributes: {
             firstName: 'Hassan',
@@ -4598,6 +4870,7 @@ module('Integration | serialization', function (hooks) {
       serialized = serializeCard(mango);
       assert.deepEqual(serialized, {
         data: {
+          lid: mango[localId],
           type: 'card',
           attributes: {
             firstName: 'Mango',
@@ -4704,8 +4977,24 @@ module('Integration | serialization', function (hooks) {
             firstName: 'Hassan',
           },
           relationships: {
-            'pets.0': { links: { self: `${testRealmURL}Pet/mango` } },
-            'pets.1': { links: { self: `${testRealmURL}Pet/vanGogh` } },
+            'pets.0': {
+              links: {
+                self: `${testRealmURL}Pet/mango`,
+              },
+              data: {
+                id: `${testRealmURL}Pet/mango`,
+                type: 'card',
+              },
+            },
+            'pets.1': {
+              links: {
+                self: `${testRealmURL}Pet/vanGogh`,
+              },
+              data: {
+                id: `${testRealmURL}Pet/vanGogh`,
+                type: 'card',
+              },
+            },
           },
           meta: {
             adoptsFrom: {
@@ -4773,6 +5062,7 @@ module('Integration | serialization', function (hooks) {
       let serialized = serializeCard(hassan, { includeUnrenderedFields: true });
       assert.deepEqual(serialized, {
         data: {
+          lid: hassan[localId],
           type: 'card',
           attributes: {
             firstName: 'Hassan',
@@ -5043,6 +5333,7 @@ module('Integration | serialization', function (hooks) {
         includeUnrenderedFields: true,
       });
       assert.deepEqual(serialized.data, {
+        lid: burcu[localId],
         type: 'card',
         attributes: {
           firstName: 'Burcu',
@@ -5270,6 +5561,7 @@ module('Integration | serialization', function (hooks) {
       });
       assert.deepEqual(serialized, {
         data: {
+          lid: person[localId],
           type: 'card',
           attributes: {
             firstName: 'Burcu',
@@ -5366,8 +5658,20 @@ module('Integration | serialization', function (hooks) {
           attributes: { firstName: 'Burcu' },
           relationships: {
             friend: { links: { self: `${testRealmURL}Friend/hassan` } },
-            'friendPets.0': { links: { self: `${testRealmURL}Pet/mango` } },
-            'friendPets.1': { links: { self: `${testRealmURL}Pet/vanGogh` } },
+            'friendPets.0': {
+              links: { self: `${testRealmURL}Pet/mango` },
+              data: {
+                id: `${testRealmURL}Pet/mango`,
+                type: 'card',
+              },
+            },
+            'friendPets.1': {
+              links: { self: `${testRealmURL}Pet/vanGogh` },
+              data: {
+                id: `${testRealmURL}Pet/vanGogh`,
+                type: 'card',
+              },
+            },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },

@@ -14,6 +14,7 @@ import type {
   CardMessageEvent,
   CommandResultEvent,
   CommandDefinitionsEvent,
+  CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -208,7 +209,10 @@ export function constructHistory(
         );
       }
     }
+
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       eventId = event.content['m.relates_to']!.event_id!;
       event.event_id = eventId;
     }
@@ -235,14 +239,19 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   let lastEventExcludingCommandResults = history.findLast(
     (event) => event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   );
-  let commandRequests =
-    lastEventExcludingCommandResults.content[APP_BOXEL_COMMAND_REQUESTS_KEY];
+
+  if (!lastEventExcludingCommandResults) {
+    return false;
+  }
+  let commandRequests = (
+    lastEventExcludingCommandResults.content as CardMessageContent
+  )[APP_BOXEL_COMMAND_REQUESTS_KEY];
   if (!commandRequests || commandRequests.length === 0) {
     return true;
   }
   let lastEventIndex = history.indexOf(lastEventExcludingCommandResults);
   let allCommandsHaveResults = commandRequests.every(
-    (commandRequest: CommandRequest) => {
+    (commandRequest: Partial<CommandRequest>) => {
       return history.slice(lastEventIndex).some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
@@ -368,9 +377,9 @@ export function getRelevantCards(
     }
   }
   // Return the cards in a consistent manner
-  let sortedCards = Array.from(attachedCardMap.values()).sort((a, b) => {
-    return a.id.localeCompare(b.id);
-  });
+  let sortedCards = Array.from(attachedCardMap.values())
+    .filter((card) => card.id) // Only include cards with valid IDs
+    .sort((a, b) => String(a.id!).localeCompare(String(b.id!)));
 
   return {
     mostRecentlyAttachedCard: mostRecentlyAttachedCard,
@@ -385,7 +394,7 @@ export async function loadCurrentlyAttachedFiles(
 ): Promise<
   {
     url: string;
-    sourceUrl: string;
+    sourceUrl?: string;
     name: string;
     contentType?: string;
     content: string | undefined;
@@ -478,7 +487,7 @@ export async function loadCurrentlyAttachedFiles(
 export function attachedFilesToPrompt(
   attachedFiles: {
     url: string;
-    sourceUrl: string;
+    sourceUrl?: string;
     name: string;
     contentType?: string;
     content: string | undefined;
@@ -609,12 +618,13 @@ function getCommandResults(
 }
 
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
-  return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (commandRequest: CommandRequest) => {
+  const content = event.content as CardMessageContent;
+  return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (commandRequest: Partial<CommandRequest>) => {
       return {
-        id: commandRequest.id,
+        id: commandRequest.id!,
         function: {
-          name: commandRequest.name,
+          name: commandRequest.name!,
           arguments: JSON.stringify(commandRequest.arguments),
         },
         type: 'function',
@@ -628,8 +638,9 @@ function toPromptMessageWithToolResults(
   history: DiscreteMatrixEvent[],
 ): OpenAIPromptMessage[] {
   let commandResults = getCommandResults(event, history);
-  return (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (commandRequest: CommandRequest) => {
+  const content = event.content as CardMessageContent;
+  return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (commandRequest: Partial<CommandRequest>) => {
       let content = 'pending';
       let commandResult = commandResults.find(
         (commandResult) =>
@@ -687,7 +698,7 @@ export async function getModifyPrompt(
     }
     let body = event.content.body;
     if (event.sender === aiBotUserId) {
-      let toolCalls = toToolCalls(event);
+      let toolCalls = toToolCalls(event as CardMessageEvent);
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
         content: body,
@@ -697,9 +708,10 @@ export async function getModifyPrompt(
       }
       historicalMessages.push(historicalMessage);
       if (toolCalls.length) {
-        toPromptMessageWithToolResults(event, history).forEach((message) =>
-          historicalMessages.push(message),
-        );
+        toPromptMessageWithToolResults(
+          event as CardMessageEvent,
+          history,
+        ).forEach((message) => historicalMessages.push(message));
       }
     }
     if (body && event.sender !== aiBotUserId) {
@@ -748,9 +760,11 @@ ${attachedFilesToPrompt(attachedFiles)}
     systemMessage += '\n';
   }
 
-  if (tools.length == 0) {
+  let cardPatchTool = tools.find((tool) => tool.function.name === 'patchCard');
+
+  if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
     systemMessage +=
-      'You are unable to edit any cards, the user has not given you access, they need to open the card on the stack and let it be auto-attached.';
+      'You are unable to edit any cards, the user has not given you access, they need to open the card and let it be auto-attached.';
   }
 
   let messages: OpenAIPromptMessage[] = [

@@ -8,12 +8,11 @@ import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, timeout } from 'ember-concurrency';
+import { dropTask, restartableTask, timeout, task } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import { provide, consume } from 'ember-provide-consume-context';
 
 import get from 'lodash/get';
-
 import { TrackedWeakMap, TrackedSet } from 'tracked-built-ins';
 
 import { Tooltip } from '@cardstack/boxel-ui/components';
@@ -24,20 +23,32 @@ import {
   CardContextName,
   GetCardContextName,
   GetCardsContextName,
+  GetCardCollectionContextName,
   Deferred,
   codeRefWithAbsoluteURL,
   moduleFrom,
   RealmPaths,
   isCardInstance,
   CardError,
+  loadCardDef,
+  realmURL as realmURLSymbol,
   type getCard,
   type getCards,
+  type getCardCollection,
   type Actions,
+  type CatalogActions,
+  type CardActions,
   type CodeRef,
   type LooseSingleCardDocument,
+  isResolvedCodeRef,
+  type ResolvedCodeRef,
+  type CopyCardsWithCodeRef,
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
+import CopySourceCommand from '@cardstack/host/commands/copy-source';
+import SaveCardCommand from '@cardstack/host/commands/save-card';
+
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 
@@ -50,6 +61,7 @@ import {
   type CardDef,
   type Format,
 } from 'https://cardstack.com/base/card-api';
+import { type Spec } from 'https://cardstack.com/base/spec';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -61,6 +73,7 @@ import type { StackItemComponentAPI } from './stack-item';
 
 import type CardService from '../../services/card-service';
 import type CommandService from '../../services/command-service';
+import type LoaderService from '../../services/loader-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type Realm from '../../services/realm';
 import type StoreService from '../../services/store';
@@ -150,6 +163,8 @@ interface CardToDelete {
 export default class InteractSubmode extends Component {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardCollectionContextName)
+  private declare getCardCollection: getCardCollection;
 
   @service private declare cardService: CardService;
   @service private declare commandService: CommandService;
@@ -157,6 +172,7 @@ export default class InteractSubmode extends Component {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare store: StoreService;
   @service private declare realm: Realm;
+  @service private declare loaderService: LoaderService;
 
   @tracked private searchSheetTrigger: SearchSheetTrigger | null = null;
   @tracked private cardToDelete: CardToDelete | undefined = undefined;
@@ -173,7 +189,7 @@ export default class InteractSubmode extends Component {
   // in the context of operator-mode, the methods can be aware of which stack to deal with (via stackIndex), i.e.
   // to which stack the cards will be added to, or from which stack the cards will be removed from.
   private publicAPI(here: InteractSubmode, stackIndex: number): Actions {
-    return {
+    let actions: CardActions = {
       createCard: async (
         ref: CodeRef,
         relativeTo: URL | undefined,
@@ -294,7 +310,7 @@ export default class InteractSubmode extends Component {
           };
         } else {
           let cardUrl = card instanceof URL ? card : new URL(card as string);
-          let loadedCard = await here.store.peek(cardUrl.href);
+          let loadedCard = await here.store.get(cardUrl.href);
           if (isCardInstance(loadedCard)) {
             cardToDelete = {
               id: loadedCard.id,
@@ -343,6 +359,31 @@ export default class InteractSubmode extends Component {
         here.operatorModeStateService.updateSubmode(submode);
       },
     };
+    let catalogActions: CatalogActions = {
+      create: async (spec: Spec, targetRealm: string) => {
+        await here._createFromSpec.perform(spec, targetRealm);
+      },
+      copy: async (
+        card: CardDef,
+        targetRealm: string,
+        codeRef?: ResolvedCodeRef,
+      ) => {
+        return await here._copy.perform(card, targetRealm, codeRef);
+      },
+      copySource: async (fromUrl: string, toUrl: string) => {
+        return await here._copySource.perform(fromUrl, toUrl);
+      },
+      copyCards: async (
+        cards: CopyCardsWithCodeRef[],
+        targetUrl: string,
+      ): Promise<CardDef[]> => {
+        return await here._copyCards.perform(cards, targetUrl);
+      },
+      allRealmsInfo: async () => {
+        return await here.realm.allRealmsInfo;
+      },
+    };
+    return { ...actions, ...catalogActions };
   }
   stackBackgroundsState = stackBackgroundsResource(this);
 
@@ -452,6 +493,67 @@ export default class InteractSubmode extends Component {
     },
   );
 
+  //==catalog actions==
+  private _createFromSpec = task(async (spec: Spec, targetRealm: string) => {
+    if (spec.isComponent) {
+      return;
+    }
+    let url = new URL(spec.id);
+    let ref = codeRefWithAbsoluteURL(spec.ref, url);
+    if (!isResolvedCodeRef(ref)) {
+      throw new Error('ref is not a resolved code ref');
+    }
+    let Klass = await loadCardDef(ref, {
+      loader: this.loaderService.loader,
+    });
+    let card = new Klass({}) as CardDef;
+    await new SaveCardCommand(this.commandService.commandContext).execute({
+      card,
+      realm: targetRealm,
+    });
+  });
+
+  private _copy = dropTask(
+    async (
+      sourceCard: CardDef,
+      targetRealm: string,
+      codeRef?: ResolvedCodeRef,
+    ) => {
+      let { commandContext } = this.commandService;
+      let newCard = await new CopyCardCommand(commandContext).execute({
+        sourceCard,
+        targetUrl: targetRealm,
+        codeRef,
+      });
+      return newCard;
+    },
+  );
+
+  private _copySource = task(async (fromUrl: string, toUrl: string) => {
+    let { commandContext } = this.commandService;
+    await new CopySourceCommand(commandContext).execute({
+      fromRealmUrl: fromUrl,
+      toRealmUrl: toUrl,
+    });
+  });
+
+  private _copyCards = dropTask(
+    async (cards: CopyCardsWithCodeRef[], targetUrl: string) => {
+      let { commandContext } = this.commandService;
+      return await Promise.all(
+        cards.map(async (cardWithNewCodeRef) => {
+          let newCard = await new CopyCardCommand(commandContext).execute({
+            sourceCard: cardWithNewCodeRef.sourceCard,
+            targetUrl,
+            codeRef: cardWithNewCodeRef.codeRef,
+          });
+          return newCard;
+        }),
+      );
+    },
+  );
+  // END ==catalog actions==
+
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
     async (
@@ -469,7 +571,7 @@ export default class InteractSubmode extends Component {
         if (!destinationIndexCardUrl) {
           throw new Error(`destination index card has no URL`);
         }
-        let destinationIndexCard = await this.store.peek(
+        let destinationIndexCard = await this.store.get(
           destinationIndexCardUrl,
         );
         if (!isCardInstance(destinationIndexCard)) {
@@ -477,8 +579,7 @@ export default class InteractSubmode extends Component {
             `destination index card ${destinationIndexCardUrl} is not a card`,
           );
         }
-        let destinationRealmURL =
-          await this.cardService.getRealmURL(destinationIndexCard);
+        let destinationRealmURL = destinationIndexCard[realmURLSymbol];
         if (!destinationRealmURL) {
           throw new Error('Could not determine the copy destination realm');
         }
@@ -490,7 +591,7 @@ export default class InteractSubmode extends Component {
             this.commandService.commandContext,
           ).execute({
             sourceCard: card,
-            targetRealmUrl: realmURL.href,
+            targetUrl: realmURL.href,
           });
           if (index === 0) {
             scrollToCardId = newCard.id; // we scroll to the first card lexically by title
@@ -531,7 +632,7 @@ export default class InteractSubmode extends Component {
           selectedCards.map((cardDefOrId: CardDefOrId) => {
             if (typeof cardDefOrId === 'string') {
               // WARNING This card is not part of the identity map!
-              return this.store.peek(cardDefOrId);
+              return this.store.get(cardDefOrId);
             }
             return cardDefOrId;
           }),
@@ -682,6 +783,7 @@ export default class InteractSubmode extends Component {
       actions: this.publicAPI(this, 0),
       getCard: this.getCard,
       getCards: this.getCards,
+      getCardCollection: this.getCardCollection,
       store: this.store,
       // TODO: should we include this here??
       commandContext: this.commandService.commandContext,

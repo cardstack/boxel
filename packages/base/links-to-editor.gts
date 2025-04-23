@@ -164,7 +164,7 @@ export class LinksToEditor extends GlimmerComponent<Signature> {
       },
     );
     if (cardId) {
-      let card = await this.cardContext.store.peek(cardId);
+      let card = await this.cardContext.store.get(cardId);
       if (isCardInstance(card)) {
         this.args.model.value = card;
       }

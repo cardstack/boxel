@@ -50,6 +50,10 @@ export class IdentityContextWithErrors implements IdentityContext {
   set(url: string, instance: CardDef): void {
     this.#cards.set(url, instance);
   }
+  setNonTracked(id: string, instance: CardDef) {
+    return this.#cards.set(id, instance);
+  }
+  makeTracked(_id: string) {}
 
   readonly errors = new Set<string>();
 }

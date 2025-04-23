@@ -199,14 +199,12 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
       simulateRemoteMessage(roomId, '@testuser:localhost', {
         body: `question #${i + 1}`,
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        formatted_body: `question #${i + 1}`,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       });
       let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
         body: `answer #${i + 1}`,
         msgtype: 'm.text',
-        formatted_body: `answer #${i + 1}`,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       });
@@ -231,7 +229,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'This is an unread message',
       msgtype: 'm.text',
-      formatted_body: 'This is an unread message',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
@@ -260,7 +257,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'This is an unread message',
       msgtype: 'm.text',
-      formatted_body: 'This is an unread message',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
@@ -281,7 +277,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'This is an unread message',
       msgtype: 'm.text',
-      formatted_body: 'This is an unread message',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
@@ -370,7 +365,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: `thinking...`,
       msgtype: 'm.text',
-      formatted_body: `thinking...`,
       format: 'org.matrix.custom.html',
       isStreamingFinished: false,
     });
@@ -381,7 +375,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
       msgtype: 'm.text',
-      formatted_body: `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum. Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.`,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       ['m.relates_to']: {
