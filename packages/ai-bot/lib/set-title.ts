@@ -16,10 +16,10 @@ import type {
   CommandResultEvent,
   CommandResultWithOutputContent,
   CommandResultWithNoOutputContent,
+  EncodedCommandRequest,
 } from 'https://cardstack.com/base/matrix-event';
 import { ChatCompletionMessageParam } from 'openai/resources';
 import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix-constants';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
 Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
@@ -123,7 +123,7 @@ export const getLatestCommandApplyMessage = (
   // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
   let commandRequest = commandSourceEvent.content[
     APP_BOXEL_COMMAND_REQUESTS_KEY
-  ].find((cr: CommandRequest) => {
+  ].find((cr: EncodedCommandRequest) => {
     // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     cr.id === eventContent.data.commandRequestId;
   });

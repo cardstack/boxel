@@ -216,13 +216,13 @@ module('Integration | create app module via ai-assistant', function (hooks) {
         {
           id: 'generateAppModule',
           name: 'Generate App Module',
-          arguments: {
+          arguments: JSON.stringify({
             attached_card_id: prdCardId,
             description:
               'Generate code for Preschool CRM based on product requirement document.',
             appTitle: 'Preschool CRM',
             moduleCode,
-          },
+          }),
         },
       ],
       'm.relates_to': {
