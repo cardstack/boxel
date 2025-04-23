@@ -52,6 +52,7 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import IdentityContext, {
   getDeps,
+  isLocalId,
   type ReferenceCount,
 } from '../lib/gc-identity-context';
 
@@ -154,6 +155,14 @@ export default class StoreService extends Service implements StoreInterface {
       (async () => {
         await Promise.resolve();
         this.autoSaveStates.delete(id);
+        let instance = this.identityContext.get(id);
+        if (instance) {
+          if (isLocalId(id)) {
+            this.autoSaveStates.delete(instance.id);
+          } else {
+            this.autoSaveStates.delete(instance[localIdSymbol]);
+          }
+        }
       })();
 
       this.unsubscribeFromInstance(id);
@@ -233,11 +242,16 @@ export default class StoreService extends Service implements StoreInterface {
     this.identityContext.set(instance.id ?? instance[localIdSymbol], instance);
 
     if (!opts?.doNotPersist) {
+      // in this branch we wire up the instance change subscription after the
+      // initial save since the caller indicated they are willing to await the
+      // save and we may not actually have an instance yet
       if (instance.id) {
         this.save(instance.id);
       } else {
         await this.persistAndUpdate(instance, opts?.realm);
       }
+    } else {
+      await this.updateInstanceChangeSubscription('start-tracking', instance);
     }
     return instance;
   }
@@ -384,7 +398,10 @@ export default class StoreService extends Service implements StoreInterface {
           });
         }
         this.subscribeToRealm(new URL(url));
-        await this.trackSavedInstance('start-tracking', instanceOrError);
+        await this.updateInstanceChangeSubscription(
+          'start-tracking',
+          instanceOrError,
+        );
 
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
@@ -540,9 +557,15 @@ export default class StoreService extends Service implements StoreInterface {
         opts: { noCache: true },
       });
       if (oldInstance) {
-        await this.trackSavedInstance('stop-tracking', oldInstance);
+        await this.updateInstanceChangeSubscription(
+          'stop-tracking',
+          oldInstance,
+        );
       }
-      await this.trackSavedInstance('start-tracking', instanceOrError);
+      await this.updateInstanceChangeSubscription(
+        'start-tracking',
+        instanceOrError,
+      );
     },
   );
 
@@ -563,63 +586,58 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
     if (!isCardInstance(maybeReloadedInstance)) {
-      await this.trackSavedInstance('stop-tracking', instance);
+      await this.updateInstanceChangeSubscription('stop-tracking', instance);
     }
     if (maybeReloadedInstance) {
-      await this.trackSavedInstance('start-tracking', maybeReloadedInstance);
+      await this.updateInstanceChangeSubscription(
+        'start-tracking',
+        maybeReloadedInstance,
+      );
     }
     if (isDelete) {
-      await this.trackSavedInstance('stop-tracking', instance);
+      await this.updateInstanceChangeSubscription('stop-tracking', instance);
       this.identityContext.delete(instance.id);
     }
   });
 
   private onInstanceUpdated = (instance: BaseDef) => {
-    if (
-      isCardInstance(instance) &&
-      'id' in instance &&
-      typeof instance.id === 'string'
-    ) {
-      let autoSaveState = this.initOrGetAutoSaveState(instance.id);
+    if (isCardInstance(instance)) {
+      let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
-      this.initiateAutoSaveTask.perform(instance.id);
+      this.initiateAutoSaveTask.perform(instance);
     }
   };
 
-  private async trackSavedInstance(
+  private async updateInstanceChangeSubscription(
     operation: 'start-tracking' | 'stop-tracking',
     instanceOrError: CardDef | CardErrorJSONAPI,
   ) {
-    if (!instanceOrError.id) {
-      return;
-    }
-
     let instance = isCardInstance(instanceOrError)
       ? instanceOrError
       : undefined;
+    if (!instance && !instanceOrError.id) {
+      return;
+    }
     if (operation === 'start-tracking') {
       this.identityContext.addInstanceOrError(
-        instanceOrError.id,
+        instance
+          ? (instance.id ?? instance[localIdSymbol])
+          : instanceOrError.id!, // we checked above to make sure errors have id's
         instanceOrError,
       );
     }
     // module updates will break the cached api. so don't hang on to this longer
     // than necessary
     this.cardApiCache = await this.cardService.getAPI();
-    let autoSaveState = instance
-      ? this.autoSaveStates.get(instance.id)
-      : undefined;
     if (operation === 'stop-tracking' && instance) {
       this.cardApiCache.unsubscribeFromChanges(
         instance,
         this.onInstanceUpdated,
       );
       this.autoSaveStates.delete(instance.id);
+      this.autoSaveStates.delete(instance[localIdSymbol]);
     } else if (operation === 'start-tracking' && instance) {
       this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
-      if (autoSaveState) {
-        this.autoSaveStates.set(instance.id, autoSaveState);
-      }
     }
   }
 
@@ -688,7 +706,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.identityContext.set(url, instance);
       deferred?.fulfill(instance);
       if (!existingInstance) {
-        await this.trackSavedInstance('start-tracking', instance);
+        await this.updateInstanceChangeSubscription('start-tracking', instance);
       }
       return instance as T;
     } catch (error: any) {
@@ -708,12 +726,18 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private initiateAutoSaveTask = task(
-    async (id: string, opts?: { isImmediate?: true }) => {
-      let instance = this.identityContext.get(id);
-      if (!instance) {
-        return;
+    async (idOrInstance: string | CardDef, opts?: { isImmediate?: true }) => {
+      let instance: CardDef | undefined;
+      if (typeof idOrInstance === 'string') {
+        instance = this.identityContext.get(idOrInstance);
+        if (!instance) {
+          return;
+        }
+      } else {
+        instance = idOrInstance;
       }
-      let autoSaveState = this.initOrGetAutoSaveState(id);
+      let isNew = !instance.id;
+      let autoSaveState = this.initOrGetAutoSaveState(instance);
       try {
         autoSaveState.isSaving = true;
         autoSaveState.lastSaveError = undefined;
@@ -734,12 +758,17 @@ export default class StoreService extends Service implements StoreInterface {
       } finally {
         autoSaveState.isSaving = false;
         this.calculateLastSavedMsg(autoSaveState);
+        if (isNew && instance.id) {
+          this.autoSaveStates.set(instance.id, autoSaveState);
+        }
       }
     },
   );
 
-  private initOrGetAutoSaveState(url: string): AutoSaveState {
-    let autoSaveState = this.autoSaveStates.get(url);
+  private initOrGetAutoSaveState(instance: CardDef): AutoSaveState {
+    let autoSaveState = this.autoSaveStates.get(
+      instance.id ?? instance[localIdSymbol],
+    );
     if (!autoSaveState) {
       autoSaveState = new TrackedObject({
         isSaving: false,
@@ -748,9 +777,12 @@ export default class StoreService extends Service implements StoreInterface {
         lastSavedErrorMsg: undefined,
         lastSaveError: undefined,
       });
-      this.autoSaveStates.set(url, autoSaveState!);
+      this.autoSaveStates.set(instance[localIdSymbol], autoSaveState);
     }
-    return autoSaveState!;
+    if (instance.id && !this.autoSaveStates.get(instance.id)) {
+      this.autoSaveStates.set(instance.id, autoSaveState);
+    }
+    return autoSaveState;
   }
 
   private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
@@ -825,6 +857,7 @@ export default class StoreService extends Service implements StoreInterface {
           // relativeTo because its up to the realm server to assign us an ID, so
           // URL's should be absolute
           useAbsoluteURL: true,
+          withIncluded: true,
         });
 
         // send doc over the wire with absolute URL's. The realm server will convert
@@ -865,7 +898,10 @@ export default class StoreService extends Service implements StoreInterface {
         if (isNew) {
           // now that we have a remote ID make a realm subscription
           this.subscribeToRealm(new URL(instance.id));
-          await this.trackSavedInstance('start-tracking', instance);
+          await this.updateInstanceChangeSubscription(
+            'start-tracking',
+            instance,
+          );
         }
       } catch (err) {
         console.error(`Failed to save ${instance.id}: `, err);

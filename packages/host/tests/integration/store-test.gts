@@ -492,7 +492,7 @@ module('Integration | Store', function (hooks) {
       typeof CardDefType
     >(doc.data, doc, undefined);
     try {
-      await store.add(conflictingInstance);
+      await store.add(conflictingInstance, { doNotPersist: true });
       throw new Error('expected exception to be thrown');
     } catch (err: any) {
       assert.ok(
@@ -531,6 +531,63 @@ module('Integration | Store', function (hooks) {
       );
     });
     (instance as any).name = 'Paper';
+  });
+
+  test<TestContextWithSave>('an unsaved instance will auto save when its data changes', async function (assert) {
+    assert.expect(2);
+    let instance = new PersonDef({ name: 'Andrea' });
+    await store.add(instance, { doNotPersist: true });
+
+    this.onSave((url, doc) => {
+      assert.strictEqual(
+        url.href.split('/').pop()!,
+        instance[localId],
+        'the new card url ends with the local id',
+      );
+      assert.strictEqual(
+        (doc as SingleCardDocument).data.attributes?.name,
+        'Air',
+        'card data is correct',
+      );
+    });
+
+    (instance as any).name = 'Air';
+  });
+
+  test<TestContextWithSave>('getSaveState works for initially unsaved instance', async function (assert) {
+    let instance = new PersonDef({ name: 'Andrea' });
+    await store.add(instance, { doNotPersist: true });
+
+    assert.strictEqual(
+      store.getSaveState(instance[localId]),
+      undefined,
+      'save state is undefined',
+    );
+
+    (instance as any).name = 'Air';
+
+    assert.strictEqual(
+      store.getSaveState(instance[localId])?.isSaving,
+      true,
+      'isSaving state is correct',
+    );
+
+    await waitUntil(() => store.getSaveState(instance[localId])?.lastSaved);
+
+    assert.strictEqual(
+      store.getSaveState(instance[localId])?.isSaving,
+      false,
+      'isSaving state is correct',
+    );
+    assert.strictEqual(
+      store.getSaveState(instance.id)?.isSaving,
+      false,
+      'isSaving state is correct (by remote id)',
+    );
+    assert.ok(
+      store.getSaveState(instance.id)?.lastSaved,
+      'lastSaved state is correct (by remote id)',
+    );
   });
 
   test('can capture error when auto saving', async function (assert) {
@@ -773,5 +830,52 @@ module('Integration | Store', function (hooks) {
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')
       .containsText('Hassan', 'card is still rendered');
+  });
+
+  test('an unsaved instance live updates when realm event matching local ID is received', async function (assert) {
+    let newInstance = new PersonDef({ name: 'Andrea' });
+    await store.add(newInstance, { doNotPersist: true });
+
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+    let instance = store.peek(`${testRealmURL}Person/hassan`) as CardDefType;
+
+    (instance as any).friends = [newInstance];
+
+    await waitUntil(() => store.getSaveState(newInstance[localId])?.lastSaved, {
+      timeout: 5_000,
+    });
+
+    assert.strictEqual(
+      newInstance.id.split('/').pop()!,
+      newInstance[localId],
+      'the new instance was live updated with a remote id',
+    );
+  });
+
+  test<TestContextWithSave>('an unsaved instance will auto save after it has been assigned a remote ID', async function (assert) {
+    assert.expect(2);
+    let newInstance = new PersonDef({ name: 'Andrea' });
+    await store.add(newInstance, { doNotPersist: true });
+
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+    let instance = store.peek(`${testRealmURL}Person/hassan`) as CardDefType;
+
+    (instance as any).friends = [newInstance];
+
+    await waitUntil(() => store.getSaveState(newInstance[localId])?.lastSaved, {
+      timeout: 5_000,
+    });
+
+    this.onSave((url, doc) => {
+      assert.strictEqual(url.href, newInstance.id, 'the save url is correct');
+      assert.strictEqual(
+        (doc as SingleCardDocument).data.attributes?.name,
+        'Air',
+        'card data is correct',
+      );
+    });
+    (newInstance as any).name = 'Air';
   });
 });
