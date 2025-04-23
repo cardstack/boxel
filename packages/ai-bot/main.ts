@@ -269,18 +269,24 @@ Common issues are:
           .on('chunk', async (chunk, snapshot) => {
             generationId = chunk.id;
 
-            let chunkHandlingResults = await responder.onChunk(chunk, snapshot);
-            let chunkHandlingResultsError = chunkHandlingResults.find(
-              (result) =>
-                result &&
-                'errorMessage' in result &&
-                result.errorMessage != null,
+            let chunkProcessingResult = await responder.onChunk(
+              chunk,
+              snapshot,
+            );
+            let chunkProcessingResultError = chunkProcessingResult.find(
+              (promiseResult) =>
+                promiseResult &&
+                'errorMessage' in promiseResult &&
+                promiseResult.errorMessage != null,
             ) as { errorMessage: string } | undefined;
 
-            if (chunkHandlingResultsError) {
-              chunkHandlingError = chunkHandlingResultsError.errorMessage;
+            if (chunkProcessingResultError) {
+              chunkHandlingError = chunkProcessingResultError.errorMessage;
 
-              runner.abort(); // Will not read any more chunks, and will throw an error where the await responder.finalize() is called
+              // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+              // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+              // where the await responder.finalize() is called (the catch block below will handle this)
+              runner.abort();
             }
           })
           .on('error', async (error) => {
@@ -292,7 +298,7 @@ Common issues are:
           await responder.finalize();
         } catch (error) {
           if (chunkHandlingError) {
-            await responder.onError(chunkHandlingError); // for example event too large error
+            await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
           } else {
             await responder.onError(error as OpenAIError);
           }
