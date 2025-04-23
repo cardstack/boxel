@@ -21,6 +21,7 @@ interface Signature {
     error: CardErrorJSONAPI;
     viewInCodeMode?: boolean;
     title?: string;
+    headerText?: string;
   };
   Element: HTMLElement;
 }
@@ -54,7 +55,7 @@ export default class CardErrorDetail extends Component<Signature> {
       >
         <:title>
           <ExclamationCircle class='error-icon' />
-          An error was encountered:
+          {{if @headerText @headerText 'An error was encountered: '}}
           <span data-test-error-title>
             {{if @title @title @error.title}}
           </span>

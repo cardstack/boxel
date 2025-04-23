@@ -205,6 +205,7 @@ export default class CreateFileModal extends Component<Signature> {
               <CardErrorDetail
                 class='create-file-error-detail'
                 @error={{this.saveError}}
+                @headerText={{this.errorHeaderText}}
                 data-test-error-container
               />
             {{/if}}
@@ -463,6 +464,14 @@ export default class CreateFileModal extends Component<Signature> {
 
   private clearSaveError() {
     this.saveError = undefined;
+  }
+
+  private get errorHeaderText() {
+    if (!this.maybeFileType || this.maybeFileType.id === 'duplicate-instance') {
+      return undefined;
+    }
+    let fileType = this.maybeFileType.displayName.toLowerCase();
+    return `Error creating ${fileType}: `;
   }
 
   private get fileNameInputState() {
