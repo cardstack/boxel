@@ -54,7 +54,7 @@
     "@typescript-eslint/parser": "catalog:",
     "babel-eslint": "catalog:",
     "broccoli-asset-rev": "catalog:",
-    "ember-auto-import": "catalog:",
+    "ember-auto-import": "^2.7.2",
     "ember-cli": "catalog:",
     "ember-cli-babel": "catalog:",
     "ember-cli-dependency-checker": "catalog:",

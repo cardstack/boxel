@@ -88,7 +88,7 @@
     "date-fns": "catalog:",
     "decorator-transforms": "catalog:",
     "ember-async-data": "catalog:",
-    "ember-auto-import": "catalog:",
+    "ember-auto-import": "^2.7.2",
     "ember-basic-dropdown": "catalog:",
     "ember-cli": "catalog:",
     "ember-cli-app-version": "catalog:",

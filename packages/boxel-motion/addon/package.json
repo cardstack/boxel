@@ -38,7 +38,7 @@
     "@embroider/addon-shim": "catalog:",
     "@glimmer/component": "catalog:",
     "@glint/template": "catalog:",
-    "ember-auto-import": "catalog:",
+    "ember-auto-import": "^2.7.2",
     "ember-cli-babel": "catalog:",
     "ember-cli-htmlbars": "catalog:",
     "ember-cli-typescript": "catalog:",
