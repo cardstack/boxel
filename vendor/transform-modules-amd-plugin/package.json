@@ -9,17 +9,17 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@babel/helper-module-transforms": "^7.18.9",
+    "@babel/helper-module-transforms": "catalog:",
     "@babel/helper-plugin-utils": "^7.0.0",
-    "babel-plugin-dynamic-import-node": "^2.3.3"
+    "babel-plugin-dynamic-import-node": "catalog:"
   },
   "peerDependencies": {
     "@babel/core": "^7.26.10"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.10",
-    "@types/babel__traverse": "^7.14.2",
-    "@types/babel__core": "^7.1.19"
+    "@babel/core": "catalog:",
+    "@types/babel__traverse": "catalog:",
+    "@types/babel__core": "catalog:"
   },
   "author": "The Babel Team (https://babel.dev/team)"
 }

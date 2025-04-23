@@ -9,7 +9,7 @@
   "keywords": [],
   "devDependencies": {
     "ember-template-lint": "*",
-    "ember-template-recast": "^6.1.5"
+    "ember-template-recast": "catalog:"
   },
   "author": "",
   "license": "MIT",
