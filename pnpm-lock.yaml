@@ -749,6 +749,9 @@ overrides:
 pnpmfileChecksum: sha256-4aYtIGLH5VZ7602JwdeiRO9eMz2VW/CY+BbwLNpu1Bw=
 
 patchedDependencies:
+  '@embroider/compat':
+    hash: db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2
+    path: patches/@embroider__compat.patch
   ember-auto-import@2.10.0:
     hash: 6fbafc3e6332bfc42dd128e0e70114b40562c2f89ede1bd12d9062bccff4762e
     path: patches/ember-auto-import@2.10.0.patch
@@ -1316,7 +1319,7 @@ importers:
         version: 3.3.1(@babel/core@7.26.10)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6)
       '@embroider/compat':
         specifier: 'catalog:'
-        version: 3.5.6(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)
+        version: 3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)
       '@embroider/core':
         specifier: 'catalog:'
         version: 3.4.14(@glint/template@1.3.0)
@@ -1325,7 +1328,7 @@ importers:
         version: 1.16.5(@glint/template@1.3.0)
       '@embroider/test-setup':
         specifier: ^4.0.0
-        version: 4.0.0(@embroider/compat@3.5.6(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.4.14(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6))
+        version: 4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.4.14(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6))
       '@embroider/webpack':
         specifier: 'catalog:'
         version: 4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6)
@@ -1750,7 +1753,7 @@ importers:
         version: 3.3.1(@babel/core@7.26.10)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6)
       '@embroider/compat':
         specifier: 'catalog:'
-        version: 3.5.6(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)
+        version: 3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)
       '@embroider/core':
         specifier: 'catalog:'
         version: 3.4.14(@glint/template@1.3.0)
@@ -1759,7 +1762,7 @@ importers:
         version: 1.16.5(@glint/template@1.3.0)
       '@embroider/test-setup':
         specifier: ^4.0.0
-        version: 4.0.0(@embroider/compat@3.5.6(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.4.14(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6))
+        version: 4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.4.14(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6))
       '@embroider/webpack':
         specifier: 'catalog:'
         version: 4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6)
@@ -2164,7 +2167,7 @@ importers:
         version: 3.1.0
       '@embroider/compat':
         specifier: 'catalog:'
-        version: 3.5.6(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)
+        version: 3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)
       '@embroider/core':
         specifier: 'catalog:'
         version: 3.4.14(@glint/template@1.3.0)
@@ -17609,7 +17612,7 @@ snapshots:
       - supports-color
       - webpack
 
-  '@embroider/compat@3.5.6(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)':
+  '@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)':
     dependencies:
       '@babel/code-frame': 7.26.2
       '@babel/core': 7.26.10(supports-color@8.1.1)
@@ -17866,12 +17869,12 @@ snapshots:
       lodash: 4.17.21
       resolve: 1.22.8
 
-  '@embroider/test-setup@4.0.0(@embroider/compat@3.5.6(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.4.14(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6))':
+  '@embroider/test-setup@4.0.0(@embroider/compat@3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0))(@embroider/core@3.4.14(@glint/template@1.3.0))(@embroider/webpack@4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6))':
     dependencies:
       lodash: 4.17.21
       resolve: 1.22.8
     optionalDependencies:
-      '@embroider/compat': 3.5.6(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)
+      '@embroider/compat': 3.5.6(patch_hash=db8df3cd3be93909d4ddbc1eace0a46dd23639f38332d9eb4c500c534687c7b2)(@embroider/core@3.4.14(@glint/template@1.3.0))(@glint/template@1.3.0)
       '@embroider/core': 3.4.14(@glint/template@1.3.0)
       '@embroider/webpack': 4.0.4(@embroider/core@3.4.14(@glint/template@1.3.0))(webpack@5.99.6)
 
