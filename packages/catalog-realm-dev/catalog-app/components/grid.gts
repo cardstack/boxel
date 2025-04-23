@@ -65,6 +65,12 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
               <li
                 class='{{@selectedView}}-view-container'
                 data-test-card-url={{card.url}}
+                {{@context.cardComponentModifier
+                  cardId=card.url
+                  format='data'
+                  fieldType=undefined
+                  fieldName=undefined
+                }}
               >
                 {{#if
                   (and (this.isHydrated card.url) this.cardResource.isLoaded)
@@ -76,12 +82,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                     }}
                       <CardContainer
                         class='card'
-                        {{@context.cardComponentModifier
-                          cardId=card.url
-                          format='data'
-                          fieldType=undefined
-                          fieldName=undefined
-                        }}
                         data-test-cards-grid-item={{removeFileExtension
                           card.url
                         }}

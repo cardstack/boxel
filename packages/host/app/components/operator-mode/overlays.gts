@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 import { velcro } from 'ember-velcro';
-import { isEqual } from 'lodash';
+import { isEqual, omit } from 'lodash';
 import { type TrackedArray } from 'tracked-built-ins';
 
 import { type Actions } from '@cardstack/runtime-common';
@@ -203,7 +203,10 @@ export default class Overlays extends Component<OverlaySignature> {
   }
 
   @action protected isHovered(renderedCard: RenderedCardForOverlayActions) {
-    return isEqual(this.currentlyHoveredCard, renderedCard);
+    return isEqual(
+      omit(this.currentlyHoveredCard, ['overlayZIndexStyle']),
+      omit(renderedCard, ['overlayZIndexStyle']),
+    );
   }
 
   protected isField(renderedCard: RenderedCardForOverlayActions) {
