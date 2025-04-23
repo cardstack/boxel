@@ -23,7 +23,7 @@
       "babel-eslint": "10.1.0"
     },
     "overrides": {
-      "@types/eslint": "8.4.1",
+      "@types/eslint": "8.56.5",
       "@embroider/util": "1.13.1",
       "@glimmer/tracking>@glimmer/validator": "0.84.3",
       "jsesc": "^3.0.0",
@@ -74,10 +74,10 @@
     "typescript": "~5.1.6"
   },
   "engines": {
-    "pnpm": "^8"
+    "pnpm": "^10"
   },
   "volta": {
-    "node": "20.11.1",
-    "pnpm": "8.15.5"
+    "node": "20.19.1",
+    "pnpm": "10.9.0"
   }
 }

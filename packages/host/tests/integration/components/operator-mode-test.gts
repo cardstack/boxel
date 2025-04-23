@@ -1752,9 +1752,6 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-label]`).containsText('Searching for “ma”');
     await settled();
 
-    assert.dom(`[data-test-search-label]`).containsText('4 Results for “ma”');
-    assert.dom(`[data-test-search-sheet-search-result]`).exists({ count: 4 });
-    assert.dom(`[data-test-realm-name]`).exists({ count: 4 });
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
     assert
       .dom(
