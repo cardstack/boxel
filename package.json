@@ -46,7 +46,8 @@
       "monaco-editor@0.52.2": "patches/monaco-editor@0.52.2.patch",
       "monaco-editor-webpack-plugin@7.1.0": "patches/monaco-editor-webpack-plugin@7.1.0.patch",
       "ember-auto-import@2.10.0": "patches/ember-auto-import@2.10.0.patch",
-      "@embroider/compat": "patches/@embroider__compat.patch"
+      "@embroider/compat": "patches/@embroider__compat.patch",
+      "ember-eslint-parser": "patches/ember-eslint-parser.patch"
     }
   },
   "devDependencies": {
