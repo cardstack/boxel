@@ -1,0 +1,15 @@
+diff --git a/src/compat-app.js b/src/compat-app.js
+index 80325d2175e115a2769595d47ea75d7d6c849b63..a4a65c750e8170fa1fb0bdaa3d502893cd073f74 100644
+--- a/src/compat-app.js
++++ b/src/compat-app.js
+@@ -237,6 +237,10 @@ class CompatApp {
+                 // defines `@babel/core` as a peer dependency, so we need to check the
+                 // project's version of `@babel/core`:
+                 let babelVersion = (_a = this.legacyEmberAppInstance.project.pkg.devDependencies) === null || _a === void 0 ? void 0 : _a['@babel/core'];
++
++                if (babelVersion === 'catalog:') {
++                  return 7;
++                }
+                 if (babelVersion) {
+                     babelMajor = (_b = semver_1.default.coerce(babelVersion)) === null || _b === void 0 ? void 0 : _b.major;
+                 }

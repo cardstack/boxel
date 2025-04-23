@@ -34,7 +34,7 @@ catalog:
   "@ember/test-waiters": ^3.0.2
   "@embroider/addon-dev": ^5.0.0
   "@embroider/addon-shim": ^1.8.9
-  "@embroider/compat": ^3.5.5
+  "@embroider/compat": ^3.9.0
   "@embroider/core": ^3.4.14
   "@embroider/macros": ^1.16.5
   "@embroider/test-setup": ^4.0.0
