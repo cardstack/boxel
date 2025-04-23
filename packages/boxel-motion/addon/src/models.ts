@@ -5,4 +5,9 @@ import {
 import Sprite from './models/sprite.ts';
 import { type Keyframe } from './value/index.ts';
 
-export { AnimationParticipant, AnimationParticipantManager, Keyframe, Sprite };
+export {
+  type Keyframe,
+  AnimationParticipant,
+  AnimationParticipantManager,
+  Sprite,
+};

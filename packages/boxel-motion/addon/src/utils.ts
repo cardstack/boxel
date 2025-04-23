@@ -6,8 +6,8 @@ import { type Snapshot } from './utils/measurement.ts';
 
 export {
   type IContext,
+  type Snapshot,
   constructKeyframe,
   instantaneousVelocity,
   parseCssToUnitValue,
-  Snapshot,
 };

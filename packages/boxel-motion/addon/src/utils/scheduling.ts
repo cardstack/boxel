@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/explicit-module-boundary-types */
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Timer } from '@ember/runloop';
 import { cancel, schedule } from '@ember/runloop';
-import { Timer } from '@ember/runloop';
 
 const cancellation: WeakMap<
   Promise<any>,
