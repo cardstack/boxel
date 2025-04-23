@@ -137,6 +137,11 @@ export default class StoreService extends Service implements StoreInterface {
       `dropping reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
     if (currentReferenceCount <= 0) {
+      if (currentReferenceCount < 0) {
+        console.error(
+          `WARNING: current reference count for ${id} is negative: ${this.referenceCount.get(id)}`,
+        );
+      }
       this.referenceCount.delete(id);
       let autoSaveState = this.autoSaveStates.get(id);
       if (autoSaveState?.hasUnsavedChanges) {
