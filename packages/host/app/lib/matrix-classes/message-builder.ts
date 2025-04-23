@@ -6,10 +6,7 @@ import { inject as service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  LooseSingleCardDocument,
-  ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
 import { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
@@ -54,7 +51,6 @@ export default class MessageBuilder {
       effectiveEventId: string;
       author: RoomMember;
       index: number;
-      serializedCardFromFragments: (eventId: string) => LooseSingleCardDocument;
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
       commandResultEvent?: CommandResultEvent;
@@ -94,23 +90,7 @@ export default class MessageBuilder {
   get attachedCardIds() {
     let content = this.event.content as CardMessageContent;
     let attachedCardIds: string[] = [];
-    if (content.data?.attachedCardsEventIds) {
-      // Safely skip over cases that don't have attached cards or a data type
-      let cardDocs = content.data?.attachedCardsEventIds
-        ? content.data.attachedCardsEventIds.map((eventId) =>
-            this.builderContext.serializedCardFromFragments(eventId),
-          )
-        : [];
-
-      cardDocs.map((c) => {
-        if (c.data.id) {
-          attachedCardIds.push(c.data.id);
-        }
-      });
-      if (attachedCardIds.length < cardDocs.length) {
-        throw new Error(`cannot handle cards in room without an ID`);
-      }
-    } else if (content.data?.attachedCards) {
+    if (content.data?.attachedCards) {
       attachedCardIds = content.data.attachedCards.map((c) => c.sourceUrl);
     }
     return attachedCardIds;
@@ -207,10 +187,6 @@ export default class MessageBuilder {
       if (messageCommand) {
         messageCommand.commandStatus = event.content['m.relates_to']
           .key as CommandStatus;
-        messageCommand.commandResultCardEventId =
-          event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-            ? event.content.data.cardEventId
-            : undefined;
         messageCommand.commandResultFileDef =
           event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
             ? event.content.data.card
@@ -275,10 +251,6 @@ export default class MessageBuilder {
       skillCommand?.requiresApproval ?? true,
       (commandResultEvent?.content['m.relates_to']?.key ||
         'ready') as CommandStatus,
-      commandResultEvent?.content.msgtype ===
-      APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-        ? commandResultEvent.content.data.cardEventId
-        : undefined,
       commandResultEvent?.content.msgtype ===
       APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
         ? commandResultEvent.content.data.card

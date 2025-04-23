@@ -6,8 +6,6 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_CARD_FORMAT,
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -19,6 +17,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -129,7 +128,7 @@ export interface MessageEvent extends BaseMatrixEvent {
 
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: CardMessageContent | CardFragmentContent | CommandDefinitionsContent;
+  content: CardMessageContent | CommandDefinitionsContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -176,12 +175,6 @@ export interface CardMessageContent {
   data: {
     attachedFiles?: SerializedFile[];
     attachedCards?: SerializedFile[];
-    /**
-     * @deprecated This field is deprecated and will be removed in a future version.
-     * We use this field over the wire since the matrix message protocol
-     * requires a string value for the content field.
-     */
-    attachedCardsEventIds?: string[];
     context: {
       openCardIds?: string[];
       tools?: Tool[];
@@ -195,33 +188,12 @@ export interface CardMessageContent {
   };
 }
 
-export interface CardFragmentContent {
-  'm.relates_to'?: {
-    rel_type: string;
-    event_id: string;
-  };
-  msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE;
-  format: typeof APP_BOXEL_CARD_FORMAT;
-  body: string;
-  errorMessage?: string;
-  data: {
-    nextFragment?: string;
-    cardFragment: string;
-    index: number;
-    totalParts: number;
-  };
-}
-
 export interface SkillsConfigEvent extends RoomStateEvent {
   type: typeof APP_BOXEL_ROOM_SKILLS_EVENT_TYPE;
   content: {
     enabledCards?: SerializedFile[];
     disabledCards?: SerializedFile[];
     commandDefinitions?: SerializedFile[];
-
-    // @deprecated Use enabledCards and disabledCards instead
-    enabledEventIds?: string[];
-    disabledEventIds?: string[];
   };
 }
 
@@ -265,7 +237,6 @@ export interface CommandResultWithOutputContent {
   };
   commandRequestId: string;
   data: {
-    cardEventId?: string;
     card?: SerializedFile;
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;

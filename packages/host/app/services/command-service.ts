@@ -143,9 +143,6 @@ export default class CommandService extends Service {
         if (this.executedCommandRequestIds.has(messageCommand.id!)) {
           continue;
         }
-        if (messageCommand.commandResultCardEventId) {
-          continue;
-        }
         if (messageCommand.commandResultFileDef) {
           continue;
         }

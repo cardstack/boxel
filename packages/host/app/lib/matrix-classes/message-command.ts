@@ -4,10 +4,7 @@ import { inject as service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import {
-  LooseSingleCardDocument,
-  ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
 
 import type CommandService from '@cardstack/host/services/command-service';
@@ -26,9 +23,6 @@ export default class MessageCommand {
   @tracked commandStatus?: CommandStatus;
   @tracked commandResultFileDef?: SerializedFile;
 
-  // @deprecated use commandResultCardId instead
-  @tracked commandResultCardEventId?: string;
-
   constructor(
     public message: Message,
     commandRequest: Partial<CommandRequest>,
@@ -36,7 +30,6 @@ export default class MessageCommand {
     public eventId: string,
     public requiresApproval: boolean,
     commandStatus: CommandStatus,
-    commandResultCardEventId: string | undefined,
     commandResultFileDef: SerializedFile | undefined,
     owner: Owner,
   ) {
@@ -44,7 +37,6 @@ export default class MessageCommand {
 
     this.commandRequest = commandRequest;
     this.commandStatus = commandStatus;
-    this.commandResultCardEventId = commandResultCardEventId;
     this.commandResultFileDef = commandResultFileDef;
   }
 
@@ -77,7 +69,7 @@ export default class MessageCommand {
   }
 
   async commandResultCardDoc() {
-    if (!this.commandResultCardEventId && !this.commandResultFileDef) {
+    if (!this.commandResultFileDef) {
       return undefined;
     }
     let roomResource = this.matrixService.roomResources.get(
@@ -87,16 +79,12 @@ export default class MessageCommand {
       return undefined;
     }
     try {
-      let cardDoc: LooseSingleCardDocument | undefined;
-      if (this.commandResultCardEventId) {
-        cardDoc = roomResource.serializedCardFromFragments(
-          this.commandResultCardEventId,
-        );
-      } else if (this.commandResultFileDef) {
-        cardDoc = await this.matrixService.downloadCardFileDef(
-          this.commandResultFileDef,
-        );
+      if (!this.commandResultFileDef) {
+        return undefined;
       }
+      let cardDoc = await this.matrixService.downloadCardFileDef(
+        this.commandResultFileDef,
+      );
       return cardDoc;
     } catch {
       // the command result card fragments might not be loaded yet

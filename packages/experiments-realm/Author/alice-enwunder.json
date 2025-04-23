@@ -4,8 +4,8 @@
     "attributes": {
       "firstName": "Alice",
       "lastName": "Enwunder",
-      "bio": "Alice Enwunder is a whimsical adventurer and storyteller, renowned for her curiosity and love for the fantastical. Born in a small village surrounded by enchanting woods, Alice grew up listening to tales of wonder from her grandmother. As she grew older, she embarked on journeys across magical realms, encountering peculiar creatures and gathering stories that she now shares with an eager audience around the world.",
-      "fullBio": "Alice Enwunder is a whimsical adventurer and storyteller, renowned for her curiosity and love for the fantastical. Born in a small village surrounded by enchanting woods, Alice grew up listening to tales of wonder from her grandmother. As she grew older, she embarked on journeys across magical realms, encountering peculiar creatures and gathering stories that she now shares with an eager audience around the world. Her works have inspired countless individuals to explore the extraordinary, finding magic in the everyday.",
+      "bio": null,
+      "fullBio": null,
       "quote": "Curiouser and curiouser",
       "contactLinks": [
         {

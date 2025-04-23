@@ -80,10 +80,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   @use private commandResultCard = resource(() => {
     let initialState = { card: undefined } as { card: CardDef | undefined };
     let state = new TrackedObject(initialState);
-    if (
-      this.args.messageCommand.commandResultCardEventId ||
-      this.args.messageCommand.commandResultFileDef
-    ) {
+    if (this.args.messageCommand.commandResultFileDef) {
       this.args.messageCommand.getCommandResultCard().then((card) => {
         state.card = card;
       });

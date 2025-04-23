@@ -43,7 +43,7 @@ interface CacheEntry {
 
 const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
 
-export default class CardFileDefManager {
+export default class FileDefManager {
   private commandDefHashes: string[] = []; // hashes
   private downloadCache: Map<string, CacheEntry> = new Map();
 
@@ -59,7 +59,7 @@ export default class CardFileDefManager {
     setOwner(this, owner);
   }
 
-  async uploadCardsAndUpdateCommandDefinitions(
+  async uploadCardsAndUpdateSkillCommands(
     cards: CardDef[],
     roomId: string,
   ): Promise<FileDef[]> {

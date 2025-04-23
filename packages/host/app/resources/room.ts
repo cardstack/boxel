@@ -11,7 +11,6 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -22,7 +21,6 @@ import {
 
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
-  CardFragmentContent,
   MatrixEvent as DiscreteMatrixEvent,
   RoomCreateEvent,
   RoomNameEvent,
@@ -75,8 +73,6 @@ export class RoomResource extends Resource<Args> {
     new TrackedMap();
   @tracked private _createEvent: RoomCreateEvent | undefined;
   private _memberCache: TrackedMap<string, RoomMember> = new TrackedMap();
-  private _fragmentCache: TrackedMap<string, CardFragmentContent> =
-    new TrackedMap();
   private _isDisplayingViewCodeMap: TrackedMap<string, boolean> =
     new TrackedMap();
   @tracked matrixRoom: Room | undefined;
@@ -129,9 +125,7 @@ export class RoomResource extends Resource<Args> {
             await this.loadRoomMemberEvent(roomId, event);
             break;
           case 'm.room.message':
-            if (this.isCardFragmentEvent(event)) {
-              await this.loadCardFragment(event);
-            } else if (
+            if (
               this.isCommandDefinitionsEvent(event) ||
               this.isRealmServerEvent(event)
             ) {
@@ -396,35 +390,6 @@ export class RoomResource extends Resource<Args> {
     return event.content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
   }
 
-  private isCardFragmentEvent(
-    event:
-      | MessageEvent
-      | CardMessageEvent
-      | CommandDefinitionsEvent
-      | RealmServerEvent,
-  ): event is CardMessageEvent & {
-    content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
-  } {
-    return event.content.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE;
-  }
-
-  private async loadCardFragment(
-    event: CardMessageEvent & {
-      content: { msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE };
-    },
-  ) {
-    let eventId = event.event_id;
-    this._fragmentCache.set(eventId, event.content);
-
-    if (this.isSkillEventId(eventId)) {
-      await this.ensureSkillCardCached(eventId);
-    }
-  }
-
-  private isSkillEventId(eventId: string) {
-    return this.allSkillEventIds.has(eventId);
-  }
-
   private async createSkillCard(cardDoc: LooseSingleCardDocument) {
     let cardId = cardDoc.data.id;
     if (!cardId) {
@@ -442,20 +407,6 @@ export class RoomResource extends Resource<Args> {
     });
     this._skillCardsCache.set(cardId, skillCard);
     return skillCard;
-  }
-
-  // TODO we should think about why we are caching these running instances
-  // outside of the store. it would be a good idea to bring these into the fold
-  // so that we can make the `createFromSerialized()` more private.
-  private async ensureSkillCardCached(eventId: string) {
-    if (this._skillEventIdToCardIdCache.has(eventId)) {
-      return;
-    }
-    let cardDoc = this.serializedCardFromFragments(eventId);
-    let card = await this.createSkillCard(cardDoc);
-    if (card) {
-      this._skillEventIdToCardIdCache.set(eventId, card.id);
-    }
   }
 
   private async loadSkillCards(skillCardFileDefs: SerializedFile[]) {
@@ -487,7 +438,6 @@ export class RoomResource extends Resource<Args> {
       effectiveEventId,
       author,
       index,
-      serializedCardFromFragments: this.serializedCardFromFragments,
       events: this.events,
       skills: this.skills,
       skillCardsCache: this._skillCardsCache,
@@ -538,7 +488,6 @@ export class RoomResource extends Resource<Args> {
         effectiveEventId,
         author,
         index,
-        serializedCardFromFragments: this.serializedCardFromFragments,
         events: this.events,
         skills: this.skills,
         commandResultEvent: event,
@@ -609,33 +558,6 @@ export class RoomResource extends Resource<Args> {
     this._memberCache.set(userId, member);
     return member;
   }
-
-  public serializedCardFromFragments = (eventId: string) => {
-    let fragments: CardFragmentContent[] = [];
-    let currentFragment: string | undefined = eventId;
-    do {
-      let fragment = this._fragmentCache.get(currentFragment);
-      if (!fragment) {
-        throw new Error(
-          `No card fragment found in cache for event id ${eventId}`,
-        );
-      }
-      fragments.push(fragment);
-      currentFragment = fragment.data.nextFragment;
-    } while (currentFragment);
-
-    fragments.sort((a, b) => (a.data.index = b.data.index));
-    if (fragments.length !== fragments[0].data.totalParts) {
-      throw new Error(
-        `Expected to find ${fragments[0].data.totalParts} fragments for fragment of event id ${eventId} but found ${fragments.length} fragments`,
-      );
-    }
-
-    let cardDoc = JSON.parse(
-      fragments.map((f) => f.data.cardFragment).join(''),
-    ) as LooseSingleCardDocument;
-    return cardDoc;
-  };
 
   public isDisplayingCode(commandRequest: CommandRequest) {
     return this._isDisplayingViewCodeMap.get(commandRequest.id) ?? false;
