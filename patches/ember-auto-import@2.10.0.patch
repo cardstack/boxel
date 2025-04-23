@@ -1,0 +1,14 @@
+diff --git a/js/leader.js b/js/leader.js
+index 2915cbcc6629acfcad3658d2022143b34f8306aa..e04648871a2af71f503e3b1d6772513376008576 100644
+--- a/js/leader.js
++++ b/js/leader.js
+@@ -110,6 +110,9 @@ class LeaderChooser {
+                     .sort()
+                     .join(', ')}`);
+             }
++            if (this.appCandidate.range === 'catalog:') {
++              this.appCandidate.range = '2.10.0';
++            }
+             let eligible = [this.appCandidate, ...this.addonCandidates].filter((c) => (0, semver_1.satisfies)(c.version, this.appCandidate.range, {
+                 includePrerelease: true,
+             }));
