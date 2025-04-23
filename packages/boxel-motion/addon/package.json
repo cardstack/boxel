@@ -39,7 +39,7 @@
     "@glimmer/component": "catalog:",
     "@glint/template": "catalog:",
     "ember-auto-import": "^2.7.2",
-    "ember-cli-babel": "catalog:",
+    "ember-cli-babel": "^7.26.11",
     "ember-cli-htmlbars": "catalog:",
     "ember-cli-typescript": "catalog:",
     "ember-concurrency": "catalog:",
