@@ -1,12 +1,9 @@
 import { module, test, assert } from 'qunit';
+import { constructHistory, HistoryConstructionError } from '../helpers';
 import {
-  constructHistory,
-  extractCardFragmentsFromEvents,
-  HistoryConstructionError,
-} from '../helpers';
-import {
-  APP_BOXEL_CARD_FORMAT,
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -16,19 +13,39 @@ import { FakeMatrixClient } from './helpers/fake-matrix-client';
 
 module('constructHistory', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
+  let originalFetch: any;
+  let mockResponses: Map<string, { ok: boolean; text: string }>;
 
   hooks.beforeEach(() => {
     fakeMatrixClient = new FakeMatrixClient();
+    mockResponses = new Map();
+    // Mock fetch
+    originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async (url: string) => {
+      const response = mockResponses.get(url);
+      if (response) {
+        return {
+          ok: response.ok,
+          status: response.ok ? 200 : 404,
+          statusText: response.ok ? 'OK' : 'Not Found',
+          text: async () => response.text,
+        };
+      }
+      throw new Error(`No mock response for ${url}`);
+    };
   });
 
   hooks.afterEach(() => {
     fakeMatrixClient.resetSentEvents();
+    // Restore the original fetch
+    (globalThis as any).fetch = originalFetch;
+    mockResponses.clear();
   });
 
   test('should return an empty array when the input array is empty', async () => {
     const history: DiscreteMatrixEvent[] = [];
 
-    const result = await constructHistory(history, new Map(), fakeMatrixClient);
+    const result = await constructHistory(history, fakeMatrixClient);
 
     assert.deepEqual(result, []);
   });
@@ -82,7 +99,7 @@ module('constructHistory', (hooks) => {
       },
     ];
 
-    const result = await constructHistory(history, new Map(), fakeMatrixClient);
+    const result = await constructHistory(history, fakeMatrixClient);
 
     assert.deepEqual(result, []);
   });
@@ -107,11 +124,7 @@ module('constructHistory', (hooks) => {
       },
     ];
 
-    const result = await constructHistory(
-      eventlist,
-      new Map(),
-      fakeMatrixClient,
-    );
+    const result = await constructHistory(eventlist, fakeMatrixClient);
 
     // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, eventlist);
@@ -169,7 +182,7 @@ module('constructHistory', (hooks) => {
       },
     ];
 
-    const result = await constructHistory(history, new Map(), fakeMatrixClient);
+    const result = await constructHistory(history, fakeMatrixClient);
 
     // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, history);
@@ -227,7 +240,7 @@ module('constructHistory', (hooks) => {
       },
     ];
 
-    const result = await constructHistory(history, new Map(), fakeMatrixClient);
+    const result = await constructHistory(history, fakeMatrixClient);
 
     // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, history);
@@ -327,7 +340,7 @@ module('constructHistory', (hooks) => {
       },
     ];
 
-    const result = await constructHistory(history, new Map(), fakeMatrixClient);
+    const result = await constructHistory(history, fakeMatrixClient);
 
     assert.deepEqual(result, [
       // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
@@ -388,75 +401,14 @@ module('constructHistory', (hooks) => {
     ]);
   });
 
-  test('should reassemble card fragments', async () => {
-    // we can't use the DiscreteMatrixEvent type here because we need to start
-    // from the wire-format which serializes the data.content to a string for
-    // safe transport over the wire
+  test('should download the card content from url', async () => {
+    // Set up the mock response for this test
+    mockResponses.set('http://mock-server/Author/1', {
+      ok: true,
+      text: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
+    });
+
     const eventlist: IRoomEvent[] = [
-      {
-        type: 'm.room.message',
-        event_id: '1',
-        origin_server_ts: 1234567900,
-        content: {
-          msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-          format: APP_BOXEL_CARD_FORMAT,
-          body: '',
-          data: JSON.stringify({
-            cardFragment: `ry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
-            index: 1,
-            totalParts: 2,
-          }),
-        },
-        sender: '@user:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 1000,
-          transaction_id: '1',
-        },
-      },
-      {
-        type: 'm.room.message',
-        event_id: '2',
-        origin_server_ts: 1234567890,
-        content: {
-          msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-          format: APP_BOXEL_CARD_FORMAT,
-          body: '',
-          data: JSON.stringify({
-            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Ter`,
-            index: 0,
-            nextFragment: '1',
-            totalParts: 2,
-          }),
-        },
-        sender: '@user:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 1000,
-          transaction_id: '2',
-        },
-      },
-      {
-        type: 'm.room.message',
-        event_id: '3',
-        origin_server_ts: 1234567910,
-        content: {
-          msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-          format: APP_BOXEL_CARD_FORMAT,
-          body: '',
-          data: JSON.stringify({
-            cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Mango","lastName":"Abdel-Rahman"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
-            index: 1,
-            totalParts: 1,
-          }),
-        },
-        sender: '@user:localhost',
-        room_id: 'room1',
-        unsigned: {
-          age: 1000,
-          transaction_id: '3',
-        },
-      },
       {
         type: 'm.room.message',
         event_id: '4',
@@ -470,7 +422,14 @@ module('constructHistory', (hooks) => {
               functions: [],
               openCardIds: ['http://localhost:4201/experiments/Author/1'],
             },
-            attachedCardsEventIds: ['2', '3'],
+            attachedCards: [
+              {
+                sourceUrl: 'http://localhost:4201/experiments/Author/1',
+                url: 'http://mock-server/Author/1',
+                name: 'Author',
+                contentType: 'text/plain',
+              },
+            ],
           }),
         },
         sender: '@user:localhost',
@@ -482,14 +441,8 @@ module('constructHistory', (hooks) => {
       },
     ];
 
-    let cardFragments = extractCardFragmentsFromEvents(eventlist);
-    const result = await constructHistory(
-      eventlist,
-      cardFragments,
-      fakeMatrixClient,
-    );
+    const result = await constructHistory(eventlist, fakeMatrixClient);
     assert.deepEqual(result, [
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '4',
@@ -503,45 +456,13 @@ module('constructHistory', (hooks) => {
               functions: [],
               openCardIds: ['http://localhost:4201/experiments/Author/1'],
             },
-            attachedCardsEventIds: ['2', '3'],
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/1',
-                content: {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/experiments/Author/1',
-                    attributes: {
-                      firstName: 'Terry',
-                      lastName: 'Pratchett',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../author',
-                        name: 'Author',
-                      },
-                    },
-                  },
-                },
-              },
-              {
-                sourceUrl: 'http://localhost:4201/experiments/Author/1',
-                content: {
-                  data: {
-                    type: 'card',
-                    id: 'http://localhost:4201/experiments/Author/1',
-                    attributes: {
-                      firstName: 'Mango',
-                      lastName: 'Abdel-Rahman',
-                    },
-                    meta: {
-                      adoptsFrom: {
-                        module: '../author',
-                        name: 'Author',
-                      },
-                    },
-                  },
-                },
+                url: 'http://mock-server/Author/1',
+                name: 'Author',
+                contentType: 'text/plain',
+                content: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
               },
             ],
           },
@@ -553,38 +474,182 @@ module('constructHistory', (hooks) => {
           transaction_id: '4',
         },
       },
-    ]);
+    ] as unknown as DiscreteMatrixEvent[]);
   });
 
-  test('handles invalid fragments', async () => {
+  test('should download the COMMAND_RESULT card content from url', async () => {
+    // Set up the mock response for this test
+    let contentText = `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Terry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`;
+    mockResponses.set('http://mock-server/Author/1', {
+      ok: true,
+      text: contentText,
+    });
+
+    const eventlist: IRoomEvent[] = [
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@tintinthong:localhost',
+        content: {
+          'm.relates_to': {
+            event_id: 'command-event-id-1',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: 'tool-call-id-1',
+          data: JSON.stringify({
+            card: {
+              sourceUrl: 'http://localhost:4201/drafts/Author/1',
+              url: 'http://mock-server/Author/1',
+              contentType: 'text/plain',
+              name: 'Author',
+            },
+          }),
+        },
+        origin_server_ts: 1722242853988,
+        unsigned: {
+          age: 44,
+          transaction_id: 'm1722242836705.4',
+        },
+        event_id: 'command-result-id-1',
+      },
+    ];
+
+    const result = await constructHistory(eventlist, fakeMatrixClient);
+    assert.deepEqual(result, [
+      {
+        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        room_id: 'room-id-1',
+        sender: '@tintinthong:localhost',
+        content: {
+          'm.relates_to': {
+            event_id: 'command-event-id-1',
+            rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+            key: 'applied',
+          },
+          msgtype: APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: 'tool-call-id-1',
+          data: {
+            card: {
+              sourceUrl: 'http://localhost:4201/drafts/Author/1',
+              url: 'http://mock-server/Author/1',
+              contentType: 'text/plain',
+              name: 'Author',
+              content: contentText,
+            },
+          },
+        },
+        origin_server_ts: 1722242853988,
+        unsigned: {
+          age: 44,
+          transaction_id: 'm1722242836705.4',
+        },
+        event_id: 'command-result-id-1',
+      },
+    ] as unknown as DiscreteMatrixEvent[]);
+  });
+
+  test('should handle fetch card content errors', async () => {
+    // Set up a mock response that will fail
+    mockResponses.set('http://mock-server/Author/2', {
+      ok: false,
+      text: 'Not Found',
+    });
+
+    const eventlist: IRoomEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '5',
+        origin_server_ts: 1234567930,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          data: JSON.stringify({
+            context: {
+              functions: [],
+              openCardIds: ['http://localhost:4201/experiments/Author/2'],
+            },
+            attachedCards: [
+              {
+                sourceUrl: 'http://localhost:4201/experiments/Author/2',
+                url: 'http://mock-server/Author/2',
+                name: 'Author',
+                contentType: 'text/plain',
+              },
+            ],
+          }),
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '5',
+        },
+      },
+    ];
+
+    let response = await constructHistory(eventlist, fakeMatrixClient);
+    assert.deepEqual(response, [
+      {
+        type: 'm.room.message',
+        event_id: '5',
+        origin_server_ts: 1234567930,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          data: {
+            context: {
+              functions: [],
+              openCardIds: ['http://localhost:4201/experiments/Author/2'],
+            },
+            attachedCards: [
+              {
+                sourceUrl: 'http://localhost:4201/experiments/Author/2',
+                url: 'http://mock-server/Author/2',
+                name: 'Author',
+                contentType: 'text/plain',
+                error:
+                  'Error loading attached card: Error: HTTP error. Status: 404',
+              },
+            ],
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: {
+          age: 1000,
+          transaction_id: '5',
+        },
+      },
+    ] as unknown as DiscreteMatrixEvent[]);
+  });
+
+  test('handles invalid content data', async () => {
     const history: IRoomEvent[] = [
       {
         type: 'm.room.message',
-        room_id: 'room1',
-        sender: '@user:localhost',
+        event_id: '5',
+        origin_server_ts: 1234567930,
         content: {
-          msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-          format: APP_BOXEL_CARD_FORMAT,
-          body: 'card fragment 1 of 1',
-          // data should be a JSON string
-          data: {
-            cardFragment:
-              '{"data":{"type":"card","id":"https://cardstack.com/base/SkillCard/card-editing","attributes":{"instructions":"- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the \\"patchCard\\" function to make the change.\\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\\n- If you do not call patchCard, the user will not see the change.\\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\\n- NEVER tell the user to use patchCard; you should always do it for them.","title":"Card Editing","description":null,"thumbnailURL":null},"meta":{"adoptsFrom":{"module":"../skill-card","name":"SkillCard"}}}}',
-            index: 0,
-            totalParts: 1,
-          },
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hello',
+          data: 'not a JSON string',
         },
-        origin_server_ts: 1722374047192,
+        sender: '@user:localhost',
+        room_id: 'room1',
         unsigned: {
-          age: 81929388,
+          age: 1000,
+          transaction_id: '5',
         },
-        event_id: '$Kho0bl1orsUHUMo8XGcu8KzEH5mrtDmFOVO68ofsswc',
-        age: 81929388,
       },
     ];
 
     try {
-      await constructHistory(history, new Map(), fakeMatrixClient);
+      await constructHistory(history, fakeMatrixClient);
       assert.ok(false, 'Expected an error');
     } catch (e) {
       assert.ok(e instanceof HistoryConstructionError);

@@ -173,8 +173,9 @@ export interface CardMessageContent {
   // to verify whether the message is already sent or not.
   clientGeneratedId?: string;
   data: {
-    attachedFiles?: SerializedFile[];
-    attachedCards?: SerializedFile[];
+    // we retrieve the content on the server side by downloading the file
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
+    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
     context: {
       openCardIds?: string[];
       tools?: Tool[];
@@ -191,8 +192,8 @@ export interface CardMessageContent {
 export interface SkillsConfigEvent extends RoomStateEvent {
   type: typeof APP_BOXEL_ROOM_SKILLS_EVENT_TYPE;
   content: {
-    enabledCards?: SerializedFile[];
-    disabledCards?: SerializedFile[];
+    enabledCards: SerializedFile[];
+    disabledCards: SerializedFile[];
     commandDefinitions?: SerializedFile[];
   };
 }
@@ -237,7 +238,8 @@ export interface CommandResultWithOutputContent {
   };
   commandRequestId: string;
   data: {
-    card?: SerializedFile;
+    // we retrieve the content on the server side by downloading the file
+    card?: SerializedFile & { content?: string; error?: string };
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;
 }

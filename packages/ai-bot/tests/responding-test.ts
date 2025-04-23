@@ -8,6 +8,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
+import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {

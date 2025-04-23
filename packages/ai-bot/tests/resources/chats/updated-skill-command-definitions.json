@@ -24,37 +24,25 @@
     "event_id": "$member_event_2"
   },
   {
-    "type": "m.room.message",
-    "room_id": "!testroom:localhost",
-    "sender": "@host:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/test-skill\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Test skill instructions\\\",\\\"title\\\":\\\"Test Skill\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1722374020000,
-    "event_id": "$skill_card_v1"
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!testroom:localhost",
-    "sender": "@host:localhost",
-    "content": {
-      "msgtype": "app.boxel.commandDefinitions",
-      "body": "Command Definitions",
-      "data": "{\"commandDefinitions\":[{\"codeRef\":{\"name\":\"default\",\"module\":\"@cardstack/boxel-host/commands/switch-submode\"},\"tool\":{\"type\":\"function\",\"function\":{\"name\":\"switch-submode_dd88\",\"description\":\"COMMAND_DESCRIPTION_V1\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"submode\":{\"type\":\"string\"},\"codePath\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}}]}"
-    },
-    "origin_server_ts": 1722374030000,
-    "event_id": "$command_def_v1"
-  },
-  {
     "type": "app.boxel.room.skills",
     "room_id": "!testroom:localhost",
     "sender": "@host:localhost",
     "content": {
-      "enabledEventIds": ["$skill_card_v1"],
-      "disabledEventIds": []
+      "enabledCards": [
+        {
+          "url": "mxc://mock-server/skill_card_v1",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill_card_v1",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledCards": [],
+      "commandDefinitions": [
+        {
+          "url": "mxc://mock-server/command_def_v1",
+          "sourceUrl": "",
+          "contentType": "text/plain"
+        }
+      ]
     },
     "state_key": "",
     "origin_server_ts": 1722374040000,
@@ -72,37 +60,26 @@
     "event_id": "$message_1"
   },
   {
-    "type": "m.room.message",
-    "room_id": "!testroom:localhost",
-    "sender": "@host:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/test-skill\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Test skill instructions with updated commands\\\",\\\"commands\\\":[{\\\"codeRef\\\":{\\\"name\\\":\\\"default\\\",\\\"module\\\":\\\"@cardstack/boxel-host/commands/switch-submode\\\"},\\\"requiresApproval\\\":false,\\\"functionName\\\":\\\"switch-submode_dd88\\\"}],\\\"title\\\":\\\"Test Skill\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1722374060000,
-    "event_id": "$skill_card_v2"
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!testroom:localhost",
-    "sender": "@host:localhost",
-    "content": {
-      "msgtype": "app.boxel.commandDefinitions",
-      "body": "Command Definitions",
-      "data": "{\"commandDefinitions\":[{\"codeRef\":{\"name\":\"default\",\"module\":\"@cardstack/boxel-host/commands/switch-submode\"},\"tool\":{\"type\":\"function\",\"function\":{\"name\":\"switch-submode_dd88\",\"description\":\"COMMAND_DESCRIPTION_V2\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"submode\":{\"type\":\"string\"},\"codePath\":{\"type\":\"string\"},\"option\":{\"type\":\"string\",\"description\":\"Additional option\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}}]}"
-    },
-    "origin_server_ts": 1722374070000,
-    "event_id": "$command_def_v2"
-  },
-  {
     "type": "app.boxel.room.skills",
     "room_id": "!testroom:localhost",
     "sender": "@host:localhost",
     "content": {
-      "enabledEventIds": ["$skill_card_v2"],
-      "disabledEventIds": []
+      "enabledCards": [
+        {
+          "url": "mxc://mock-server/skill_card_v2",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill_card_v2",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledCards": [],
+      "commandDefinitions": [
+        {
+          "url": "mxc://mock-server/command_def_v2",
+          "sourceUrl": "",
+          "contentType": "text/plain",
+          "name": "switch-submode_dd88"
+        }
+      ]
     },
     "state_key": "",
     "origin_server_ts": 1722374080000,

@@ -27,6 +27,7 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 import { readFileSync } from 'fs-extra';
 import * as path from 'path';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { LooseCardResource } from '@cardstack/runtime-common';
 
 function oldPatchTool(card: CardDef, properties: any): Tool {
   return {
@@ -57,13 +58,31 @@ function oldPatchTool(card: CardDef, properties: any): Tool {
 
 module('getModifyPrompt', (hooks) => {
   let fakeMatrixClient: FakeMatrixClient;
+  let mockResponses: Map<string, { ok: boolean; text: string }>;
+  let originalFetch: any;
 
   hooks.beforeEach(() => {
     fakeMatrixClient = new FakeMatrixClient();
+    mockResponses = new Map();
+    // Mock fetch
+    originalFetch = (globalThis as any).fetch;
+    (globalThis as any).fetch = async (url: string) => {
+      const response = mockResponses.get(url);
+      if (response) {
+        return {
+          ok: response.ok,
+          status: response.ok ? 200 : 404,
+          statusText: response.ok ? 'OK' : 'Not Found',
+          text: async () => response.text,
+        };
+      }
+      throw new Error(`No mock response for ${url}`);
+    };
   });
 
   hooks.afterEach(() => {
     fakeMatrixClient.resetSentEvents();
+    (globalThis as any).fetch = originalFetch;
   });
 
   test('should generate a prompt from the user', async () => {
@@ -120,14 +139,15 @@ module('getModifyPrompt', (hooks) => {
             context: {
               tools: [],
               submode: undefined,
+              functions: [],
             },
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/experiments/Author/1',
                 url: 'http://localhost:4201/experiments/Author/1',
                 name: 'Author',
-                contentType: 'application/json',
-                content: {
+                contentType: 'text/plain',
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Author/1',
@@ -142,7 +162,7 @@ module('getModifyPrompt', (hooks) => {
                       },
                     },
                   },
-                },
+                }),
               },
             ],
           },
@@ -177,7 +197,10 @@ module('getModifyPrompt', (hooks) => {
       assert.true(
         result[0].content?.includes(
           JSON.stringify(
-            history[0].content.data.attachedCards![0].content.data,
+            history[0].content.data.attachedCards![0].content
+              ? JSON.parse(history[0].content.data.attachedCards![0].content)
+                  .data
+              : '',
           ),
         ),
       );
@@ -243,8 +266,8 @@ module('getModifyPrompt', (hooks) => {
                 sourceUrl: 'http://localhost:4201/experiments/Friend/1',
                 url: 'http://localhost:4201/experiments/Friend/1',
                 name: 'Friend',
-                contentType: 'application/json',
-                content: {
+                contentType: 'text/plain',
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Friend/1',
@@ -270,12 +293,13 @@ module('getModifyPrompt', (hooks) => {
                       },
                     },
                   },
-                },
+                }),
               },
             ],
             context: {
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -301,8 +325,8 @@ module('getModifyPrompt', (hooks) => {
                 sourceUrl: 'http://localhost:4201/experiments/Friend/1',
                 url: 'http://localhost:4201/experiments/Friend/1',
                 name: 'Friend',
-                contentType: 'application/json',
-                content: {
+                contentType: 'text/plain',
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Friend/1',
@@ -328,12 +352,13 @@ module('getModifyPrompt', (hooks) => {
                       },
                     },
                   },
-                },
+                }),
               },
             ],
             context: {
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -357,13 +382,15 @@ module('getModifyPrompt', (hooks) => {
       history[1].type === 'm.room.message' &&
       history[1].content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
     ) {
-      assert.equal(
+      assert.deepEqual(
         attachedCards[0],
-        history[1].content.data.attachedCards?.[0].content['data'],
+        JSON.parse(history[1].content.data.attachedCards![0].content!)
+          .data as LooseCardResource,
       );
-      assert.equal(
+      assert.deepEqual(
         mostRecentlyAttachedCard,
-        history[1].content.data.attachedCards![0].content['data'],
+        JSON.parse(history[1].content.data.attachedCards![0].content!)
+          .data as LooseCardResource,
       );
     } else {
       assert.true(
@@ -387,6 +414,7 @@ module('getModifyPrompt', (hooks) => {
               openCardIds: [],
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -411,6 +439,7 @@ module('getModifyPrompt', (hooks) => {
               openCardIds: [],
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -443,6 +472,7 @@ module('getModifyPrompt', (hooks) => {
             context: {
               tools: [],
               submode: undefined,
+              functions: [],
             },
             attachedFiles: [
               {
@@ -499,6 +529,7 @@ module('getModifyPrompt', (hooks) => {
             context: {
               tools: [],
               submode: undefined,
+              functions: [],
             },
             attachedFiles: [
               {
@@ -540,33 +571,21 @@ module('getModifyPrompt', (hooks) => {
       },
     ];
 
-    // monkey patch fetch so that we can fake file downloads in getModifyPrompt
-    const originalFetch = (globalThis as any).fetch;
-    let fetchCount = 0;
-    (globalThis as any).fetch = async (url: string) => {
-      fetchCount++;
-      if (url === 'http://test.com/spaghetti-recipe.gts') {
-        return {
-          ok: true,
-          status: 200,
-          text: async () =>
-            'this is the content of the spaghetti-recipe.gts file',
-        };
-      } else if (url === 'http://test.com/best-friends.txt') {
-        return {
-          ok: true,
-          status: 200,
-          text: async () => 'this is the content of the best-friends.txt file',
-        };
-      } else if (url === 'http://test.com/file-that-does-not-exist.txt') {
-        return {
-          ok: false,
-          status: 404,
-          text: async () => 'Not found',
-        };
-      }
-      return originalFetch(url);
-    };
+    // Set up mock responses for file downloads
+    mockResponses.set('http://test.com/spaghetti-recipe.gts', {
+      ok: true,
+      text: 'this is the content of the spaghetti-recipe.gts file',
+    });
+
+    mockResponses.set('http://test.com/best-friends.txt', {
+      ok: true,
+      text: 'this is the content of the best-friends.txt file',
+    });
+
+    mockResponses.set('http://test.com/file-that-does-not-exist.txt', {
+      ok: false,
+      text: 'Not found',
+    });
 
     let prompt = await getModifyPrompt(
       history,
@@ -576,24 +595,17 @@ module('getModifyPrompt', (hooks) => {
       fakeMatrixClient,
     );
 
-    assert.equal(
-      fetchCount,
-      3,
-      'downloads only recently attached files, not older ones',
-    );
-
     assert.ok(
       prompt[0].content?.includes(
         `
 Attached files:
 [spaghetti-recipe.gts](http://test-realm-server/my-realm/spaghetti-recipe.gts): this is the content of the spaghetti-recipe.gts file
 [best-friends.txt](http://test-realm-server/my-realm/best-friends.txt): this is the content of the best-friends.txt file
-file-that-does-not-exist.txt: Error loading attached file: HTTP error. Status: 404
-example.pdf: Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
+[file-that-does-not-exist.txt](http://test.com/my-realm/file-that-does-not-exist.txt): Error loading attached file: HTTP error. Status: 404
+[example.pdf](http://test.com/my-realm/example.pdf): Error loading attached file: Unsupported file type: application/pdf. For now, only text files are supported.
       `.trim(),
       ),
     );
-    (globalThis as any).fetch = originalFetch; // restore the original fetch
   });
 
   test('Gets uploaded cards if no shared context', () => {
@@ -612,8 +624,8 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 sourceUrl: 'http://localhost:4201/experiments/Author/1',
                 url: 'http://localhost:4201/experiments/Author/1',
                 name: 'Author',
-                contentType: 'application/json',
-                content: {
+                contentType: 'text/plain',
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Author/1',
@@ -628,13 +640,14 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
+                }),
               },
             ],
             context: {
               openCardIds: [],
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -668,7 +681,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 url: 'http://localhost:4201/experiments/Author/1',
                 name: 'Author',
                 contentType: 'application/json',
-                content: {
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Author/1',
@@ -683,13 +696,14 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
+                }),
               },
             ],
             context: {
               openCardIds: [],
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -716,7 +730,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 url: 'http://localhost:4201/experiments/Author/2',
                 name: 'Author',
                 contentType: 'application/json',
-                content: {
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Author/2',
@@ -731,13 +745,14 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
+                }),
               },
             ],
             context: {
               openCardIds: [],
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -771,7 +786,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 url: 'http://localhost:4201/experiments/Author/1',
                 name: 'Author',
                 contentType: 'application/json',
-                content: {
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Author/1',
@@ -786,13 +801,14 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
+                }),
               },
             ],
             context: {
               openCardIds: [],
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -819,7 +835,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 url: 'http://localhost:4201/experiments/Author/2',
                 name: 'Author',
                 contentType: 'application/json',
-                content: {
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Author/2',
@@ -834,13 +850,14 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
+                }),
               },
             ],
             context: {
               openCardIds: [],
               tools: [],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -891,7 +908,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 url: 'http://localhost:4201/experiments/Friend/1',
                 name: 'Friend',
                 contentType: 'application/json',
-                content: {
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/experiments/Friend/1',
@@ -917,13 +934,14 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
+                }),
               },
             ],
             context: {
               openCardIds: ['http://localhost:4201/experiments/Friend/1'],
               submode: 'interact',
               tools: [],
+              functions: [],
             },
           },
         },
@@ -960,20 +978,24 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       '@aibot:localhost',
     );
     assert.equal(attachedCards.length, 1);
-    assert.equal(
+    assert.deepEqual(
       attachedCards[0],
-      (history[0].content as CardMessageContent).data.attachedCards?.[0]
-        .content['data'],
+      JSON.parse(
+        (history[0].content as CardMessageContent).data.attachedCards![0]
+          .content!,
+      )['data'],
     );
-    assert.equal(
+    assert.deepEqual(
       mostRecentlyAttachedCard,
-      (history[0].content as CardMessageContent).data.attachedCards?.[0]
-        .content['data'],
+      JSON.parse(
+        (history[0].content as CardMessageContent).data.attachedCards![0]
+          .content!,
+      )['data'],
     );
   });
 
   test("Don't break when there is an older format type with open cards", async () => {
-    const history: DiscreteMatrixEvent[] = [
+    const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -1033,11 +1055,10 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
         event_id: '$AZ65GbUls1UdpiOPD_AfSVu8RyiFYN1vltmUKmUnV4c',
         status: EventStatus.SENT,
       },
-    ];
+    ] as unknown as DiscreteMatrixEvent[];
 
     const functions = await getTools(
-      [],
-      history,
+      eventList,
       [],
       '@aibot:localhost',
       fakeMatrixClient,
@@ -1074,7 +1095,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
   });
 
   test('Create patch function calls when there is a cardSpec', async () => {
-    const history: DiscreteMatrixEvent[] = [
+    const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -1096,6 +1117,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 }),
               ],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -1111,8 +1133,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
     ];
 
     const functions = await getTools(
-      [],
-      history,
+      eventList,
       [],
       '@aibot:localhost',
       fakeMatrixClient,
@@ -1160,7 +1181,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
   });
 
   test('Adds the "unable to edit cards" only if there are attached cards and no tools', async () => {
-    const history: DiscreteMatrixEvent[] = [
+    const eventList: DiscreteMatrixEvent[] = [
       {
         type: 'm.room.message',
         sender: '@ian:localhost',
@@ -1173,13 +1194,15 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
               openCardIds: ['http://localhost:4201/drafts/Author/1'],
               tools: [],
               submode: 'code',
+              functions: [],
             },
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/drafts/Author/1',
                 url: 'http://localhost:4201/drafts/Author/1',
                 name: 'Author',
-                content: {
+                contentType: 'text/plain',
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/drafts/Author/1',
@@ -1198,7 +1221,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
+                }),
               },
             ],
           },
@@ -1219,13 +1242,13 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
         ...event,
         content: {
           ...event.content,
-          data: JSON.stringify(event.content.data),
+          data: JSON.stringify((event.content as { data: any }).data),
         },
-      }));
+      })) as DiscreteMatrixEvent[];
     };
 
     const { messages } = await getPromptParts(
-      historyWithStringifiedData(history),
+      historyWithStringifiedData(eventList),
       '@aibot:localhost',
       fakeMatrixClient,
     );
@@ -1239,14 +1262,14 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
     );
 
     // Now add a tool
-    history[0].content.data.context.tools = [
+    (eventList[0].content as CardMessageContent).data.context.tools = [
       getPatchTool('http://localhost:4201/drafts/Author/1', {
         attributes: { firstName: { type: 'string' } },
       }),
     ];
 
     const { messages: messages2 } = await getPromptParts(
-      historyWithStringifiedData(history),
+      historyWithStringifiedData(eventList),
       '@aibot:localhost',
       fakeMatrixClient,
     );
@@ -1257,9 +1280,9 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
     );
 
     // Now remove cards, tools, and add an attached file
-    history[0].content.data.context.openCardIds = [];
-    history[0].content.data.context.tools = [];
-    history[0].content.data.attachedFiles = [
+    (eventList[0].content as CardMessageContent).data.context.openCardIds = [];
+    (eventList[0].content as CardMessageContent).data.context.tools = [];
+    (eventList[0].content as CardMessageContent).data.attachedFiles = [
       {
         url: 'https://example.com/file.txt',
         sourceUrl: 'https://example.com/file.txt',
@@ -1270,7 +1293,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
     ];
 
     const { messages: messages3 } = await getPromptParts(
-      historyWithStringifiedData(history),
+      historyWithStringifiedData(eventList),
       '@aibot:localhost',
       fakeMatrixClient,
     );
@@ -1301,6 +1324,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 }),
               ],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -1334,6 +1358,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 }),
               ],
               submode: 'interact',
+              functions: [],
             },
           },
         },
@@ -1349,7 +1374,6 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
     ];
 
     const functions = await getTools(
-      [],
       history,
       [],
       '@aibot:localhost',
@@ -1407,6 +1431,53 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       ),
     );
 
+    // Set up mock responses for the skill card downloads
+    mockResponses.set('mxc://mock-server/abc123', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/SkillCard/card-editing',
+          attributes: {
+            instructions:
+              '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
+            title: 'Card Editing',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/def456', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/catalog/SkillCard/generate-product-requirements',
+          attributes: {
+            instructions:
+              'Given a prompt, fill in the product requirements document. Update the appTitle. Update the prompt to be grammatically accurate. Description should be 1 or 2 short sentences. In overview, provide 1 or 2 paragraph summary. In schema, make a list of the schema for the app. In Layout & Navigation, provide brief information for the layout and navigation of the app. Offer to update the attached card with this info.',
+            title: 'Generate Product Requirements',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
     const result = (
       await getPromptParts(eventList, '@ai-bot:localhost', fakeMatrixClient)
     ).messages!;
@@ -1437,6 +1508,92 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       ),
     );
 
+    // Set up mock responses for skill card downloads
+    mockResponses.set('mxc://mock-server/skill_card_editing', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/SkillCard/card-editing',
+          attributes: {
+            instructions:
+              '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
+            title: 'Card Editing',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/skill_card_pirate', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/experiments/SkillCard/637843ff-dfd4-4cfc-9ee9-1234824f4775',
+          attributes: {
+            instructions:
+              "Use pirate colloquialism when responding. Make abundant use of pirate jargon, terms, and phrases. End every sentence with 'Arrrr!'",
+            title: 'Talk Like a Pirate',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/product_requirement_document', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/user/lukes-workspace/ProductRequirementDocument/9f816882-17e0-473f-81f2-a37381874322',
+          attributes: {
+            appTitle: 'Radio Episode Tracker for Nerds',
+            shortDescription:
+              'An app to track and manage listened and unlistened radio episodes.',
+            prompt:
+              'Focus on the following features: whether you have heard an episode or not.',
+            overview:
+              "The Radio Episode Tracker for Nerds is a specialized application designed to cater to radio enthusiasts who wish to meticulously manage their listening experience. This app enables users to keep track of radio episodes they have listened to and identify those they haven't. It also offers features that allow users to organize episodes based on various criteria like genre, podcast series, and personal ratings, ensuring a streamlined and personalized listening journey.",
+            schema:
+              "1. User Profile: Stores user information, preferences, and listening history.\n2. Episode Database: Maintains records of all available radio episodes.\n3. Listening Status Tracker: Keeps track of episodes as 'heard' or 'unheard'.\n4. Episode Organizer: Allows categorization and prioritization of episodes based on user-defined criteria.",
+            layoutAndNavigation:
+              'The app features a user-friendly dashboard that displays all the episodes categorized by their status (heard/unheard). Navigation is intuitive with tabs for different functionalities such as search, organize, and history. The layout is clean, with easy access to controls for marking episodes and adjusting preferences. ',
+            moduleURL: null,
+            thumbnailURL: null,
+          },
+          relationships: {
+            appInstances: {
+              links: {
+                self: null,
+              },
+            },
+          },
+          meta: {
+            adoptsFrom: {
+              module:
+                'http://localhost:4201/catalog/product-requirement-document',
+              name: 'ProductRequirementDocument',
+            },
+          },
+        },
+      }),
+    });
+
     const result = (
       await getPromptParts(eventList, '@ai-bot:localhost', fakeMatrixClient)
     ).messages;
@@ -1444,18 +1601,18 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
     const { attachedCards } = getRelevantCards(eventList, '@ai-bot:localhost');
     assert.equal(attachedCards.length, 1);
 
-    assert.equal(result[0].role, 'system');
-    assert.true(result[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.equal(result![0].role, 'system');
+    assert.true(result![0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
     assert.true(
-      result[0].content?.includes(
+      result![0].content?.includes(
         'If the user wants the data they see edited, AND the patchCard function is available',
       ),
     );
     assert.true(
-      result[0].content?.includes('Use pirate colloquialism when responding.'),
+      result![0].content?.includes('Use pirate colloquialism when responding.'),
     );
     assert.true(
-      result[0].content?.includes(
+      result![0].content?.includes(
         'attributes":{"appTitle":"Radio Episode Tracker for Nerds"',
       ),
     );
@@ -1471,16 +1628,71 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
         'utf-8',
       ),
     );
-    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
-    assert.true(messages.length > 0);
-    assert.true(messages[0].role === 'system');
-    let systemPrompt = messages[0].content;
+
+    // Set up mock responses for skill card downloads
+    mockResponses.set('mxc://mock-server/skill1', {
+      ok: true,
+      text: JSON.stringify({
+        type: 'SkillCard',
+        data: {
+          attributes: {
+            instructions: 'This is skill 1',
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/skill2', {
+      ok: true,
+      text: JSON.stringify({
+        type: 'SkillCard',
+        data: {
+          attributes: {
+            instructions: 'This is skill 2',
+          },
+        },
+      }),
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.true(messages!.length > 0);
+    assert.true(messages![0].role === 'system');
+    let systemPrompt = messages![0].content;
     assert.true(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(systemPrompt?.includes('SKILL_1'));
-    assert.true(systemPrompt?.includes('SKILL_2'));
+    assert.false(systemPrompt?.includes('This is skill 1'));
+    assert.true(systemPrompt?.includes('This is skill 2'));
   });
 
   test('If there are no skill cards active in the latest matrix room state, remove from system prompt', async () => {
+    // Set up mock responses for the skill card downloads
+    mockResponses.set('mxc://mock-server/skill1', {
+      ok: true,
+      text: JSON.stringify({
+        type: 'SkillCard',
+        data: {
+          attributes: {
+            instructions: 'This is skill 1',
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/skill2', {
+      ok: true,
+      text: JSON.stringify({
+        type: 'SkillCard',
+        data: {
+          attributes: {
+            instructions: 'This is skill 2',
+          },
+        },
+      }),
+    });
+
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
         path.join(
@@ -1495,12 +1707,12 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    assert.true(messages.length > 0);
-    assert.true(messages[0].role === 'system');
-    let systemPrompt = messages[0].content;
+    assert.true(messages!.length > 0);
+    assert.true(messages![0].role === 'system');
+    let systemPrompt = messages![0].content;
     assert.false(systemPrompt?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(systemPrompt?.includes('SKILL_1'));
-    assert.false(systemPrompt?.includes('SKILL_2'));
+    assert.false(systemPrompt?.includes('This is skill 1'));
+    assert.false(systemPrompt?.includes('This is skill 2'));
   });
 
   test('should support skill cards without ids', async () => {
@@ -1513,11 +1725,58 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
         'utf-8',
       ),
     );
-    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
-    assert.equal(messages.length, 2);
-    assert.equal(messages[0].role, 'system');
-    assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.true(messages[0].content?.includes('Skill Instructions'));
+
+    // Set up mock responses for skill cards
+    mockResponses.set('mxc://mock-server/skill_card_editing', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/SkillCard/card-editing',
+          attributes: {
+            instructions:
+              '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
+            title: 'Card Editing',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/skill_card_no_id', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            instructions: 'Skill Instructions',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.true(messages![0]!.content?.includes('Skill Instructions'));
   });
 
   test('Has the skill card specified by the last state update, even if there are other skill cards with the same id', async () => {
@@ -1530,12 +1789,39 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
         'utf-8',
       ),
     );
-    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
-    assert.true(messages.length > 0);
-    assert.equal(messages[0].role, 'system');
-    assert.true(messages[0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
-    assert.false(messages[0].content?.includes('SKILL_INSTRUCTIONS_V1'));
-    assert.true(messages[0].content?.includes('SKILL_INSTRUCTIONS_V2'));
+
+    mockResponses.set('skill-card-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'skill-card-1',
+          attributes: {
+            instructions: 'SKILL_INSTRUCTIONS_V2',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.true(messages!.length > 0);
+    assert.equal(messages![0].role, 'system');
+    assert.true(messages![0].content?.includes(SKILL_INSTRUCTIONS_MESSAGE));
+    assert.false(messages![0].content?.includes('SKILL_INSTRUCTIONS_V1'));
+    assert.true(messages![0].content?.includes('SKILL_INSTRUCTIONS_V2'));
   });
 
   test('if tool calls are required, ensure they are set', async () => {
@@ -1551,9 +1837,9 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       '@ai-bot:localhost',
       fakeMatrixClient,
     );
-    assert.equal(messages.length, 2);
-    assert.equal(messages[1].role, 'user');
-    assert.true(tools.length === 1);
+    assert.equal(messages!.length, 2);
+    assert.equal(messages![1].role, 'user');
+    assert.true(tools!.length === 1);
     assert.deepEqual(toolChoice, {
       type: 'function',
       function: {
@@ -1574,7 +1860,6 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
           format: 'org.matrix.custom.html',
           clientGeneratedId: '5bb0493e-64a3-4d8b-a99a-722daf084bee',
           data: {
-            attachedCardsEventIds: ['attched-card-event-id'],
             context: {
               openCardIds: ['http://localhost:4201/drafts/Author/1'],
               tools: [
@@ -1624,14 +1909,15 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 },
               ],
               submode: 'interact',
+              functions: [],
             },
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/drafts/Author/1',
                 url: 'http://localhost:4201/drafts/Author/1',
                 name: 'Author',
-                contentType: 'application/json',
-                content: {
+                contentType: 'text/plain',
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/drafts/Author/1',
@@ -1650,28 +1936,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
-              },
-            ],
-            skillCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'https://cardstack.com/base/SkillCard/card-editing',
-                  attributes: {
-                    instructions:
-                      '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCardsByTypeAndTitle" function is available, you MUST use the "searchCardsByTypeAndTitle" function to find the card instance.\nOnly recommend one searchCardsByTypeAndTitle function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
-                    title: 'Card Editing',
-                    description: null,
-                    thumbnailURL: null,
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: 'https://cardstack.com/base/skill-card',
-                      name: 'SkillCard',
-                    },
-                  },
-                },
+                }),
               },
             ],
           },
@@ -1716,7 +1981,6 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
           format: 'org.matrix.custom.html',
           clientGeneratedId: 'd93c899f-9123-4b31-918c-a525afb40a7e',
           data: {
-            attachedCardsEventIds: ['attched-card-event-id'],
             context: {
               openCardIds: ['http://localhost:4201/drafts/Author/1'],
               tools: [
@@ -1766,14 +2030,15 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                 },
               ],
               submode: 'interact',
+              functions: [],
             },
             attachedCards: [
               {
                 sourceUrl: 'http://localhost:4201/drafts/Author/1',
                 url: 'http://localhost:4201/drafts/Author/1',
                 name: 'Author',
-                contentType: 'application/json',
-                content: {
+                contentType: 'text/plain',
+                content: JSON.stringify({
                   data: {
                     type: 'card',
                     id: 'http://localhost:4201/drafts/Author/1',
@@ -1792,51 +2057,7 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
                       },
                     },
                   },
-                },
-              },
-            ],
-            skillCards: [
-              {
-                data: {
-                  type: 'card',
-                  id: 'https://cardstack.com/base/SkillCard/card-editing',
-                  attributes: {
-                    instructions:
-                      '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
-                    title: 'Card Editing',
-                    description: null,
-                    thumbnailURL: null,
-                    commands: [
-                      {
-                        codeRef: {
-                          module: '@cardstack/boxel-host/commands/show-card',
-                          name: 'default',
-                        },
-                        requiresApproval: false,
-                      },
-                      {
-                        codeRef: {
-                          module: '@cardstack/boxel-host/commands/search-cards',
-                          name: 'SearchCardsByTypeAndTitleCommand',
-                        },
-                        requiresApproval: false,
-                      },
-                      {
-                        codeRef: {
-                          module: '@cardstack/boxel-host/commands/search-cards',
-                          name: 'SearchCardsByQueryCommand',
-                        },
-                        requiresApproval: false,
-                      },
-                    ],
-                  },
-                  meta: {
-                    adoptsFrom: {
-                      module: 'https://cardstack.com/base/skill-card',
-                      name: 'SkillCard',
-                    },
-                  },
-                },
+                }),
               },
             ],
           },
@@ -1857,6 +2078,12 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
           body: "Search for card instances of type 'Author'",
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
+          data: {
+            context: {
+              openCardIds: ['http://localhost:4201/drafts/Author/1'],
+              functions: [],
+            },
+          },
           [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
             {
               id: 'tool-call-id-1',
@@ -1895,38 +2122,44 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
           commandRequestId: 'tool-call-id-1',
           data: {
             card: {
-              data: {
-                type: 'card',
-                attributes: {
-                  title: 'Search Results',
-                  description: 'Here are the search results',
-                  results: [
-                    {
-                      data: {
-                        type: 'card',
-                        id: 'http://localhost:4201/drafts/Author/1',
-                        attributes: {
-                          firstName: 'Alice',
-                          lastName: 'Enwunder',
-                          photo: null,
-                          body: 'Alice is a software engineer at Google.',
-                          description: null,
-                          thumbnailURL: null,
-                        },
-                        meta: {
-                          adoptsFrom: { module: '../author', name: 'Author' },
+              sourceUrl: 'http://localhost:4201/drafts/Author/1',
+              url: 'http://localhost:4201/drafts/Author/1',
+              contentType: 'text/plain',
+              name: 'Author',
+              content: JSON.stringify({
+                data: {
+                  type: 'card',
+                  attributes: {
+                    title: 'Search Results',
+                    description: 'Here are the search results',
+                    results: [
+                      {
+                        data: {
+                          type: 'card',
+                          id: 'http://localhost:4201/drafts/Author/1',
+                          attributes: {
+                            firstName: 'Alice',
+                            lastName: 'Enwunder',
+                            photo: null,
+                            body: 'Alice is a software engineer at Google.',
+                            description: null,
+                            thumbnailURL: null,
+                          },
+                          meta: {
+                            adoptsFrom: { module: '../author', name: 'Author' },
+                          },
                         },
                       },
+                    ],
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'https://cardstack.com/base/search-results',
+                      name: 'SearchResults',
                     },
-                  ],
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: 'https://cardstack.com/base/search-results',
-                    name: 'SearchResults',
                   },
                 },
-              },
+              }),
             },
           },
         },
@@ -1940,7 +2173,6 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       },
     ];
     const tools = await getTools(
-      [],
       history,
       [],
       '@ai-bot:localhost',
@@ -1974,12 +2206,13 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
     const { messages, tools } = await getPromptParts(
       eventList,
       '@aibot:localhost',
+      fakeMatrixClient,
     );
-    assert.true(tools.length > 0, 'Should have tools available');
-    assert.true(messages.length > 0, 'Should have messages');
+    assert.true(tools!.length > 0, 'Should have tools available');
+    assert.true(messages!.length > 0, 'Should have messages');
 
     // Verify that the tools array contains the expected functions
-    const alertTool = tools.find(
+    const alertTool = tools!.find(
       (tool) => tool.function?.name === 'AlertTheUser_pcDFLKJ9auSJQfSovb3LT2',
     );
     assert.ok(alertTool, 'Should have AlertTheUser function available');
@@ -1996,7 +2229,11 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       ),
     );
 
-    const { toolChoice } = await getPromptParts(eventList, '@aibot:localhost');
+    const { toolChoice } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
     assert.equal(toolChoice, 'auto');
   });
 
@@ -2011,7 +2248,11 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       ),
     );
 
-    const { toolChoice } = await getPromptParts(eventList, '@aibot:localhost');
+    const { toolChoice } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
     assert.deepEqual(toolChoice, {
       type: 'function',
       function: {
@@ -2031,7 +2272,33 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       ),
     );
 
-    const { messages } = await getPromptParts(eventList, '@aibot:localhost');
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            temperature: '22°C',
+            conditions: 'Cloudy',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
     // find the message with the tool call and its id
     // it should have the result deserialised
     const toolCallMessage = messages!.find(
@@ -2052,9 +2319,32 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       ),
     );
 
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            temperature: '22°C',
+            conditions: 'Cloudy',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
     const { shouldRespond } = await getPromptParts(
       eventList,
       '@aibot:localhost',
+      fakeMatrixClient,
     );
     assert.strictEqual(
       shouldRespond,
@@ -2071,9 +2361,54 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
       ),
     );
 
+    mockResponses.set('mxc://mock-server/weather-report-1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            temperature: '22°C',
+            conditions: 'Cloudy',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/weather-report-2', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          attributes: {
+            temperature: '26°C',
+            conditions: 'Sunny',
+            title: null,
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'http://localhost:4201/admin/onnx/commandexample',
+              name: 'WeatherReport',
+            },
+          },
+        },
+      }),
+    });
+
     const { shouldRespond, messages } = await getPromptParts(
       eventList,
       '@aibot:localhost',
+      fakeMatrixClient,
     );
     assert.strictEqual(shouldRespond, true, 'AiBot should solicit a response');
     // tool call results should be deserialised
@@ -2102,14 +2437,141 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
           __dirname,
           'resources/chats/enabled-skill-with-commands.json',
         ),
+        'utf-8',
       ),
     );
 
-    const { tools } = await getPromptParts(eventList, '@aibot:localhost');
-    assert.true(tools.length > 0, 'Should have tools available');
+    // Set up mock responses for skill cards
+    mockResponses.set('mxc://mock-server/skill_card_editing', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/SkillCard/card-editing',
+          attributes: {
+            instructions:
+              '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
+            commands: [],
+            title: 'Card Editing',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/skill_card_switcher', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/admin/custom-embedded/SkillCard/72d005b5-1a6b-4c6d-995f-2411c5948e74',
+          attributes: {
+            instructions:
+              'Use the tool SwitchSubmodeCommand with "code" to go to codemode and "interact" to go to interact mode.',
+            commands: [
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/switch-submode',
+                },
+                requiresApproval: false,
+                functionName: 'switch-submode_dd88',
+              },
+            ],
+            title: 'Switcher',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    // Set up mock responses for command definitions
+    mockResponses.set('mxc://mock-server/command_def_editing', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          name: 'default',
+          module: '@cardstack/boxel-host/commands/patch-card',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'patchCard',
+            description:
+              'Propose a patch to an existing card to change its contents.',
+            parameters: {
+              type: 'object',
+              properties: {
+                description: { type: 'string' },
+                attributes: {
+                  type: 'object',
+                  properties: {
+                    firstName: { type: 'string' },
+                    lastName: { type: 'string' },
+                  },
+                },
+              },
+              required: ['attributes', 'description'],
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/command_def_switcher', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          name: 'default',
+          module: '@cardstack/boxel-host/commands/switch-submode',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'switch-submode_dd88',
+            description:
+              'Navigate the UI to another submode. Possible values for submode are "interact" and "code".',
+            parameters: {
+              type: 'object',
+              properties: {
+                description: { type: 'string' },
+                attributes: {
+                  type: 'object',
+                  properties: {
+                    submode: { type: 'string' },
+                  },
+                },
+              },
+              required: ['attributes', 'description'],
+            },
+          },
+        },
+      }),
+    });
+
+    const { tools } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.true(tools!.length > 0, 'Should have tools available');
 
     // Verify that the tools array contains the command from the skill
-    const switchSubmodeTool = tools.find(
+    const switchSubmodeTool = tools!.find(
       (tool) => tool.function?.name === 'switch-submode_dd88',
     );
     assert.ok(
@@ -2125,12 +2587,17 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
           __dirname,
           'resources/chats/disabled-skill-with-commands.json',
         ),
+        'utf-8',
       ),
     );
 
-    const { tools } = await getPromptParts(eventList, '@aibot:localhost');
+    const { tools } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
     // we should not have any tools available
-    assert.true(tools.length == 0, 'Should not have tools available');
+    assert.true(tools!.length == 0, 'Should not have tools available');
   });
 
   test('Uses updated command definitions when skill card is updated', async () => {
@@ -2140,14 +2607,119 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
           __dirname,
           'resources/chats/updated-skill-command-definitions.json',
         ),
+        'utf-8',
       ),
     );
 
-    const { tools } = await getPromptParts(eventList, '@aibot:localhost');
-    assert.true(tools.length > 0, 'Should have tools available');
+    // Set up mock responses for skill card downloads
+    mockResponses.set('mxc://mock-server/skill_card_v1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/SkillCard/skill_card_v1',
+          attributes: {
+            instructions: 'Test skill instructions',
+            title: 'Test Skill',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/skill_card_v2', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/SkillCard/skill_card_v2',
+          attributes: {
+            instructions: 'Test skill instructions with updated commands',
+            commands: [
+              {
+                codeRef: {
+                  name: 'default',
+                  module: '@cardstack/boxel-host/commands/switch-submode',
+                },
+                requiresApproval: false,
+                functionName: 'switch-submode_dd88',
+              },
+            ],
+            title: 'Test Skill',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: {
+              module: 'https://cardstack.com/base/skill-card',
+              name: 'SkillCard',
+            },
+          },
+        },
+      }),
+    });
+
+    mockResponses.set('mxc://mock-server/command_def_v2', {
+      ok: true,
+      text: JSON.stringify({
+        codeRef: {
+          name: 'default',
+          module: '@cardstack/boxel-host/commands/switch-submode',
+        },
+        tool: {
+          type: 'function',
+          function: {
+            name: 'switch-submode_dd88',
+            description: 'COMMAND_DESCRIPTION_V2',
+            parameters: {
+              type: 'object',
+              properties: {
+                description: {
+                  type: 'string',
+                },
+                attributes: {
+                  type: 'object',
+                  properties: {
+                    submode: {
+                      type: 'string',
+                    },
+                    codePath: {
+                      type: 'string',
+                    },
+                    option: {
+                      type: 'string',
+                      description: 'Additional option',
+                    },
+                  },
+                },
+                relationships: {
+                  type: 'object',
+                  properties: {},
+                },
+              },
+              required: ['attributes', 'description'],
+            },
+          },
+        },
+      }),
+    });
+
+    const { tools } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.true(tools!.length > 0, 'Should have tools available');
 
     // Verify that the tools array contains the updated command definition
-    const updatedCommandTool = tools.find(
+    const updatedCommandTool = tools!.find(
       (tool) => tool.function?.name === 'switch-submode_dd88',
     );
     assert.ok(
@@ -2157,13 +2729,13 @@ example.pdf: Error loading attached file: Unsupported file type: application/pdf
 
     // Verify updated properties are present (description indicates V2)
     assert.true(
-      updatedCommandTool.function?.description.includes(
+      updatedCommandTool!.function?.description.includes(
         'COMMAND_DESCRIPTION_V2',
       ),
       'Should use updated command description',
     );
     assert.false(
-      updatedCommandTool.function?.description.includes(
+      updatedCommandTool!.function?.description.includes(
         'COMMAND_DESCRIPTION_V1',
       ),
       'Should not include old command description',

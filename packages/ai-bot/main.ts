@@ -8,7 +8,6 @@ import {
   constructHistory,
   isCommandResultStatusApplied,
   getPromptParts,
-  extractCardFragmentsFromEvents,
 } from './helpers';
 
 import {
@@ -323,10 +322,8 @@ Common issues are:
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
-      let cardFragments = extractCardFragmentsFromEvents(eventList);
       let history: DiscreteMatrixEvent[] = await constructHistory(
         eventList,
-        cardFragments,
         client,
       );
       return await assistant.setTitle(

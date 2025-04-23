@@ -32,9 +32,9 @@ export interface MatrixClient {
 
 export interface SerializedFileDef {
   url: string;
-  sourceUrl?: string;
+  sourceUrl: string;
   name: string;
-  contentType?: string;
+  contentType: string;
   content?: string;
   error?: string;
 }
