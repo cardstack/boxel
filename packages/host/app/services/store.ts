@@ -70,6 +70,7 @@ export { CardErrorJSONAPI, CardSaveSubscriber };
 let waiter = buildWaiter('store-service');
 
 const realmEventsLogger = logger('realm:events');
+const storeLogger = logger('store');
 
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
@@ -133,13 +134,13 @@ export default class StoreService extends Service implements StoreInterface {
     currentReferenceCount -= 1;
     this.referenceCount.set(id, currentReferenceCount);
 
-    console.debug(
+    storeLogger.debug(
       `dropping reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
     if (currentReferenceCount <= 0) {
       if (currentReferenceCount < 0) {
         let message = `current reference count for ${id} is negative: ${this.referenceCount.get(id)}`;
-        console.error(message);
+        storeLogger.error(message);
         console.trace(message); // this will helps us to understand who dropped the reference that made it negative
       }
       this.referenceCount.delete(id);
@@ -172,7 +173,7 @@ export default class StoreService extends Service implements StoreInterface {
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
     currentReferenceCount += 1;
     this.referenceCount.set(id, currentReferenceCount);
-    console.debug(
+    storeLogger.debug(
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
