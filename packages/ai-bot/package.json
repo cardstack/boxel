@@ -12,7 +12,7 @@
     "lodash": "~4.17.21",
     "matrix-js-sdk": "catalog:",
     "openai": "catalog:",
-    "qunit": "^2.18.0",
+    "qunit": "catalog:",
     "stream-chain": "catalog:",
     "stream-json": "catalog:",
     "ts-node": "^10.9.2",
@@ -21,11 +21,11 @@
   "devDependencies": {
     "@sinonjs/fake-timers": "catalog:",
     "@types/fs-extra": "~11.0.4",
-    "@types/qunit": "^2.19.12",
+    "@types/qunit": "catalog:",
     "@types/sinonjs__fake-timers": "catalog:",
     "concurrently": "^8.0.1",
     "fs-extra": "~11.3.0",
-    "qunit": "^2.18.0"
+    "qunit": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

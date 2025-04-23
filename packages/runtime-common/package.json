@@ -50,7 +50,7 @@
     "marked": "catalog:",
     "pluralize": "catalog:",
     "qs": "catalog:",
-    "qunit": "^2.20.0",
+    "qunit": "catalog:",
     "recast": "catalog:",
     "safe-stable-stringify": "catalog:",
     "super-fast-md5": "catalog:",
@@ -64,7 +64,7 @@
     "@glint/environment-ember-template-imports": "1.3.0",
     "@types/dompurify": "catalog:",
     "@types/js-string-escape": "catalog:",
-    "@types/qunit": "^2.11.3",
+    "@types/qunit": "catalog:",
     "concurrently": "^8.2.2",
     "dompurify": "catalog:",
     "ember-cli-htmlbars": "catalog:"
