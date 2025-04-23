@@ -37,7 +37,7 @@
     "concurrently": "^8.0.1",
     "date-fns": "catalog:",
     "decorator-transforms": "catalog:",
-    "ember-eslint-parser": "0.5.9",
+    "ember-eslint-parser": "catalog:",
     "eslint-plugin-qunit": "^7.3.4",
     "ethers": "catalog:",
     "fastboot": "catalog:",

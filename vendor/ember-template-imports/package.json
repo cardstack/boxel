@@ -73,7 +73,7 @@
     "ember-source-channel-url": "catalog:",
     "ember-template-lint": "^2.18.1",
     "ember-try": "^1.4.0",
-    "eslint": "^8.57.1",
+    "eslint": "catalog:",
     "eslint-config-prettier": "^7.2.0",
     "eslint-plugin-ember": "catalog:",
     "eslint-plugin-node": "catalog:",

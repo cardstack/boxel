@@ -35,9 +35,9 @@
     "decorator-transforms": "catalog:",
     "diff": "catalog:",
     "ember-concurrency-async-plugin": "workspace:*",
-    "ember-eslint-parser": "0.5.9",
+    "ember-eslint-parser": "catalog:",
     "ember-source": "catalog:",
-    "eslint": "^8.52.0",
+    "eslint": "catalog:",
     "flat": "catalog:",
     "glimmer-scoped-css": "^0.8.0",
     "http-status-codes": "catalog:",
@@ -70,7 +70,7 @@
     "ember-cli-htmlbars": "catalog:"
   },
   "peerDependencies": {
-    "@babel/core": "^7.26.10",
+    "@babel/core": "catalog:",
     "ember-cli-htmlbars": "^6.3.0"
   },
   "scripts": {

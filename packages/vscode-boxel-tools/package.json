@@ -275,7 +275,7 @@
     "@vscode/vsce": "catalog:",
     "concurrently": "^8.0.1",
     "esbuild": "catalog:",
-    "eslint": "^8.57.1",
+    "eslint": "catalog:",
     "typescript": "catalog:"
   }
 }

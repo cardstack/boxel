@@ -34,10 +34,10 @@
   "author": "Cardstack",
   "license": "MIT",
   "peerDependencies": {
-    "eslint": "^8.57.1"
+    "eslint": "catalog:"
   },
   "dependencies": {
-    "ember-eslint-parser": "^0.5.9",
+    "ember-eslint-parser": "catalog:",
     "requireindex": "catalog:"
   },
   "devDependencies": {
@@ -47,7 +47,7 @@
     "@eslint/js": "catalog:",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
-    "eslint": "^8.57.1",
+    "eslint": "catalog:",
     "eslint-doc-generator": "catalog:",
     "eslint-plugin-eslint-comments": "catalog:",
     "eslint-plugin-eslint-plugin": "catalog:",
