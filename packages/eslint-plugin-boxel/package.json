@@ -34,7 +34,7 @@
   "author": "Cardstack",
   "license": "MIT",
   "peerDependencies": {
-    "eslint": "^8.57.1"
+    "eslint": "catalog:"
   },
   "dependencies": {
     "ember-eslint-parser": "catalog:",
