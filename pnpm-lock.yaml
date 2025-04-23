@@ -246,9 +246,6 @@ catalogs:
     '@types/uuid':
       specifier: ^9.0.8
       version: 9.0.8
-    '@types/vscode':
-      specifier: ^1.73.0
-      version: 1.93.0
     '@types/yargs':
       specifier: ^17.0.10
       version: 17.0.10
@@ -3117,7 +3114,7 @@ importers:
         specifier: ^18.19.39
         version: 18.19.54
       '@types/vscode':
-        specifier: 'catalog:'
+        specifier: ^1.73.0
         version: 1.93.0
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'

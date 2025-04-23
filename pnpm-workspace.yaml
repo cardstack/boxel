@@ -85,7 +85,6 @@ catalog:
   "@types/supertest": ^2.0.12
   "@types/tmp": ^0.2.3
   "@types/uuid": ^9.0.8
-  "@types/vscode": ^1.73.0
   "@types/yargs": ^17.0.10
   "@typescript-eslint/eslint-plugin": ^7.18.0
   "@typescript-eslint/parser": ^7.18.0
