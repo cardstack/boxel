@@ -17,7 +17,7 @@ import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 
 import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
 import {
@@ -160,28 +160,19 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       {} as Record<string, CodePatchAction[]>,
     );
 
-    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+    let patchCodeCommand = new PatchCodeCommand(
       this.commandService.commandContext,
     );
 
     // TODO: Handle possible errors (fetching source, patching, saving source)
     // Handle in CS-8369
     for (let fileUrl in codePatchActionsGroupedByFileUrl) {
-      let source = await this.cardService.getSource(new URL(fileUrl));
-      let patchedCode = source;
-      for (let codePatchAction of codePatchActionsGroupedByFileUrl[fileUrl]) {
-        let { resultContent: patchedCodeResult } =
-          await applySearchReplaceBlockCommand.execute({
-            fileContent: patchedCode,
-            codeBlock: codePatchAction.searchReplaceBlock,
-          });
-        patchedCode = patchedCodeResult;
-      }
-      await this.cardService.saveSource(
-        new URL(fileUrl),
-        patchedCode,
-        'bot-patch',
-      );
+      await patchCodeCommand.execute({
+        fileUrl,
+        codeBlocks: codePatchActionsGroupedByFileUrl[fileUrl].map(
+          (codePatchAction) => codePatchAction.searchReplaceBlock,
+        ),
+      });
       codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
         codePatchAction.patchCodeTaskState = 'applied';
       });
