@@ -163,7 +163,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           name: spec.ref.name,
         },
         targetCodeRef: {
-          module: targetFilePath,
+          module: fileTargetUrl,
           name: spec.ref.name,
         },
       });
@@ -171,35 +171,32 @@ class EmbeddedTemplate extends Component<typeof Listing> {
 
     if (this.args.model.examples) {
       // Create serialized objects for each example with modified adoptsFrom
-      const results = await Promise.all(
-        this.args.model.examples.map(async (instance: CardDef) => {
-          let adoptsFrom = instance[meta]?.adoptsFrom;
-          if (!adoptsFrom) {
-            return null;
-          }
-          let exampleCodeRef = instance.id
-            ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
-            : adoptsFrom;
-
-          if (!isResolvedCodeRef(exampleCodeRef)) {
-            throw new Error('exampleCodeRef is NOT resolved');
-          }
-          let maybeCopyMeta = copyMeta.find(
-            (meta) =>
-              meta.sourceCodeRef.module ===
-                (exampleCodeRef as ResolvedCodeRef).module &&
-              meta.sourceCodeRef.name ===
-                (exampleCodeRef as ResolvedCodeRef).name,
-          );
-          if (maybeCopyMeta) {
-            return {
-              sourceCard: instance,
-              codeRef: maybeCopyMeta.targetCodeRef,
-            };
-          }
+      const results = this.args.model.examples.map((instance: CardDef) => {
+        let adoptsFrom = instance[meta]?.adoptsFrom;
+        if (!adoptsFrom) {
           return null;
-        }),
-      );
+        }
+        let exampleCodeRef = instance.id
+          ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
+          : adoptsFrom;
+        if (!isResolvedCodeRef(exampleCodeRef)) {
+          throw new Error('exampleCodeRef is NOT resolved');
+        }
+        let maybeCopyMeta = copyMeta.find(
+          (meta) =>
+            meta.sourceCodeRef.module ===
+              (exampleCodeRef as ResolvedCodeRef).module &&
+            meta.sourceCodeRef.name ===
+              (exampleCodeRef as ResolvedCodeRef).name,
+        );
+        if (maybeCopyMeta) {
+          return {
+            sourceCard: instance,
+            codeRef: maybeCopyMeta.targetCodeRef,
+          };
+        }
+        return null;
+      });
       const copyCardsWithCodeRef = results.filter(
         (result) => result !== null,
       ) as CopyCardsWithCodeRef[];
