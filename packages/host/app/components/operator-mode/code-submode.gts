@@ -8,9 +8,9 @@ import { htmlSafe } from '@ember/template';
 import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
-import { tracked, cached } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
-import { dropTask, restartableTask, timeout } from 'ember-concurrency';
+import { dropTask, timeout } from 'ember-concurrency';
 
 import perform from 'ember-concurrency/helpers/perform';
 
@@ -67,7 +67,6 @@ import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { type SpecType } from 'https://cardstack.com/base/spec';
 
-import { htmlComponent } from '../../lib/html-component';
 import {
   CodeModePanelWidths,
   CodeModePanelHeights,
@@ -77,7 +76,6 @@ import FileTree from '../editor/file-tree';
 
 import AttachFileModal from './attach-file-modal';
 import CardError from './card-error';
-import CardErrorDetail from './card-error-detail';
 import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
@@ -329,34 +327,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.readyFile.content.match(/^\s*$/);
   }
 
-  @cached
-  get lastKnownGoodHtml() {
-    if (this.cardError?.meta.lastKnownGoodHtml) {
-      this.loadScopedCSS.perform();
-      return htmlComponent(this.cardError.meta.lastKnownGoodHtml);
-    }
-    return undefined;
-  }
-
-  @cached
-  get cardErrorSummary() {
-    if (!this.cardError) {
-      return undefined;
-    }
-    return this.cardError.status === 404 &&
-      // a missing link error looks a lot like a missing card error
-      this.cardError.message?.includes('missing')
-      ? `Link Not Found`
-      : this.cardError.title;
-  }
-
-  get cardErrorTitle() {
-    if (!this.cardError) {
-      return undefined;
-    }
-    return `Card Error: ${this.cardErrorSummary}`;
-  }
-
   private get fileIncompatibilityMessage() {
     if (this.isCard) {
       if (this.cardError) {
@@ -534,16 +504,6 @@ export default class CodeSubmode extends Component<Signature> {
     });
     this.specPanelService.setSelection(null);
   }
-
-  private loadScopedCSS = restartableTask(async () => {
-    if (this.cardError?.meta.scopedCssUrls) {
-      await Promise.all(
-        this.cardError.meta.scopedCssUrls.map((cssModuleUrl) =>
-          this.loaderService.loader.import(cssModuleUrl),
-        ),
-      );
-    }
-  });
 
   private get isSaving() {
     return (
@@ -923,21 +883,11 @@ export default class CodeSubmode extends Component<Signature> {
               <InnerContainer>
                 {{#if this.isReady}}
                   {{#if this.isCardPreviewError}}
-                    <div
-                      class='stack-item-content card-error'
-                      data-test-card-error
-                    >
-                      {{#if this.lastKnownGoodHtml}}
-                        <this.lastKnownGoodHtml />
-                      {{else}}
-                        <CardError />
-                      {{/if}}
-                    </div>
                     {{! this is here to make TS happy, this is always true }}
                     {{#if this.cardError}}
-                      <CardErrorDetail
+                      <CardError
                         @error={{this.cardError}}
-                        @title={{this.cardErrorSummary}}
+                        @hideHeader={{true}}
                       />
                     {{/if}}
                   {{else if this.isEmptyFile}}
@@ -1285,14 +1235,6 @@ export default class CodeSubmode extends Component<Signature> {
       pre.preview-error {
         white-space: pre-wrap;
         text-align: left;
-      }
-
-      .card-error {
-        flex: 2;
-        opacity: 0.4;
-        border-radius: 0;
-        box-shadow: none;
-        overflow: auto;
       }
 
       :deep(.boxel-panel, .separator-vertical, .separator-horizontal) {

@@ -2290,6 +2290,9 @@ importers:
       '@types/qunit':
         specifier: ^2.11.3
         version: 2.11.3
+      '@types/statuses':
+        specifier: ^2.0.5
+        version: 2.0.5
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
@@ -2299,6 +2302,9 @@ importers:
       ember-cli-htmlbars:
         specifier: ^6.3.0
         version: 6.3.0
+      statuses:
+        specifier: ^2.0.1
+        version: 2.0.1
 
   packages/seed-realm:
     devDependencies:

@@ -19,9 +19,11 @@ import DropdownArrowDown from './icons/dropdown-arrow-down.gts';
 import DropdownArrowFilled from './icons/dropdown-arrow-filled.gts';
 import DropdownArrowUp from './icons/dropdown-arrow-up.gts';
 import Exclamation from './icons/exclamation.gts';
+import ExclamationCircle from './icons/exclamation-circle.gts';
 import Eye from './icons/eye.gts';
 import FailureBordered from './icons/failure-bordered.gts';
 import File from './icons/file.gts';
+import FileAlert from './icons/file-alert.gts';
 import FourLines from './icons/four-lines.gts';
 import Grid3x3 from './icons/grid-3x3.gts';
 import Group from './icons/group.gts';
@@ -81,9 +83,11 @@ export const ALL_ICON_COMPONENTS = [
   DropdownArrowFilled,
   DropdownArrowUp,
   Exclamation,
+  ExclamationCircle,
   Eye,
   FailureBordered,
   File,
+  FileAlert,
   FourLines,
   Grid3x3,
   Group,
@@ -144,9 +148,11 @@ export {
   DropdownArrowFilled,
   DropdownArrowUp,
   Exclamation,
+  ExclamationCircle,
   Eye,
   FailureBordered,
   File,
+  FileAlert,
   FourLines,
   Grid3x3,
   Group,
