@@ -90,7 +90,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   // (readonly) Monaco editor
   private updateHtmlGroups = (html: string) => {
     let htmlGroups = parseHtmlContent(html);
-    let isIncrementalUpdate = htmlGroups.length > this.htmlGroups.length; // Not incremental update happens when the new html is shorter than the old html (the content was replaced in a way that removed some parts, e.g. replacing the content with an error message if something goes wrong during chunk processing in the AI bot)
+    let isIncrementalUpdate = htmlGroups.length >= this.htmlGroups.length; // Not incremental update happens when the new html is shorter than the old html (the content was replaced in a way that removed some parts, e.g. replacing the content with an error message if something goes wrong during chunk processing in the AI bot)
     if (!this.htmlGroups.length || !isIncrementalUpdate) {
       this.setHtmlGroups(htmlGroups);
     } else {
