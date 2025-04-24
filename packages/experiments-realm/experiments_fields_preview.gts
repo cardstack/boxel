@@ -3,7 +3,7 @@ import { PhoneField } from 'https://cardstack.com/base/phone-number';
 import { UrlField } from 'https://cardstack.com/base/url';
 import { WebsiteField } from 'https://cardstack.com/base/website';
 import AddressField from 'https://cardstack.com/base/address';
-import { PercentageField } from 'https://cardstack.com/base/percentage';
+import PercentageField from 'https://cardstack.com/base/percentage';
 
 import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
