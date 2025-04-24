@@ -125,7 +125,7 @@ export const getLatestCommandApplyMessage = (
     APP_BOXEL_COMMAND_REQUESTS_KEY
   ].find((cr: EncodedCommandRequest) => {
     // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    cr.id === eventContent.data.commandRequestId;
+    cr.id === eventContent.commandRequestId;
   });
   let args = JSON.stringify(commandRequest.content.data.toolCall);
   let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(

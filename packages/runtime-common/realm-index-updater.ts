@@ -129,15 +129,14 @@ export class RealmIndexUpdater {
     }
   }
 
-  // TODO update to support multiple url updates
   async update(
-    url: URL,
+    urls: URL[],
     opts?: { delete?: true; onInvalidation?: (invalidatedURLs: URL[]) => void },
   ): Promise<void> {
     this.#indexingDeferred = new Deferred<void>();
     try {
       let args: IncrementalArgs = {
-        url: url.href,
+        urls: urls.map((u) => u.href),
         realmURL: this.#realm.url,
         realmUsername: await this.getRealmUsername(),
         operation: opts?.delete ? 'delete' : 'update',

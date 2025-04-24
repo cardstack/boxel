@@ -80,9 +80,9 @@ const tests = Object.freeze({
     );
 
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let invalidations = await batch.invalidate(
+    let invalidations = await batch.invalidate([
       new URL(`${testRealmURL}4.json`),
-    );
+    ]);
 
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
@@ -194,9 +194,9 @@ const tests = Object.freeze({
     );
 
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let invalidations = await batch.invalidate(
+    let invalidations = await batch.invalidate([
       new URL(`${testRealmURL}person.gts`),
-    );
+    ]);
 
     assert.deepEqual(invalidations.sort(), [
       `${testRealmURL}1.json`,
@@ -236,9 +236,9 @@ const tests = Object.freeze({
       ],
     );
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    let invalidations = await batch.invalidate(
+    let invalidations = await batch.invalidate([
       new URL(`${testRealmURL}person.gts`),
-    );
+    ]);
 
     // invalidations currently do not cross realm boundaries (probably they
     // will in the future--but via a different mechanism)
@@ -290,7 +290,7 @@ const tests = Object.freeze({
       },
     };
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    await batch.invalidate(new URL(`${testRealmURL}1.json`));
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
       resource,
@@ -903,7 +903,7 @@ const tests = Object.freeze({
       },
     };
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    await batch.invalidate(new URL(`${testRealmURL}1.json`));
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
       resource,
@@ -996,7 +996,7 @@ const tests = Object.freeze({
     let source = JSON.stringify(resource);
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
     let now = Date.now();
-    await batch.invalidate(new URL(`${testRealmURL}1.json`));
+    await batch.invalidate([new URL(`${testRealmURL}1.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}1.json`), {
       type: 'instance',
       resource,
@@ -1093,9 +1093,9 @@ const tests = Object.freeze({
       );
 
       let batch = await indexWriter.createBatch(new URL(testRealmURL));
-      let invalidations = await batch.invalidate(
+      let invalidations = await batch.invalidate([
         new URL(`${testRealmURL}1.json`),
-      );
+      ]);
 
       assert.ok(invalidations.length > 1000, 'Can invalidate more than 1000');
       assert.deepEqual(
@@ -1342,7 +1342,7 @@ const tests = Object.freeze({
       },
     };
     let batch = await indexWriter.createBatch(new URL(testRealmURL));
-    await batch.invalidate(new URL(`${testRealmURL}2.json`));
+    await batch.invalidate([new URL(`${testRealmURL}2.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}2.json`), {
       type: 'instance',
       resource: resource2,
@@ -1438,7 +1438,7 @@ const tests = Object.freeze({
         },
       },
     };
-    await batch.invalidate(new URL(`${testRealmURL}3.json`));
+    await batch.invalidate([new URL(`${testRealmURL}3.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}3.json`), {
       type: 'instance',
       resource: resource3,
@@ -1468,7 +1468,7 @@ const tests = Object.freeze({
         },
       },
     };
-    await batch.invalidate(new URL(`${testRealmURL}4.json`));
+    await batch.invalidate([new URL(`${testRealmURL}4.json`)]);
     await batch.updateEntry(new URL(`${testRealmURL}4.json`), {
       type: 'instance',
       resource: resource4,

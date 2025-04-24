@@ -674,4 +674,20 @@ module('Responding', (hooks) => {
       );
     }
   });
+
+  test('Chunk processing will result in an error if matrix sending fails', async () => {
+    fakeMatrixClient.sendEvent = async () => {
+      throw new Error('MatrixError: [413] event too large');
+    };
+
+    let result = await responder.onChunk(
+      {} as any,
+      snapshotWithContent('super long content that is too large'),
+    );
+
+    assert.equal(
+      (result[0] as { errorMessage: string }).errorMessage,
+      'MatrixError: [413] event too large',
+    );
+  });
 });

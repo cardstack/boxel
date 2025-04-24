@@ -1908,10 +1908,25 @@ module('Acceptance | interact submode tests', function (hooks) {
             return; // ignore the index initiation event
           }
           ev = ev as IncrementalIndexEventContent;
-          assert.ok(ev.clientRequestId);
-          assert.strictEqual(ev.eventName, 'index');
-          assert.strictEqual(ev.indexType, 'incremental');
-          assert.deepEqual(ev.invalidations, [`${testRealmURL}Person/fadhlan`]); // the card that was edited
+          assert.ok(
+            ev.clientRequestId,
+            'client request ID is included in event',
+          );
+          assert.strictEqual(
+            ev.eventName,
+            'index',
+            'the event name is "index"',
+          );
+          assert.strictEqual(
+            ev.indexType,
+            'incremental',
+            'the event type is "incremental"',
+          );
+          assert.deepEqual(
+            ev.invalidations,
+            [`${testRealmURL}Person/fadhlan`],
+            'invalidations are correct',
+          ); // the card that was edited
           receivedEventDeferred.fulfill();
         });
       await click('[data-test-edit-button]');
@@ -1932,7 +1947,11 @@ module('Acceptance | interact submode tests', function (hooks) {
         inputElement,
         'focus is preserved on the input element',
       );
-      assert.strictEqual(document.getSelection()?.anchorOffset, 3); // selection is preserved
+      assert.strictEqual(
+        document.getSelection()?.anchorOffset,
+        3,
+        'select is preserved',
+      );
     });
   });
 
