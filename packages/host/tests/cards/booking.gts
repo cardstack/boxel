@@ -5,26 +5,26 @@ import {
   Component,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import DateTimeCard from 'https://cardstack.com/base/datetime';
-import StringCard from 'https://cardstack.com/base/string';
+import DateTimeField from 'https://cardstack.com/base/datetime';
+import StringField from 'https://cardstack.com/base/string';
 
 import { PersonField } from './person';
 import { PostField } from './post';
 
 export class Booking extends CardDef {
-  @field title = contains(StringCard);
-  @field venue = contains(StringCard);
-  @field startTime = contains(DateTimeCard);
-  @field endTime = contains(DateTimeCard);
+  @field title = contains(StringField);
+  @field venue = contains(StringField);
+  @field startTime = contains(DateTimeField);
+  @field endTime = contains(DateTimeField);
   @field hosts = containsMany(PersonField);
-  @field sponsors = containsMany(StringCard);
+  @field sponsors = containsMany(StringField);
   @field posts = containsMany(PostField);
-  @field description = contains(StringCard, {
+  @field description = contains(StringField, {
     computeVia: function (this: Booking) {
       return this.venue;
     },
   });
-  @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+  @field thumbnailURL = contains(StringField, { computeVia: () => null });
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

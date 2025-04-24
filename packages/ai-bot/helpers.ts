@@ -4,7 +4,6 @@ import {
   type CardResource,
 } from '@cardstack/runtime-common';
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CardFragmentContent,
@@ -15,6 +14,7 @@ import type {
   CommandResultEvent,
   CommandDefinitionsEvent,
   CardMessageContent,
+  EncodedCommandRequest,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -251,7 +251,7 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   }
   let lastEventIndex = history.indexOf(lastEventExcludingCommandResults);
   let allCommandsHaveResults = commandRequests.every(
-    (commandRequest: Partial<CommandRequest>) => {
+    (commandRequest: Partial<EncodedCommandRequest>) => {
       return history.slice(lastEventIndex).some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
@@ -620,12 +620,12 @@ function getCommandResults(
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
   return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (commandRequest: Partial<CommandRequest>) => {
+    (commandRequest: Partial<EncodedCommandRequest>) => {
       return {
         id: commandRequest.id!,
         function: {
           name: commandRequest.name!,
-          arguments: JSON.stringify(commandRequest.arguments),
+          arguments: commandRequest.arguments!,
         },
         type: 'function',
       };
@@ -638,9 +638,9 @@ function toPromptMessageWithToolResults(
   history: DiscreteMatrixEvent[],
 ): OpenAIPromptMessage[] {
   let commandResults = getCommandResults(event, history);
-  const content = event.content as CardMessageContent;
-  return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
-    (commandRequest: Partial<CommandRequest>) => {
+  const messageContent = event.content as CardMessageContent;
+  return (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
+    (commandRequest: Partial<EncodedCommandRequest>) => {
       let content = 'pending';
       let commandResult = commandResults.find(
         (commandResult) =>

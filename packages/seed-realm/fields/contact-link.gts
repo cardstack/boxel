@@ -5,7 +5,7 @@ import {
   StringField,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import { UrlField } from 'https://cardstack.com/base/url';
+import UrlField from 'https://cardstack.com/base/url';
 
 import {
   BoxelSelect,

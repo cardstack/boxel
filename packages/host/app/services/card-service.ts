@@ -4,6 +4,7 @@ import Service, { service } from '@ember/service';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  formattedError,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -159,27 +160,35 @@ export default class CardService extends Service {
   }
 
   async saveSource(url: URL, content: string, type: string) {
-    let clientRequestId = `${type}:${uuidv4()}`;
-    this.clientRequestIds.add(clientRequestId);
+    try {
+      let clientRequestId = `${type}:${uuidv4()}`;
+      this.clientRequestIds.add(clientRequestId);
 
-    let response = await this.network.authedFetch(url, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.card+source',
-        'X-Boxel-Client-Request-Id': clientRequestId,
-      },
-      body: content,
-    });
+      let response = await this.network.authedFetch(url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+source',
+          'X-Boxel-Client-Request-Id': clientRequestId,
+        },
+        body: content,
+      });
 
-    if (!response.ok) {
-      let errorMessage = `Could not write file ${url}, status ${
-        response.status
-      }: ${response.statusText} - ${await response.text()}`;
-      console.error(errorMessage);
-      throw new Error(errorMessage);
+      if (!response.ok) {
+        let errorMessage = `Could not write file ${url}, status ${
+          response.status
+        }: ${response.statusText} - ${await response.text()}`;
+        console.error(errorMessage);
+        throw new Error(errorMessage);
+      }
+      this.subscriber?.(url, content);
+      return response;
+    } catch (e: any) {
+      let error = formattedError(undefined, e)?.errors?.[0];
+      if (error) {
+        throw error;
+      }
+      throw new Error(e);
     }
-    this.subscriber?.(url, content);
-    return response;
   }
 
   async copySource(fromUrl: URL, toUrl: URL) {

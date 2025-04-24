@@ -11,7 +11,10 @@ import {
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { CommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  CommandRequest,
+  decodeCommandRequest,
+} from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -171,19 +174,22 @@ export default class MessageBuilder {
     message.updated = new Date();
     message.errorMessage = this.errorMessage;
 
-    let commandRequests =
+    let encodedCommandRequests =
       (this.event.content as CardMessageContent)[
         APP_BOXEL_COMMAND_REQUESTS_KEY
       ] ?? [];
-    for (let commandRequest of commandRequests) {
+    for (let encodedCommandRequest of encodedCommandRequests) {
       let command = message.commands.find(
-        (c) => c.commandRequest.id === commandRequest.id,
+        (c) => c.commandRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.commandRequest = commandRequest;
+        command.commandRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
         message.commands.push(
-          this.buildMessageCommand(message, commandRequest),
+          this.buildMessageCommand(
+            message,
+            decodeCommandRequest(encodedCommandRequest),
+          ),
         );
       }
     }
@@ -218,7 +224,10 @@ export default class MessageBuilder {
     }
     let commands = new TrackedArray<MessageCommand>();
     for (let commandRequest of commandRequests) {
-      let command = this.buildMessageCommand(message, commandRequest);
+      let command = this.buildMessageCommand(
+        message,
+        decodeCommandRequest(commandRequest),
+      );
       commands.push(command);
     }
     return commands;

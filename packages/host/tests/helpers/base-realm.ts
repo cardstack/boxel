@@ -31,7 +31,7 @@ let DateField: DateField;
 type DatetimeField = (typeof DatetimeFieldModule)['default'];
 let DatetimeField: DatetimeField;
 
-type Base64ImageField = (typeof Base64ImageFieldModule)['Base64ImageField'];
+type Base64ImageField = (typeof Base64ImageFieldModule)['default'];
 let Base64ImageField: Base64ImageField;
 
 type CodeRefField = (typeof CodeRefModule)['default'];
@@ -105,7 +105,7 @@ async function initialize() {
     await loader.import<typeof Base64ImageFieldModule>(
       `${baseRealm.url}base64-image`,
     )
-  ).Base64ImageField;
+  ).default;
 
   CodeRefField = (
     await loader.import<typeof CodeRefModule>(`${baseRealm.url}code-ref`)

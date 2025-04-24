@@ -749,10 +749,10 @@ module('Integration | Store', function (hooks) {
       `person.gts`,
       `
       import { contains, field, Component, CardDef, } from 'https://cardstack.com/base/card-api';
-      import StringCard from 'https://cardstack.com/base/string';
+      import StringField from 'https://cardstack.com/base/string';
 
       export class Person extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <div test-update>Hello</div>

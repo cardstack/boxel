@@ -62,12 +62,12 @@ const postalCodeFieldSource = `
     Component,
     FieldDef,
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
 
   export class PostalCode extends FieldDef {
     static displayName = 'Postal Code';
-    @field fiveDigitPostalCode = contains(StringCard); // required
-    @field fourDigitOptional = contains(StringCard);
+    @field fiveDigitPostalCode = contains(StringField); // required
+    @field fourDigitOptional = contains(StringField);
 
     static embedded = class Embedded extends Component<typeof this> {
       <template>
@@ -86,17 +86,17 @@ const addressFieldSource = `
     Component,
     FieldDef,
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
   import { PostalCode } from './postal-code';
 
   export class Address extends FieldDef {
     static displayName = 'Address';
-    @field streetAddress = contains(StringCard); // required
-    @field city = contains(StringCard); // required
-    @field region = contains(StringCard);
+    @field streetAddress = contains(StringField); // required
+    @field city = contains(StringField); // required
+    @field region = contains(StringField);
     @field postalCode = contains(PostalCode);
-    @field poBoxNumber = contains(StringCard);
-    @field country = contains(StringCard); // required // dropdown
+    @field poBoxNumber = contains(StringField);
+    @field country = contains(StringField); // required // dropdown
 
     static embedded = class Embedded extends Component<typeof this> {
       <template>
@@ -165,7 +165,7 @@ const tripsFieldSource = `
 
 const personCardSource = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
   import { Friend } from './friend';
   import { Pet } from "./pet";
   import { Address } from './address';
@@ -173,16 +173,16 @@ const personCardSource = `
 
   export class Person extends CardDef {
     static displayName = 'Person';
-    @field firstName = contains(StringCard);
-    @field lastName = contains(StringCard);
-    @field title = contains(StringCard, {
+    @field firstName = contains(StringField);
+    @field lastName = contains(StringField);
+    @field title = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
     });
     @field pet = linksTo(Pet);
     @field friends = linksToMany(Friend);
-    @field address = containsMany(StringCard);
+    @field address = containsMany(StringField);
     @field addressDetail = contains(Address);
     @field trips = contains(Trips);
     static isolated = class Isolated extends Component<typeof this> {
@@ -207,12 +207,12 @@ const personCardSource = `
 
 const petCardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
-    @field name = contains(StringCard);
-    @field title = contains(StringCard, {
+    @field name = contains(StringField);
+    @field title = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -248,7 +248,7 @@ const employeeCardSource = `
     Component,
     CardDef
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
   import DateField from 'https://cardstack.com/base/date';
   import BooleanField from 'https://cardstack.com/base/boolean';
   import { Person } from './person';
@@ -267,7 +267,7 @@ const employeeCardSource = `
 
   export class Employee extends Person {
     static displayName = 'Employee';
-    @field department = contains(StringCard);
+    @field department = contains(StringField);
 
     static isolated = class Isolated extends Component<typeof this> {
       <template>
@@ -286,7 +286,7 @@ const inThisFileSource = `
     CardDef,
     FieldDef,
   } from 'https://cardstack.com/base/card-api';
-  import StringCard from 'https://cardstack.com/base/string';
+  import StringField from 'https://cardstack.com/base/string';
 
   export const exportedVar = 'exported var';
 
@@ -308,7 +308,7 @@ const inThisFileSource = `
 
   export class ExportedCard extends CardDef {
     static displayName = 'exported card';
-    @field someString = contains(StringCard);
+    @field someString = contains(StringField);
   }
 
   export class ExportedCardInheritLocalCard extends LocalCard {
@@ -320,7 +320,7 @@ const inThisFileSource = `
   }
   export class ExportedField extends FieldDef {
     static displayName = 'exported field';
-    @field someString = contains(StringCard);
+    @field someString = contains(StringField);
   }
 
   export class ExportedFieldInheritLocalField extends LocalField {
@@ -332,13 +332,13 @@ const inThisFileSource = `
 
 const friendCardSource = `
   import { contains, linksTo, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export class Friend extends CardDef {
     static displayName = 'Friend';
-    @field name = contains(StringCard);
+    @field name = contains(StringField);
     @field friend = linksTo(() => Friend);
-    @field title = contains(StringCard, {
+    @field title = contains(StringField, {
       computeVia: function (this: Person) {
         return name;
       },
@@ -1549,7 +1549,7 @@ module('Acceptance | code submode tests', function (_hooks) {
     test('card preview live updates when there is a change in module', async function (assert) {
       const personGts = `
         import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         import { Friend } from './friend';
         import { Pet } from "./pet";
         import { Address } from './address';
@@ -1557,16 +1557,16 @@ module('Acceptance | code submode tests', function (_hooks) {
 
         export class Person extends CardDef {
           static displayName = 'Person';
-          @field firstName = contains(StringCard);
-          @field lastName = contains(StringCard);
-          @field title = contains(StringCard, {
+          @field firstName = contains(StringField);
+          @field lastName = contains(StringField);
+          @field title = contains(StringField, {
             computeVia: function (this: Person) {
               return [this.firstName, this.lastName].filter(Boolean).join(' ');
             },
           });
           @field pet = linksTo(Pet);
           @field friends = linksToMany(Friend);
-          @field address = containsMany(StringCard);
+          @field address = containsMany(StringField);
           @field addressDetail = contains(Address);
           @field trips = contains(Trips);
           static isolated = class Isolated extends Component<typeof this> {

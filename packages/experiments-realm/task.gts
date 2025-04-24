@@ -10,7 +10,7 @@ import {
 import NumberField from 'https://cardstack.com/base/number';
 import BooleanField from 'https://cardstack.com/base/boolean';
 import DateRangeField from 'https://cardstack.com/base/date-range-field';
-import { ColorField } from 'https://cardstack.com/base/color';
+import ColorField from 'https://cardstack.com/base/color';
 
 import { Tag } from './tag';
 import { User } from './user';

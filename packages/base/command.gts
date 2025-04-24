@@ -78,6 +78,22 @@ export class ApplySearchReplaceBlockResult extends CardDef {
   @field resultContent = contains(StringField);
 }
 
+export class LintAndFixInput extends CardDef {
+  @field fileContent = contains(StringField);
+  @field realm = contains(StringField);
+}
+
+export class LintAndFixResult extends CardDef {
+  @field output = contains(StringField);
+  @field fixed = contains(BooleanField);
+  @field messages = containsMany(JsonField);
+}
+
+export class PatchCodeInput extends CardDef {
+  @field fileUrl = contains(StringField);
+  @field codeBlocks = containsMany(StringField);
+}
+
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
 }

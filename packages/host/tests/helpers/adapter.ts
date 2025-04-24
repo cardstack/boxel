@@ -12,6 +12,7 @@ import {
   unixTime,
 } from '@cardstack/runtime-common';
 
+import { LintResult } from '@cardstack/runtime-common/lint';
 import { type MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -432,5 +433,16 @@ export class TestRealmAdapter implements RealmAdapter {
 
   unsubscribe(): void {
     this.#subscriber = undefined;
+  }
+
+  async lintStub(
+    request: Request,
+    _requestContext: RequestContext,
+  ): Promise<LintResult> {
+    return {
+      output: await request.text(),
+      fixed: false,
+      messages: [],
+    };
   }
 }

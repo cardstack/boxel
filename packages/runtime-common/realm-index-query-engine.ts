@@ -33,7 +33,7 @@ interface SearchResultDoc {
   type: 'doc';
   doc: SingleCardDocument;
 }
-interface SearchResultError {
+export interface SearchResultError {
   type: 'error';
   error: {
     lastKnownGoodHtml: string | null;

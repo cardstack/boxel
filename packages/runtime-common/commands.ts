@@ -12,6 +12,7 @@ import {
   generateJsonSchemaForCardType,
 } from './helpers/ai';
 import { simpleHash } from './utils';
+import { EncodedCommandRequest } from '../base/matrix-event';
 
 export interface CommandRequest {
   id: string;
@@ -182,4 +183,50 @@ export function buildCommandFunctionName(
       ? friendlyModuleName(absoluteCodeRef.module)
       : absoluteCodeRef.name;
   return `${name}_${hashed.slice(0, 4)}`;
+}
+
+export function decodeCommandRequest(
+  commandRequest: Partial<EncodedCommandRequest>,
+): Partial<CommandRequest> {
+  if (typeof commandRequest.arguments === 'object') {
+    // backwards compatibility for older format
+    return commandRequest as Partial<CommandRequest>;
+  }
+  let decodedCommandRequest: Partial<CommandRequest> = {};
+  if (commandRequest.id) {
+    decodedCommandRequest.id = commandRequest.id;
+  }
+  if (commandRequest.name) {
+    decodedCommandRequest.name = commandRequest.name;
+  }
+  if (commandRequest.arguments) {
+    decodedCommandRequest.arguments = JSON.parse(commandRequest.arguments);
+  }
+  return decodedCommandRequest;
+}
+
+export function encodeCommandRequest(
+  commandRequest: Partial<CommandRequest>,
+): Partial<EncodedCommandRequest> {
+  if (typeof commandRequest.arguments === 'string') {
+    // backwards compatibility for older format
+    return commandRequest as Partial<EncodedCommandRequest>;
+  }
+  let encodedCommandRequest: Partial<EncodedCommandRequest> = {};
+  if (commandRequest.id) {
+    encodedCommandRequest.id = commandRequest.id;
+  }
+  if (commandRequest.name) {
+    encodedCommandRequest.name = commandRequest.name;
+  }
+  if (commandRequest.arguments) {
+    encodedCommandRequest.arguments = JSON.stringify(commandRequest.arguments);
+  }
+  return encodedCommandRequest;
+}
+
+export function encodeCommandRequests(
+  commandRequests: Partial<CommandRequest>[],
+): Partial<EncodedCommandRequest>[] {
+  return commandRequests.map(encodeCommandRequest);
 }

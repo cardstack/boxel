@@ -4,7 +4,7 @@ import { not } from '@cardstack/boxel-ui/helpers';
 
 import ExternalLink from '@cardstack/boxel-icons/external-link';
 
-export class UrlField extends StringField {
+export default class UrlField extends StringField {
   static icon = ExternalLink;
   static displayName = 'Url';
 

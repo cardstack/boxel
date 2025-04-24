@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
 import { ImageSizeField } from 'https://cardstack.com/base/base64-image';
-import { UrlField } from 'https://cardstack.com/base/url';
+import UrlField from 'https://cardstack.com/base/url';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 import PhotoIcon from '@cardstack/boxel-icons/photo';
