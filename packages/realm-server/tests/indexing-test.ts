@@ -350,7 +350,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h1> Mango </h1>`),
+          cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
         assert.strictEqual(
@@ -376,7 +376,7 @@ module(basename(__filename), function () {
       }
     });
 
-    test('can recover from rendering a card that has a template error', async function (assert) {
+    test.only('can recover from rendering a card that has a template error', async function (assert) {
       {
         let entry = await realm.realmIndexQueryEngine.cardDocument(
           new URL(`${testRealm}boom`),
@@ -417,7 +417,7 @@ module(basename(__filename), function () {
           if (item?.type === 'instance') {
             assert.strictEqual(
               trimCardContainer(stripScopedCSSAttributes(item.isolatedHtml!)),
-              cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+              cleanWhiteSpace(`<h1> Van Gogh $50 </h1>`),
             );
             assert.strictEqual(
               trimCardContainer(

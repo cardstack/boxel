@@ -86,7 +86,7 @@
     "@typescript-eslint/parser": "^7.18.0",
     "babel-plugin-ember-template-compilation": "^2.2.1",
     "concurrently": "^8.0.1",
-    "ember-template-imports": "^4.1.1",
+    "ember-template-imports": "^4.3.0",
     "ember-template-lint": "^5.11.2",
     "ember-template-lint-plugin-prettier": "^5.0.0",
     "eslint": "^8.57.1",
@@ -96,7 +96,7 @@
     "eslint-plugin-prettier": "^5.0.0",
     "glimmer-scoped-css": "^0.6.0",
     "prettier": "^3.5.1",
-    "prettier-plugin-ember-template-tag": "^1.1.0",
+    "prettier-plugin-ember-template-tag": "^2.0.5",
     "rollup": "^4.18.1",
     "rollup-plugin-copy": "^3.5.0",
     "svgo": "3.0.2"

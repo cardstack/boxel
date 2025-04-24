@@ -27,7 +27,8 @@
       "@embroider/util": "1.13.1",
       "@glimmer/tracking>@glimmer/validator": "0.84.3",
       "jsesc": "^3.0.0",
-      "ember-modifier": "^4.1.0"
+      "ember-modifier": "^4.1.0",
+      "magic-string": "0.30.17"
     },
     "peerDependencyRules": {
       "allowedVersions": {
@@ -36,7 +37,6 @@
       }
     },
     "patchedDependencies": {
-      "magic-string@0.25.9": "patches/magic-string@0.25.9.patch",
       "fastboot@4.1.0": "patches/fastboot@4.1.0.patch",
       "style-loader@2.0.0": "patches/style-loader@2.0.0.patch",
       "ember-css-url@1.0.0": "patches/ember-css-url@1.0.0.patch",
@@ -62,7 +62,7 @@
     "ember-cli-htmlbars": "^6.3.0",
     "ember-resources": "^6.5.1",
     "ember-source": "~5.4.0",
-    "ember-template-imports": "^4.1.1",
+    "ember-template-imports": "^4.3.0",
     "eslint": "^8.57.1",
     "eslint-config-prettier": "^8.4.0",
     "eslint-plugin-import": "^2.26.0",
@@ -70,7 +70,7 @@
     "eslint-plugin-prettier": "^5.0.0",
     "hcl2-parser": "^1.0.3",
     "prettier": "^3.5.1",
-    "prettier-plugin-ember-template-tag": "^1.1.0",
+    "prettier-plugin-ember-template-tag": "^2.0.5",
     "typescript": "~5.1.6"
   },
   "engines": {

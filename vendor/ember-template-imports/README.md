@@ -1,67 +1,163 @@
-# ember-template-imports
+ember-template-imports
+==============================================================================
 
-This addon provides a number of different formats for using template imports
-within Ember!
+This addon provides the build tooling required to support Ember's next-gen component authoring format:
 
-```js
-import MyComponent from "./my-component";
+```gjs
+import { on } from '@ember/modifier';
+import FancyButton from './fancy-button';
+
+function greet() {
+  alert("AHOY!")
+}
 
 <template>
-  <MyComponent />
-</template>;
+  <p>Hello, {{@name}}!</p>
+  <FancyButton @label="Say hello!" {{on "click" greet}} />
+</template>
 ```
 
-Template imports are an upcoming feature in Ember. Like Glimmer components, the
-primitive APIs for supporting imports were built before we decided on a final
-format for their high level usage. There are a number of different ideas for how
-we can integrate imports with templates, and the idea behind this addon is that
-it can be a test bed for them all. This way, we can share common tooling between
-solutions, and work together as a community as we explore the design space.
+This design uses `<template>` to allow us to author JavaScript or TypeScript in
+the same file as templates, while keeping a clear separation between the
+template language and the JavaScript around it.
 
-So far, this addon supports two different potential formats:
+This "next-gen" format is [the official future][rfc-0779] of Ember's authoring
+story, and is stable and usable today. (It is already being used in some of the
+largest Ember apps in the world!) We expect it to become the recommended way of
+authoring *all* Ember apps in the near future, once we are satisfied that we
+have sufficiently polished up all the corners of the implementation.
 
-- Template tags, embedded in `.gjs` files
+[rfc-0779]: https://rfcs.emberjs.com/id/0779-first-class-component-templates
 
-  ```js
-  import MyComponent from "./my-component";
 
-  <template>
-    <MyComponent />
-  </template>;
+## Installation and setup
+
+Install this package and [the supporting Prettier plugin][prettier-plugin]:
+
+[prettier-plugin]: https://github.com/gitKrystan/prettier-plugin-ember-template-tag
+
+- pnpm:
+
+  ```sh
+  pnpm add --save-dev ember-template-imports prettier-plugin-ember-template-tag
   ```
 
-- Template literals, similar to the existing `hbs` helper in tests:
+- Yarn:
 
-  ```js
-  import { hbs } from "ember-template-imports";
-  import MyComponent from "./my-component";
-
-  export default hbs`
-    <MyComponent/>
-  `;
+  ```sh
+  yarn add --dev ember-template-imports prettier-plugin-ember-template-tag
   ```
 
-For the previous version of this addon, see [this repository](https://github.com/patricklx/ember-template-imports).
-And huge thanks to @patricklx for his contributions here!
+- npm:
 
-## Using Template Tags and `.gjs` Files
+  ```sh
+  npm add --save-dev ember-template-imports prettier-plugin-ember-template-tag
+  ```
 
-Template tags are a new syntax introduced in `.gjs`, a new file format that is
-a superset of standard JavaScript. In this syntax, templates are defined in
-JavaScript files directly.
+Then configure the Prettier plugin following [the instructions from its
+README][prettier-plugin]. Additionally, make sure you are using at least v5.8.0
+of [ember-template-lint][etl] and v11.6.0 of [eslint-plugin-ember][epe], so your
+linting tools will work correctly.
 
-```js
+[etl]: https://github.com/ember-template-lint/ember-template-lint
+[epe]: https://github.com/ember-cli/eslint-plugin-ember
+
+Additionally, if you are using TypeScript, you will also want to set up
+[Glint][glint], following [its setup instructions][glint-setup]. (Make sure you
+include `@glint/environment-ember-template-imports`!)
+
+[glint]: https://typed-ember.gitbook.io/glint
+[glint-setup]: https://typed-ember.gitbook.io/glint/environments/ember/installation
+
+
+## Compatibility
+
+* Ember.js v3.27 or above
+* Ember CLI v3.27 or above
+* `ember-cli-htmlbars` 6.3.0 or above
+* Node.js v16 or above
+
+
+## Editor Integrations
+
+To get syntax highlighting inside embedded templates and support for the GJS
+file extension, you may need to configure your editor.
+
+### Visual Studio Code
+
+The [Ember.js extension pack](https://marketplace.visualstudio.com/items?itemName=EmberTooling.emberjs) bundles everything you need to get started.
+
+
+### Neovim
+
+[Example Neovim Config](https://github.com/NullVoxPopuli/dotfiles/blob/main/home/.config/nvim/lua/plugins/syntax.lua#L52) with support for good highlighting of embedded templates in JS and TS, using:
+
+- https://github.com/nvim-treesitter/nvim-treesitter
+- https://github.com/ember-tooling/tree-sitter-glimmer
+- https://github.com/NullVoxPopuli/tree-sitter-glimmer-javascript/
+- https://github.com/NullVoxPopuli/tree-sitter-glimmer-typescript/
+
+Additionally, when using the eslint-lsp, you'll need to tell ESLint to activate when `javascript.glimmer` and `typescript.glimmer` files are loaded. [Example](https://github.com/NullVoxPopuli/dotfiles/blob/main/home/.config/nvim/lua/plugin-config/lsp/init.lua#L147).
+
+<details><summary>Configure ESLint for gjs + gts and fix-on-save</summary>
+
+```lua
+local lsp = require('lspconfig')
+  
+-- ✂️ 
+
+local eslint = lsp['eslint']
+  
+eslint.setup({
+  filetypes = { 
+    "javascript", "typescript", 
+    "typescript.glimmer", "javascript.glimmer", 
+    "json", 
+    "markdown" 
+  },
+  on_attach = function(client, bufnr)
+    vim.api.nvim_create_autocmd("BufWritePre", {
+      buffer = bufnr,
+      command = "EslintFixAll",
+    })
+  end,
+})
+```
+  
+</details>
+
+
+### Other editors
+
+For other editors, you may be able to get support using one of these other syntax definitions:
+
+- [TextMate](https://github.com/IgnaceMaes/glimmer-textmate-grammar)
+- TreeSitter
+  - [Glimmer / hbs](https://github.com/alexlafroscia/tree-sitter-glimmer)
+  - gjs: https://github.com/NullVoxPopuli/tree-sitter-glimmer-javascript/
+  - gts: https://github.com/NullVoxPopuli/tree-sitter-glimmer-typescript/
+
+
+## Using Template Tags and `.gjs`/`.gts` Files
+
+The new `<template>` tag format is available in `.gjs` and `.gts` files. These
+file extensions represent a new file format "GlimmerJS" and "GlimmerTS", which
+are supersets of standard JavaScript and TypeScript respectively. In this
+syntax, templates are defined in JavaScript files directly.
+
+This example defines a template-only component, which is the default export of
+`hello.gjs`:
+
+```gjs
 // components/hello.gjs
 <template>
   <span>Hello, {{@name}}!</span>
 </template>
 ```
 
-This example defines a template-only component, which is the default export of
-`hello.js`. You would be able to use this component in another component
-like so:
+You would be able to use this component in another component like so:
 
-```js
+```gjs
 // components/hello-world.gjs
 import Hello from './hello';
 
@@ -72,18 +168,18 @@ import Hello from './hello';
 
 You can also export the component explicitly:
 
-```js
+```gjs
 // components/hello.gjs
 export default <template>
   <span>Hello, {{@name}}!</span>
-</template>
+</template>;
 ```
 
 Omitting the `export default` is just syntactic sugar. In addition, you can
 define template-only components and assign them to variables, allowing you to
 export components with named exports:
 
-```js
+```gjs
 export const First = <template>First</template>;
 
 export const Second = <template>Second</template>;
@@ -94,33 +190,32 @@ export const Third = <template>Third</template>;
 This also allows you to create components that are only used locally, in the
 same file:
 
-```js
+```gjs
 const Option = <template>
   <option selected={{@selected}} value={{@value}}>
     {{or @title @value}}
   </option>
-</template>
+</template>;
 
 export const CustomSelect = <template>
   <select>
-    {{#each @options as |option|}}
+    {{#each @options as |opt|}}
       <Option
-        @value={{option.value}}
-        @selected={{eq option @selectedOption}}
+        @value={{opt.value}}
+        @selected={{eq opt @selectedOption}}
       />
     {{/each}}
   </select>
-</template>
+</template>;
 ```
 
 Helpers and modifiers can also be defined in the same file as your components,
 making them very flexible:
 
-```js
-import { helper } from '@ember/component/helper';
+```gjs
 import { modifier } from 'ember-modifier';
 
-const plusOne = helper(([num]) => num + 1);
+const plusOne = (num) => num + 1;
 
 const setScrollPosition = modifier((element, [position]) => {
   element.scrollTop = position
@@ -138,168 +233,145 @@ const setScrollPosition = modifier((element, [position]) => {
 Finally, to associate a template with a class-based component, you can use the
 template syntax directly in the class body:
 
-```js
+```gjs
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+import { on } from '@ember/modifier';
+
 // components/hello.gjs
-export default class Hello {
-  name = 'world';
+export default class Hello extends Component {
+  @tracked count = 0;
+
+  increment = () => {
+    this.count += 1;
+  };
+
+  decrement = () => {
+    this.count -= 1;
+  };
 
   <template>
-    <span>Hello, {{this.name}}!</span>
+    <button {{on "click" this.increment}}>+</button>
+    Count: {{this.count}}
+    <button {{on "click" this.decrement}}>&minus;</button>
   </template>
 }
 ```
 
-## Using Template Literals with `hbs`
+Template tag components can also be used for writing tests. In fact, this aligned syntax between app code and test code is one of the big advantages of the new authoring format.
 
-Template literals are an existing JavaScript syntax that has been repurposed to
-define Ember templates. This syntax can be used in standard JavaScript files to
-define templates for Ember components.
+Just like in app code, the template tag has access to the outer scope. This means you can reference variables directly in your tests:
 
-```js
-// components/hello.js
-import { hbs } from "ember-template-imports";
+```gjs
+// tests/integration/components/hello-test.gjs
+import Hello from 'example-app/components/hello';
+import { module, test } from 'qunit';
+import { setupRenderingTest } from 'ember-qunit';
+import { render } from '@ember/test-helpers';
 
-export default hbs`
-  <span>Hello, {{@name}}!</span>
-`;
-```
+module('Integration | Component | hello', function (hooks) {
+  setupRenderingTest(hooks);
 
-This example defines a template-only component, which is the default export of
-`hello.js`. You would be able to use this component in another component
-like so:
-
-```js
-// components/hello-world.js
-import { hbs } from "ember-template-imports";
-import Hello from "./hello";
-
-export default hbs`
-  <Hello @name="world" />
-`;
-```
-
-In addition, you can define template-only components and assign them to
-variables, allowing you to export components with named exports:
-
-```js
-import { hbs } from "ember-template-imports";
-
-export const First = hbs`First`;
-
-export const Second = hbs`Second`;
-
-export const Third = hbs`Third`;
-```
-
-This also allows you to create components that are only used locally, in the
-same file:
-
-```js
-import { hbs } from "ember-template-imports";
-
-const Option = hbs`
-  <option selected={{@selected}} value={{@value}}>
-    {{or @title @value}}
-  </option>
-`;
-
-export const CustomSelect = hbs`
-  <select>
-    {{#each @options as |option|}}
-      <Option
-        @value={{option.value}}
-        @selected={{eq option @selectedOption}}
-      />
-    {{/each}}
-  </select>
-`;
-```
-
-Helpers and modifiers can also be defined in the same file as your components,
-making them very flexible:
-
-```js
-import { hbs } from "ember-template-imports";
-import { helper } from "@ember/component/helper";
-import { modifier } from "ember-modifier";
-
-const plusOne = helper(([num]) => num + 1);
-
-const setScrollPosition = modifier((element, [position]) => {
-  element.scrollTop = position;
+  test('renders name argument', async function (assert) {
+    const name = 'world';
+    await render(<template><Hello @name={{name}} /></template>);
+    assert.dom('[data-test-id="some-selector"]').hasText(name);
+  });
 });
 
-hbs`
-  <div class="scroll-container" {{setScrollPosition @scrollPos}}>
-    {{#each @items as |item index|}}
-      Item #{{plusOne index}}: {{item}}
-    {{/each}}
-  </div>
-`;
 ```
 
-Finally, to associate a template with a class-based component, you can assign
-the template to the `static template` property of the class:
+## Sourcemap Generation
+
+Inline sourcemaps are inserted automatically, which downstream build tooling may extract or remove. To disable this sourcemap injection, set the `inline_source_map` flag to `false`:
 
 ```js
-// components/hello.js
-import Component from "@glimmer/component";
-import { hbs } from "ember-template-imports";
-
-export default class Hello extends Component {
-  name = "world";
-
-  static template = hbs`
-    <span>Hello, {{this.name}}!</span>
-  `;
-}
+// ember-cli-build.js
+module.exports = function (defaults) {
+  let app = new EmberAddon(defaults, {
+    'ember-template-imports': {
+      inline_source_map: false
+    }
+  });
 ```
-
-This template literal syntax has a few key differences and restrictions from
-standard JS template literal syntax:
-
-- Using template interpolations (`${}`) is disallowed. You cannot embed dynamic
-  values in templates, they must be statically analyzable and compilable.
-- Templates are able to reference all variables that are in scope where they are
-  defined. This is unlike normal template literals, which require you to
-  interpolate a value using `${}` to reference and use it.
-- The `static template` property of class components does not exist directly on
-  the class. It is compiled away, and so it cannot be directly referenced or
-  dynamically modified/assigned.
 
 ## Reference: built-in helpers, modifiers, components
 
-As implemented as part of the [Strict Mode Templates RFC](rfc-496), the built in
+As implemented as part of the [Strict Mode Templates RFC][rfc-496], the built in
 helpers, modifiers and components are available for import:
 
-- `array` (`import { array } from '@ember/helper`)
-- `concat` (`import { concat } from '@ember/helper`)
-- `fn` (`import { fn } from '@ember/helper`)
-- `get` (`import { get } from '@ember/helper`)
-- `hash` (`import { hash } from '@ember/helper`)
-- `on` (`import { on } from '@ember/modifier'`)
-- `Input` (`import { Input } from '@ember/component`)
-- `LinkTo` (`import { LinkTo } from '@ember/routing`)
-- `TextArea` (`import { TextArea } from '@ember/component'`)
+* `array` (`import { array } from '@ember/helper';`)
+* `concat` (`import { concat } from '@ember/helper';`)
+* `fn` (`import { fn } from '@ember/helper';`)
+* `get` (`import { get } from '@ember/helper';`)
+* `hash` (`import { hash } from '@ember/helper';`)
+* `unique-id` (`import { uniqueId } from '@ember/helper';`, needs Ember v5.2+)
+* `on` (`import { on } from '@ember/modifier';`)
+* `Input` (`import { Input } from '@ember/component';`)
+* `LinkTo` (`import { LinkTo } from '@ember/routing';`)
+* `Textarea` (`import { Textarea } from '@ember/component';`)
 
 [rfc-496]: https://github.com/emberjs/rfcs/pull/496
 
-## Compatibility
+## Reference: import external helpers, modifiers, components
 
-- Ember.js v3.27 or above
-- Ember CLI v2.13 or above
-- `ember-cli-htmlbars` 6.0 or above
-- Node.js v12 or above
+You can import non `.gjs/.gts` helpers, modifiers and components from apps/addons
+you may already be using when migrating your own components. To determine 
+the import path:
 
-## Installation
+1. Check the app
+   1. If found, import that
+   2. If not found,
+        1. Check all addon's app folders
+            1. When found, look in the matching file to see what the re-export is -- this is what you can use in your app
+        2. Check all v2-addon's ember-addon#app-js configs in package.json
+            1. When found, look in the matching file to see what the re-export is -- this is what you can use in
 
+For example:
+
+```gjs
+import BasicDropdown from 'ember-basic-dropdown/components/basic-dropdown';
+
+<template>
+  <BasicDropdown>
+   <!-- Your component implementation here -->
+  </BasicDropdown>
+</template>
 ```
-ember install ember-template-imports
+
+## History
+
+Like Glimmer components, the primitive APIs for supporting imports were built
+before we decided on a final format for their high level usage in [RFC
+0779][rfc-0779]. There were a number of different ideas for how we can integrate
+imports with templates, and the idea behind this addon was that it could be a
+test bed for them all. This allowed us to share common tooling between
+solutions, and work together as a community as we explored the design space.
+
+The main alternative explored in a previous version was template literals,
+similar to the existing `hbs` helper in tests:
+
+```gjs
+import { hbs } from 'ember-template-imports';
+import MyComponent from './my-component';
+
+export default hbs`
+  <MyComponent/>
+`;
 ```
+
+For the previous version of this addon, see [this repository][first-repo]. And
+huge thanks to @patricklx for his contributions here!
+
+[first-repo]: https://github.com/patricklx/ember-template-imports
+
+As of [RFC 0779][rfc-0779], we decided on `<template>` over `hbs`; see the RFC for the full rationale. ~~The `hbs` format is still technically supported by this repo for transition purposes for the early adopters who helped us get here, but will be removed at some point in the near future!~~ `hbs` has been removed -- if you rely on this feature, please use `ember-template-imports @ < v4`, until migrated to `<template>`
+
 
 ## Contributing
 
 See the [Contributing](CONTRIBUTING.md) guide for details.
+
 
 ## License
 
