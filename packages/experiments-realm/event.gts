@@ -12,7 +12,7 @@ import {
   linksTo,
   StringField,
 } from 'https://cardstack.com/base/card-api';
-import TextAreaCard from '../base/text-area';
+import TextAreaField from '../base/text-area';
 import { FieldContainer, BoxelSelect } from '@cardstack/boxel-ui/components';
 import CalendarPlus from '@cardstack/boxel-icons/calendar-plus';
 
@@ -170,7 +170,7 @@ export class Event extends CardDef {
   @field startDateTime = contains(DateTimeCard);
   @field endDateTime = contains(DateTimeCard);
   @field eventType = contains(StringCard);
-  @field description = contains(TextAreaCard);
+  @field description = contains(TextAreaField);
   @field title = contains(StringField, {
     computeVia(this: Event) {
       return this.subject;

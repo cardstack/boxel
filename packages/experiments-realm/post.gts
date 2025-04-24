@@ -7,7 +7,7 @@ import {
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
 import StringCard from 'https://cardstack.com/base/string';
-import TextAreaCard from 'https://cardstack.com/base/text-area';
+import TextAreaField from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
@@ -41,7 +41,7 @@ export class Post extends CardDef {
   static icon = FileTextIcon;
   @field author = linksTo(Person);
   @field title = contains(StringCard);
-  @field body = contains(TextAreaCard);
+  @field body = contains(TextAreaField);
   @field titleRef = contains(VeryBasicCard);
   static isolated = class Isolated extends Component<typeof this> {
     <template>

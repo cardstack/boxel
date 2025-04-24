@@ -1,4 +1,4 @@
-import TextAreaCard from 'https://cardstack.com/base/text-area';
+import TextAreaField from 'https://cardstack.com/base/text-area';
 import MarkdownCard from 'https://cardstack.com/base/markdown';
 import StringCard from 'https://cardstack.com/base/string';
 import {
@@ -14,7 +14,7 @@ export class HelloWorld extends CardDef {
   @field heroUrl = contains(StringCard);
   @field headshotUrl = contains(StringCard);
   @field bio = contains(MarkdownCard);
-  @field quote = contains(TextAreaCard);
+  @field quote = contains(TextAreaField);
   static displayName = 'Hello World';
   static icon = MoodSmileBeamIcon;
 
