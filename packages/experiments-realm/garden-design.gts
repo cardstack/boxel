@@ -9,7 +9,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
 import CoordinateField from 'https://cardstack.com/base/coordinate';
-import { PositionedCard } from 'https://cardstack.com/base/positioned-card';
+import PositionedCardField from 'https://cardstack.com/base/positioned-card';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -283,7 +283,7 @@ class Isolated extends Component<typeof GardenDesign> {
       .filter((el) => el[1] != null)
       .map((el) => {
         let coordinate = new CoordinateField(this.decomposeId(el[0]));
-        let positionedGardenItem = new PositionedCard({
+        let positionedGardenItem = new PositionedCardField({
           coordinate,
           card: el[1],
         });
