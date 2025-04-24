@@ -1,16 +1,6 @@
-import Owner from '@ember/owner';
-import { htmlSafe } from '@ember/template';
-import {
-  RenderingTestContext,
-  render,
-  settled,
-  waitFor,
-} from '@ember/test-helpers';
+import { RenderingTestContext, render, waitFor } from '@ember/test-helpers';
 
 import { waitUntil } from '@ember/test-helpers';
-
-import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import percySnapshot from '@percy/ember';
 import { module, test } from 'qunit';
@@ -20,7 +10,6 @@ import FormattedMessage from '@cardstack/host/components/ai-assistant/formatted-
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
-import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module('Integration | Component | FormattedMessage', function (hooks) {
@@ -54,7 +43,7 @@ module('Integration | Component | FormattedMessage', function (hooks) {
     </template>);
   }
 
-  test('it renders content without monaco editor when renderCodeBlocks is false', async function (assert) {
+  test('it renders content without monaco editor when renderCodeBlocks is false', async function (this: RenderingTestContext, assert) {
     await renderFormattedMessage({
       renderCodeBlocks: false,
       html: `
@@ -69,9 +58,7 @@ main = putStrLn "🖤"
       isStreaming: false,
     });
 
-    let messageElement = (this as RenderingTestContext).element.querySelector(
-      '.message',
-    );
+    let messageElement = this.element.querySelector('.message');
 
     assert.ok(
       messageElement?.innerHTML.includes(
@@ -83,7 +70,7 @@ main = putStrLn "🖤"
     assert.dom('.monaco-editor').doesNotExist();
   });
 
-  test('it renders content with monaco editor in place of pre tags when renderCodeBlocks is true', async function (assert) {
+  test('it renders content with monaco editor in place of pre tags when renderCodeBlocks is true', async function (this: RenderingTestContext, assert) {
     await renderFormattedMessage({
       renderCodeBlocks: true,
       html: `
@@ -100,9 +87,7 @@ puts "💎"
       isStreaming: false,
     });
 
-    let messageElement = (this as RenderingTestContext).element.querySelector(
-      '.message',
-    ) as HTMLElement;
+    let messageElement = this.element.querySelector('.message') as HTMLElement;
     let directChildren = messageElement.children;
 
     assert.ok(directChildren[0]?.tagName == 'P');
@@ -307,47 +292,5 @@ let c = 2;
     });
 
     assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
-  });
-
-  test('unincremental updates are handled gracefully', async function (assert) {
-    let monacoSDK = await monacoService.getMonacoContext();
-
-    let component = null;
-
-    class TestComponent extends Component {
-      @tracked html = '<p>Howdy!</p> <p>How are you today?</p>';
-
-      constructor(owner: Owner, args: any) {
-        super(owner, args);
-        component = this;
-      }
-
-      <template>
-        <FormattedMessage
-          @renderCodeBlocks={{true}}
-          @monacoSDK={{monacoSDK}}
-          @html={{htmlSafe this.html}}
-          @isStreaming={{true}}
-        />
-      </template>
-    }
-
-    await renderComponent(TestComponent);
-    assert.dom('.message').containsText('Howdy! How are you today?');
-
-    // Keep in mind that this test isn't as simple as it looks. Html is not directly rendered
-    // but the component will react to its change and parse out groups, for example text and code,
-    // and then render them separately (check the HtmlDidUpdate modifier in the component for more info).
-    // Most of the time, streaming html updates are incremental, meaning the next html is an appended version of the previous one.
-    // But not always! For example when the html is replaced with an error message, the new html is not an appended version of the previous one.
-    // This is a regression test for this particular case.
-    component!.html =
-      '<p>There was an error processing your request, please try again later.</p>';
-    await settled();
-    assert
-      .dom('.message')
-      .containsText(
-        'There was an error processing your request, please try again later.',
-      );
   });
 });

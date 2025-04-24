@@ -4,6 +4,7 @@ import {
   click,
   focus,
   triggerEvent,
+  type TestContext,
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -537,7 +538,7 @@ module('Integration | card-delete', function (hooks) {
     assert.strictEqual(notFound, undefined, 'file ref does not exist');
   });
 
-  test('can delete a card that is a recent item', async function (assert) {
+  test('can delete a card that is a recent item', async function (this: TestContext, assert) {
     // creates a recent item
     let recentCardsService = this.owner.lookup(
       'service:recent-cards-service',

@@ -738,7 +738,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     );
   });
 
-  test<TestContextWithSave>('deleting a field from schema editor', async function (assert) {
+  test('deleting a field from schema editor', async function (this: TestContextWithSave, assert) {
     assert.expect(9);
     await visitOperatorMode({
       submode: 'code',
@@ -805,7 +805,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
       .doesNotExist();
   });
 
-  test<TestContextWithSave>('editing a field from schema editor', async function (assert) {
+  test('editing a field from schema editor', async function (this: TestContextWithSave, assert) {
     assert.expect(2);
     await visitOperatorMode({
       submode: 'code',
@@ -852,7 +852,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     );
   });
 
-  test<TestContextWithSave>('adding a "default" field type from the schema editor', async function (assert) {
+  test('adding a "default" field type from the schema editor', async function (this: TestContextWithSave, assert) {
     assert.expect(1);
     await visitOperatorMode({
       submode: 'code',
@@ -912,7 +912,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('renaming a field from the schema editor', async function (assert) {
+  test('renaming a field from the schema editor', async function (this: TestContextWithSave, assert) {
     assert.expect(1);
     await visitOperatorMode({
       submode: 'code',
@@ -1070,7 +1070,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-syntax-errors]').hasText('File is empty');
   });
 
-  test<TestContextWithSave>('updates cursor position in monaco editor when field row clicked', async function (assert) {
+  test('updates cursor position in monaco editor when field row clicked', async function (this: TestContextWithSave, assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}employee.gts`,

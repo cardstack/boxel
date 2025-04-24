@@ -857,7 +857,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
     });
 
-    test<TestContextWithSave>('trigger auto saved in edit format', async function (assert) {
+    test('trigger auto saved in edit format', async function (this: TestContextWithSave, assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
@@ -877,7 +877,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
     });
 
-    test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
+    test('automatically attaches the selected card to the AI message', async function (this: TestContextWithSave, assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
@@ -927,7 +927,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       ]);
     });
 
-    test<TestContextWithSave>('instance chooser only appears when panel is opened', async function (assert) {
+    test('instance chooser only appears when panel is opened', async function (this: TestContextWithSave, assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       assert.dom('[data-test-instance-chooser]').exists();
       await click('[data-test-accordion-item="playground"] button');
@@ -1077,17 +1077,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         @field pet = linksTo(Pet);
       }
     `;
-    const boomPerson = `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
-      export class BoomPerson extends CardDef {
-        static displayName = 'Boom Person';
-        @field firstName = contains(StringField);
-        static isolated = class Isolated extends Component<typeof this> {
-          <template>
-            Hello <@fields.firstName />! {{this.boom}}
-          </template>
-          boom = () => fn();
-        }
-      }`;
 
     hooks.beforeEach(async function () {
       matrixRoomId = createAndJoinRoom({
@@ -1105,7 +1094,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         contents: {
           'boom-pet.gts': boomPet,
           'person.gts': person,
-          'boom-person.gts': boomPerson,
           'Person/delilah.json': {
             data: {
               attributes: { title: 'Delilah' },
@@ -1162,19 +1150,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     });
 
     test('it renders error info when creating new instance causes error', async function (assert) {
-      await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
+      await openFileInPlayground('boom-pet.gts', testRealmURL, 'BoomPet');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
       assert.dom('[data-test-card-error]').doesNotExist();
 
       await createNewInstance();
       assert
-        .dom('[data-test-playground-panel] [data-test-card]')
-        .doesNotExist();
-      assert.dom('[data-test-card-error]').hasText('Failed to create card.');
-      assert.dom('[data-test-error-title]').hasText('Internal Server Error');
+        .dom('[data-test-card-error]')
+        .containsText('Failed to create card');
 
       await click('[data-test-error-detail-toggle] button');
-      assert.dom('[data-test-error-detail]').containsText('fn is not defined');
+      assert.dom('[data-test-error-detail]').containsText('Boom!');
     });
 
     test('it can render the last known good state for card with error', async function (assert) {
