@@ -1,4 +1,8 @@
-import { fillIn, RenderingTestContext } from '@ember/test-helpers';
+import {
+  fillIn,
+  RenderingTestContext,
+  type TestContext,
+} from '@ember/test-helpers';
 
 import parseISO from 'date-fns/parseISO';
 
@@ -4239,7 +4243,7 @@ module('Integration | serialization', function (hooks) {
     });
   });
 
-  test('can serialize a card that is constructed by another card (test realm)', async function (assert) {
+  test('can serialize a card that is constructed by another card (test realm)', async function (this: TestContext, assert) {
     await setupIntegrationTestRealm({
       loader,
       mockMatrixUtils,

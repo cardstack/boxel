@@ -288,7 +288,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       assert.dom('[data-test-file-name-field]').hasValue('test_card');
     });
 
-    test<TestContextWithSave>('can create new card-instance file in local realm with card type from same realm', async function (assert) {
+    test('can create new card-instance file in local realm with card type from same realm', async function (this: TestContextWithSave, assert) {
       const baseRealmIconURL =
         'https://boxel-images.boxel.ai/icons/cardstack.png';
       assert.expect(13);
@@ -366,7 +366,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('an error when creating a new card instance is shown', async function (assert) {
+    test('an error when creating a new card instance is shown', async function (this: TestContextWithSave, assert) {
       await visitOperatorMode();
       await openNewFileModal('Card Instance');
       await waitFor(`[data-test-selected-type="General Card"]`);
@@ -395,7 +395,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .doesNotExist();
     });
 
-    test<TestContextWithSave>('can create new card-instance file in local realm with card type from a remote realm', async function (assert) {
+    test('can create new card-instance file in local realm with card type from a remote realm', async function (this: TestContextWithSave, assert) {
       assert.expect(8);
       await visitOperatorMode();
       await openNewFileModal('Card Instance');
@@ -449,7 +449,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from another realm', async function (assert) {
+    test('can create new card-instance file in a remote realm with card type from another realm', async function (this: TestContextWithSave, assert) {
       assert.expect(8);
       await visitOperatorMode();
       await openNewFileModal('Card Instance');
@@ -508,7 +508,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('can create new card-instance file in a remote realm with card type from a local realm', async function (assert) {
+    test('can create new card-instance file in a remote realm with card type from a local realm', async function (this: TestContextWithSave, assert) {
       assert.expect(8);
       await visitOperatorMode();
       await openNewFileModal('Card Instance');
@@ -574,7 +574,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('can create a new card definition in different realm than inherited definition', async function (assert) {
+    test('can create a new card definition in different realm than inherited definition', async function (this: TestContextWithSave, assert) {
       assert.expect(11);
       let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -631,7 +631,7 @@ export class TrèsTestCard extends CardDef {
       assert.dom('[data-test-total-fields]').containsText('3 Fields');
     });
 
-    test<TestContextWithSave>('can create a new card definition in same realm as inherited definition', async function (assert) {
+    test('can create a new card definition in same realm as inherited definition', async function (this: TestContextWithSave, assert) {
       assert.expect(1);
       await visitOperatorMode();
       await openNewFileModal('Card Definition');
@@ -669,7 +669,7 @@ export class TestCard extends Person {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('can create new card definition in different realm than realm of current file opened in code mode', async function (assert) {
+    test('can create new card definition in different realm than realm of current file opened in code mode', async function (this: TestContextWithSave, assert) {
       let done = assert.async();
       await visitOperatorMode(`${baseRealm.url}card-api.gts`);
       await openNewFileModal('Card Definition');
@@ -725,7 +725,7 @@ export class TestCard extends Person {
         .doesNotExist('changing a field should clear the error');
     });
 
-    test<TestContextWithSave>('can create a new field definition that extends field definition that uses default export', async function (assert) {
+    test('can create a new field definition that extends field definition that uses default export', async function (this: TestContextWithSave, assert) {
       assert.expect(3);
       await visitOperatorMode();
       await openNewFileModal('Field Definition');
@@ -796,7 +796,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
         .containsText('A deliberate fetch error');
     });
 
-    test<TestContextWithSave>('can create a new definition that extends card definition which uses default export', async function (assert) {
+    test('can create a new definition that extends card definition which uses default export', async function (this: TestContextWithSave, assert) {
       assert.expect(1);
       await visitOperatorMode();
       await openNewFileModal('Card Definition');
@@ -835,7 +835,7 @@ export class TestCard extends Pet {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('can reconcile a classname collision with the selected name of extending a card definition which uses a default export', async function (assert) {
+    test('can reconcile a classname collision with the selected name of extending a card definition which uses a default export', async function (this: TestContextWithSave, assert) {
       assert.expect(1);
       await visitOperatorMode();
       await openNewFileModal('Card Definition');
@@ -873,7 +873,7 @@ export class Pet extends PetParent {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('can reconcile a classname collision with a javascript builtin object', async function (assert) {
+    test('can reconcile a classname collision with a javascript builtin object', async function (this: TestContextWithSave, assert) {
       assert.expect(1);
       await visitOperatorMode();
       await openNewFileModal('Card Definition');
@@ -911,7 +911,7 @@ export class Map0 extends Pet {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('can specify new directory as part of filename when creating a new definition', async function (assert) {
+    test('can specify new directory as part of filename when creating a new definition', async function (this: TestContextWithSave, assert) {
       assert.expect(2);
       let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -946,7 +946,7 @@ export class TestCard extends CardDef {
       );
     });
 
-    test<TestContextWithSave>('can handle filename with .gts extension in filename when creating a new definition', async function (assert) {
+    test('can handle filename with .gts extension in filename when creating a new definition', async function (this: TestContextWithSave, assert) {
       assert.expect(2);
       let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';
@@ -981,7 +981,7 @@ export class TestCard extends CardDef {
       );
     });
 
-    test<TestContextWithSave>('can handle leading "/" in filename when creating a new definition', async function (assert) {
+    test('can handle leading "/" in filename when creating a new definition', async function (this: TestContextWithSave, assert) {
       assert.expect(2);
       let expectedSrc = `
 import { CardDef } from 'https://cardstack.com/base/card-api';

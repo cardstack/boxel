@@ -146,7 +146,7 @@ const primitiveFieldCardSource = `
 
    export class PrimitiveField extends FieldDef {
     static displayName = 'PrimitiveField';
-    static [primitive]: number 
+    static [primitive]: number
    }
 
    export class SubclassPrimitiveField extends PrimitiveField {
@@ -812,7 +812,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-card-overlay]').doesNotExist();
   });
 
-  test<TestContextWithSave>('can render containedExamples for spec for field', async function (assert) {
+  test('can render containedExamples for spec for field', async function (this: TestContextWithSave, assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}polymorphic-field.gts`,

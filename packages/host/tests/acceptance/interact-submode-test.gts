@@ -6,6 +6,7 @@ import {
   find,
   triggerKeyEvent,
   settled,
+  type TestContext,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -582,7 +583,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
     });
 
-    test<TestContextWithSave>('a realm event with known clientRequestId is ignored', async function (assert) {
+    test('a realm event with known clientRequestId is ignored', async function (this: TestContextWithSave, assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -649,7 +650,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-field="firstName"] input').exists(); // Existence of an input field means it is in edit mode
     });
 
-    test('click left or right add card button will open the search panel and then click on a recent card will open a new stack on the left or right', async function (assert) {
+    test('click left or right add card button will open the search panel and then click on a recent card will open a new stack on the left or right', async function (this: TestContext, assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -756,7 +757,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
     });
 
-    test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (assert) {
+    test('Clicking search panel (without left and right buttons activated) replaces open card on existing stack', async function (this: TestContext, assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -827,7 +828,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-search-sheet]').hasClass('closed');
     });
 
-    test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
+    test('can create a card from the index stack item', async function (this: TestContextWithSave, assert) {
       assert.expect(7);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
@@ -863,7 +864,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
-    test<TestContextWithSave>('card-catalog can pre-select the current filtered card type', async function (assert) {
+    test('card-catalog can pre-select the current filtered card type', async function (this: TestContextWithSave, assert) {
       assert.expect(14);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
@@ -938,7 +939,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       );
     });
 
-    test<TestContextWithSave>('can change selection on card catalog after a card was pre-selected', async function (assert) {
+    test('can change selection on card catalog after a card was pre-selected', async function (this: TestContextWithSave, assert) {
       assert.expect(10);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
@@ -1114,7 +1115,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
     });
 
-    test<TestContextWithSave>('new card is created in the selected realm', async function (assert) {
+    test('new card is created in the selected realm', async function (this: TestContextWithSave, assert) {
       assert.expect(1);
       await visitOperatorMode({
         stacks: [
@@ -1141,7 +1142,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(`[data-test-card-catalog-go-button]`);
     });
 
-    test<TestContextWithSave>('new card is created in the realm that has no results from card chooser', async function (assert) {
+    test('new card is created in the realm that has no results from card chooser', async function (this: TestContextWithSave, assert) {
       assert.expect(2);
       await visitOperatorMode({
         stacks: [
@@ -1573,7 +1574,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       assert.dom('[data-test-workspace-chooser]').exists();
     });
 
-    test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {
+    test('can create a card when 2 stacks are present', async function (this: TestContextWithSave, assert) {
       assert.expect(3);
       await visitOperatorMode({
         stacks: [
@@ -1882,7 +1883,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .doesNotExist('card error state is NOT displayed');
     });
 
-    test('stack item edit results in index event that is ignored', async function (assert) {
+    test('stack item edit results in index event that is ignored', async function (this: TestContext, assert) {
       assert.expect(6);
       await visitOperatorMode({
         stacks: [

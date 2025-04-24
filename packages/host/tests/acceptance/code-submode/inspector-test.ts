@@ -849,7 +849,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     }
   });
 
-  test<TestContextWithSave>('can duplicate an instance in same realm', async function (assert) {
+  test('can duplicate an instance in same realm', async function (this: TestContextWithSave, assert) {
     assert.expect(7);
     let operatorModeStateParam = stringify({
       stacks: [[]],
@@ -904,7 +904,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-card-url-bar-input]').hasValue(`${id}.json`);
   });
 
-  test<TestContextWithSave>('can duplicate an instance in different realm', async function (assert) {
+  test('can duplicate an instance in different realm', async function (this: TestContextWithSave, assert) {
     assert.expect(8);
     let operatorModeStateParam = stringify({
       stacks: [[]],
@@ -1697,7 +1697,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       );
   });
 
-  test<TestContextWithSave>('can inherit from an exported card def declaration', async function (assert) {
+  test('can inherit from an exported card def declaration', async function (this: TestContextWithSave, assert) {
     assert.expect(11);
     let expectedSrc = `
 import { ExportedCard } from './in-this-file';
@@ -1777,7 +1777,7 @@ export class TestCard extends ExportedCard {
       .hasNoValue('filename field is empty');
   });
 
-  test<TestContextWithSave>('can inherit from an exported field def declaration', async function (assert) {
+  test('can inherit from an exported field def declaration', async function (this: TestContextWithSave, assert) {
     assert.expect(2);
     await visitOperatorMode({
       stacks: [[]],
@@ -1825,7 +1825,7 @@ export class TestField extends ExportedField {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('inherit modal state is cleared when modal is cancelled', async function (assert) {
+  test('inherit modal state is cleared when modal is cancelled', async function (this: TestContextWithSave, assert) {
     assert.expect(3);
     await visitOperatorMode({
       stacks: [[]],
@@ -1868,7 +1868,7 @@ export class TestField extends ExportedField {
       .hasNoValue('filename field is empty');
   });
 
-  test<TestContextWithSave>(`can handle the situation where there is a class name collision with the inherited cards class name`, async function (assert) {
+  test(`can handle the situation where there is a class name collision with the inherited cards class name`, async function (this: TestContextWithSave, assert) {
     assert.expect(4);
     let expectedSrc = `
 import { ExportedCard as ExportedCardParent } from './in-this-file';
@@ -1979,7 +1979,7 @@ export class ExportedCard extends ExportedCardParent {
       .doesNotExist('non-exported cards do not display an inherit button');
   });
 
-  test<TestContextWithSave>('can create an instance from an exported card definition', async function (assert) {
+  test('can create an instance from an exported card definition', async function (this: TestContextWithSave, assert) {
     assert.expect(8);
     await visitOperatorMode({
       stacks: [[]],

@@ -43,7 +43,7 @@ module('Integration | Component | FormattedMessage', function (hooks) {
     </template>);
   }
 
-  test('it renders content without monaco editor when renderCodeBlocks is false', async function (assert) {
+  test('it renders content without monaco editor when renderCodeBlocks is false', async function (this: RenderingTestContext, assert) {
     await renderFormattedMessage({
       renderCodeBlocks: false,
       html: `
@@ -58,9 +58,7 @@ main = putStrLn "🖤"
       isStreaming: false,
     });
 
-    let messageElement = (this as RenderingTestContext).element.querySelector(
-      '.message',
-    );
+    let messageElement = this.element.querySelector('.message');
 
     assert.ok(
       messageElement?.innerHTML.includes(
@@ -72,7 +70,7 @@ main = putStrLn "🖤"
     assert.dom('.monaco-editor').doesNotExist();
   });
 
-  test('it renders content with monaco editor in place of pre tags when renderCodeBlocks is true', async function (assert) {
+  test('it renders content with monaco editor in place of pre tags when renderCodeBlocks is true', async function (this: RenderingTestContext, assert) {
     await renderFormattedMessage({
       renderCodeBlocks: true,
       html: `
@@ -89,9 +87,7 @@ puts "💎"
       isStreaming: false,
     });
 
-    let messageElement = (this as RenderingTestContext).element.querySelector(
-      '.message',
-    ) as HTMLElement;
+    let messageElement = this.element.querySelector('.message') as HTMLElement;
     let directChildren = messageElement.children;
 
     assert.ok(directChildren[0]?.tagName == 'P');

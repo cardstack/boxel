@@ -225,7 +225,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
     return roomId;
   }
 
-  test<TestContextWithSave>('it allows chat commands to change cards in the stack', async function (assert) {
+  test('it allows chat commands to change cards in the stack', async function (this: TestContextWithSave, assert) {
     assert.expect(4);
 
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);

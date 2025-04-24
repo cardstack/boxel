@@ -335,7 +335,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     // await percySnapshot(assert);
   });
 
-  test<TestContextWithSave>('allows fixing broken cards', async function (assert) {
+  test('allows fixing broken cards', async function (this: TestContextWithSave, assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -389,7 +389,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     );
   });
 
-  test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
+  test('card instance change made in monaco editor is auto-saved', async function (this: TestContextWithSave, assert) {
     assert.expect(4);
 
     let expected: LooseSingleCardDocument = {
@@ -439,7 +439,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .containsText('MangoXXX');
   });
 
-  test<TestContextWithSave>('card instance change made in card editor is auto-saved', async function (assert) {
+  test('card instance change made in card editor is auto-saved', async function (this: TestContextWithSave, assert) {
     assert.expect(2);
 
     let expected: LooseSingleCardDocument = {
@@ -496,7 +496,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await waitFor('[data-test-save-idle]');
   });
 
-  test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {
+  test('non-card instance change made in monaco editor is auto-saved', async function (this: TestContextWithSave, assert) {
     assert.expect(2);
     await visitOperatorMode({
       submode: 'code',
@@ -517,7 +517,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await waitFor('[data-test-save-idle]');
   });
 
-  test<TestContextWithSave>('unsaved changes made in monaco editor are saved when switching out of code submode', async function (assert) {
+  test('unsaved changes made in monaco editor are saved when switching out of code submode', async function (this: TestContextWithSave, assert) {
     assert.expect(2);
     await visitOperatorMode({
       submode: 'code',
@@ -538,7 +538,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Interact"]');
   });
 
-  test<TestContextWithSave>('unsaved changes made in monaco editor are saved when opening a different file', async function (assert) {
+  test('unsaved changes made in monaco editor are saved when opening a different file', async function (this: TestContextWithSave, assert) {
     let environment = this.owner.lookup(
       'service:environment-service',
     ) as EnvironmentService;
@@ -566,7 +566,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await deferred.promise;
   });
 
-  test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code submode', async function (assert) {
+  test('unsaved changes made in card editor are saved when switching out of code submode', async function (this: TestContextWithSave, assert) {
     let environment = this.owner.lookup(
       'service:environment-service',
     ) as EnvironmentService;
@@ -607,7 +607,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Interact"]');
   });
 
-  test<TestContextWithSave>('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (assert) {
+  test('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (this: TestContextWithSave, assert) {
     assert.expect(1);
     await visitOperatorMode({
       stacks: [
@@ -635,7 +635,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert.strictEqual(getMonacoContent(), `{ this is not actual JSON }`);
   });
 
-  test<TestContextWithSave>('card definition change made in monaco editor is auto-saved', async function (assert) {
+  test('card definition change made in monaco editor is auto-saved', async function (this: TestContextWithSave, assert) {
     let expected = `
     import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
     import StringCard from "https://cardstack.com/base/string";
