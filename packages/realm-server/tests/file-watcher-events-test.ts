@@ -63,10 +63,10 @@ module(basename(__filename), function () {
       fileSystem: {
         'person.gts': `
         import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
 
         export class Person extends CardDef {
-          @field firstName = contains(StringCard);
+          @field firstName = contains(StringField);
           static isolated = class Isolated extends Component<typeof this> {
             <template>
               <h1><@fields.firstName/></h1>

@@ -6,7 +6,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
-import { ColorField } from 'https://cardstack.com/base/color';
+import ColorField from 'https://cardstack.com/base/color';
 
 import { tracked } from '@glimmer/tracking';
 import { action } from '@ember/object';

@@ -5,7 +5,7 @@ import {
   field,
   Component,
 } from 'https://cardstack.com/base/card-api';
-import { ColorField } from 'https://cardstack.com/base/color';
+import ColorField from 'https://cardstack.com/base/color';
 import TagIcon from '@cardstack/boxel-icons/tag';
 import { Pill } from '@cardstack/boxel-ui/components';
 

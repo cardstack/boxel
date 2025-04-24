@@ -25,7 +25,7 @@ function getAddressRows(
     .map((r) => r.join(', '));
 }
 
-class Atom extends Component<typeof Address> {
+class Atom extends Component<typeof AddressField> {
   get label() {
     return (
       [this.args.model?.city, this.args.model?.country?.code]
@@ -42,7 +42,7 @@ class Atom extends Component<typeof Address> {
   </template>
 }
 
-export class Address extends FieldDef {
+export default class AddressField extends FieldDef {
   static displayName = 'Address';
   static icon = MapPinIcon;
   @field addressLine1 = contains(StringField);
@@ -53,7 +53,7 @@ export class Address extends FieldDef {
   @field country = contains(CountryField);
   @field poBoxNumber = contains(StringField);
   @field fullAddress = contains(StringField, {
-    computeVia: function (this: Address) {
+    computeVia: function (this: AddressField) {
       let rows = getAddressRows(
         this.addressLine1,
         this.addressLine2,

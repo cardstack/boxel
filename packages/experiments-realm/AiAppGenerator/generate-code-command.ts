@@ -71,7 +71,7 @@ function constructModule(input: ConstructApplicationCodeInput) {
   import DateTimeField from 'https://cardstack.com/base/datetime';
   import TextAreaField from 'https://cardstack.com/base/text-area';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
-import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import Base64ImageField from 'https://cardstack.com/base/base64-image';
 import { AppCard } from '/experiments/app-card';
 import {
   CardDef,
@@ -161,7 +161,7 @@ import MarkdownField from 'https://cardstack.com/base/markdown';
 import DateField from 'https://cardstack.com/base/date';
 import DateTimeField from 'https://cardstack.com/base/date-time';
 import TextAreaField from 'https://cardstack.com/base/text-area';
-import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import Base64ImageField from 'https://cardstack.com/base/base64-image';
 import {
 CardDef,
 field,

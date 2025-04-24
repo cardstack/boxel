@@ -6,17 +6,17 @@ import {
   Component,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import DatetimeCard from 'https://cardstack.com/base/datetime';
-import NumberCard from 'https://cardstack.com/base/number';
-import StringCard from 'https://cardstack.com/base/string';
+import DatetimeField from 'https://cardstack.com/base/datetime';
+import NumberField from 'https://cardstack.com/base/number';
+import StringField from 'https://cardstack.com/base/string';
 
 import { PersonField } from './person';
 import { Publication } from './publication';
 
 export class Post extends CardDef {
   @field author = contains(PersonField);
-  @field views = contains(NumberCard);
-  @field createdAt = contains(DatetimeCard);
+  @field views = contains(NumberField);
+  @field createdAt = contains(DatetimeField);
   @field publication = linksTo(() => Publication);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
@@ -29,11 +29,11 @@ export class Post extends CardDef {
 }
 
 export class PostField extends FieldDef {
-  @field title = contains(StringCard);
-  @field description = contains(StringCard);
+  @field title = contains(StringField);
+  @field description = contains(StringField);
   @field author = contains(PersonField);
-  @field views = contains(NumberCard);
-  @field createdAt = contains(DatetimeCard);
+  @field views = contains(NumberField);
+  @field createdAt = contains(DatetimeField);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <h1><@fields.title />

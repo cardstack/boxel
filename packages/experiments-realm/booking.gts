@@ -6,20 +6,20 @@ import {
   Component,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
-import DateTimeCard from 'https://cardstack.com/base/datetime';
+import StringField from 'https://cardstack.com/base/string';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import { Person } from './person';
 import CalendarCheck from '@cardstack/boxel-icons/calendar-check';
 
 export class Booking extends CardDef {
   static displayName = 'Booking';
   static icon = CalendarCheck;
-  @field title = contains(StringCard);
-  @field venue = contains(StringCard);
-  @field startTime = contains(DateTimeCard);
-  @field endTime = contains(DateTimeCard);
+  @field title = contains(StringField);
+  @field venue = contains(StringField);
+  @field startTime = contains(DateTimeField);
+  @field endTime = contains(DateTimeField);
   @field hosts = linksToMany(Person);
-  @field sponsors = containsMany(StringCard);
+  @field sponsors = containsMany(StringField);
 
   static embedded = class Embedded extends Component<typeof this> {
     <template>

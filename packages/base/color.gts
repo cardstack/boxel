@@ -14,7 +14,7 @@ class EditView extends Component<typeof ColorPalette> {
   </template>
 }
 
-export class ColorField extends StringField {
+export default class ColorField extends StringField {
   static displayName = 'Color';
 
   static embedded = View;

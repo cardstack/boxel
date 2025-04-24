@@ -9,8 +9,8 @@ import {
   realmURL,
   StringField,
 } from 'https://cardstack.com/base/card-api';
-import { WebsiteField } from 'https://cardstack.com/base/website';
-import { Address as AddressField } from 'https://cardstack.com/base/address';
+import WebsiteField from 'https://cardstack.com/base/website';
+import AddressField from 'https://cardstack.com/base/address';
 
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import { Query } from '@cardstack/runtime-common';

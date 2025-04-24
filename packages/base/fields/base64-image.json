@@ -7,7 +7,7 @@
       "specType": "field",
       "ref": {
         "module": "https://cardstack.com/base/base64-image",
-        "name": "Base64ImageField"
+        "name": "default"
       }
     },
     "meta": {
