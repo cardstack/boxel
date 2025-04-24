@@ -534,7 +534,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return {
       isTopCard: this.isTopCard,
       moreOptionsMenuItems: this.moreOptionsMenuItemsForErrorCard,
-      onClose: this.isBuried ? this.closeItem.perform() : undefined,
+      onClose: !this.isBuried ? this.closeItem.perform() : undefined,
     };
   }
 
