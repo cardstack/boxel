@@ -361,8 +361,8 @@ catalogs:
       specifier: ^3.0.2
       version: 3.0.2
     ember-cli-fastboot:
-      specifier: ^4.1.2
-      version: 4.1.2
+      specifier: ^4.1.5
+      version: 4.1.5
     ember-cli-htmlbars:
       specifier: ^6.3.0
       version: 6.3.0
@@ -526,8 +526,8 @@ catalogs:
       specifier: ^2.1.0
       version: 2.1.0
     fastboot:
-      specifier: 4.1.0
-      version: 4.1.0
+      specifier: ^4.1.5
+      version: 4.1.5
     file-loader:
       specifier: ^6.2.0
       version: 6.2.0
@@ -782,9 +782,6 @@ patchedDependencies:
   ember-source@5.4.1:
     hash: f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1
     path: patches/ember-source@5.4.1.patch
-  fastboot@4.1.0:
-    hash: 45798f76d40a8b2c1ef716fa1bb624557861928ebead0c15ba041809d7a37958
-    path: patches/fastboot@4.1.0.patch
   magic-string@0.25.9:
     hash: 32dda55b40f0bc860d0a8e93bee54d8005c34ed7ac5faed23ce9f5e5f57eea39
     path: patches/magic-string@0.25.9.patch
@@ -2356,7 +2353,7 @@ importers:
         version: 3.0.2(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
       ember-cli-fastboot:
         specifier: 'catalog:'
-        version: 4.1.2
+        version: 4.1.5(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))
       ember-cli-htmlbars:
         specifier: 'catalog:'
         version: 6.3.0
@@ -2765,7 +2762,7 @@ importers:
         version: 6.6.2
       fastboot:
         specifier: 'catalog:'
-        version: 4.1.0(patch_hash=45798f76d40a8b2c1ef716fa1bb624557861928ebead0c15ba041809d7a37958)
+        version: 4.1.5
       flat:
         specifier: 'catalog:'
         version: 5.0.2
@@ -8425,9 +8422,11 @@ packages:
     peerDependencies:
       ember-source: '>= 4.0.0'
 
-  ember-cli-fastboot@4.1.2:
-    resolution: {integrity: sha512-cC2ET8AbRTssA4sg9qF9KLX9N/Xnwa7kS0PKZADMMOUXtuBF4jmgnXsjzlvIE+lgWcwK4tc6udgwpMeNMkOg7w==}
-    engines: {node: 14.* || 16.* || >=18}
+  ember-cli-fastboot@4.1.5:
+    resolution: {integrity: sha512-XVigHzn+xXMqvovdrPNQHXRCzVOkU78ij6adU8Qt7PAaF3stR9oPh/35f30aJ2vcL6jwR72glnuCyXpm3EL22A==}
+    engines: {node: 14.* || 16.* || >= 18}
+    peerDependencies:
+      ember-source: '>=3.16'
 
   ember-cli-get-component-path-option@1.0.0:
     resolution: {integrity: sha512-k47TDwcJ2zPideBCZE8sCiShSxQSpebY2BHcX2DdipMmBox5gsfyVrbKJWIHeSTTKyEUgmBIvQkqTOozEziCZA==}
@@ -9477,12 +9476,12 @@ packages:
   fastboot-transform@0.1.3:
     resolution: {integrity: sha512-6otygPIJw1ARp1jJb+6KVO56iKBjhO+5x59RSC9qiZTbZRrv+HZAuP00KD3s+nWMvcFDemtdkugki9DNFTTwCQ==}
 
-  fastboot@4.1.0:
-    resolution: {integrity: sha512-NoUUiWhLS4JfrYiHmbRjqqWmzttO+6hVyt+CawsZCg79ljTGAIhPThy8cxg11yiDNiaM9EY3kocWZrCMUM7o4g==}
-    engines: {node: 12.* || 14.* || >=16}
-
   fastboot@4.1.2:
     resolution: {integrity: sha512-VJLmF0xdCNwIIuA7DQtN1KTAKfEGsbZGJ0cfKh64h6DeMh3Fhr2FCCxkPh8zYqGoqzjXFdFbtk60WS3f6HKqBg==}
+    engines: {node: 12.* || 14.* || >=16}
+
+  fastboot@4.1.5:
+    resolution: {integrity: sha512-2FkJWrpxgJjy5kLb3KrYp0pKdB4WgT/6qxtQO7ozYtQqMBOAARMnp59xp/Hdosa1cE2jslZgwDAv3v11OlQfAw==}
     engines: {node: 12.* || 14.* || >=16}
 
   fastq@1.19.1:
@@ -21199,7 +21198,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-cli-fastboot@4.1.2:
+  ember-cli-fastboot@4.1.5(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)):
     dependencies:
       broccoli-concat: 4.2.5
       broccoli-file-creator: 2.1.1
@@ -21211,7 +21210,8 @@ snapshots:
       ember-cli-lodash-subset: 2.0.1
       ember-cli-preprocess-registry: 3.3.0
       ember-cli-version-checker: 5.1.2
-      fastboot: 4.1.2
+      ember-source: 5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6)
+      fastboot: 4.1.5
       fastboot-express-middleware: 4.1.2
       fastboot-transform: 0.1.3
       fs-extra: 10.1.0
@@ -23368,7 +23368,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  fastboot@4.1.0(patch_hash=45798f76d40a8b2c1ef716fa1bb624557861928ebead0c15ba041809d7a37958):
+  fastboot@4.1.2:
     dependencies:
       chalk: 4.1.2
       cookie: 0.4.2
@@ -23383,7 +23383,7 @@ snapshots:
       - supports-color
       - utf-8-validate
 
-  fastboot@4.1.2:
+  fastboot@4.1.5:
     dependencies:
       chalk: 4.1.2
       cookie: 0.4.2
