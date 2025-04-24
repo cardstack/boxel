@@ -325,44 +325,44 @@ Common issues are:
   );
 
   //handle set title by commands
-  client.on(RoomEvent.Timeline, async function (event, room) {
-    if (!room) {
-      return;
-    }
-    if (!isCommandResultStatusApplied(event)) {
-      return;
-    }
-    log.info(
-      '(%s) (Room: "%s" %s) (Message: %s %s)',
-      event.getType(),
-      room?.name,
-      room?.roomId,
-      event.getSender(),
-      undefined,
-    );
-    try {
-      //TODO: optimise this so we don't need to sync room events within a reaction event
-      let initial = await client.roomInitialSync(room!.roomId, 1000);
-      let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
-      if (roomTitleAlreadySet(eventList)) {
-        return;
-      }
-      let cardFragments = extractCardFragmentsFromEvents(eventList);
-      let history: DiscreteMatrixEvent[] = constructHistory(
-        eventList,
-        cardFragments,
-      );
-      return await assistant.setTitle(
-        room.roomId,
-        history,
-        event as unknown as CommandResultEvent,
-      );
-    } catch (e) {
-      log.error(e);
-      Sentry.captureException(e);
-      return;
-    }
-  });
+  // client.on(RoomEvent.Timeline, async function (event, room) {
+  //   if (!room) {
+  //     return;
+  //   }
+  //   if (!isCommandResultStatusApplied(event)) {
+  //     return;
+  //   }
+  //   log.info(
+  //     '(%s) (Room: "%s" %s) (Message: %s %s)',
+  //     event.getType(),
+  //     room?.name,
+  //     room?.roomId,
+  //     event.getSender(),
+  //     undefined,
+  //   );
+  //   try {
+  //     //TODO: optimise this so we don't need to sync room events within a reaction event
+  //     let initial = await client.roomInitialSync(room!.roomId, 1000);
+  //     let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+  //     if (roomTitleAlreadySet(eventList)) {
+  //       return;
+  //     }
+  //     let cardFragments = extractCardFragmentsFromEvents(eventList);
+  //     let history: DiscreteMatrixEvent[] = constructHistory(
+  //       eventList,
+  //       cardFragments,
+  //     );
+  //     return await assistant.setTitle(
+  //       room.roomId,
+  //       history,
+  //       event as unknown as CommandResultEvent,
+  //     );
+  //   } catch (e) {
+  //     log.error(e);
+  //     Sentry.captureException(e);
+  //     return;
+  //   }
+  // });
 
   //handle debug events
   client.on(RoomEvent.Timeline, async function (event, room) {
