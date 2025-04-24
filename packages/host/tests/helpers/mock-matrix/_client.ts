@@ -21,6 +21,8 @@ import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader'
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
+import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+
 import { MockSDK } from './_sdk';
 
 import { ServerState } from './_server-state';
@@ -619,6 +621,16 @@ export class MockClient implements ExtendedClient {
     let contentUri = `mxc://mock-server/${Math.random()}`;
     this.serverState.addContent(this.mxcUrlToHttp(contentUri), _content);
     return { content_uri: contentUri };
+  }
+
+  downloadContent(serializedFile: SerializedFile): Promise<string> {
+    let content = this.serverState.getContent(
+      this.mxcUrlToHttp(serializedFile.url),
+    );
+    if (!content) {
+      throw new Error(`content not found for ${serializedFile.url}`);
+    }
+    return Promise.resolve(content.toString());
   }
 
   mxcUrlToHttp(mxcUrl: string): string {

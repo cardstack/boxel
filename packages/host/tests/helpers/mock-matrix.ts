@@ -9,8 +9,6 @@ import { MockSDK } from './mock-matrix/_sdk';
 import { MockSlidingSync } from './mock-matrix/_sliding-sync';
 import { MockUtils } from './mock-matrix/_utils';
 
-import { lookupNetworkService } from './index';
-
 export interface Config {
   loggedInAs?: string;
   displayName?: string;
@@ -43,14 +41,6 @@ export function setupMockMatrix(
     testState.opts = { ...opts };
     let sdk = new MockSDK(testState.opts);
     testState.sdk = sdk;
-    // Handle download file requests
-    lookupNetworkService().mount(async (req: Request) => {
-      let content = sdk.serverState.getContent(req.url);
-      if (req.url.includes('mock-server') && content) {
-        return new Response(content);
-      }
-      return null;
-    });
 
     // Needed for realm event subscriptions to receive events
     (this.owner.lookup('service:message-service') as MessageService).register();

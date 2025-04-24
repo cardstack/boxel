@@ -32,6 +32,7 @@ import {
   logger,
   ResolvedCodeRef,
   isCardInstance,
+  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import {
@@ -82,7 +83,7 @@ import type {
 import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
-import FileDefManager from '../lib/file-def-manager';
+import CardUploader from '../lib/card-uploader';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -145,7 +146,7 @@ export default class MatrixService extends Service {
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
   private startedAtTs = -1;
-  private fileDefManager = new FileDefManager(
+  private cardUploader = new CardUploader(
     getOwner(this) as Owner,
     () => this.cardAPI,
   );
@@ -637,23 +638,13 @@ export default class MatrixService extends Service {
   }
 
   async downloadCardFileDef(cardFileDef: FileAPI.SerializedFile) {
-    return this.fileDefManager.downloadCardFileDef(cardFileDef);
-  }
-
-  async downloadFile(url: string) {
-    let response = await this.network.fetch(url, {
-      headers: {
-        Authorization: `Bearer ${this.client.getAccessToken()}`,
-      },
-    });
-    if (!response.ok) {
-      throw new Error(`HTTP error. Status: ${response.status}`);
-    }
-    return response;
+    return JSON.parse(
+      await this.client.downloadContent(cardFileDef),
+    ) as LooseSingleCardDocument;
   }
 
   async uploadCards(cards: CardDef[]) {
-    let cardFileDefs = await this.fileDefManager.uploadCards(cards);
+    let cardFileDefs = await this.cardUploader.uploadCards(cards);
     return cardFileDefs;
   }
 
@@ -661,7 +652,7 @@ export default class MatrixService extends Service {
     commandDefinitions: SkillCardModule.CommandField[],
   ) {
     let commandFileDefs =
-      await this.fileDefManager.uploadCommandDefinitions(commandDefinitions);
+      await this.cardUploader.uploadCommandDefinitions(commandDefinitions);
     return commandFileDefs;
   }
 
@@ -673,7 +664,7 @@ export default class MatrixService extends Service {
   ) {
     let cardFileDef: FileDef | undefined;
     if (resultCard) {
-      [cardFileDef] = await this.fileDefManager.uploadCards([resultCard]);
+      [cardFileDef] = await this.cardUploader.uploadCards([resultCard]);
     }
     let content:
       | CommandResultWithNoOutputContent
@@ -787,7 +778,7 @@ export default class MatrixService extends Service {
     }
 
     let cardFileDefs =
-      await this.fileDefManager.uploadCardsAndUpdateSkillCommands(
+      await this.cardUploader.uploadCardsAndUpdateSkillCommands(
         attachedCards,
         roomId,
       );
@@ -929,7 +920,7 @@ export default class MatrixService extends Service {
     this.flushRoomState = undefined;
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
-    this.fileDefManager = new FileDefManager(
+    this.cardUploader = new CardUploader(
       getOwner(this) as Owner,
       () => this.cardAPI,
     );

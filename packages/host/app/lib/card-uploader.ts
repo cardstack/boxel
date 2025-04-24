@@ -18,10 +18,7 @@ import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { relativeTo, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
-import type {
-  FileDef,
-  SerializedFile,
-} from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   CommandDefinitionSchema,
   Tool,
@@ -36,16 +33,8 @@ import type MatrixService from '../services/matrix-service';
 
 export const isSkillCard = Symbol.for('is-skill-card');
 
-interface CacheEntry {
-  content: string;
-  timestamp: number;
-}
-
-const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
-
-export default class FileDefManager {
+export default class CardUploader {
   private commandDefHashes: string[] = []; // hashes
-  private downloadCache: Map<string, CacheEntry> = new Map();
 
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
@@ -305,55 +294,5 @@ export default class FileDefManager {
     commandDefSchema: CommandDefinitionSchema,
   ): string {
     return md5(JSON.stringify(commandDefSchema));
-  }
-
-  /**
-   * Downloads a card from a SerializedFile and returns it as a LooseSingleCardDocument
-   * Uses caching to avoid repeated downloads of the same file
-   */
-  async downloadCardFileDef(
-    serializedFile: SerializedFile,
-  ): Promise<LooseSingleCardDocument> {
-    if (!serializedFile?.contentType?.includes('text/')) {
-      throw new Error(`Unsupported file type: ${serializedFile.contentType}`);
-    }
-
-    // Check cache first
-    const cachedEntry = this.downloadCache.get(serializedFile.url);
-    if (
-      cachedEntry &&
-      Date.now() - cachedEntry.timestamp < CACHE_EXPIRATION_MS
-    ) {
-      return JSON.parse(cachedEntry.content) as LooseSingleCardDocument;
-    }
-
-    // Download if not in cache or expired
-    const response = await this.matrixService.downloadFile(serializedFile.url);
-    const content = await response.text();
-
-    // Update cache
-    this.downloadCache.set(serializedFile.url, {
-      content,
-      timestamp: Date.now(),
-    });
-
-    // Clean up cache if it gets too large
-    if (this.downloadCache.size > 100) {
-      this.cleanupCache();
-    }
-
-    return JSON.parse(content) as LooseSingleCardDocument;
-  }
-
-  /**
-   * Cleans up expired entries from the download cache
-   */
-  private cleanupCache(): void {
-    const now = Date.now();
-    for (const [url, entry] of this.downloadCache.entries()) {
-      if (now - entry.timestamp > CACHE_EXPIRATION_MS) {
-        this.downloadCache.delete(url);
-      }
-    }
   }
 }

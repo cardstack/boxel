@@ -7,6 +7,8 @@ import { SlidingSync } from 'matrix-js-sdk/lib/sliding-sync';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
+import { SerializedFile } from 'https://cardstack.com/base/file-api';
+
 import NetworkService from './network';
 
 /*
@@ -126,6 +128,7 @@ export type ExtendedClient = Pick<
     opts: MatrixSDK.UploadOpts,
   ): Promise<MatrixSDK.UploadResponse>;
   mxcUrlToHttp(mxcUrl: string): string;
+  downloadContent(serializedFile: SerializedFile): Promise<string>;
 };
 
 async function hashMessageWithSecret(
@@ -214,6 +217,66 @@ async function loginWithEmail(
   }
 }
 
+interface CacheEntry {
+  content: string;
+  timestamp: number;
+}
+
+const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
+const downloadCache: Map<string, CacheEntry> = new Map();
+
+async function downloadContent(
+  this: ExtendedClient,
+  fetch: typeof globalThis.fetch,
+  serializedFile: SerializedFile,
+): Promise<string> {
+  if (!serializedFile?.contentType?.includes('text/')) {
+    throw new Error(`Unsupported file type: ${serializedFile.contentType}`);
+  }
+
+  // Check cache first
+  const cachedEntry = downloadCache.get(serializedFile.url);
+  if (cachedEntry && Date.now() - cachedEntry.timestamp < CACHE_EXPIRATION_MS) {
+    return cachedEntry.content;
+  }
+
+  // Download if not in cache or expired
+  const response = await fetch(serializedFile.url, {
+    headers: {
+      Authorization: `Bearer ${this.getAccessToken()}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP error. Status: ${response.status}`);
+  }
+  const content = await response.text();
+
+  // Update cache
+  downloadCache.set(serializedFile.url, {
+    content,
+    timestamp: Date.now(),
+  });
+
+  // Clean up cache if it gets too large
+  if (downloadCache.size > 100) {
+    cleanupCache();
+  }
+
+  return content;
+}
+
+/**
+ * Cleans up expired entries from the download cache
+ */
+function cleanupCache(): void {
+  const now = Date.now();
+  for (const [url, entry] of downloadCache.entries()) {
+    if (now - entry.timestamp > CACHE_EXPIRATION_MS) {
+      downloadCache.delete(url);
+    }
+  }
+}
+
 function extendedClient(
   client: MatrixSDK.MatrixClient,
   fetch: typeof globalThis.fetch,
@@ -230,6 +293,8 @@ function extendedClient(
           return loginWithEmail.bind(extendedTarget, fetch);
         case 'createRealmSession':
           return createRealmSession.bind(extendedTarget, fetch);
+        case 'downloadContent':
+          return downloadContent.bind(extendedTarget, fetch);
         default:
           return Reflect.get(target, key, receiver);
       }
