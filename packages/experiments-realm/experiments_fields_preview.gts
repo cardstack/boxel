@@ -1,5 +1,5 @@
 import EmailField from 'https://cardstack.com/base/email';
-import { PhoneField } from 'https://cardstack.com/base/phone-number';
+import PhoneNumberField from 'https://cardstack.com/base/phone-number';
 import { UrlField } from 'https://cardstack.com/base/url';
 import { WebsiteField } from 'https://cardstack.com/base/website';
 import AddressField from 'https://cardstack.com/base/address';
@@ -31,7 +31,7 @@ export class ExperimentsFieldsPreview extends CardDef {
   @field website = contains(WebsiteField);
   @field email = contains(EmailField);
   @field emails = containsMany(EmailField);
-  @field phone = contains(PhoneField);
+  @field phone = contains(PhoneNumberField);
   @field percentage = contains(PercentageField);
   @field currency = contains(CurrencyField);
   @field amountWithCurrency = contains(AmountWithCurrencyField);

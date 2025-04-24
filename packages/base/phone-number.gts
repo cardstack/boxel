@@ -68,7 +68,7 @@ export class PhoneNumberType extends FieldDef {
   static edit = PhoneNumberTypeEdit;
 }
 
-export class PhoneField extends FieldDef {
+export default class PhoneNumberField extends FieldDef {
   static displayName = 'Phone Number';
   @field number = contains(StringField);
   @field countryCode = contains(StringField);
