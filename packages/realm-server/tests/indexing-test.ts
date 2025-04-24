@@ -83,9 +83,10 @@ module(basename(__filename), function () {
 
             export class Person extends CardDef {
               @field firstName = contains(StringField);
+              @field hourlyRate = contains(NumberField);
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
-                  <h1><@fields.firstName/></h1>
+                  <h1><@fields.title /> \${{@model.hourlyRate}}</h1>
                 </template>
               }
               static embedded = class Embedded extends Component<typeof this> {
@@ -216,6 +217,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Van Gogh',
+                  hourlyRate: 50,
                 },
                 meta: {
                   adoptsFrom: {
