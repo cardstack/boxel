@@ -55,9 +55,9 @@ export class Person extends CardDef {
   #title = (dt7948.i(this, "title"), void 0);
   static isolated = setComponentTemplate(createTemplateFactory(
   /*
-
+    
         <h1 data-test-card><@fields.firstName /></h1>
-
+      
   */
   {
     "id": ${id},
