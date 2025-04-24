@@ -137,13 +137,13 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @action async copyToWorkspace() {
     let { commandContext } = this.commandService;
-    const { newCard } = await new CopyCardCommand(commandContext).execute({
+    const { newCardId } = await new CopyCardCommand(commandContext).execute({
       sourceCard: this.commandResultCard.card as CardDef,
     });
 
     let showCardCommand = new ShowCardCommand(commandContext);
     await showCardCommand.execute({
-      cardIdToShow: newCard.id,
+      cardIdToShow: newCardId,
     });
   }
 
