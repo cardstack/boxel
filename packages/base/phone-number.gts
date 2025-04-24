@@ -81,7 +81,7 @@ export default class PhoneNumberField extends FieldDef {
     this.countryCode = code;
   };
 
-  static edit = class Edit extends Component<typeof PhoneField> {
+  static edit = class Edit extends Component<typeof PhoneNumberField> {
     <template>
       <PhoneInput
         @countryCode={{@model.countryCode}}
@@ -92,7 +92,7 @@ export default class PhoneNumberField extends FieldDef {
     </template>
   };
 
-  static atom = class Atom extends Component<typeof PhoneField> {
+  static atom = class Atom extends Component<typeof PhoneNumberField> {
     <template>
       <EntityDisplayWithIcon @underline={{false}}>
         <:title>
@@ -114,7 +114,7 @@ export default class PhoneNumberField extends FieldDef {
     </template>
   };
 
-  static embedded = class Embedded extends Component<typeof PhoneField> {
+  static embedded = class Embedded extends Component<typeof PhoneNumberField> {
     <template>
       {{#if @model.countryCode}}
         <span>+{{@model.countryCode}}{{@model.number}}</span>
@@ -126,7 +126,7 @@ export default class PhoneNumberField extends FieldDef {
 }
 
 export class ContactPhoneNumber extends FieldDef {
-  @field phoneNumber = contains(PhoneField);
+  @field phoneNumber = contains(PhoneNumberField);
   @field type = contains(PhoneNumberType);
 
   static atom = class Atom extends Component<typeof ContactPhoneNumber> {
