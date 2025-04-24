@@ -158,7 +158,10 @@ Common issues are:
   let assistant = new Assistant(client, aiBotUserId);
   await assistant.loadToolCallCapableModels();
 
-  client.on(RoomMemberEvent.Membership, function (_event, member) {
+  client.on(RoomMemberEvent.Membership, function (event, member) {
+    if (event.event.origin_server_ts! < startTime) {
+      return;
+    }
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
         .joinRoom(member.roomId)
@@ -326,12 +329,14 @@ Common issues are:
 
   //handle set title by commands
   client.on(RoomEvent.Timeline, async function (event, room) {
-    if (!room) {
+    if (
+      event.event.origin_server_ts! < startTime ||
+      !room ||
+      !isCommandResultStatusApplied(event)
+    ) {
       return;
     }
-    if (!isCommandResultStatusApplied(event)) {
-      return;
-    }
+
     log.info(
       '(%s) (Room: "%s" %s) (Message: %s %s)',
       event.getType(),
