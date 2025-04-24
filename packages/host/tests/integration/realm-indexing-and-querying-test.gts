@@ -3956,9 +3956,9 @@ posts/ignore-me.json
 
     let realmIndexUpdater = realm.realmIndexUpdater;
     let queryEngine = realm.realmIndexQueryEngine;
-    await realmIndexUpdater.update(
+    await realmIndexUpdater.update([
       new URL(`${testRealmURL}posts/ignore-me.json`),
-    );
+    ]);
 
     let instance = await queryEngine.cardDocument(
       new URL(`${testRealmURL}posts/ignore-me`),

@@ -1,6 +1,7 @@
 import {
   contains,
   linksTo,
+  linksToMany,
   field,
   CardDef,
   Component,
@@ -10,6 +11,7 @@ import StringCard from 'https://cardstack.com/base/string';
 export class Friend extends CardDef {
   @field firstName = contains(StringCard);
   @field friend = linksTo(() => Friend);
+  @field friends = linksToMany(() => Friend);
   @field title = contains(StringCard, {
     computeVia: function (this: Friend) {
       return this.firstName;

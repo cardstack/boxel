@@ -66,6 +66,8 @@ export interface RealmPrerenderedCards {
   realmInfo: RealmInfo;
   prerenderedCards: PrerenderedCard[];
 }
+// TODO should we use the secure form once we start letting lid's drive the id
+// on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
@@ -153,7 +155,6 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
   isCardDocumentString,
-  isLocalResourceID,
 } from './card-document';
 export { sanitizeHtml } from './dompurify-runtime';
 export { markedSync, markdownToHtml } from './marked-sync';
