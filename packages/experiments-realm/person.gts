@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import BooleanCard from 'https://cardstack.com/base/boolean';
 import StringCard from 'https://cardstack.com/base/string';
-import { Address } from 'https://cardstack.com/base/address';
+import AddressField from 'https://cardstack.com/base/address';
 import { Pet } from './pet';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 import { Trips } from './trips';
@@ -126,7 +126,7 @@ export class Person extends CardDef {
   @field lastName = contains(StringCard);
   @field isCool = contains(BooleanCard);
   @field isHuman = contains(BooleanCard);
-  @field address = contains(Address);
+  @field address = contains(AddressField);
   @field pet = linksTo(Pet);
   @field trips = contains(Trips);
   @field title = contains(StringCard, {

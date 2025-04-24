@@ -1,7 +1,7 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
 import { WebsiteField } from 'https://cardstack.com/base/website';
-import { Address } from 'https://cardstack.com/base/address';
+import AddressField from 'https://cardstack.com/base/address';
 import {
   Component,
   CardDef,
@@ -71,7 +71,7 @@ export class Company extends CardDef {
   @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field industry = contains(StringField);
-  @field headquartersAddress = contains(Address);
+  @field headquartersAddress = contains(AddressField);
   @field phone = contains(NumberField);
   @field website = contains(WebsiteField);
   @field stockSymbol = contains(StringField);
