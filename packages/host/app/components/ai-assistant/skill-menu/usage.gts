@@ -19,7 +19,12 @@ export default class AiAssistantSkillMenuUsage extends Component {
       ...this.skills,
       new TrackedObject({
         cardId,
-        skillEventId: 'abc123',
+        fileDef: {
+          sourceUrl: cardId,
+          url: cardId,
+          name: cardId,
+          contentType: 'text/plain',
+        },
         isActive: true,
       }),
     ];

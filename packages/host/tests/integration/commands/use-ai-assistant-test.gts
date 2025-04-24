@@ -375,7 +375,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     );
     assert.ok(skillsState, 'Skills state should be present in room');
     assert.strictEqual(
-      skillsState.enabledCards.length,
+      skillsState.enabledSkillCards.length,
       2,
       'At least two skills should be added to room',
     );
@@ -404,7 +404,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     );
     assert.ok(skillsState, 'Skills state should be present in room');
     assert.strictEqual(
-      skillsState.enabledCards.length,
+      skillsState.enabledSkillCards.length,
       2,
       'At least two skills should be added to room',
     );

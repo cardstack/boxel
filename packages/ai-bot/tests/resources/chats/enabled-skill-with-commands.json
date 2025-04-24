@@ -318,14 +318,14 @@
     "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": [],
+      "disabledSkillCards": [],
       "commandDefinitions": [
         {
           "url": "mxc://mock-server/command_def_editing",
@@ -355,7 +355,7 @@
     "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
@@ -367,7 +367,7 @@
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": [],
+      "disabledSkillCards": [],
       "commandDefinitions": [
         {
           "url": "mxc://mock-server/command_def_editing",
@@ -388,14 +388,14 @@
     "unsigned": {
       "replaces_state": "$YYEiRfzGX1hzo5bN-NgHoBvbjoFJuXRCLIzccG8zBLs",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill_card_editing",
             "sourceUrl": "mxc://mock-server/skill_card_editing",
             "contentType": "text/plain"
           }
         ],
-        "disabledCards": [],
+        "disabledSkillCards": [],
         "commandDefinitions": [
           {
             "url": "mxc://mock-server/command_def_editing",
@@ -412,14 +412,14 @@
     "age": 22136,
     "replaces_state": "$YYEiRfzGX1hzo5bN-NgHoBvbjoFJuXRCLIzccG8zBLs",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": [],
+      "disabledSkillCards": [],
       "commandDefinitions": [
         {
           "url": "mxc://mock-server/command_def_editing",
@@ -434,14 +434,14 @@
     "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_switcher",
           "sourceUrl": "mxc://mock-server/skill_card_switcher",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": [
+      "disabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
@@ -463,7 +463,7 @@
     "unsigned": {
       "replaces_state": "$DBII8yOsGEFs5ZQXhhGErHgeAMJDyfujMeDvxtZx5zQ",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill_card_editing",
             "sourceUrl": "mxc://mock-server/skill_card_editing",
@@ -475,7 +475,7 @@
             "contentType": "text/plain"
           }
         ],
-        "disabledCards": [],
+        "disabledSkillCards": [],
         "commandDefinitions": [
           {
             "url": "mxc://mock-server/command_def_editing",
@@ -499,7 +499,7 @@
     "age": 20847,
     "replaces_state": "$DBII8yOsGEFs5ZQXhhGErHgeAMJDyfujMeDvxtZx5zQ",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
@@ -511,7 +511,7 @@
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": [],
+      "disabledSkillCards": [],
       "commandDefinitions": [
         {
           "url": "mxc://mock-server/command_def_editing",

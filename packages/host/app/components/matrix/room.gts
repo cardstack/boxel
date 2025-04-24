@@ -590,10 +590,10 @@ export default class Room extends Component<Signature> {
 
   private get sortedSkills(): RoomSkill[] {
     return [...this.skills].sort((a, b) => {
-      // Not all of the skills have a title, so we use the skillEventId as a fallback
+      // Not all of the skills have a title, so we use the sourceUrl as a fallback
       // which should be consistent.
-      let aTitle = a.cardId || a.skillEventId;
-      let bTitle = b.cardId || b.skillEventId;
+      let aTitle = a.cardId || a.fileDef.sourceUrl;
+      let bTitle = b.cardId || b.fileDef.sourceUrl;
       return aTitle?.localeCompare(bTitle ?? '') ?? 0;
     });
   }
@@ -612,10 +612,6 @@ export default class Room extends Component<Signature> {
   }
 
   private get cardIdsToAttach() {
-    console.log(
-      'cardIdsToAttach',
-      this.matrixService.cardsToSend.get(this.args.roomId),
-    );
     return this.matrixService.cardsToSend.get(this.args.roomId);
   }
 
@@ -836,18 +832,11 @@ export default class Room extends Component<Signature> {
   }
 
   private updateSkillIsActiveTask = task(
-    async (isActive: boolean, skillEventId?: string, skillCardId?: string) => {
-      console.log(
-        'updateSkillIsActiveTask',
-        isActive,
-        skillEventId,
-        skillCardId,
-      );
+    async (isActive: boolean, skillCardId?: string) => {
       await new UpdateSkillActivationCommand(
         this.commandService.commandContext,
       ).execute({
         roomId: this.args.roomId,
-        skillEventId,
         skillCardId,
         isActive,
       });

@@ -285,14 +285,14 @@
     "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733266518032,
@@ -308,7 +308,7 @@
     "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
@@ -320,21 +320,21 @@
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733266540113,
     "unsigned": {
       "replaces_state": "$1pZDTUqrUOHjIxwYuywpDs-5jiY-kyu0d2LshvMIrqU",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill_card_editing",
             "sourceUrl": "mxc://mock-server/skill_card_editing",
             "contentType": "text/plain"
           }
         ],
-        "disabledCards": []
+        "disabledSkillCards": []
       },
       "prev_sender": "@user:localhost",
       "age": 93936
@@ -344,14 +344,14 @@
     "age": 93936,
     "replaces_state": "$1pZDTUqrUOHjIxwYuywpDs-5jiY-kyu0d2LshvMIrqU",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     }
   },
   {

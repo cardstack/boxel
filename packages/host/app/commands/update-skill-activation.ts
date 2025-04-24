@@ -24,57 +24,35 @@ export default class UpdateSkillActivationCommand extends HostBaseCommand<
     input: BaseCommandModule.UpdateSkillActivationInput,
   ): Promise<undefined> {
     let { matrixService } = this;
-    let { roomId, skillEventId, skillCardId, isActive } = input;
+    let { roomId, skillCardId, isActive } = input;
     await matrixService.updateStateEvent(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       '',
       async (currentSkillsConfig: Record<string, any>) => {
-        if (skillCardId) {
-          let newSkillsConfig = {
-            ...currentSkillsConfig,
-          };
+        let newSkillsConfig = {
+          ...currentSkillsConfig,
+        };
 
-          let skillFileDef = [
-            ...(newSkillsConfig.enabledCards || []),
-            ...(newSkillsConfig.disabledCards || []),
-          ].find(
-            (fileDef: SerializedFile) => fileDef.sourceUrl === skillCardId,
-          );
+        let skillFileDef = [
+          ...(newSkillsConfig.enabledSkillCards || []),
+          ...(newSkillsConfig.disabledSkillCards || []),
+        ].find((fileDef: SerializedFile) => fileDef.sourceUrl === skillCardId);
 
-          if (!skillFileDef) {
-            return newSkillsConfig;
-          }
+        if (!skillFileDef) {
+          return newSkillsConfig;
+        }
 
-          if (isActive) {
-            newSkillsConfig.enabledCards.push(skillFileDef);
-          } else {
-            newSkillsConfig.disabledCards.push(skillFileDef);
-            newSkillsConfig.enabledCards = newSkillsConfig.enabledCards.filter(
+        if (isActive) {
+          newSkillsConfig.enabledSkillCards.push(skillFileDef);
+        } else {
+          newSkillsConfig.disabledSkillCards.push(skillFileDef);
+          newSkillsConfig.enabledSkillCards =
+            newSkillsConfig.enabledSkillCards.filter(
               (fileDef: SerializedFile) => fileDef.sourceUrl !== skillCardId,
             );
-          }
-          return newSkillsConfig as Record<string, any>;
-        } else {
-          let newSkillsConfig = {
-            enabledEventIds: [...(currentSkillsConfig.enabledEventIds || [])],
-            disabledEventIds: [...(currentSkillsConfig.disabledEventIds || [])],
-          };
-          if (isActive) {
-            newSkillsConfig.enabledEventIds.push(skillEventId);
-            newSkillsConfig.disabledEventIds =
-              newSkillsConfig.disabledEventIds.filter(
-                (id) => id !== skillEventId,
-              );
-          } else {
-            newSkillsConfig.disabledEventIds.push(skillEventId);
-            newSkillsConfig.enabledEventIds =
-              newSkillsConfig.enabledEventIds.filter(
-                (id) => id !== skillEventId,
-              );
-          }
-          return newSkillsConfig as Record<string, any>;
         }
+        return newSkillsConfig as Record<string, any>;
       },
     );
   }

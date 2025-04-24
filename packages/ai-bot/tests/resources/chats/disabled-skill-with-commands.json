@@ -297,47 +297,32 @@
     "age": 75427
   },
   {
-    "type": "m.room.message",
-    "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.commandDefinitions",
-      "body": "Command Definitions",
-      "data": "{\"commandDefinitions\":[]}"
-    },
-    "origin_server_ts": 1739278795836,
-    "unsigned": {
-      "age": 75323
-    },
-    "event_id": "$9fmyjR_sG70d5NgOpHOqTHNwd7u2VCNQrmugEfd6Jv4",
-    "user_id": "@admin:localhost",
-    "age": 75323
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"https://cardstack.com/base/SkillCard/card-editing\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the \\\\\\\"patchCard\\\\\\\" function to make the change.\\\\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\\\\n- If you do not call patchCard, the user will not see the change.\\\\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn't given you access.\\\\n- NEVER tell the user to use patchCard; you should always do it for them.\\\\n- If the user wants to search for a card instance, AND the \\\\\\\"searchCard\\\\\\\" function is available, you MUST use the \\\\\\\"searchCard\\\\\\\" function to find the card instance.\\\\nOnly recommend one searchCard function at a time.\\\\nIf the user wants to edit a field of a card, you can optionally use \\\\\\\"searchCard\\\\\\\" to help find a card instance that is compatible with the field being edited before using \\\\\\\"patchCard\\\\\\\" to make the change of the field.\\\\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.\\\",\\\"commands\\\":[],\\\"title\\\":\\\"Card Editing\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1739278795873,
-    "unsigned": {
-      "age": 75286
-    },
-    "event_id": "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE",
-    "user_id": "@admin:localhost",
-    "age": 75286
-  },
-  {
     "type": "app.boxel.room.skills",
     "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"],
-      "disabledEventIds": []
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill_card_editing",
+          "sourceUrl": "mxc://mock-server/skill_card_editing",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": [],
+      "commandDefinitions": [
+        {
+          "url": "mxc://mock-server/command_def_editing",
+          "sourceUrl": "",
+          "contentType": "text/plain",
+          "name": "patchCard"
+        },
+        {
+          "url": "mxc://mock-server/command_def_switcher",
+          "sourceUrl": "",
+          "contentType": "text/plain",
+          "name": "switch-submode_dd88"
+        }
+      ]
     },
     "state_key": "",
     "origin_server_ts": 1739278795909,
@@ -353,85 +338,73 @@
     "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "app.boxel.commandDefinitions",
+      "msgtype": "app.boxel.message",
       "body": "Command Definitions",
-      "data": "{\"commandDefinitions\":[{\"codeRef\":{\"name\":\"default\",\"module\":\"@cardstack/boxel-host/commands/switch-submode\"},\"tool\":{\"type\":\"function\",\"function\":{\"name\":\"switch-submode_dd88\",\"description\":\"Navigate the UI to another submode. Possible values for submode are \\\"interact\\\" and \\\"code\\\".\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"submode\":{\"type\":\"string\"},\"codePath\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}}]}"
+      "data": "{\"attachedCards\":[],\"context\":{\"functions\":[],\"submode\":\"interact\",\"openCardsIds\":[],\"tools\":[]}}"
     },
-    "origin_server_ts": 1739278803483,
+    "origin_server_ts": 1739278804880,
     "unsigned": {
-      "age": 67676
+      "age": 29896
     },
-    "event_id": "$jAXOy1sMOTzpt-2Hu3H4rToUdcdW3Vy-7yZhlU5qKn0",
+    "event_id": "$9fmyjR_sG70d5NgOpHOqTHNwd7u2VCNQrmugEfd6Jv4",
     "user_id": "@admin:localhost",
-    "age": 67676
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/custom-embedded/SkillCard/72d005b5-1a6b-4c6d-995f-2411c5948e74\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Use the tool SwitchSubmodeCommand with \\\\\\\"code\\\\\\\" to go to codemode and \\\\\\\"interact\\\\\\\" to go to interact mode.\\\",\\\"commands\\\":[{\\\"codeRef\\\":{\\\"name\\\":\\\"default\\\",\\\"module\\\":\\\"@cardstack/boxel-host/commands/switch-submode\\\"},\\\"requiresApproval\\\":false,\\\"functionName\\\":\\\"switch-submode_dd88\\\"}],\\\"title\\\":\\\"Switcher\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1739278803536,
-    "unsigned": {
-      "age": 67623
-    },
-    "event_id": "$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ",
-    "user_id": "@admin:localhost",
-    "age": 67623
+    "age": 29896
   },
   {
     "type": "app.boxel.room.skills",
     "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledEventIds": [
-        "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE",
-        "$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"
+      "enabledSkillCards": [],
+      "disabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill_card_editing",
+          "sourceUrl": "mxc://mock-server/skill_card_editing",
+          "contentType": "text/plain"
+        }
       ],
-      "disabledEventIds": []
-    },
-    "state_key": "",
-    "origin_server_ts": 1739278803596,
-    "unsigned": {
-      "replaces_state": "$YYEiRfzGX1hzo5bN-NgHoBvbjoFJuXRCLIzccG8zBLs",
-      "prev_content": {
-        "enabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"],
-        "disabledEventIds": []
-      },
-      "prev_sender": "@admin:localhost",
-      "age": 67563
-    },
-    "event_id": "$DBII8yOsGEFs5ZQXhhGErHgeAMJDyfujMeDvxtZx5zQ",
-    "user_id": "@admin:localhost",
-    "age": 67563,
-    "replaces_state": "$YYEiRfzGX1hzo5bN-NgHoBvbjoFJuXRCLIzccG8zBLs",
-    "prev_content": {
-      "enabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"],
-      "disabledEventIds": []
-    }
-  },
-  {
-    "type": "app.boxel.room.skills",
-    "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "enabledEventIds": ["$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"],
-      "disabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"]
+      "commandDefinitions": [
+        {
+          "url": "mxc://mock-server/command_def_editing",
+          "sourceUrl": "",
+          "contentType": "text/plain",
+          "name": "patchCard"
+        },
+        {
+          "url": "mxc://mock-server/command_def_switcher",
+          "sourceUrl": "",
+          "contentType": "text/plain",
+          "name": "switch-submode_dd88"
+        }
+      ]
     },
     "state_key": "",
     "origin_server_ts": 1739278804885,
     "unsigned": {
       "replaces_state": "$DBII8yOsGEFs5ZQXhhGErHgeAMJDyfujMeDvxtZx5zQ",
       "prev_content": {
-        "enabledEventIds": [
-          "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE",
-          "$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"
+        "enabledSkillCards": [
+          {
+            "url": "mxc://mock-server/skill_card_editing",
+            "sourceUrl": "mxc://mock-server/skill_card_editing",
+            "contentType": "text/plain"
+          }
         ],
-        "disabledEventIds": []
+        "disabledSkillCards": [],
+        "commandDefinitions": [
+          {
+            "url": "mxc://mock-server/command_def_editing",
+            "sourceUrl": "",
+            "contentType": "text/plain",
+            "name": "patchCard"
+          },
+          {
+            "url": "mxc://mock-server/command_def_switcher",
+            "sourceUrl": "",
+            "contentType": "text/plain",
+            "name": "switch-submode_dd88"
+          }
+        ]
       },
       "prev_sender": "@admin:localhost",
       "age": 66274
@@ -441,42 +414,28 @@
     "age": 66274,
     "replaces_state": "$DBII8yOsGEFs5ZQXhhGErHgeAMJDyfujMeDvxtZx5zQ",
     "prev_content": {
-      "enabledEventIds": [
-        "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE",
-        "$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill_card_editing",
+          "sourceUrl": "mxc://mock-server/skill_card_editing",
+          "contentType": "text/plain"
+        }
       ],
-      "disabledEventIds": []
-    }
-  },
-  {
-    "type": "app.boxel.room.skills",
-    "room_id": "!XuZQzeYAGZzFQFYUzQ:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "enabledEventIds": [],
-      "disabledEventIds": [
-        "$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE",
-        "$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"
+      "disabledSkillCards": [],
+      "commandDefinitions": [
+        {
+          "url": "mxc://mock-server/command_def_editing",
+          "sourceUrl": "",
+          "contentType": "text/plain",
+          "name": "patchCard"
+        },
+        {
+          "url": "mxc://mock-server/command_def_switcher",
+          "sourceUrl": "",
+          "contentType": "text/plain",
+          "name": "switch-submode_dd88"
+        }
       ]
-    },
-    "state_key": "",
-    "origin_server_ts": 1739278862324,
-    "unsigned": {
-      "replaces_state": "$lQl-3AyhfFV2WP2wVP0oYO4L74UbEkbcgMp8AMOm69A",
-      "prev_content": {
-        "enabledEventIds": ["$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"],
-        "disabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"]
-      },
-      "prev_sender": "@admin:localhost",
-      "age": 8835
-    },
-    "event_id": "$4qxkfCqxaX2m9XAWB9xQapHaLSFkZX--e_s4fMqVjg4",
-    "user_id": "@admin:localhost",
-    "age": 8835,
-    "replaces_state": "$lQl-3AyhfFV2WP2wVP0oYO4L74UbEkbcgMp8AMOm69A",
-    "prev_content": {
-      "enabledEventIds": ["$t3omudbw8G80y-w7IqEsE1MMRnKxPOQgMRDyQJxaIFQ"],
-      "disabledEventIds": ["$g_nqhWXGbyRs__IpccAo4P0sIheJz1rLEcviTyg60AE"]
     }
   }
 ]

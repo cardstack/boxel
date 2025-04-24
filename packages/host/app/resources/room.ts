@@ -12,7 +12,6 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
@@ -29,7 +28,6 @@ import type {
   LeaveEvent,
   CardMessageEvent,
   MessageEvent,
-  CommandDefinitionsEvent,
   CommandResultEvent,
   RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
@@ -52,8 +50,7 @@ import type StoreService from '../services/store';
 
 export type RoomSkill = {
   cardId: string;
-  skillEventId?: string;
-  fileDef?: SerializedFile;
+  fileDef: SerializedFile;
   isActive: boolean;
 };
 
@@ -66,8 +63,6 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
-  private _skillEventIdToCardIdCache: TrackedMap<string, string> =
-    new TrackedMap();
   private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
@@ -114,7 +109,7 @@ export class RoomResource extends Resource<Args> {
       if (!memberIds || !memberIds.includes(this.matrixService.aiBotUserId)) {
         return;
       }
-      await this.loadSkillCards(this.matrixRoom.skillsConfig.enabledCards);
+      await this.loadSkillCards(this.matrixRoom.skillsConfig.enabledSkillCards);
 
       let index = this._messageCache.size;
       // This is brought up to this level so if the
@@ -125,10 +120,7 @@ export class RoomResource extends Resource<Args> {
             await this.loadRoomMemberEvent(roomId, event);
             break;
           case 'm.room.message':
-            if (
-              this.isCommandDefinitionsEvent(event) ||
-              this.isRealmServerEvent(event)
-            ) {
+            if (this.isRealmServerEvent(event)) {
               break;
             } else {
               await this.loadRoomMessage({
@@ -210,41 +202,25 @@ export class RoomResource extends Resource<Args> {
     return this.events.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   }
 
-  private get allSkillEventIds(): Set<string> {
-    let skillsConfig = this.matrixRoom?.skillsConfig;
-
-    if (
-      !skillsConfig ||
-      !skillsConfig.enabledEventIds ||
-      !skillsConfig.disabledEventIds
-    ) {
-      return new Set();
-    }
-    return new Set([
-      ...skillsConfig.enabledEventIds,
-      ...skillsConfig.disabledEventIds,
-    ]);
-  }
-
   private get allSkillFileDefs(): SerializedFile[] {
     let skillConfig = this.matrixRoom?.skillsConfig;
     if (
       !skillConfig ||
-      !skillConfig.enabledCards ||
-      !skillConfig.disabledCards
+      !skillConfig.enabledSkillCards ||
+      !skillConfig.disabledSkillCards
     ) {
       return [];
     }
 
-    const enabledCards = skillConfig.enabledCards || [];
-    const disabledCards = skillConfig.disabledCards || [];
+    const enabledSkillCards = skillConfig.enabledSkillCards || [];
+    const disabledSkillCards = skillConfig.disabledSkillCards || [];
     const uniqueCardsMap = new Map();
 
-    for (const card of enabledCards) {
+    for (const card of enabledSkillCards) {
       uniqueCardsMap.set(card.sourceUrl, card);
     }
 
-    for (const card of disabledCards) {
+    for (const card of disabledSkillCards) {
       if (!uniqueCardsMap.has(card.sourceUrl)) {
         uniqueCardsMap.set(card.sourceUrl, card);
       }
@@ -255,27 +231,13 @@ export class RoomResource extends Resource<Args> {
 
   get skills(): RoomSkill[] {
     let result: RoomSkill[] = [];
-    for (let skillEventId of this.allSkillEventIds) {
-      let cardId = this._skillEventIdToCardIdCache.get(skillEventId);
-      if (!cardId) {
-        continue;
-      }
-      result.push({
-        cardId,
-        skillEventId,
-        isActive:
-          this.matrixRoom?.skillsConfig.enabledEventIds.includes(
-            skillEventId,
-          ) ?? false,
-      });
-    }
 
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
         fileDef: skillCard,
         isActive:
-          this.matrixRoom?.skillsConfig.enabledCards
+          this.matrixRoom?.skillsConfig.enabledSkillCards
             .map((enabledCard) => enabledCard.sourceUrl)
             .includes(skillCard.sourceUrl) ?? false,
       });
@@ -370,22 +332,8 @@ export class RoomResource extends Resource<Args> {
     });
   }
 
-  private isCommandDefinitionsEvent(
-    event:
-      | MessageEvent
-      | CardMessageEvent
-      | CommandDefinitionsEvent
-      | RealmServerEvent,
-  ): event is CommandDefinitionsEvent {
-    return event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
-  }
-
   private isRealmServerEvent(
-    event:
-      | MessageEvent
-      | CardMessageEvent
-      | CommandDefinitionsEvent
-      | RealmServerEvent,
+    event: MessageEvent | CardMessageEvent | RealmServerEvent,
   ): event is RealmServerEvent {
     return event.content.msgtype === APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE;
   }

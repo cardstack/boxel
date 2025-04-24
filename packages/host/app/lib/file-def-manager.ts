@@ -92,40 +92,45 @@ export default class FileDefManager {
         APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
         '',
         async (currentSkillsConfig) => {
-          const enabledCards = [...(currentSkillsConfig.enabledCards || [])];
+          const enabledSkillCards = [
+            ...(currentSkillsConfig.enabledSkillCards || []),
+          ];
           const newEnabledCards = updatedSkillFileDefs
             .map((fileDef) => fileDef.serialize())
             .filter(
               (newCard) =>
-                !enabledCards.some(
+                !enabledSkillCards.some(
                   (existingCard) =>
                     existingCard.sourceUrl === newCard.sourceUrl,
                 ),
             );
-          const updatedEnabledCards = [...enabledCards, ...newEnabledCards].map(
-            (card) => {
-              const matchingFileDef = updatedSkillFileDefs.find(
-                (fileDef) => fileDef.sourceUrl === card.sourceUrl,
-              );
-              if (matchingFileDef) {
-                return { ...card, url: matchingFileDef.url };
-              }
-              return card;
-            },
-          );
+          const updatedEnabledCards = [
+            ...enabledSkillCards,
+            ...newEnabledCards,
+          ].map((card) => {
+            const matchingFileDef = updatedSkillFileDefs.find(
+              (fileDef) => fileDef.sourceUrl === card.sourceUrl,
+            );
+            if (matchingFileDef) {
+              return { ...card, url: matchingFileDef.url };
+            }
+            return card;
+          });
 
-          const disabledCards = [...(currentSkillsConfig.disabledCards || [])];
+          const disabledSkillCards = [
+            ...(currentSkillsConfig.disabledSkillCards || []),
+          ];
           const newDisabledCards = updatedSkillFileDefs
             .map((fileDef) => fileDef.serialize())
             .filter(
               (newCard) =>
-                !enabledCards.some(
+                !enabledSkillCards.some(
                   (existingCard) =>
                     existingCard.sourceUrl === newCard.sourceUrl,
                 ),
             );
           const updatedDisabledCards = [
-            ...disabledCards,
+            ...disabledSkillCards,
             ...newDisabledCards,
           ].map((card) => {
             const matchingFileDef = updatedSkillFileDefs.find(
@@ -163,8 +168,8 @@ export default class FileDefManager {
             return cmd;
           });
           return {
-            enabledCards: updatedEnabledCards,
-            disabledCards: updatedDisabledCards,
+            enabledSkillCards: updatedEnabledCards,
+            disabledSkillCards: updatedDisabledCards,
             commandDefinitions: updatedCommandDefinitions,
           };
         },

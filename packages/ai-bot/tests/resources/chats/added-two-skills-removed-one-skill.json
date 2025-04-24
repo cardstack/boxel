@@ -285,14 +285,14 @@
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
           "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733487579032,
@@ -308,7 +308,7 @@
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
           "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
@@ -320,21 +320,21 @@
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733487583858,
     "unsigned": {
       "replaces_state": "$tQJ37hTMp69BRHNDXjxJ1-D01NEPX-l41iASpKD1cWk",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill1",
             "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
             "contentType": "text/plain"
           }
         ],
-        "disabledCards": []
+        "disabledSkillCards": []
       },
       "prev_sender": "@admin:localhost",
       "age": 54844
@@ -344,14 +344,14 @@
     "age": 54844,
     "replaces_state": "$tQJ37hTMp69BRHNDXjxJ1-D01NEPX-l41iASpKD1cWk",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
           "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     }
   },
   {
@@ -359,14 +359,14 @@
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill2",
           "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": [
+      "disabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
           "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
@@ -379,7 +379,7 @@
     "unsigned": {
       "replaces_state": "$01XVRKjY9LXrM9E-DCiGeZrm79oRlnKNAKqax7iSJaE",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill1",
             "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
@@ -391,7 +391,7 @@
             "contentType": "text/plain"
           }
         ],
-        "disabledCards": []
+        "disabledSkillCards": []
       },
       "prev_sender": "@admin:localhost",
       "age": 52510
@@ -401,7 +401,7 @@
     "age": 52510,
     "replaces_state": "$01XVRKjY9LXrM9E-DCiGeZrm79oRlnKNAKqax7iSJaE",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
           "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
@@ -413,7 +413,7 @@
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     }
   },
   {
@@ -425,7 +425,7 @@
       "body": "Please make me a doggy day care CRM app",
       "format": "org.matrix.custom.html",
       "clientGeneratedId": "6e4b5c72-fd16-43e9-a73d-730c501b0680",
-      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[]}}"
+      "data": "{\"attachedCards\":[],\"context\":{\"tools\":[]}}"
     },
     "origin_server_ts": 1733664873921,
     "unsigned": {

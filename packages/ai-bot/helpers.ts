@@ -12,7 +12,6 @@ import type {
   ActiveLLMEvent,
   CardMessageEvent,
   CommandResultEvent,
-  CommandDefinitionsEvent,
   CardMessageContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
@@ -25,7 +24,6 @@ import {
   DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
@@ -270,10 +268,10 @@ async function getEnabledSkills(
     return [];
   }
 
-  let enabledCards = skillsConfigEvent.content.enabledCards;
-  if (enabledCards?.length) {
+  let enabledSkillCards = skillsConfigEvent.content.enabledSkillCards;
+  if (enabledSkillCards?.length) {
     return await Promise.all(
-      enabledCards?.map(async (cardFileDef: SerializedFileDef) => {
+      enabledSkillCards?.map(async (cardFileDef: SerializedFileDef) => {
         let cardContent = await downloadFile(client, cardFileDef);
         return (JSON.parse(cardContent) as LooseSingleCardDocument)?.data;
       }),
@@ -464,39 +462,15 @@ export async function getTools(
     (event) => event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   ) as SkillsConfigEvent;
 
-  if (skillsConfigEvent?.content?.commandDefinitions) {
-    let commandDefinitions = skillsConfigEvent.content.commandDefinitions;
-    for (let commandDefinition of commandDefinitions) {
-      if (enabledCommandNames.has(commandDefinition.name)) {
-        let commandDefinitionContent = await downloadFile(
-          client,
-          commandDefinition,
-        );
-        let commandDefinitionObject = JSON.parse(commandDefinitionContent);
-        toolMap.set(commandDefinition.name, commandDefinitionObject.tool);
-      }
-    }
-  } else {
-    // This is a deprecated approach where we store command definitions as room events
-    // Iterate over the command definitions, and add any tools that are in
-    // enabled skills to the tool map
-    let commandDefinitionEvents: CommandDefinitionsEvent[] = eventList.filter(
-      (event) =>
-        event.type === 'm.room.message' &&
-        event.content.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-    ) as CommandDefinitionsEvent[];
-
-    for (let event of commandDefinitionEvents) {
-      let { content } = event;
-      let { commandDefinitions } = content.data;
-      for (let commandDefinition of commandDefinitions) {
-        if (enabledCommandNames.has(commandDefinition.tool.function.name)) {
-          toolMap.set(
-            commandDefinition.tool.function.name,
-            commandDefinition.tool,
-          );
-        }
-      }
+  let commandDefinitions = skillsConfigEvent?.content?.commandDefinitions ?? [];
+  for (let commandDefinition of commandDefinitions) {
+    if (enabledCommandNames.has(commandDefinition.name)) {
+      let commandDefinitionContent = await downloadFile(
+        client,
+        commandDefinition,
+      );
+      let commandDefinitionObject = JSON.parse(commandDefinitionContent);
+      toolMap.set(commandDefinition.name, commandDefinitionObject.tool);
     }
   }
 

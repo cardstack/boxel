@@ -285,14 +285,14 @@
     "room_id": "!vORvGxbYIvLeiYUfNx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/abc123",
           "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733197031644,
@@ -308,7 +308,7 @@
     "room_id": "!vORvGxbYIvLeiYUfNx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/abc123",
           "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
@@ -320,20 +320,20 @@
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733241619767,
     "unsigned": {
       "replaces_state": "$tRRG802dS-3HvRzRK_KezeO26Tnalj8mV6H9VQSmg0o",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "mxc://mock-server/abc123",
             "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing"
           }
         ],
-        "disabledCards": []
+        "disabledSkillCards": []
       },
       "prev_sender": "@user:localhost",
       "age": 266662
@@ -343,13 +343,13 @@
     "age": 266662,
     "replaces_state": "$tRRG802dS-3HvRzRK_KezeO26Tnalj8mV6H9VQSmg0o",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/abc123",
           "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     }
   },
   {
@@ -361,7 +361,7 @@
       "body": "Please make me a doggy day care CRM app",
       "format": "org.matrix.custom.html",
       "clientGeneratedId": "6e4b5c72-fd16-43e9-a73d-730c501b0680",
-      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[]}}"
+      "data": "{\"attachedCards\":[],\"context\":{\"tools\":[]}}"
     },
     "origin_server_ts": 1733664873921,
     "unsigned": {

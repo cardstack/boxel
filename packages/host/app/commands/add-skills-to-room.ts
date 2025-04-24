@@ -34,17 +34,17 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
       '',
       async (oldContent: Record<string, any>) => {
-        let enabledCards = [...(oldContent.enabledCards || [])];
+        let enabledSkillCards = [...(oldContent.enabledSkillCards || [])];
 
         const newCards = skillFileDefs
           .map((fileDef) => fileDef.serialize())
           .filter(
             (newCard) =>
-              !enabledCards.some(
+              !enabledSkillCards.some(
                 (existingCard) => existingCard.sourceUrl === newCard.sourceUrl,
               ),
           );
-        const updatedEnabledCards = [...enabledCards, ...newCards];
+        const updatedEnabledCards = [...enabledSkillCards, ...newCards];
 
         let commandDefinitions = [...(oldContent.commandDefinitions || [])];
         const newCommandDefinitions = commandFileDefs
@@ -62,8 +62,8 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
           ...newCommandDefinitions,
         ];
         return {
-          enabledCards: updatedEnabledCards,
-          disabledCards: [...(oldContent.disabledCards || [])],
+          enabledSkillCards: updatedEnabledCards,
+          disabledSkillCards: [...(oldContent.disabledSkillCards || [])],
           commandDefinitions: updatedCommandDefinitions,
         };
       },

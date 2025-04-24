@@ -6,7 +6,6 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -128,18 +127,7 @@ export interface MessageEvent extends BaseMatrixEvent {
 
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: CardMessageContent | CommandDefinitionsContent;
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-}
-
-export interface CommandDefinitionsEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
-  content: CommandDefinitionsContent;
+  content: CardMessageContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -192,8 +180,8 @@ export interface CardMessageContent {
 export interface SkillsConfigEvent extends RoomStateEvent {
   type: typeof APP_BOXEL_ROOM_SKILLS_EVENT_TYPE;
   content: {
-    enabledCards: SerializedFile[];
-    disabledCards: SerializedFile[];
+    enabledSkillCards: SerializedFile[];
+    disabledSkillCards: SerializedFile[];
     commandDefinitions?: SerializedFile[];
   };
 }
@@ -223,13 +211,6 @@ export interface CommandDefinitionSchema {
   tool: Tool;
 }
 
-export interface CommandDefinitionsContent {
-  msgtype: typeof APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
-  body: string;
-  data: {
-    commandDefinitions: CommandDefinitionSchema[];
-  };
-}
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
     rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
@@ -329,7 +310,6 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandResultEvent
-  | CommandDefinitionsEvent
   | CardMessageEvent
   | RealmServerEvent
   | RealmEvent

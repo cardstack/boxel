@@ -323,14 +323,14 @@
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "https://cardstack.com/base/SkillCard/card-editing",
           "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733664873634,
@@ -346,7 +346,7 @@
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "https://cardstack.com/base/SkillCard/card-editing",
           "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
@@ -358,21 +358,21 @@
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733664873770,
     "unsigned": {
       "replaces_state": "$4usn8JHE-ipBId96KWE0nogsb0VvosVkLfGvcMQt-4s",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "https://cardstack.com/base/SkillCard/card-editing",
             "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
             "contentType": "text/plain"
           }
         ],
-        "disabledCards": []
+        "disabledSkillCards": []
       },
       "prev_sender": "@admin:localhost",
       "age": 15683
@@ -382,14 +382,14 @@
     "age": 15683,
     "replaces_state": "$4usn8JHE-ipBId96KWE0nogsb0VvosVkLfGvcMQt-4s",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "https://cardstack.com/base/SkillCard/card-editing",
           "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     }
   },
   {
@@ -397,21 +397,21 @@
     "room_id": "!TcSnACCUWcJpkukyQT:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "skill-card-1",
           "sourceUrl": "skill-card-1",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733664873932,
     "unsigned": {
       "replaces_state": "$2WHs5cpLidPloy9-ZIuZvde-J2U8Qmflx45nf78Hly4",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "https://cardstack.com/base/SkillCard/card-editing",
             "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
@@ -423,7 +423,7 @@
             "contentType": "text/plain"
           }
         ],
-        "disabledCards": []
+        "disabledSkillCards": []
       },
       "prev_sender": "@admin:localhost",
       "age": 15521
@@ -433,7 +433,7 @@
     "age": 15521,
     "replaces_state": "$2WHs5cpLidPloy9-ZIuZvde-J2U8Qmflx45nf78Hly4",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "https://cardstack.com/base/SkillCard/card-editing",
           "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
@@ -445,7 +445,7 @@
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     }
   }
 ]

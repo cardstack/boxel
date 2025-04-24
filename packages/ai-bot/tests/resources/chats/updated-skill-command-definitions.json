@@ -28,14 +28,14 @@
     "room_id": "!testroom:localhost",
     "sender": "@host:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_v1",
           "sourceUrl": "https://cardstack.com/base/SkillCard/skill_card_v1",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": [],
+      "disabledSkillCards": [],
       "commandDefinitions": [
         {
           "url": "mxc://mock-server/command_def_v1",
@@ -64,14 +64,14 @@
     "room_id": "!testroom:localhost",
     "sender": "@host:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_v2",
           "sourceUrl": "https://cardstack.com/base/SkillCard/skill_card_v2",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": [],
+      "disabledSkillCards": [],
       "commandDefinitions": [
         {
           "url": "mxc://mock-server/command_def_v2",

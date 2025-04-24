@@ -76,7 +76,6 @@ import type {
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
   RealmEventContent,
-  CommandDefinitionsContent,
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
@@ -621,8 +620,7 @@ export default class MatrixService extends Service {
     content:
       | CardMessageContent
       | CommandResultWithNoOutputContent
-      | CommandResultWithOutputContent
-      | CommandDefinitionsContent,
+      | CommandResultWithOutputContent,
   ) {
     let roomData = this.ensureRoomData(roomId);
     return roomData.mutex.dispatch(async () => {
@@ -741,7 +739,6 @@ export default class MatrixService extends Service {
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        console.log('uploading file', file.sourceUrl, contentType);
         file.url = await this.uploadContent(text, contentType);
         file.contentType = contentType;
 

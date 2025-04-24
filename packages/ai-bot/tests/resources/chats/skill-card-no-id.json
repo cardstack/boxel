@@ -285,14 +285,14 @@
     "room_id": "!pgznMrutwnQyxihhXn:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733664373145,
@@ -308,28 +308,28 @@
     "room_id": "!pgznMrutwnQyxihhXn:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_no_id",
           "sourceUrl": "mxc://mock-server/skill_card_no_id",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733664373221,
     "unsigned": {
       "replaces_state": "$e7XrAoU-gXSoQYx-Cuyr-5TbZu0TP-QYkdDtu8Sdx04",
       "prev_content": {
-        "enabledCards": [
+        "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill_card_editing",
             "sourceUrl": "mxc://mock-server/skill_card_editing",
             "contentType": "text/plain"
           }
         ],
-        "disabledCards": []
+        "disabledSkillCards": []
       },
       "prev_sender": "@admin:localhost",
       "age": 21574
@@ -339,14 +339,14 @@
     "age": 21574,
     "replaces_state": "$e7XrAoU-gXSoQYx-Cuyr-5TbZu0TP-QYkdDtu8Sdx04",
     "prev_content": {
-      "enabledCards": [
+      "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
           "contentType": "text/plain"
         }
       ],
-      "disabledCards": []
+      "disabledSkillCards": []
     }
   },
   {
@@ -358,7 +358,7 @@
       "body": "This is a message after a skill card with no id",
       "format": "org.matrix.custom.html",
       "clientGeneratedId": "c4ad43c9-b81a-473a-9655-077a24f32dfb",
-      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[]}}"
+      "data": "{\"attachedCards\":[],\"context\":{\"tools\":[]}}"
     },
     "origin_server_ts": 1733664374152,
     "unsigned": {
