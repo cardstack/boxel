@@ -857,7 +857,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
     });
 
-    test('trigger auto saved in edit format', async function (this: TestContextWithSave, assert) {
+    test<TestContextWithSave>('trigger auto saved in edit format', async function (assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
@@ -877,7 +877,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
     });
 
-    test('automatically attaches the selected card to the AI message', async function (this: TestContextWithSave, assert) {
+    test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
@@ -927,7 +927,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       ]);
     });
 
-    test('instance chooser only appears when panel is opened', async function (this: TestContextWithSave, assert) {
+    test<TestContextWithSave>('instance chooser only appears when panel is opened', async function (assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       assert.dom('[data-test-instance-chooser]').exists();
       await click('[data-test-accordion-item="playground"] button');
