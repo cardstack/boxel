@@ -174,7 +174,7 @@ Common issues are:
     }
   });
 
-  // TODO: Set this up to use a queue that gets drained
+  // TODO: Set this up to use a queue that gets drained (CS-8516)
   client.on(
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
