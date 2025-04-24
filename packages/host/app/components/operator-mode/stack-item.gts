@@ -18,7 +18,6 @@ import {
   waitForProperty,
   dropTask,
 } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
@@ -90,7 +89,7 @@ interface Signature {
     publicAPI: Actions;
     commandContext: CommandContext;
     close: (item: StackItem) => void;
-    dismissStackedCardsAbove: (stackIndex: number) => void;
+    dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
       stackItem: StackItem,
@@ -254,7 +253,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     };
   }
 
-  private closeItem = dropTask(async () => {
+  private closeItem = () => this._closeItem.perform();
+
+  private _closeItem = dropTask(async () => {
     await this.args.dismissStackedCardsAbove(this.args.index - 1);
   });
 
@@ -534,7 +535,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return {
       isTopCard: this.isTopCard,
       moreOptionsMenuItems: this.moreOptionsMenuItemsForErrorCard,
-      onClose: !this.isBuried ? this.closeItem.perform() : undefined,
+      onClose: !this.isBuried ? this.closeItem : undefined,
     };
   }
 
@@ -608,7 +609,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @realmInfo={{realmInfo}}
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
-              @onClose={{unless this.isBuried (perform this.closeItem)}}
+              @onClose={{unless this.isBuried this.closeItem}}
               class='stack-item-header'
               style={{cssVar
                 boxel-card-header-icon-container-min-width=(if

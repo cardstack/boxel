@@ -2,7 +2,7 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached } from '@glimmer/tracking';
 
-import { type TaskInstance, restartableTask } from 'ember-concurrency';
+import { restartableTask } from 'ember-concurrency';
 
 import { CardHeader } from '@cardstack/boxel-ui/components';
 import type { MenuItem } from '@cardstack/boxel-ui/helpers';
@@ -25,7 +25,7 @@ interface Signature {
     headerOptions?: {
       isTopCard?: boolean;
       moreOptionsMenuItems?: MenuItem[];
-      onClose?: (() => void) | TaskInstance<void>;
+      onClose?: () => void;
     };
   };
   Element: HTMLElement;
