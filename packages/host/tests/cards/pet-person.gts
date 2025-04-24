@@ -9,25 +9,25 @@ import {
   CardDef,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 
 import { Person } from './person';
 import { Pet } from './pet';
 
 export class PetPerson extends CardDef {
   static displayName = 'Pet Person';
-  @field firstName = contains(StringCard);
+  @field firstName = contains(StringField);
   @field friend = linksTo(Person);
   @field pets = linksToMany(Pet);
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: PetPerson) {
       return `${this.firstName} Pet Person`;
     },
   });
-  @field description = contains(StringCard, {
+  @field description = contains(StringField, {
     computeVia: () => 'A person with pets',
   });
-  @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+  @field thumbnailURL = contains(StringField, { computeVia: () => null });
 
   static fitted = class Fitted extends Component<typeof this> {
     <template>
@@ -43,18 +43,18 @@ export class PetPerson extends CardDef {
 }
 
 export class PetPersonField extends FieldDef {
-  @field firstName = contains(StringCard);
+  @field firstName = contains(StringField);
   @field friend = linksTo(Person);
   @field pets = linksToMany(Pet);
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: PetPersonField) {
       return `${this.firstName} Pet Person`;
     },
   });
-  @field description = contains(StringCard, {
+  @field description = contains(StringField, {
     computeVia: () => 'A person with pets',
   });
-  @field thumbnailURL = contains(StringCard, { computeVia: () => null });
+  @field thumbnailURL = contains(StringField, { computeVia: () => null });
   static fitted = class Fitted extends Component<typeof this> {
     <template>
       <GridContainer>

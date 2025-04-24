@@ -397,7 +397,7 @@ export class GardenItem extends CardDef {
 export class GardenDesign extends CardDef {
   @field rows = contains(NumberField);
   @field columns = contains(NumberField);
-  @field items = containsMany(PositionedCard);
+  @field items = containsMany(PositionedCardField);
   static displayName = 'Garden Design';
   static icon = LayoutBoardSplitIcon;
   static isolated = Isolated;

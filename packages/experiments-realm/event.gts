@@ -1,6 +1,5 @@
 import { Person as PersonCard } from './person';
-import StringCard from 'https://cardstack.com/base/string';
-import DateTimeCard from 'https://cardstack.com/base/datetime';
+import DateTimeField from 'https://cardstack.com/base/datetime';
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
 
@@ -164,12 +163,12 @@ class Isolated extends Component<typeof Event> {
 export class Event extends CardDef {
   static displayName = 'Event form';
   static icon = CalendarPlus;
-  @field subject = contains(StringCard);
-  @field location = contains(StringCard);
+  @field subject = contains(StringField);
+  @field location = contains(StringField);
   @field assignee = linksTo(PersonCard);
-  @field startDateTime = contains(DateTimeCard);
-  @field endDateTime = contains(DateTimeCard);
-  @field eventType = contains(StringCard);
+  @field startDateTime = contains(DateTimeField);
+  @field endDateTime = contains(DateTimeField);
+  @field eventType = contains(StringField);
   @field description = contains(TextAreaField);
   @field title = contains(StringField, {
     computeVia(this: Event) {

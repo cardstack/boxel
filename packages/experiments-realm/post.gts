@@ -6,16 +6,16 @@ import {
   CardDef,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import { Person } from './person';
 import FileTextIcon from '@cardstack/boxel-icons/file-text';
 
 let imageURL = new URL('./logo.png', import.meta.url).href;
 
-class BasicCard extends FieldDef {
-  static displayName = 'Basic Card';
-  @field title = contains(StringCard);
+class BasicField extends FieldDef {
+  static displayName = 'Basic Field';
+  @field title = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       Title: <@fields.title />
@@ -23,9 +23,9 @@ class BasicCard extends FieldDef {
   };
 }
 
-class VeryBasicCard extends BasicCard {
-  static displayName = 'Very Basic Card';
-  @field description = contains(StringCard);
+class VeryBasicField extends BasicField {
+  static displayName = 'Very Basic Field';
+  @field description = contains(StringField);
   static embedded = class Embedded extends Component<typeof this> {
     <template>
       Title:
@@ -40,9 +40,9 @@ export class Post extends CardDef {
   static displayName = 'Post';
   static icon = FileTextIcon;
   @field author = linksTo(Person);
-  @field title = contains(StringCard);
+  @field title = contains(StringField);
   @field body = contains(TextAreaField);
-  @field titleRef = contains(VeryBasicCard);
+  @field titleRef = contains(VeryBasicField);
   static isolated = class Isolated extends Component<typeof this> {
     <template>
       <div class='container'>

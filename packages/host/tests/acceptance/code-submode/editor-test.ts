@@ -69,12 +69,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       contents: {
         'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
 
         export class Pet extends CardDef {
           static displayName = 'Pet';
-          @field name = contains(StringCard);
-          @field title = contains(StringCard, {
+          @field name = contains(StringField);
+          @field title = contains(StringField, {
             computeVia: function (this: Pet) {
               return this.name;
             },
@@ -90,12 +90,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       `,
         'shipping-info.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         export class ShippingInfo extends FieldDef {
           static displayName = 'Shipping Info';
-          @field preferredCarrier = contains(StringCard);
-          @field remarks = contains(StringCard);
-          @field title = contains(StringCard, {
+          @field preferredCarrier = contains(StringField);
+          @field remarks = contains(StringField);
+          @field title = contains(StringField, {
             computeVia: function (this: ShippingInfo) {
               return this.preferredCarrier;
             },
@@ -110,14 +110,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       `,
         'address.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui/components';
 
         export class Address extends FieldDef {
           static displayName = 'Address';
-          @field city = contains(StringCard);
-          @field country = contains(StringCard);
+          @field city = contains(StringField);
+          @field country = contains(StringField);
           @field shippingInfo = contains(ShippingInfo);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
@@ -146,21 +146,21 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       `,
         'person.gts': `
         import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
 
         export class Person extends CardDef {
           static displayName = 'Person';
-          @field firstName = contains(StringCard);
+          @field firstName = contains(StringField);
           @field pet = linksTo(Pet);
           @field friends = linksToMany(Pet);
-          @field firstLetterOfTheName = contains(StringCard, {
+          @field firstLetterOfTheName = contains(StringField, {
             computeVia: function (this: Chain) {
               return this.firstName[0];
             },
           });
-          @field title = contains(StringCard, {
+          @field title = contains(StringField, {
             computeVia: function (this: Person) {
               return this.firstName;
             },
@@ -638,12 +638,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
   test<TestContextWithSave>('card definition change made in monaco editor is auto-saved', async function (assert) {
     let expected = `
     import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-    import StringCard from "https://cardstack.com/base/string";
+    import StringField from "https://cardstack.com/base/string";
 
     export class Pet extends CardDef {
       static displayName = 'PetXXX';  // this is the change
-      @field name = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field name = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },

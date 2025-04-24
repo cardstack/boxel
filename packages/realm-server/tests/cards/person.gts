@@ -4,12 +4,12 @@ import {
   Component,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 
 export class Person extends CardDef {
   static displayName = 'Person';
-  @field firstName = contains(StringCard);
-  @field title = contains(StringCard, {
+  @field firstName = contains(StringField);
+  @field title = contains(StringField, {
     computeVia: function (this: Person) {
       return this.firstName;
     },

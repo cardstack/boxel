@@ -8,7 +8,7 @@ import {
   primitive,
 } from 'https://cardstack.com/base/card-api';
 import Component from '@glimmer/component';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import { contains, field } from 'https://cardstack.com/base/card-api';
 import { on } from '@ember/modifier';
 import { cn } from '@cardstack/boxel-ui/helpers';
@@ -505,7 +505,7 @@ export class Chess extends CardDef {
   @field pgn = contains(PgnField);
   @field analysis = contains(BooleanField);
 
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Chess) {
       return 'Chess Game';
     },

@@ -95,11 +95,11 @@ module('Integration | card-prerender', function (hooks) {
         },
         'person.gts': `
           import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+          import StringField from "https://cardstack.com/base/string";
 
           export class Person extends CardDef {
             static displayName = 'Person';
-            @field firstName = contains(StringCard);
+            @field firstName = contains(StringField);
             static isolated = class Isolated extends Component<typeof this> {
               <template>
                 <h1><@fields.firstName/></h1>
@@ -121,11 +121,11 @@ module('Integration | card-prerender', function (hooks) {
         'fancy-person.gts': `
           import { Person } from './person';
           import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+          import StringField from "https://cardstack.com/base/string";
 
           export class FancyPerson extends Person {
             static displayName = 'Fancy Person';
-            @field favoriteColor = contains(StringCard);
+            @field favoriteColor = contains(StringField);
 
             static embedded = class Embedded extends Component<typeof this> {
               <template>

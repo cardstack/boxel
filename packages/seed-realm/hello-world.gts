@@ -1,6 +1,6 @@
 import TextAreaField from 'https://cardstack.com/base/text-area';
-import MarkdownCard from 'https://cardstack.com/base/markdown';
-import StringCard from 'https://cardstack.com/base/string';
+import MarkdownField from 'https://cardstack.com/base/markdown';
+import StringField from 'https://cardstack.com/base/string';
 import {
   CardDef,
   Component,
@@ -10,10 +10,10 @@ import {
 import MoodSmileBeamIcon from '@cardstack/boxel-icons/mood-smile-beam';
 
 export class HelloWorld extends CardDef {
-  @field fullName = contains(StringCard);
-  @field heroUrl = contains(StringCard);
-  @field headshotUrl = contains(StringCard);
-  @field bio = contains(MarkdownCard);
+  @field fullName = contains(StringField);
+  @field heroUrl = contains(StringField);
+  @field headshotUrl = contains(StringField);
+  @field bio = contains(MarkdownField);
   @field quote = contains(TextAreaField);
   static displayName = 'Hello World';
   static icon = MoodSmileBeamIcon;
