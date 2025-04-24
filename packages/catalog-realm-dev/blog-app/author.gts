@@ -9,7 +9,7 @@ import {
   linksTo,
   StringField,
 } from 'https://cardstack.com/base/card-api';
-import { EmailField } from 'https://cardstack.com/base/email';
+import EmailField from 'https://cardstack.com/base/email';
 
 import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';

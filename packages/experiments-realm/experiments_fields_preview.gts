@@ -1,4 +1,4 @@
-import { EmailField } from 'https://cardstack.com/base/email';
+import EmailField from 'https://cardstack.com/base/email';
 import { PhoneField } from 'https://cardstack.com/base/phone-number';
 import { UrlField } from 'https://cardstack.com/base/url';
 import { WebsiteField } from 'https://cardstack.com/base/website';
