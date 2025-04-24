@@ -1,5 +1,5 @@
 import WorldWwwIcon from '@cardstack/boxel-icons/world-www';
-import { UrlField } from './url';
+import UrlField from './url';
 import { Component } from './card-api';
 import { EntityDisplayWithIcon } from '@cardstack/boxel-ui/components';
 
@@ -12,7 +12,7 @@ const domainWithPath = (urlString: string | null) => {
   return `${url.hostname}${url.pathname === '/' ? '' : url.pathname}`;
 };
 
-export class WebsiteField extends UrlField {
+export default class WebsiteField extends UrlField {
   static icon = WorldWwwIcon;
   static displayName = 'Website';
 

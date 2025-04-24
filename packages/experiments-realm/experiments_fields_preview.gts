@@ -1,7 +1,7 @@
 import EmailField from 'https://cardstack.com/base/email';
 import PhoneNumberField from 'https://cardstack.com/base/phone-number';
 import UrlField from 'https://cardstack.com/base/url';
-import { WebsiteField } from 'https://cardstack.com/base/website';
+import WebsiteField from 'https://cardstack.com/base/website';
 import AddressField from 'https://cardstack.com/base/address';
 import PercentageField from 'https://cardstack.com/base/percentage';
 

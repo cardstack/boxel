@@ -1,6 +1,6 @@
 import StringField from 'https://cardstack.com/base/string';
 import NumberField from 'https://cardstack.com/base/number';
-import { WebsiteField } from 'https://cardstack.com/base/website';
+import WebsiteField from 'https://cardstack.com/base/website';
 import AddressField from 'https://cardstack.com/base/address';
 import {
   Component,
