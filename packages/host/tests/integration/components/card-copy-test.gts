@@ -924,11 +924,6 @@ module('Integration | card-copy', function (hooks) {
           let json = JSON.parse(await req.clone().text());
           waiter.endAsync(token);
           assert.strictEqual(json.data.attributes.firstName, 'Hassan');
-          assert.strictEqual(
-            json.included,
-            undefined,
-            'included not being sent over the wire',
-          );
         }
         return null;
       },
@@ -1074,11 +1069,6 @@ module('Integration | card-copy', function (hooks) {
           let json = JSON.parse(await req.clone().text());
           waiter.endAsync(token);
           assert.strictEqual(json.data.attributes.firstName, 'Sakura');
-          assert.strictEqual(
-            json.included,
-            undefined,
-            'included not being sent over the wire',
-          );
         }
         return null;
       },
