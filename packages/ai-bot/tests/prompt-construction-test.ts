@@ -1792,15 +1792,8 @@ test('Return host result of tool call back to open ai', async () => {
           {
             id: 'tool-call-id-1',
             name: 'searchCardsByTypeAndTitle',
-            arguments: {
-              attributes: {
-                description: "Search for card instances of type 'Author'",
-                type: {
-                  module: 'http://localhost:4201/drafts/author',
-                  name: 'Author',
-                },
-              },
-            },
+            arguments:
+              '{"attributes":{"description":"Search for card instances of type \'Author\'","type":{"module":"http://localhost:4201/drafts/author","name":"Author"}}}',
           },
         ],
         data: {

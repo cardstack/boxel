@@ -352,17 +352,8 @@ module('Responding', (hooks) => {
         {
           id: 'some-tool-call-id',
           name: 'patchCard',
-          arguments: {
-            description: 'A new thing',
-            attributes: {
-              cardId: 'card/1',
-              patch: {
-                attributes: {
-                  some: 'thing',
-                },
-              },
-            },
-          },
+          arguments:
+            '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
       ],
       'Tool call event should be sent with correct content',
@@ -441,9 +432,7 @@ module('Responding', (hooks) => {
       [
         {
           name: 'patchCard',
-          arguments: {
-            description: 'A new',
-          },
+          arguments: '{"description":"A new"}',
         },
       ],
       'Partial tool call event should be sent with correct content',
@@ -454,17 +443,8 @@ module('Responding', (hooks) => {
         {
           id: 'some-tool-call-id',
           name: 'patchCard',
-          arguments: {
-            description: 'A new thing',
-            attributes: {
-              cardId: 'card/1',
-              patch: {
-                attributes: {
-                  some: 'thing',
-                },
-              },
-            },
-          },
+          arguments:
+            '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
       ],
       'Tool call event should be sent with correct content',
@@ -585,22 +565,14 @@ module('Responding', (hooks) => {
         {
           id: 'tool-call-1-id',
           name: 'checkWeather',
-          arguments: {
-            description: 'Check the weather in NYC',
-            attributes: {
-              zipCode: '10011',
-            },
-          },
+          arguments:
+            '{"description":"Check the weather in NYC","attributes":{"zipCode":"10011"}}',
         },
         {
           id: 'tool-call-2-id',
           name: 'checkWeather',
-          arguments: {
-            description: 'Check the weather in Beverly Hills',
-            attributes: {
-              zipCode: '90210',
-            },
-          },
+          arguments:
+            '{"description":"Check the weather in Beverly Hills","attributes":{"zipCode":"90210"}}',
         },
       ],
       'Command requests should be sent with correct content',
