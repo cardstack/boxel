@@ -174,7 +174,7 @@ export class Responder {
       );
     }
 
-    await Promise.all(this.messagePromises);
+    return await Promise.all(this.messagePromises);
   }
 
   deserializeToolCall(
