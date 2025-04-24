@@ -59,15 +59,25 @@ type ViewOption = 'strip' | 'grid';
 // ShowcaseView
 interface ShowcaseViewArgs {
   Args: {
-    startHereListings?: CardDef[];
-    newListings?: CardDef[];
-    featuredListings?: CardDef[];
+    startHereListings?: string[];
+    newListings?: string[];
+    featuredListings?: string[];
     context?: CardContext;
   };
   Element: HTMLElement;
 }
 
 class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
+  @tracked private startHereListingsResource =
+    this.args.context?.getCardCollection(
+      this,
+      () => this.args.startHereListings,
+    );
+
+  get startHereListings() {
+    return this.startHereListingsResource?.cards;
+  }
+
   <template>
     <header class='showcase-header'>
       <BookOpen width='45' height='45' role='presentation' />
@@ -92,7 +102,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
           </:intro>
           <:content>
             <CardsIntancesGrid
-              @cards={{@startHereListings}}
+              @cards={{this.startHereListings}}
               @context={{@context}}
             />
           </:content>
@@ -107,7 +117,7 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
             </p>
           </:intro>
           <:content>
-            <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} />
+            {{!-- <CardsIntancesGrid @cards={{@newListings}} @context={{@context}} /> --}}
           </:content>
         </CardsDisplaySection>
 
@@ -118,10 +128,10 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
               tools for personal project management.</p>
           </:intro>
           <:content>
-            <CardsIntancesGrid
+            {{!-- <CardsIntancesGrid
               @cards={{@featuredListings}}
               @context={{@context}}
-            />
+            /> --}}
           </:content>
         </CardsDisplaySection>
       </div>
@@ -497,6 +507,18 @@ class Isolated extends Component<typeof Catalog> {
     return this.realms.map((realm) => realm.href);
   }
 
+  get startHereListingIds() {
+    return this.args.model.startHere.map((listing) => listing.id);
+  }
+
+  get newListingIds() {
+    return this.args.model.new.map((listing) => listing.id);
+  }
+
+  get featuredListingIds() {
+    return this.args.model.featured.map((listing) => listing.id);
+  }
+
   getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   <template>
@@ -557,9 +579,9 @@ class Isolated extends Component<typeof Catalog> {
               <div class='catalog-listing info-box'>
                 {{#if (this.shouldShowTab 'showcase')}}
                   <ShowcaseView
-                    @startHereListings={{@model.startHere}}
-                    @newListings={{@model.new}}
-                    @featuredListings={{@model.featured}}
+                    @startHereListings={{this.startHereListingIds}}
+                    @newListings={{this.newListingIds}}
+                    @featuredListings={{this.featuredListingIds}}
                     @context={{@context}}
                   />
                 {{else}}

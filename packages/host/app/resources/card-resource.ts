@@ -19,10 +19,14 @@ interface Args {
 
 export class CardResource extends Resource<Args> {
   #id: string | undefined;
+  #hasRegisteredDestructor = false;
   @service declare private store: StoreService;
 
   modify(_positional: never[], named: Args['named']) {
     let { id } = named;
+    if (!id || id === this.#id) {
+      return;
+    }
     if (id !== this.#id) {
       if (this.#id) {
         this.store.dropReference(this.#id);
@@ -30,11 +34,14 @@ export class CardResource extends Resource<Args> {
       this.#id = id;
       this.store.addReference(this.#id);
     }
-    registerDestructor(this, () => {
-      if (this.#id) {
-        this.store.dropReference(this.#id);
-      }
-    });
+    if (!this.#hasRegisteredDestructor) {
+      registerDestructor(this, () => {
+        if (this.#id) {
+          this.store.dropReference(this.#id);
+        }
+      });
+      this.#hasRegisteredDestructor = true;
+    }
   }
 
   get card() {

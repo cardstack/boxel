@@ -68,7 +68,8 @@ export default class CopyCardCommand extends HostBaseCommand<
     }
     let commandModule = await this.loadCommandModule();
     const { CopyCardResult } = commandModule;
-    return new CopyCardResult({ newCard });
+    return new CopyCardResult();
+    // return new CopyCardResult({ newCard });
   }
 
   private async determineTargetUrl({

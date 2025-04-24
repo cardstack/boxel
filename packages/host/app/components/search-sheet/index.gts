@@ -264,10 +264,10 @@ export default class SearchSheet extends Component<Signature> {
             @isCompact={{this.isCompact}}
           />
         {{/if}}
-        <RecentCardsSection
+        {{!-- <RecentCardsSection
           @handleCardSelect={{this.handleCardSelect}}
           @isCompact={{this.isCompact}}
-        />
+        /> --}}
       </div>
       <div class='footer'>
         <div class='buttons'>
