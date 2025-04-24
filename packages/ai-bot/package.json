@@ -25,7 +25,7 @@
     "@types/sinonjs__fake-timers": "^8.1.5",
     "concurrently": "^8.0.1",
     "fs-extra": "~11.3.0",
-    "qunit": "catalog:"
+    "qunit": "^2.24.1"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
