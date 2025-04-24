@@ -35,7 +35,7 @@ export class CopyCardInput extends CardDef {
 }
 
 export class CopyCardResult extends CardDef {
-  @field newCard = linksTo(CardDef);
+  @field newCardId = contains(StringField);
 }
 
 export class CopySourceInput extends CardDef {

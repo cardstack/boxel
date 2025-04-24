@@ -478,11 +478,10 @@ export default class InteractSubmode extends Component {
       let newCardId: string | undefined;
       try {
         let { commandContext } = this.commandService;
-        const { newCard } = await new CopyCardCommand(commandContext).execute({
+        ({ newCardId } = await new CopyCardCommand(commandContext).execute({
           sourceCard,
           targetStackIndex: stackIndex,
-        });
-        newCardId = newCard.id;
+        }));
       } catch (e) {
         done.reject(e);
       } finally {
@@ -493,7 +492,6 @@ export default class InteractSubmode extends Component {
     },
   );
 
-  //==catalog actions==
   private _createFromSpec = task(async (spec: Spec, targetRealm: string) => {
     if (spec.isComponent) {
       return;
@@ -552,7 +550,6 @@ export default class InteractSubmode extends Component {
       );
     },
   );
-  // END ==catalog actions==
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(
@@ -586,15 +583,16 @@ export default class InteractSubmode extends Component {
         let realmURL = destinationRealmURL;
         sources.sort((a, b) => a.title.localeCompare(b.title));
         let scrollToCardId: string | undefined;
+        let newCardId: string | undefined;
         for (let [index, card] of sources.entries()) {
-          let { newCard } = await new CopyCardCommand(
+          ({ newCardId } = await new CopyCardCommand(
             this.commandService.commandContext,
           ).execute({
             sourceCard: card,
             targetUrl: realmURL.href,
-          });
+          }));
           if (index === 0) {
-            scrollToCardId = newCard.id; // we scroll to the first card lexically by title
+            scrollToCardId = newCardId; // we scroll to the first card lexically by title
           }
         }
         let clearSelection =
