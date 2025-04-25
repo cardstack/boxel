@@ -276,6 +276,8 @@ module('Integration | operator-mode', function (hooks) {
           <@fields.pet />
           Friends:
           <@fields.friends />
+          Cars:
+          <@fields.cars />
           <div data-test-addresses>Address: <@fields.address /></div>
         </template>
       };
@@ -1188,7 +1190,7 @@ module('Integration | operator-mode', function (hooks) {
     );
     await fillIn(
       '[data-test-stack-card-index="1"] [data-test-field="socialBlurb"] [data-test-boxel-input]',
-      `Everyone knows that Alice ran the show in the Brady household. But when Alice’s past comes to light, things get rather topsy turvy…`,
+      `Everyone knows that Alice ran the show in the Brady household. But when Alice's past comes to light, things get rather topsy turvy…`,
     );
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
@@ -1778,9 +1780,9 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(() =>
       (
         document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('Searching for “ma”'),
+      )?.innerText.includes('Searching for "ma"'),
     );
-    assert.dom(`[data-test-search-label]`).containsText('Searching for “ma”');
+    assert.dom(`[data-test-search-label]`).containsText('Searching for "ma"');
     await settled();
 
     assert.dom(`[data-test-search-result="${testRealmURL}Pet/mango"]`).exists();
@@ -1800,7 +1802,7 @@ module('Integration | operator-mode', function (hooks) {
 
     assert
       .dom(`[data-test-search-label]`)
-      .containsText('1 Result for “Mark J”');
+      .containsText('1 Result for "Mark J"');
 
     //Ensures that there is no cards when reopen the search sheet
     await click(`[data-test-search-sheet-cancel-button]`);
@@ -1814,17 +1816,17 @@ module('Integration | operator-mode', function (hooks) {
     await waitUntil(() =>
       (
         document.querySelector('[data-test-search-label]') as HTMLElement
-      )?.innerText.includes('Searching for “No Cards”'),
+      )?.innerText.includes('Searching for "No Cards"'),
     );
     assert
       .dom(`[data-test-search-label]`)
-      .containsText('Searching for “No Cards”');
+      .containsText('Searching for "No Cards"');
 
     await settled();
 
     assert
       .dom(`[data-test-search-label]`)
-      .containsText('0 Results for “No Cards”');
+      .containsText('0 Results for "No Cards"');
     assert.dom(`[data-test-search-sheet-search-result]`).doesNotExist();
   });
 
@@ -2928,6 +2930,10 @@ module('Integration | operator-mode', function (hooks) {
         `[data-test-plural-view-field="friends"] [data-test-plural-view-item]`,
       )
       .exists({ count: 3 });
+    assert
+      .dom(`[data-test-plural-view-field="cars"] [data-test-plural-view-item]`)
+      .exists({ count: 2 });
+
     assert
       .dom(
         `[data-test-plural-view-field="friends"] [data-test-plural-view-item="0"]`,
