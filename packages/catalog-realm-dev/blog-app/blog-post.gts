@@ -18,7 +18,7 @@ import BlogIcon from '@cardstack/boxel-icons/notebook';
 import { setBackgroundImage } from './components/layout';
 
 import { Author } from './author';
-import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
+// import { formatDatetime, BlogApp as BlogAppCard } from './blog-app';
 import { BlogCategory, categoryStyle } from './blog-category';
 import { User } from './user';
 import { markdownToHtml } from '@cardstack/runtime-common';
@@ -629,7 +629,7 @@ export class BlogPost extends CardDef {
       return 'Scheduled';
     },
   });
-  @field blog = linksTo(BlogAppCard, { isUsed: true });
+  // @field blog = linksTo(BlogAppCard, { isUsed: true });
   @field featuredImage = contains(FeaturedImageField);
   @field categories = linksToMany(BlogCategory);
   @field lastUpdated = contains(DatetimeField, {
@@ -654,11 +654,7 @@ export class BlogPost extends CardDef {
 
   get formattedDatePublished() {
     if (this.status === 'Published' && this.publishDate) {
-      return formatDatetime(this.publishDate, {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      });
+      return 'hey';
     }
     return undefined;
   }
@@ -671,13 +667,7 @@ export class BlogPost extends CardDef {
   }
 
   get formattedLastUpdated() {
-    return this.lastUpdated
-      ? formatDatetime(this.lastUpdated, {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        })
-      : undefined;
+    return this.lastUpdated ? 'hey' : undefined;
   }
 
   get lastUpdatedIsoTimestamp() {

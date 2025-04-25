@@ -22,7 +22,7 @@ import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { setBackgroundImage } from './components/layout';
 import { FeaturedImageField } from './fields/featured-image';
 import { ContactLinkField } from './fields/contact-link';
-import { BlogApp } from './blog-app';
+// import { BlogApp } from './blog-app';
 
 class AuthorContactLink extends ContactLinkField {
   static values = [
@@ -69,7 +69,7 @@ export class Author extends CardDef {
   @field contactLinks = containsMany(AuthorContactLink);
   @field email = contains(EmailField);
   @field featuredImage = contains(FeaturedImageField);
-  @field blog = linksTo(BlogApp, { isUsed: true });
+  // @field blog = linksTo(BlogApp, { isUsed: true });
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

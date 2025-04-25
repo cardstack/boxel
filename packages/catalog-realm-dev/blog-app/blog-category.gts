@@ -7,7 +7,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import ColorField from 'https://cardstack.com/base/color';
-import { BlogApp as BlogAppCard } from './blog-app';
+// import { BlogApp as BlogAppCard } from './blog-app';
 import { htmlSafe } from '@ember/template';
 import { cssVar, getContrastColor } from '@cardstack/boxel-ui/helpers';
 
@@ -81,7 +81,7 @@ export class BlogCategory extends CardDef {
   @field slug = contains(StringField);
   @field pillColor = contains(ColorField);
   @field description = contains(StringField);
-  @field blog = linksTo(BlogAppCard, { isUsed: true });
+  // @field blog = linksTo(BlogAppCard, { isUsed: true });
 
   static embedded = BlogCategoryTemplate;
   static isolated = BlogCategoryTemplate;
