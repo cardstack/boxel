@@ -1117,6 +1117,274 @@ module(basename(__filename), function () {
         assert.notOk(deletedEntryUrls.includes(file));
       });
     });
+
+    test('can handle multiple files with cyclic import errors', async function (assert) {
+      // Create three files with cyclic dependencies
+      await realm.write(
+        'a.gts',
+        `
+          import { linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { B } from "./b";
+          import { C } from "./c";
+
+          export class A extends CardDef {
+            @field b = linksTo(() => B);
+            @field c = linksTo(() => C);
+          }
+        `,
+      );
+
+      await realm.write(
+        'b.gts',
+        `
+          import { linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { A } from "./a";
+          import { C } from "./c";
+
+          export class B extends CardDef {
+            @field a = linksTo(() => A);
+            @field c = linksTo(() => C);
+          }
+        `,
+      );
+
+      await realm.write(
+        'c.gts',
+        `
+          import { linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
+          import { A } from "./a";
+          import { B } from "./b";
+
+          export class C extends CardDef {
+            @field a = linksTo(() => A);
+            @field b = linksTo(() => B);
+          }
+        `,
+      );
+
+      // Verify that trying to load any of these modules directly results in an error
+      let aModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}a`),
+      );
+
+      assert.strictEqual(
+        aModule?.type,
+        'module',
+        'Module A is in resolved module successfully',
+      );
+
+      let bModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}b`),
+      );
+      assert.strictEqual(
+        bModule?.type,
+        'module',
+        'Module B is in resolved module successfully',
+      );
+
+      let cModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}c`),
+      );
+      assert.strictEqual(
+        cModule?.type,
+        'module',
+        'Module C is in resolved module successfully',
+      );
+    });
+
+    test('should be able to handle dependencies between modules', async function (assert) {
+      // Create author.gts that depends on blog-app
+      await realm.write(
+        'author.gts',
+        `
+              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              import { BlogApp } from "./blog-app";
+              
+              export class Author extends CardDef {
+                @field name = contains(StringField);
+                @field blog = linksTo(BlogApp);
+              }
+            `,
+      );
+      // Create blog-category.gts that depends on blog-app
+      await realm.write(
+        'blog-category.gts',
+        `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { BlogApp } from "./blog-app";
+
+          export class BlogCategory extends CardDef {
+            @field name = contains(StringField);
+            @field blog = linksTo(BlogApp);
+          }
+        `,
+      );
+      // Create blog-post.gts that depends on author and blog-app
+      await realm.write(
+        'blog-post.gts',
+        `
+          import { contains, field, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { Author } from "./author";
+          import { BlogApp } from "./blog-app";
+          
+          export class BlogPost extends CardDef {
+            @field title = contains(StringField);
+            @field author = linksToMany(Author);
+            @field blog = linksTo(BlogApp);
+          }
+        `,
+      );
+      // Create blog-app.gts that depends on blog-post type
+      await realm.write(
+        'blog-app.gts',
+        `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import type { BlogPost } from "./blog-post";
+          
+          export class BlogApp extends CardDef {
+            @field title = contains(StringField);
+          }
+        `,
+      );
+
+      let blogPostModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-post`),
+      );
+      // This is failing because the currently module is not being resolved
+      assert.strictEqual(
+        blogPostModule?.type,
+        'module',
+        'BlogPost module is in resolved module successfully',
+      );
+
+      let blogCategoryModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-category`),
+      );
+      assert.strictEqual(
+        blogCategoryModule?.type,
+        'module',
+        'BlogCategory module is in resolved module successfully',
+      );
+
+      let authorModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}author`),
+      );
+      assert.strictEqual(
+        authorModule?.type,
+        'module',
+        'Author module is in resolved module successfully',
+      );
+
+      let blogAppModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-app`),
+      );
+      assert.strictEqual(
+        blogAppModule?.type,
+        'module',
+        'BlogApp module is in resolved module successfully',
+      );
+    });
+
+    test('should be able to handle dependencies between modules - with thunk', async function (assert) {
+      // Create author.gts that depends on blog-app
+      await realm.write(
+        'author.gts',
+        `
+              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              import { BlogApp } from "./blog-app";
+              
+              export class Author extends CardDef {
+                @field name = contains(StringField);
+                @field blog = linksTo(() => BlogApp);
+              }
+            `,
+      );
+      // Create blog-category.gts that depends on blog-app
+      await realm.write(
+        'blog-category.gts',
+        `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { BlogApp } from "./blog-app";
+
+          export class BlogCategory extends CardDef {
+            @field name = contains(StringField);
+            @field blog = linksTo(() =>BlogApp);
+          }
+        `,
+      );
+      // Create blog-post.gts that depends on author and blog-app
+      await realm.write(
+        'blog-post.gts',
+        `
+          import { contains, field, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { Author } from "./author";
+          import { BlogApp } from "./blog-app";
+          
+          export class BlogPost extends CardDef {
+            @field title = contains(StringField);
+            @field author = linksToMany(() => Author);
+            @field blog = linksTo(() => BlogApp);
+          }
+        `,
+      );
+      // Create blog-app.gts that depends on blog-post type
+      await realm.write(
+        'blog-app.gts',
+        `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import type { BlogPost } from "./blog-post";
+          
+          export class BlogApp extends CardDef {
+            @field title = contains(StringField);
+          }
+        `,
+      );
+
+      let blogPostModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-post`),
+      );
+      // This is failing because the currently module is not being resolved
+      assert.strictEqual(
+        blogPostModule?.type,
+        'module',
+        'BlogPost module is in resolved module successfully',
+      );
+
+      let blogCategoryModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-category`),
+      );
+      assert.strictEqual(
+        blogCategoryModule?.type,
+        'module',
+        'BlogCategory module is in resolved module successfully',
+      );
+
+      let authorModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}author`),
+      );
+      assert.strictEqual(
+        authorModule?.type,
+        'module',
+        'Author module is in resolved module successfully',
+      );
+
+      let blogAppModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-app`),
+      );
+      assert.strictEqual(
+        blogAppModule?.type,
+        'module',
+        'BlogApp module is in resolved module successfully',
+      );
+    });
   });
 
   module('permissioned realm', function (hooks) {
