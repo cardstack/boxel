@@ -722,13 +722,13 @@ export class ${className} extends ${exportName} {
         `Cannot duplicateCardInstance where where is no selected realm URL`,
       );
     }
-    let { newCard } = await new CopyCardCommand(
+    let { newCardId } = await new CopyCardCommand(
       this.commandService.commandContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
       targetUrl: this.selectedRealmURL.href,
     });
-    this.currentRequest.newFileDeferred.fulfill(new URL(`${newCard.id}.json`));
+    this.currentRequest.newFileDeferred.fulfill(new URL(`${newCardId}.json`));
   });
 
   private createCardInstance = restartableTask(async () => {
