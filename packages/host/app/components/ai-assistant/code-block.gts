@@ -24,6 +24,8 @@ import { CodeData } from './formatted-message';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import { service } from '@ember/service';
 
 interface CopyCodeButtonSignature {
   Args: {
@@ -34,6 +36,8 @@ interface CopyCodeButtonSignature {
 interface ApplyCodePatchButtonSignature {
   Args: {
     codePatchAction: CodePatchAction;
+    originalCode?: string | null;
+    modifiedCode?: string | null;
   };
 }
 
@@ -511,8 +515,30 @@ class CopyCodeButton extends Component<CopyCodeButtonSignature> {
   </template>
 }
 
-let ApplyCodePatchButton: TemplateOnlyComponent<ApplyCodePatchButtonSignature> =
+class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
+  @service declare operatorModeStateService: OperatorModeStateService;
+
+  // This is for debugging purposes only
+  logCodePatchAction = () => {
+    console.log('fileUrl \n', this.args.codePatchAction.fileUrl);
+    console.log(
+      'searchReplaceBlock \n',
+      this.args.codePatchAction.searchReplaceBlock,
+    );
+    console.log('originalCode \n', this.args.originalCode);
+    console.log('modifiedCode \n', this.args.modifiedCode);
+  };
+
+  get debugButtonEnabled() {
+    return this.operatorModeStateService.operatorModeController.debug;
+  }
+
   <template>
+    {{#if this.debugButtonEnabled}}
+      <button {{on 'click' this.logCodePatchAction}} class='debug-button'>
+        👁️
+      </button>
+    {{/if}}
     <ApplyButton
       data-test-apply-code-button
       @state={{@codePatchAction.patchCodeTaskState}}
@@ -520,4 +546,13 @@ let ApplyCodePatchButton: TemplateOnlyComponent<ApplyCodePatchButtonSignature> =
     >
       Apply
     </ApplyButton>
-  </template>;
+
+    <style scoped>
+      .debug-button {
+        background: transparent;
+        border: none;
+        margin-right: 5px;
+      }
+    </style>
+  </template>
+}
