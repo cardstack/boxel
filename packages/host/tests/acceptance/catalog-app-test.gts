@@ -75,7 +75,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         ],
       });
 
-      await waitFor('[data-test-catalog-listing--button]');
+      await waitFor('[data-test-catalog-listing-use-button]');
       assert
         .dom('[data-test-catalog-listing-use-button]')
         .containsText('Use', '"Use" button exist in listing');
