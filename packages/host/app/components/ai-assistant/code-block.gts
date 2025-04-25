@@ -4,6 +4,8 @@ import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 
+import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -18,14 +20,14 @@ import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
 import ApplyButton from '../ai-assistant/apply-button';
 
 import { CodeData } from './formatted-message';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import { service } from '@ember/service';
 
 interface CopyCodeButtonSignature {
   Args: {
