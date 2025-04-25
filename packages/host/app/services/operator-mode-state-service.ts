@@ -60,6 +60,7 @@ export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
+  aiAssistantOpen: boolean;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
   codeSelection?: string;
@@ -84,6 +85,7 @@ export type SerializedState = {
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
   fieldSelection?: string;
+  aiAssistantOpen?: boolean;
 };
 
 interface OpenFileSubscriber {
@@ -96,8 +98,8 @@ export default class OperatorModeStateService extends Service {
     submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
+    aiAssistantOpen: false,
   });
-  @tracked private _aiAssistantOpen = false;
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
@@ -121,15 +123,17 @@ export default class OperatorModeStateService extends Service {
   }
 
   get aiAssistantOpen() {
-    return this._aiAssistantOpen;
+    return this.state.aiAssistantOpen;
   }
 
   set aiAssistantOpen(value: boolean) {
-    this._aiAssistantOpen = value;
+    this.state.aiAssistantOpen = value;
+    this.schedulePersist();
   }
 
   toggleAiAssistant = () => {
     this.aiAssistantOpen = !this.aiAssistantOpen;
+    this.schedulePersist();
   };
 
   resetState() {
@@ -138,6 +142,7 @@ export default class OperatorModeStateService extends Service {
       submode: Submodes.Interact,
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
+      aiAssistantOpen: false,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -535,6 +540,7 @@ export default class OperatorModeStateService extends Service {
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
       codeSelection: this.state.codeSelection,
       fieldSelection: this.state.fieldSelection,
+      aiAssistantOpen: this.state.aiAssistantOpen,
     };
 
     for (let stack of this.state.stacks) {
@@ -592,6 +598,7 @@ export default class OperatorModeStateService extends Service {
       openDirs,
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
+      aiAssistantOpen: rawState.aiAssistantOpen ?? false,
     });
 
     let stackIndex = 0;
