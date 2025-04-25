@@ -270,9 +270,10 @@ export default class FileDefManagerImpl implements FileDefManager {
           opts['includeComputeds'] = true;
         }
 
-        let { Base64ImageField } = await this.loaderService.loader.import<{
-          Base64ImageField: typeof Base64ImageFieldType;
-        }>(`${baseRealm.url}base64-image`);
+        let { default: Base64ImageField } =
+          await this.loaderService.loader.import<{
+            default: typeof Base64ImageFieldType;
+          }>(`${baseRealm.url}base64-image`);
         let serialization = await this.cardService.serializeCard(card, {
           omitFields: [Base64ImageField],
           ...opts,
