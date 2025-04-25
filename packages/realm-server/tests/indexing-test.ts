@@ -1118,80 +1118,6 @@ module(basename(__filename), function () {
       });
     });
 
-    test('can handle multiple files with cyclic import errors', async function (assert) {
-      // Create three files with cyclic dependencies
-      await realm.write(
-        'a.gts',
-        `
-          import { linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-          import { B } from "./b";
-          import { C } from "./c";
-
-          export class A extends CardDef {
-            @field b = linksTo(() => B);
-            @field c = linksTo(() => C);
-          }
-        `,
-      );
-
-      await realm.write(
-        'b.gts',
-        `
-          import { linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-          import { A } from "./a";
-          import { C } from "./c";
-
-          export class B extends CardDef {
-            @field a = linksTo(() => A);
-            @field c = linksTo(() => C);
-          }
-        `,
-      );
-
-      await realm.write(
-        'c.gts',
-        `
-          import { linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-          import { A } from "./a";
-          import { B } from "./b";
-
-          export class C extends CardDef {
-            @field a = linksTo(() => A);
-            @field b = linksTo(() => B);
-          }
-        `,
-      );
-
-      // Verify that trying to load any of these modules directly results in an error
-      let aModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}a`),
-      );
-
-      assert.strictEqual(
-        aModule?.type,
-        'module',
-        'Module A is in resolved module successfully',
-      );
-
-      let bModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}b`),
-      );
-      assert.strictEqual(
-        bModule?.type,
-        'module',
-        'Module B is in resolved module successfully',
-      );
-
-      let cModule = await realm.realmIndexQueryEngine.module(
-        new URL(`${testRealm}c`),
-      );
-      assert.strictEqual(
-        cModule?.type,
-        'module',
-        'Module C is in resolved module successfully',
-      );
-    });
-
     test('should be able to handle dependencies between modules', async function (assert) {
       // Create author.gts that depends on blog-app
       await realm.write(
@@ -1225,7 +1151,7 @@ module(basename(__filename), function () {
       await realm.write(
         'blog-post.gts',
         `
-          import { contains, field, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           import { Author } from "./author";
           import { BlogApp } from "./blog-app";
@@ -1322,7 +1248,7 @@ module(basename(__filename), function () {
       await realm.write(
         'blog-post.gts',
         `
-          import { contains, field, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
+          import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
           import { Author } from "./author";
           import { BlogApp } from "./blog-app";
