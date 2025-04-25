@@ -566,22 +566,19 @@ module('Integration | Store', function (hooks) {
 
     (instance as any).name = 'Air';
 
-    assert.strictEqual(
+    assert.true(
       store.getSaveState(instance[localId])?.isSaving,
-      true,
       'isSaving state is correct',
     );
 
     await waitUntil(() => store.getSaveState(instance[localId])?.lastSaved);
 
-    assert.strictEqual(
+    assert.false(
       store.getSaveState(instance[localId])?.isSaving,
-      false,
       'isSaving state is correct',
     );
-    assert.strictEqual(
+    assert.false(
       store.getSaveState(instance.id)?.isSaving,
-      false,
       'isSaving state is correct (by remote id)',
     );
     assert.ok(
