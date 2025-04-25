@@ -2088,7 +2088,7 @@ Attached files:
             {
               id: 'tool-call-id-1',
               name: 'searchCardsByTypeAndTitle',
-              arguments: {
+              arguments: JSON.stringify({
                 attributes: {
                   description: "Search for card instances of type 'Author'",
                   type: {
@@ -2096,7 +2096,7 @@ Attached files:
                     name: 'Author',
                   },
                 },
-              },
+              }),
             },
           ],
         },

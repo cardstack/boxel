@@ -16,7 +16,7 @@ import {
 
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 
-import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
+import type { default as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import { relativeTo, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';

@@ -9,10 +9,12 @@ import { SlidingSync } from 'matrix-js-sdk/lib/sliding-sync';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
+import FileDefManagerImpl, {
+  FileDefManager,
+} from '@cardstack/host/lib/file-def-manager';
+
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as FileAPI from 'https://cardstack.com/base/file-api';
-
-import FileDefManagerImpl, { FileDefManager } from '../lib/file-def-manager';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
