@@ -75,6 +75,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         ],
       });
 
+      await waitFor('[data-test-catalog-listing-use-button]');
       assert
         .dom('[data-test-catalog-listing-use-button]')
         .containsText('Use', '"Use" button exist in listing');
@@ -126,6 +127,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         ],
       });
 
+      await waitFor('[data-test-catalog-listing-install-button]');
       await click('[data-test-catalog-listing-install-button]');
       await click('[data-test-boxel-menu-item-text="http://test-realm/test/"]');
 

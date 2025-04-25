@@ -95,9 +95,6 @@ export default class IdentityContextWithGarbageCollection
   }
 
   set(id: string, instance: CardDef): void {
-    if (!isLocalId(id)) {
-      this.#idResolver.addIdPair(instance[localIdSymbol], id);
-    }
     this.setItem(id, instance);
   }
 
@@ -228,18 +225,39 @@ export default class IdentityContextWithGarbageCollection
     type: 'instance' | 'error',
     id: string,
   ): CardDef | CardError | undefined {
+    let item: CardDef | CardError | undefined;
     let bucket = type === 'instance' ? this.#cards : this.#cardErrors;
     let silentBucket =
       type === 'instance' ? this.#nonTrackedCards : this.#nonTrackedCardErrors;
     let localId = isLocalId(id) ? id : undefined;
     let remoteId = !isLocalId(id) ? id : undefined;
+
     if (localId) {
       remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
     }
+
     if (remoteId) {
       localId = this.#idResolver.getLocalId(remoteId);
+      // try correlating the last part of the URL with a local ID to handle
+      // the scenario where the instance has a newly assigned remote id
+      if (!localId) {
+        localId = remoteId.split('/').pop()!;
+        let trackedItem = this.#cards.get(localId);
+        let nonTrackedItem = this.#nonTrackedCards.get(localId);
+        if (trackedItem) {
+          this.set(remoteId, trackedItem);
+        } else if (nonTrackedItem) {
+          this.setNonTracked(remoteId, nonTrackedItem);
+        }
+        item = trackedItem ?? nonTrackedItem;
+        if (item) {
+          item.id = remoteId;
+        }
+      }
     }
-    let item =
+
+    item =
+      item ??
       (localId
         ? (bucket.get(localId) ?? silentBucket.get(localId))
         : undefined) ??
@@ -253,6 +271,9 @@ export default class IdentityContextWithGarbageCollection
   }
 
   private setItem(id: string, item: CardDef | CardError, notTracked?: true) {
+    if (!isLocalId(id) && isCardInstance(item)) {
+      this.#idResolver.addIdPair(item[localIdSymbol], id);
+    }
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
     let localId = isLocalId(id) ? id : undefined;
@@ -403,6 +424,6 @@ function setIfDifferent(map: Map<string, unknown>, id: string, value: unknown) {
   }
 }
 
-function isLocalId(id: string) {
+export function isLocalId(id: string) {
   return !id.startsWith('http');
 }

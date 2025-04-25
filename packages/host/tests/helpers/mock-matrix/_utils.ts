@@ -16,6 +16,7 @@ type IEvent = MatrixSDK.IEvent;
 export class MockUtils {
   constructor(
     private testState: { owner?: Owner; sdk?: MockSDK; opts?: Config },
+    readonly start: () => Promise<void>,
   ) {}
   getRoomEvents = (roomId: string) => {
     return this.testState.sdk!.getRoomEvents(roomId);

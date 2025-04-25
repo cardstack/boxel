@@ -50,25 +50,19 @@ export default class CopyCardCommand extends HostBaseCommand<
       }
       doc.data.meta.adoptsFrom = input.codeRef;
     }
-    let maybeId = await this.store.create(doc, undefined, targetUrl);
-    if (typeof maybeId !== 'string') {
+    let newCardId = await this.store.create(doc, undefined, targetUrl);
+    if (typeof newCardId !== 'string') {
       throw new Error(
         `unable to save copied card instance: ${JSON.stringify(
-          maybeId,
+          newCardId,
           null,
           2,
         )}`,
       );
     }
-    let newCard = await this.store.get(maybeId);
-    if (!isCardInstance(newCard)) {
-      throw new Error(
-        `unable to get instance ${maybeId}: ${JSON.stringify(newCard, null, 2)}`,
-      );
-    }
     let commandModule = await this.loadCommandModule();
     const { CopyCardResult } = commandModule;
-    return new CopyCardResult({ newCard });
+    return new CopyCardResult({ newCardId });
   }
 
   private async determineTargetUrl({
