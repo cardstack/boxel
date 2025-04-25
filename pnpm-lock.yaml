@@ -21,12 +21,6 @@ catalogs:
     '@babel/generator':
       specifier: ^7.17.8
       version: 7.27.0
-    '@babel/helper-module-imports':
-      specifier: ^7.18.2
-      version: 7.25.9
-    '@babel/helper-module-transforms':
-      specifier: ^7.18.9
-      version: 7.26.0
     '@babel/parser':
       specifier: ^7.23.3
       version: 7.27.0
@@ -258,9 +252,6 @@ catalogs:
     awesome-phonenumber:
       specifier: ^7.2.0
       version: 7.2.0
-    babel-plugin-dynamic-import-node:
-      specifier: ^2.3.3
-      version: 2.3.3
     broccoli-asset-rev:
       specifier: ^3.0.0
       version: 3.0.0
@@ -3105,7 +3096,7 @@ importers:
   vendor/ember-concurrency-async-plugin:
     dependencies:
       '@babel/helper-module-imports':
-        specifier: 'catalog:'
+        specifier: ^7.18.2
         version: 7.25.9(supports-color@8.1.1)
       '@babel/helper-plugin-utils':
         specifier: ^7.12.13
@@ -3280,23 +3271,23 @@ importers:
   vendor/transform-modules-amd-plugin:
     dependencies:
       '@babel/helper-module-transforms':
-        specifier: 'catalog:'
+        specifier: ^7.18.9
         version: 7.26.0(@babel/core@7.26.10)(supports-color@8.1.1)
       '@babel/helper-plugin-utils':
         specifier: ^7.0.0
         version: 7.26.5
       babel-plugin-dynamic-import-node:
-        specifier: 'catalog:'
+        specifier: ^2.3.3
         version: 2.3.3
     devDependencies:
       '@babel/core':
-        specifier: 'catalog:'
+        specifier: ^7.26.10
         version: 7.26.10(supports-color@8.1.1)
       '@types/babel__core':
-        specifier: 'catalog:'
+        specifier: ^7.1.19
         version: 7.1.19
       '@types/babel__traverse':
-        specifier: 'catalog:'
+        specifier: ^7.14.2
         version: 7.14.2
 
 packages:
