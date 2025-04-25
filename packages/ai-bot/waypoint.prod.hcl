@@ -20,8 +20,8 @@ app "boxel-ai-bot" {
   deploy {
     use "aws-ecs" {
       count               = 1
-      cpu                 = 256
-      memory              = 512
+      cpu                 = 512
+      memory              = 1024
       architecture        = "x86_64"
       cluster             = "production"
       task_role_name      = "boxel-ai-bot-production-ecs-task"
