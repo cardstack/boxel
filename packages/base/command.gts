@@ -28,12 +28,14 @@ export class SaveCardInput extends CardDef {
 
 export class CopyCardInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
-  @field targetRealmUrl = contains(StringField);
+  @field targetUrl = contains(StringField);
   @field targetStackIndex = contains(NumberField);
+  @field realm = contains(StringField);
+  @field codeRef = contains(CodeRefField);
 }
 
 export class CopyCardResult extends CardDef {
-  @field newCard = linksTo(CardDef);
+  @field newCardId = contains(StringField);
 }
 
 export class CopySourceInput extends CardDef {
@@ -74,6 +76,22 @@ export class ApplySearchReplaceBlockInput extends CardDef {
 
 export class ApplySearchReplaceBlockResult extends CardDef {
   @field resultContent = contains(StringField);
+}
+
+export class LintAndFixInput extends CardDef {
+  @field fileContent = contains(StringField);
+  @field realm = contains(StringField);
+}
+
+export class LintAndFixResult extends CardDef {
+  @field output = contains(StringField);
+  @field fixed = contains(BooleanField);
+  @field messages = containsMany(JsonField);
+}
+
+export class PatchCodeInput extends CardDef {
+  @field fileUrl = contains(StringField);
+  @field codeBlocks = containsMany(StringField);
 }
 
 export class CreateAIAssistantRoomInput extends CardDef {

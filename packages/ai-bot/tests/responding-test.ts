@@ -10,6 +10,7 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
+import OpenAI from 'openai';
 
 class FakeMatrixClient implements MatrixClient {
   private eventId = 0;
@@ -61,6 +62,10 @@ class FakeMatrixClient implements MatrixClient {
     this.sentEvents = [];
     this.eventId = 0;
   }
+
+  getAccessToken() {
+    return 'fake-access-token';
+  }
 }
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
@@ -88,6 +93,7 @@ function chunkWithReasoning(
     choices: [
       {
         delta: {
+          // @ts-ignore  Type '{ reasoning: string; }' is not assignable to type 'Delta'.
           reasoning: reasoning,
         },
         finish_reason: null,
@@ -346,17 +352,8 @@ module('Responding', (hooks) => {
         {
           id: 'some-tool-call-id',
           name: 'patchCard',
-          arguments: {
-            description: 'A new thing',
-            attributes: {
-              cardId: 'card/1',
-              patch: {
-                attributes: {
-                  some: 'thing',
-                },
-              },
-            },
-          },
+          arguments:
+            '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
       ],
       'Tool call event should be sent with correct content',
@@ -435,9 +432,7 @@ module('Responding', (hooks) => {
       [
         {
           name: 'patchCard',
-          arguments: {
-            description: 'A new',
-          },
+          arguments: '{"description":"A new"}',
         },
       ],
       'Partial tool call event should be sent with correct content',
@@ -448,17 +443,8 @@ module('Responding', (hooks) => {
         {
           id: 'some-tool-call-id',
           name: 'patchCard',
-          arguments: {
-            description: 'A new thing',
-            attributes: {
-              cardId: 'card/1',
-              patch: {
-                attributes: {
-                  some: 'thing',
-                },
-              },
-            },
-          },
+          arguments:
+            '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
       ],
       'Tool call event should be sent with correct content',
@@ -579,22 +565,14 @@ module('Responding', (hooks) => {
         {
           id: 'tool-call-1-id',
           name: 'checkWeather',
-          arguments: {
-            description: 'Check the weather in NYC',
-            attributes: {
-              zipCode: '10011',
-            },
-          },
+          arguments:
+            '{"description":"Check the weather in NYC","attributes":{"zipCode":"10011"}}',
         },
         {
           id: 'tool-call-2-id',
           name: 'checkWeather',
-          arguments: {
-            description: 'Check the weather in Beverly Hills',
-            attributes: {
-              zipCode: '90210',
-            },
-          },
+          arguments:
+            '{"description":"Check the weather in Beverly Hills","attributes":{"zipCode":"90210"}}',
         },
       ],
       'Command requests should be sent with correct content',
@@ -695,5 +673,21 @@ module('Responding', (hooks) => {
         `Update ${i} replaced original message`,
       );
     }
+  });
+
+  test('Chunk processing will result in an error if matrix sending fails', async () => {
+    fakeMatrixClient.sendEvent = async () => {
+      throw new Error('MatrixError: [413] event too large');
+    };
+
+    let result = await responder.onChunk(
+      {} as any,
+      snapshotWithContent('super long content that is too large'),
+    );
+
+    assert.equal(
+      (result[0] as { errorMessage: string }).errorMessage,
+      'MatrixError: [413] event too large',
+    );
   });
 });

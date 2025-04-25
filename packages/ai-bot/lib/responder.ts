@@ -18,6 +18,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
@@ -59,13 +60,16 @@ export class Responder {
     readonly roomId: string,
   ) {}
 
-  messagePromises: Promise<ISendEventResponse | void>[] = [];
+  messagePromises: Promise<
+    ISendEventResponse | void | { errorMessage: string }
+  >[] = [];
 
   initialMessageSent = false;
   responseEventId: string | undefined;
   latestReasoning = '';
   latestContent = '';
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
+  toolCallsJson: string | undefined;
   isStreamingFinished = false;
   needsMessageSend = false;
 
@@ -92,7 +96,11 @@ export class Responder {
         this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
       ),
       this.latestReasoning,
-    );
+    ).catch((e) => {
+      return {
+        errorMessage: e.message,
+      };
+    });
     this.messagePromises.push(messagePromise);
     await messagePromise;
   };
@@ -140,7 +148,9 @@ export class Responder {
     }
 
     // reasoning does not support snapshots, so we need to handle the delta
-    let newReasoningContent = chunk.choices?.[0]?.delta?.reasoning;
+    let newReasoningContent = (
+      chunk.choices?.[0]?.delta as { reasoning?: string }
+    )?.reasoning;
     if (newReasoningContent?.length) {
       if (this.latestReasoning === thinkingMessage) {
         this.latestReasoning = '';
@@ -164,7 +174,7 @@ export class Responder {
       );
     }
 
-    await Promise.all(this.messagePromises);
+    return await Promise.all(this.messagePromises);
   }
 
   deserializeToolCall(
@@ -222,7 +232,14 @@ export class Responder {
       ).cancel();
       this.sendMessageEvent();
     }
-    await Promise.all(this.messagePromises);
+
+    let results = await Promise.all(this.messagePromises);
+
+    for (let result of results) {
+      if (result && 'errorMessage' in result) {
+        await this.onError(result.errorMessage);
+      }
+    }
   }
 
   async finalize() {

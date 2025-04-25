@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "address": {
+        "addressLine1": "Golden Gate Bridge",
+        "addressLine2": null,
+        "city": "San Francisco",
+        "state": "CA",
+        "postalCode": "94129",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "mapWidth": 600,
+      "mapHeight": 400,
+      "description": null,
+      "thumbnailURL": null,
+      "title": "Golden Gate Bridge"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../map",
+        "name": "Map"
+      }
+    }
+  }
+}

@@ -1,6 +1,6 @@
 import BooleanField from 'https://cardstack.com/base/boolean';
 import CodeRefField from 'https://cardstack.com/base/code-ref';
-import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import Base64ImageField from 'https://cardstack.com/base/base64-image';
 import {
   CardDef,
   field,

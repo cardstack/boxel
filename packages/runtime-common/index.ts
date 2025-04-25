@@ -1,4 +1,5 @@
 import { CardResource } from './card-document';
+import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -10,7 +11,7 @@ export type LooseCardResource = Omit<CardResource, 'id' | 'type'> & {
 
 export interface LooseSingleCardDocument {
   data: LooseCardResource;
-  included?: CardResource<Saved>[];
+  included?: CardResource[];
 }
 
 export type PatchData = {
@@ -19,7 +20,13 @@ export type PatchData = {
 };
 
 export { Deferred } from './deferred';
-export { CardError } from './error';
+export {
+  CardError,
+  isCardError,
+  formattedError,
+  type CardErrorJSONAPI,
+  type CardErrorsJSONAPI,
+} from './error';
 
 export interface ResourceObject {
   type: string;
@@ -59,6 +66,8 @@ export interface RealmPrerenderedCards {
   realmInfo: RealmInfo;
   prerenderedCards: PrerenderedCard[];
 }
+// TODO should we use the secure form once we start letting lid's drive the id
+// on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
@@ -121,8 +130,6 @@ export type {
   RealmSession,
 } from './realm';
 
-import type { Saved } from './card-document';
-
 import type { CodeRef } from './code-ref';
 export type { CodeRef };
 
@@ -134,7 +141,9 @@ export type {
   CardFields,
   SingleCardDocument,
   Relationship,
+  ResourceID,
   Meta,
+  Saved,
   CardResourceMeta,
 } from './card-document';
 export type { JWTPayload } from './realm-auth-client';
@@ -158,6 +167,7 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type Spec } from 'https://cardstack.com/base/spec';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
 
@@ -247,22 +257,7 @@ export async function chooseFile<T extends FieldDef>(): Promise<
   return await chooser.chooseFile<T>();
 }
 
-export interface CardErrorsJSONAPI {
-  errors: {
-    id?: string; // 404 errors won't necessarily have an id
-    status: number;
-    title: string;
-    message: string;
-    realm: string | undefined;
-    meta: {
-      lastKnownGoodHtml: string | null;
-      cardTitle: string | null;
-      scopedCssUrls: string[];
-      stack: string | null;
-    };
-  }[];
-}
-export type CardErrorJSONAPI = CardErrorsJSONAPI['errors'][0];
+import { type CardErrorJSONAPI } from './error';
 export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
@@ -324,11 +319,10 @@ export interface Store {
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
   get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
-  patch(
-    instance: CardDef,
-    doc: LooseSingleCardDocument,
+  patch<T extends CardDef>(
+    id: string,
     patchData: PatchData,
-  ): Promise<void>;
+  ): Promise<T | undefined>;
   search(query: Query, realmURL: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
@@ -393,7 +387,7 @@ export interface SearchQuery {
   isLoading: boolean;
 }
 
-export interface Actions {
+export interface CardActions {
   createCard: (
     ref: CodeRef,
     relativeTo: URL | undefined,
@@ -425,6 +419,26 @@ export interface Actions {
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
 }
+
+export interface CopyCardsWithCodeRef {
+  sourceCard: CardDef;
+  codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
+}
+
+export interface CatalogActions {
+  create: (spec: Spec, targetRealm: string) => void;
+  copy: (card: CardDef, targetRealm: string) => Promise<CardDef>;
+  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
+  copyCards: (
+    cards: CopyCardsWithCodeRef[],
+    targetUrl: string,
+  ) => Promise<CardDef[]>;
+  allRealmsInfo: () => Promise<
+    Record<string, { canWrite: boolean; info: RealmInfo }>
+  >;
+}
+
+export type Actions = CardActions & CatalogActions;
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {

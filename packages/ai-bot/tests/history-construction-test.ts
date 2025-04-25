@@ -86,7 +86,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         sender: 'John',
         room_id: 'room1',
@@ -99,6 +98,7 @@ module('constructHistory', () => {
 
     const result = constructHistory(eventlist, new Map());
 
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, eventlist);
   });
 
@@ -113,7 +113,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         room_id: 'room1',
         unsigned: {
@@ -130,7 +129,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'yo',
-          formatted_body: 'yo',
         },
         room_id: 'room1',
         unsigned: {
@@ -147,7 +145,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
-          formatted_body: 'hola',
         },
         room_id: 'room1',
         unsigned: {
@@ -159,6 +156,7 @@ module('constructHistory', () => {
 
     const result = constructHistory(history, new Map());
 
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, history);
   });
 
@@ -173,7 +171,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         room_id: 'room1',
         unsigned: {
@@ -190,7 +187,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
-          formatted_body: 'hola',
         },
         room_id: 'room1',
         unsigned: {
@@ -207,7 +203,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'yo',
-          formatted_body: 'yo',
         },
         room_id: 'room1',
         unsigned: {
@@ -219,6 +214,7 @@ module('constructHistory', () => {
 
     const result = constructHistory(history, new Map());
 
+    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
     assert.deepEqual(result, history);
   });
 
@@ -236,7 +232,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'yo',
-          formatted_body: 'yo',
         },
         sender: 'user1',
         origin_server_ts: 1629876543210,
@@ -253,7 +248,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         sender: 'user2',
         origin_server_ts: 1629876543220,
@@ -270,7 +264,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         sender: 'user3',
         origin_server_ts: 1629876543230,
@@ -292,7 +285,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
-          formatted_body: 'hola',
         },
         sender: 'user3',
         origin_server_ts: 1629876543240,
@@ -309,7 +301,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'aloha',
-          formatted_body: 'aloha',
         },
         sender: 'user5',
         origin_server_ts: 1629876543250,
@@ -324,6 +315,7 @@ module('constructHistory', () => {
     const result = constructHistory(history, new Map());
 
     assert.deepEqual(result, [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '2',
         type: 'm.room.message',
@@ -331,7 +323,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hi',
-          formatted_body: 'hi',
         },
         sender: 'user2',
         origin_server_ts: 1629876543220,
@@ -341,6 +332,7 @@ module('constructHistory', () => {
           transaction_id: '2',
         },
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '3',
         type: 'm.room.message',
@@ -352,7 +344,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
-          formatted_body: 'hola',
         },
         sender: 'user3',
         origin_server_ts: 1629876543240,
@@ -362,6 +353,7 @@ module('constructHistory', () => {
           transaction_id: '4',
         },
       },
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         event_id: '5',
         type: 'm.room.message',
@@ -369,7 +361,6 @@ module('constructHistory', () => {
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'aloha',
-          formatted_body: 'aloha',
         },
         sender: 'user5',
         origin_server_ts: 1629876543250,
@@ -394,7 +385,6 @@ module('constructHistory', () => {
         content: {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
-          formatted_body: '',
           body: '',
           data: JSON.stringify({
             cardFragment: `ry","lastName":"Pratchett"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
@@ -416,7 +406,6 @@ module('constructHistory', () => {
         content: {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
-          formatted_body: '',
           body: '',
           data: JSON.stringify({
             cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Ter`,
@@ -439,7 +428,6 @@ module('constructHistory', () => {
         content: {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
-          formatted_body: '',
           body: '',
           data: JSON.stringify({
             cardFragment: `{"data":{"type":"card","id":"http://localhost:4201/experiments/Author/1","attributes":{"firstName":"Mango","lastName":"Abdel-Rahman"},"meta":{"adoptsFrom":{"module":"../author","name":"Author"}}}}`,
@@ -462,7 +450,6 @@ module('constructHistory', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: JSON.stringify({
             context: {
               functions: [],
@@ -483,6 +470,7 @@ module('constructHistory', () => {
     let cardFragments = extractCardFragmentsFromEvents(eventlist);
     const result = constructHistory(eventlist, cardFragments);
     assert.deepEqual(result, [
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       {
         type: 'm.room.message',
         event_id: '4',
@@ -491,7 +479,6 @@ module('constructHistory', () => {
           msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
-          formatted_body: 'Hey',
           data: {
             context: {
               functions: [],
@@ -554,7 +541,6 @@ module('constructHistory', () => {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
           body: 'card fragment 1 of 1',
-          formatted_body: 'card fragment 1 of 1',
           // data should be a JSON string
           data: {
             cardFragment:

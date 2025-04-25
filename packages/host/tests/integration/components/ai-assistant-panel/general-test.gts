@@ -285,21 +285,18 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: `question #0`,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: `question #1`,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
     let messageEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: `Thinking...`,
       msgtype: 'm.text',
-      formatted_body: `Thinking...`,
       format: 'org.matrix.custom.html',
       isStreamingFinished: false,
     });
     let commandEventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: `Thinking...`,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: `Thinking...`,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
@@ -325,7 +322,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: `answer #0`,
       msgtype: 'm.text',
-      formatted_body: `answer #0`,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       'm.relates_to': {
@@ -335,7 +331,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Changing first name to Evie',
-      formatted_body: 'Changing first name to Evie',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       'm.relates_to': {
@@ -370,8 +365,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
       msgtype: 'm.text',
-      formatted_body:
-        "# Beagles: Loyal Companions\n\nEnergetic and friendly, beagles are wonderful family pets. They _love_ company and always crave playtime.\n\nTheir keen noses lead adventures, unraveling scents. Always curious, they're the perfect mix of independence and affection.",
     });
     await waitFor(`[data-test-room="${roomId}"] [data-test-message-idx="0"]`);
     assert.dom('[data-test-message-idx="0"] h1').containsText('Beagles');
@@ -386,14 +379,12 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'Say one word.',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Say one word.',
       format: 'org.matrix.custom.html',
     });
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'French.',
       msgtype: 'm.text',
-      formatted_body: 'French.',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
@@ -401,7 +392,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     simulateRemoteMessage(roomId, '@matic:boxel', {
       body: 'What is a french bulldog?',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'What is a french bulldog?',
       format: 'org.matrix.custom.html',
     });
 
@@ -411,7 +401,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'Thinking...',
         msgtype: 'm.text',
-        formatted_body: 'Thinking...',
         format: 'org.matrix.custom.html',
         isStreamingFinished: false,
       },
@@ -445,7 +434,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'French bulldog is a',
         msgtype: 'm.text',
-        formatted_body: 'French bulldog is a',
         format: 'org.matrix.custom.html',
         isStreamingFinished: false,
         'm.relates_to': {
@@ -484,7 +472,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'French bulldog is a French breed',
         msgtype: 'm.text',
-        formatted_body: 'French bulldog is a French breed',
         format: 'org.matrix.custom.html',
         isStreamingFinished: false,
         'm.relates_to': {
@@ -529,8 +516,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'French bulldog is a French breed of companion dog or toy dog.',
         msgtype: 'm.text',
-        formatted_body:
-          'French bulldog is a French breed of companion dog or toy dog',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true, // This is an indicator from the ai bot that the message is finalized and the openai is done streaming
         'm.relates_to': {
@@ -559,7 +544,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       );
     assert
       .dom('[data-test-message-idx="3"] [data-test-ai-message-content]')
-      .hasText('French bulldog is a French breed of companion dog or toy dog');
+      .hasText('French bulldog is a French breed of companion dog or toy dog.');
 
     assert
       .dom(`[data-test-enter-room='${roomId}']`)
@@ -571,7 +556,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     let roomId = await renderAiAssistantPanel();
     let event1Id = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
-      formatted_body: '',
       msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
       data: JSON.stringify({
         index: 0,
@@ -595,7 +579,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'card with error',
-      formatted_body: 'card with error',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       data: JSON.stringify({
         attachedCardsEventIds: [event1Id],
@@ -619,7 +602,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       '@aibot:localhost',
       {
         body: 'Update mango card',
-        formatted_body: 'Update mango card',
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         data: JSON.stringify({
           attachedCardsEventIds: [cardFragmentsEventId],
@@ -633,7 +615,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       '@aibot:localhost',
       {
         body: '',
-        formatted_body: '',
         msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
         data: JSON.stringify({
           index: 0,
@@ -714,7 +695,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'Say one word.',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Say one word.',
       format: 'org.matrix.custom.html',
     });
 
@@ -723,7 +703,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     let eventId2 = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Word.',
       msgtype: 'm.text',
-      formatted_body: 'Word.',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
@@ -746,7 +725,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'I sent a message from the background.',
         msgtype: 'm.text',
-        formatted_body: 'Word.',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -775,15 +753,12 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'I have a feeling something will go wrong',
       format: 'org.matrix.custom.html',
     });
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'There was an error processing your request, please try again later',
       msgtype: 'm.text',
-      formatted_body:
-        'There was an error processing your request, please try again later',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       errorMessage: 'AI bot error',
@@ -792,15 +767,12 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     simulateRemoteMessage(roomId, '@testuser:localhost', {
       body: 'I have a feeling something will go wrong',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'I have a feeling something will go wrong',
       format: 'org.matrix.custom.html',
     });
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'There was an error processing your request, please try again later',
       msgtype: 'm.text',
-      formatted_body:
-        'There was an error processing your request, please try again later',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       errorMessage: 'AI bot error',
@@ -847,14 +819,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'This is the first message',
         msgtype: 'org.text',
-        formatted_body: 'This is the first message',
         format: 'org.matrix.custom.html',
-        'm.new_content': {
-          body: 'First message body',
-          msgtype: 'org.text',
-          formatted_body: 'First message body',
-          format: 'org.matrix.custom.html',
-        },
       },
       {
         origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
@@ -866,7 +831,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'Second message body',
         msgtype: 'org.text',
-        formatted_body: 'Second message body',
         format: 'org.matrix.custom.html',
       },
       {
@@ -879,14 +843,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'First replacement message body',
         msgtype: 'org.text',
-        formatted_body: 'First replacement message body',
         format: 'org.matrix.custom.html',
-        ['m.new_content']: {
-          body: 'First replacement message body',
-          msgtype: 'org.text',
-          formatted_body: 'First replacement message body',
-          format: 'org.matrix.custom.html',
-        },
         ['m.relates_to']: {
           event_id: firstMessageId,
           rel_type: 'm.replace',
@@ -934,9 +891,8 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       anotherRoomId,
       '@aibot:localhost',
       {
-        body: 'I sent a message sixteen minutes ago',
+        body: 'A message that was sent sixteen minutes ago.',
         msgtype: 'm.text',
-        formatted_body: 'A message that was sent sixteen minutes ago.',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -953,7 +909,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       {
         body: 'I sent a message from the background.',
         msgtype: 'm.text',
-        formatted_body: 'A message from the background.',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -973,6 +928,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert.dom('[data-test-chat-title]').containsText('Another Room');
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
-      .containsText('A message from the background.');
+      .containsText('I sent a message from the background.');
   });
 });

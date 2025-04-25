@@ -81,6 +81,10 @@ class Assistant {
   }
 
   getResponse(prompt: PromptParts) {
+    if (!prompt.model) {
+      throw new Error('Model is required');
+    }
+
     // Sending tools to models that don't support them results in an error
     // from openrouter.
     if (
@@ -154,7 +158,10 @@ Common issues are:
   let assistant = new Assistant(client, aiBotUserId);
   await assistant.loadToolCallCapableModels();
 
-  client.on(RoomMemberEvent.Membership, function (_event, member) {
+  client.on(RoomMemberEvent.Membership, function (event, member) {
+    if (event.event.origin_server_ts! < startTime) {
+      return;
+    }
     if (member.membership === 'invite' && member.userId === aiBotUserId) {
       client
         .joinRoom(member.roomId)
@@ -170,7 +177,7 @@ Common issues are:
     }
   });
 
-  // TODO: Set this up to use a queue that gets drained
+  // TODO: Set this up to use a queue that gets drained (CS-8516)
   client.on(
     RoomEvent.Timeline,
     async function (event, room, toStartOfTimeline) {
@@ -258,12 +265,32 @@ Common issues are:
           );
         }
 
+        let chunkHandlingError: string | undefined;
         let generationId: string | undefined;
         const runner = assistant
           .getResponse(promptParts)
           .on('chunk', async (chunk, snapshot) => {
             generationId = chunk.id;
-            await responder.onChunk(chunk, snapshot);
+
+            let chunkProcessingResult = await responder.onChunk(
+              chunk,
+              snapshot,
+            );
+            let chunkProcessingResultError = chunkProcessingResult.find(
+              (promiseResult) =>
+                promiseResult &&
+                'errorMessage' in promiseResult &&
+                promiseResult.errorMessage != null,
+            ) as { errorMessage: string } | undefined;
+
+            if (chunkProcessingResultError) {
+              chunkHandlingError = chunkProcessingResultError.errorMessage;
+
+              // If there was an error processing the chunk, e.g. matrix sending error (e.g. event too large),
+              // then we want to stop accepting more chunks by aborting the runner. This will throw an error
+              // where the await responder.finalize() is called (the catch block below will handle this)
+              runner.abort();
+            }
           })
           .on('error', async (error) => {
             await responder.onError(error);
@@ -273,7 +300,11 @@ Common issues are:
           await runner.finalChatCompletion();
           await responder.finalize();
         } catch (error) {
-          await responder.onError(error as OpenAIError);
+          if (chunkHandlingError) {
+            await responder.onError(chunkHandlingError); // E.g. MatrixError: [413] event too large
+          } else {
+            await responder.onError(error as OpenAIError);
+          }
         } finally {
           if (generationId) {
             assistant.trackAiUsageCost(senderMatrixUserId, generationId);
@@ -284,7 +315,7 @@ Common issues are:
           return await assistant.setTitle(
             room.roomId,
             promptParts.history,
-            event as CommandResultEvent,
+            event as unknown as CommandResultEvent,
           );
         }
         return;
@@ -298,12 +329,14 @@ Common issues are:
 
   //handle set title by commands
   client.on(RoomEvent.Timeline, async function (event, room) {
-    if (!room) {
+    if (
+      event.event.origin_server_ts! < startTime ||
+      !room ||
+      !isCommandResultStatusApplied(event)
+    ) {
       return;
     }
-    if (!isCommandResultStatusApplied(event)) {
-      return;
-    }
+
     log.info(
       '(%s) (Room: "%s" %s) (Message: %s %s)',
       event.getType(),
@@ -324,7 +357,11 @@ Common issues are:
         eventList,
         cardFragments,
       );
-      return await assistant.setTitle(room.roomId, history, event);
+      return await assistant.setTitle(
+        room.roomId,
+        history,
+        event as unknown as CommandResultEvent,
+      );
     } catch (e) {
       log.error(e);
       Sentry.captureException(e);

@@ -23,7 +23,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import type { Base64ImageField as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
+import type { default as Base64ImageFieldType } from 'https://cardstack.com/base/base64-image';
 import type { relativeTo, CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type {
@@ -90,9 +90,10 @@ export default class CardEventPublisher {
           opts['includeComputeds'] = true;
         }
 
-        let { Base64ImageField } = await this.loaderService.loader.import<{
-          Base64ImageField: typeof Base64ImageFieldType;
-        }>(`${baseRealm.url}base64-image`);
+        let { default: Base64ImageField } =
+          await this.loaderService.loader.import<{
+            default: typeof Base64ImageFieldType;
+          }>(`${baseRealm.url}base64-image`);
         let serialization = await this.cardService.serializeCard(card, {
           omitFields: [Base64ImageField],
           ...opts,
@@ -266,7 +267,6 @@ export default class CardEventPublisher {
           msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
           format: APP_BOXEL_CARD_FORMAT,
           body: `card fragment ${index + 1} of ${fragments.length}`,
-          formatted_body: `card fragment ${index + 1} of ${fragments.length}`,
           data: {
             ...(index < fragments.length - 1
               ? { nextFragment: responses[0].event_id }

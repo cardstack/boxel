@@ -202,7 +202,7 @@ export class Batch {
             ...entry.pristine_doc,
             id: this.copiedRealmURL(
               sourceRealmURL,
-              new URL(entry.pristine_doc.id),
+              new URL(entry.pristine_doc.id!), // these will always have an ID
             ).href,
           }
         : entry.pristine_doc;
@@ -511,19 +511,26 @@ export class Batch {
     }
   }
 
-  async invalidate(url: URL): Promise<string[]> {
+  async invalidate(urls: URL[]): Promise<string[]> {
     await this.ready;
     let start = Date.now();
-    this.#perfLog.debug(`${jobIdentity} starting invalidation of ${url.href}`);
-    let alias = trimExecutableExtension(url).href;
+    this.#perfLog.debug(
+      `${jobIdentity} starting invalidation of ${urls.map((u) => u.href).join()}`,
+    );
     let visited = new Set<string>();
-
-    let invalidations = [
-      ...new Set([
-        ...(!this.nodeResolvedInvalidations.includes(alias) ? [url.href] : []),
-        ...(alias ? await this.calculateInvalidations(alias, visited) : []),
-      ]),
-    ];
+    let invalidations: string[] = [];
+    for (let url of urls) {
+      let alias = trimExecutableExtension(url).href;
+      let workingInvalidations = [
+        ...new Set([
+          ...(!this.nodeResolvedInvalidations.includes(alias)
+            ? [url.href]
+            : []),
+          ...(alias ? await this.calculateInvalidations(alias, visited) : []),
+        ]),
+      ];
+      invalidations = [...new Set([...invalidations, ...workingInvalidations])];
+    }
 
     if (invalidations.length === 0) {
       return [];
@@ -560,13 +567,13 @@ export class Batch {
     ]);
 
     this.#perfLog.debug(
-      `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${url.href} in ${
+      `${jobIdentity(this.jobInfo)} inserted invalidated rows for  ${urls.map((u) => u.href).join()} in ${
         Date.now() - insertStart
       } ms`,
     );
 
     this.#perfLog.debug(
-      `${jobIdentity(this.jobInfo)} completed invalidation of ${url.href} in ${Date.now() - start} ms`,
+      `${jobIdentity(this.jobInfo)} completed invalidation of ${urls.map((u) => u.href).join()} in ${Date.now() - start} ms`,
     );
 
     this.#invalidations = new Set([...this.#invalidations, ...invalidations]);

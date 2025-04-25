@@ -1,6 +1,8 @@
 import { getReasonPhrase } from 'http-status-codes';
+import status from 'statuses';
 import { createResponse } from './create-response';
 import { RequestContext } from './realm';
+import type { SearchResultError } from './realm-index-query-engine';
 
 export interface ErrorDetails {
   status?: number;
@@ -24,6 +26,103 @@ export interface SerializedError {
   stack?: string;
 }
 
+export interface CardErrorJSONAPI {
+  id?: string; // 404 errors won't necessarily have an id
+  status: number;
+  title: string;
+  message: string;
+  realm: string | undefined;
+  meta: {
+    lastKnownGoodHtml: string | null;
+    cardTitle: string | null;
+    scopedCssUrls: string[];
+    stack: string | null;
+  };
+  additionalErrors?: (CardError | SearchResultError['error'] | Error)[] | null;
+}
+
+export interface CardErrorsJSONAPI {
+  errors: CardErrorJSONAPI[];
+}
+
+export function formattedError(
+  url: string | undefined,
+  error: any,
+  err?: CardError | Partial<CardErrorJSONAPI>,
+): CardErrorsJSONAPI {
+  if (isCardError(err)) {
+    let cardError;
+    let meta: CardErrorJSONAPI['meta'] | undefined;
+    let message: string | undefined;
+    let additionalError = err.additionalErrors?.[0];
+
+    if (additionalError && 'errorDetail' in additionalError) {
+      cardError = additionalError.errorDetail;
+      let { lastKnownGoodHtml, scopedCssUrls, cardTitle } = additionalError;
+      meta = {
+        lastKnownGoodHtml,
+        scopedCssUrls,
+        stack: cardError.stack ?? err.stack ?? error.stack ?? null,
+        cardTitle,
+      };
+    } else if (isCardError(additionalError)) {
+      cardError = additionalError;
+    } else {
+      message = additionalError?.message;
+      cardError = err;
+    }
+
+    return {
+      errors: [
+        {
+          id: url,
+          message: message ?? cardError.message,
+          status: cardError.status,
+          title:
+            cardError.title ??
+            status.message[cardError.status] ??
+            cardError.message,
+          realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
+          meta: meta ?? {
+            lastKnownGoodHtml: null,
+            scopedCssUrls: [],
+            stack: cardError.stack ?? err.stack ?? error.stack ?? null,
+            cardTitle: null,
+          },
+          additionalErrors: cardError.additionalErrors,
+        },
+      ],
+    };
+  }
+
+  let errorStatus = err?.status ?? error.status;
+  let errorMessage =
+    err?.message ??
+    (errorStatus
+      ? `Received HTTP ${errorStatus} from server ${
+          error.responseText ?? ''
+        }`.trim()
+      : error.message);
+
+  return {
+    errors: [
+      {
+        id: url,
+        status: errorStatus ?? '500',
+        title: err?.title ?? status.message[errorStatus] ?? errorMessage,
+        message: errorMessage,
+        realm: err?.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
+        meta: err?.meta ?? {
+          lastKnownGoodHtml: null,
+          scopedCssUrls: [],
+          stack: error.stack ?? null,
+          cardTitle: null,
+        },
+      },
+    ],
+  };
+}
+
 export class CardError extends Error implements SerializedError {
   message: string;
   status: number;
@@ -31,7 +130,8 @@ export class CardError extends Error implements SerializedError {
   source?: ErrorDetails['source'];
   responseText?: string;
   isCardError: true = true;
-  additionalErrors: (CardError | Error)[] | null = null;
+  additionalErrors: (CardError | SearchResultError['error'] | Error)[] | null =
+    null;
   deps?: string[];
 
   constructor(
@@ -94,9 +194,14 @@ export class CardError extends Error implements SerializedError {
         Array.isArray(maybeErrorJSON.errors) &&
         maybeErrorJSON.errors.length > 0
       ) {
-        return CardError.fromSerializableError(maybeErrorJSON.errors[0]);
+        let error = CardError.fromSerializableError(maybeErrorJSON.errors[0]);
+        if (response.status === 404) {
+          error.deps = [response.url];
+        }
+
+        return error;
       }
-      return new CardError(
+      let error = new CardError(
         `unable to fetch ${url}${!maybeErrorJSON ? ': ' + text : ''}`,
         {
           title: response.statusText,
@@ -104,6 +209,10 @@ export class CardError extends Error implements SerializedError {
           responseText: text,
         },
       );
+      if (response.status === 404) {
+        error.deps = [response.url];
+      }
+      return error;
     }
     throw new CardError(
       `tried to create a card error from a successful fetch response from ${url}, status ${

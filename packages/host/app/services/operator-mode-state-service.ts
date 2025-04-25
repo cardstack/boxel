@@ -7,13 +7,10 @@ import Service, { service } from '@ember/service';
 import { tracked, cached } from '@glimmer/tracking';
 
 import { task, restartableTask } from 'ember-concurrency';
-import { mergeWith } from 'lodash';
 import stringify from 'safe-stable-stringify';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import {
-  mergeRelationships,
-  type PatchData,
   RealmPaths,
   type LocalPath,
   CodeRef,
@@ -170,29 +167,6 @@ export default class OperatorModeStateService extends Service {
     }
     this.schedulePersist();
   }
-
-  patchCard = task({ enqueue: true }, async (id: string, patch: PatchData) => {
-    let card = await this.store.get(id);
-    if (card && isCardInstance(card)) {
-      let document = await this.cardService.serializeCard(card);
-      if (patch.attributes) {
-        document.data.attributes = mergeWith(
-          document.data.attributes,
-          patch.attributes,
-        );
-      }
-      if (patch.relationships) {
-        let mergedRel = mergeRelationships(
-          document.data.relationships,
-          patch.relationships,
-        );
-        if (mergedRel && Object.keys(mergedRel).length !== 0) {
-          document.data.relationships = mergedRel;
-        }
-      }
-      await this.store.patch(card, document, patch);
-    }
-  });
 
   async deleteCard(cardId: string) {
     let cardRealmUrl = (await this.network.authedFetch(cardId)).headers.get(

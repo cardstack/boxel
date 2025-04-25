@@ -55,7 +55,7 @@ class EmailEditTemplate extends Component<typeof EmailField> {
   </template>
 }
 
-export class EmailField extends StringField {
+export default class EmailField extends StringField {
   static icon = MailIcon;
   static displayName = 'Email';
 

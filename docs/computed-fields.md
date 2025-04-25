@@ -4,10 +4,10 @@ In addition to linking to or containing card fields, a card can have a “comput
 
 ```typescript
 export class Person extends CardDef {
-  @field firstName = contains(StringCard);
-  @field lastName = contains(StringCard);
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
 
-  @field fullName = contains(StringCard, {
+  @field fullName = contains(StringField, {
     computeVia: function (this: Person) {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     }

@@ -24,7 +24,7 @@ import {
 import {
   codeRefWithAbsoluteURL,
   Loader,
-  loadCard,
+  loadCardDef,
   isResolvedCodeRef,
   isPrimitive,
 } from '@cardstack/runtime-common';
@@ -43,7 +43,7 @@ import Brain from '@cardstack/boxel-icons/brain';
 import { use, resource } from 'ember-resources';
 import { TrackedObject } from 'tracked-built-ins';
 
-export type SpecType = 'card' | 'field' | 'app' | 'skill';
+export type SpecType = 'card' | 'field' | 'component' | 'app' | 'skill';
 
 class SpecTypeField extends StringField {
   static displayName = 'Spec Type';
@@ -54,6 +54,9 @@ const PRIMITIVE_INCOMPATIBILITY_MESSAGE =
 
 class Isolated extends Component<typeof Spec> {
   get defaultIcon() {
+    if (!this.args.model) {
+      return;
+    }
     return this.args.model.constructor?.icon;
   }
 
@@ -68,7 +71,7 @@ class Isolated extends Component<typeof Spec> {
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCard(this.args.model.ref, {
+          let cardDef = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
@@ -111,7 +114,7 @@ class Isolated extends Component<typeof Spec> {
         <div class='box header-icon-container'>
           {{#if this.icon}}
             <this.icon width='35' height='35' role='presentation' />
-          {{else}}
+          {{else if this.defaultIcon}}
             <this.defaultIcon width='35' height='35' role='presentation' />
           {{/if}}
         </div>
@@ -304,6 +307,9 @@ class Isolated extends Component<typeof Spec> {
 
 class Fitted extends Component<typeof Spec> {
   get defaultIcon() {
+    if (!this.args.model) {
+      return;
+    }
     return this.args.model.constructor?.icon;
   }
 
@@ -318,7 +324,7 @@ class Fitted extends Component<typeof Spec> {
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let card = await loadCard(this.args.model.ref, {
+          let card = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
@@ -336,7 +342,7 @@ class Fitted extends Component<typeof Spec> {
       <div class='thumbnail-section'>
         {{#if this.icon}}
           <this.icon width='35' height='35' role='presentation' />
-        {{else}}
+        {{else if this.defaultIcon}}
           <this.defaultIcon width='35' height='35' role='presentation' />
         {{/if}}
       </div>
@@ -563,6 +569,9 @@ class Fitted extends Component<typeof Spec> {
 
 class Edit extends Component<typeof Spec> {
   get defaultIcon() {
+    if (!this.args.model) {
+      return;
+    }
     return this.args.model.constructor?.icon;
   }
 
@@ -579,7 +588,7 @@ class Edit extends Component<typeof Spec> {
     (async () => {
       try {
         if (this.args.model.ref && this.args.model.id) {
-          let cardDef = await loadCard(this.args.model.ref, {
+          let cardDef = await loadCardDef(this.args.model.ref, {
             loader: myLoader(),
             relativeTo: new URL(this.args.model.id),
           });
@@ -622,7 +631,7 @@ class Edit extends Component<typeof Spec> {
         <div class='box header-icon-container'>
           {{#if this.icon}}
             <this.icon width='35' height='35' role='presentation' />
-          {{else}}
+          {{else if this.defaultIcon}}
             <this.defaultIcon width='35' height='35' role='presentation' />
           {{/if}}
         </div>
@@ -903,6 +912,13 @@ export class Spec extends CardDef {
       );
     },
   });
+
+  @field isComponent = contains(BooleanField, {
+    computeVia: function (this: Spec) {
+      return this.specType === 'component';
+    },
+  });
+
   @field moduleHref = contains(StringField, {
     computeVia: function (this: Spec) {
       if (!this.ref || !this.ref.module) {
@@ -1021,6 +1037,8 @@ function getIcon(specType: string) {
       return LayoutList;
     case 'skill':
       return Brain;
+    case 'component':
+      return LayoutList;
     default:
       return;
   }

@@ -630,19 +630,18 @@ module('Acceptance | Commands tests', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
-          },
+          }),
         },
       ],
     });
@@ -692,17 +691,16 @@ module('Acceptance | Commands tests', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Delaying 1 second',
             attributes: {},
-          },
+          }),
         },
       ],
     });
@@ -748,9 +746,8 @@ Hello, world!
 =======
 Hi, world!
 >>>>>>> REPLACE\n\`\`\``;
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
-      formatted_body: codeBlock,
       msgtype: 'org.text',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
@@ -803,9 +800,8 @@ We are one!
     await click('[data-test-open-ai-assistant]');
     let roomId = getRoomIds().pop()!;
 
-    await simulateRemoteMessage(roomId, '@aibot:localhost', {
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
-      formatted_body: codeBlock,
       msgtype: 'org.text',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
@@ -904,17 +900,16 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Switching to code submode',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Switching to code submode',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               submode: 'code',
             },
-          },
+          }),
         },
       ],
     });
@@ -991,13 +986,12 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             description:
               'Change the topic of the meeting to "Meeting with Hassan"',
             attributes: {
@@ -1008,7 +1002,7 @@ We are one!
                 },
               },
             },
-          },
+          }),
         },
       ],
     });
@@ -1055,19 +1049,18 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'abc123',
           name: 'switch-submode_dd88',
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
-          },
+          }),
         },
       ],
     });
@@ -1084,8 +1077,19 @@ We are one!
     assert.dom('[data-test-submode-switcher=code]').exists();
 
     // verify that command result event was created correctly
-    await waitUntil(() => getRoomIds().length > 0);
-    let message = getRoomEvents(roomId).pop()!;
+    await waitUntil(
+      () =>
+        getRoomIds().length > 0 &&
+        getRoomEvents(roomId).find(
+          (m) =>
+            m.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        ),
+    );
+    let message = getRoomEvents(roomId).find(
+      (m) =>
+        m.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    )!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -1124,7 +1128,6 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: '',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
@@ -1134,12 +1137,12 @@ We are one!
             module: `${testRealmURL}search-and-open-card-command`,
             name: 'default',
           }),
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Finding and opening Hassan card',
             attributes: {
               title: 'Hassan',
             },
-          },
+          }),
         },
       ],
     });
@@ -1201,21 +1204,20 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Show the card',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'show-card_566f',
-          arguments: {
+          arguments: JSON.stringify({
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
               cardIdToShow: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
-          },
+          }),
         },
       ],
     });
@@ -1277,22 +1279,21 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Checking the current UI state and searching for cards',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Checking the current UI state and searching for cards',
       format: 'org.matrix.custom.html',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'a4237eca-b73e-4256-bf3a-45849fa07d02',
           name: 'get-boxel-ui-state_dd88',
-          arguments: {},
+          arguments: JSON.stringify({}),
         },
         {
           id: '2b48526b-d599-4789-a47b-dff349948c37',
           name: 'search-cards-by-type-and-title_dd88',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               query: 'test',
             },
-          },
+          }),
         },
       ],
     });
@@ -1358,15 +1359,14 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Inspecting the current UI state',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Inspecting the current UI state',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {},
-          },
+          }),
         },
       ],
     });
@@ -1414,18 +1414,17 @@ We are one!
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Getting weather information for London',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: 'Getting weather information for London',
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'fd1606f6-4d81-414a-8901-d6017eaf1fe9',
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               location: 'London',
             },
-          },
+          }),
         },
       ],
     });
@@ -1472,14 +1471,13 @@ We are one!
       simulateRemoteMessage(roomId, '@aibot:localhost', {
         body: 'Will it boom?',
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        formatted_body: 'Will it boom?',
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
         [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
           {
             id: '8406a6eb-a3d5-494f-a7f3-ae9880115756',
             name: toolName,
-            arguments: {},
+            arguments: JSON.stringify({}),
           },
         ],
       });

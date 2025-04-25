@@ -288,7 +288,6 @@
       "msgtype": "app.boxel.message",
       "body": "Alerting the user should only be done if requested",
       "format": "org.matrix.custom.html",
-      "formatted_body": "<p>Alerting the user should only be done if requested</p>\n",
       "clientGeneratedId": "a4108056-3f47-46cc-b979-cee8113925a6",
       "data": "{\"attachedCardsEventIds\":[],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"AlertTheUser_pcDFLKJ9auSJQfSovb3LT2\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"message\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":true}}"
     },
@@ -307,14 +306,7 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "formatted_body": "Thinking...",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "formatted_body": "Thinking...",
-        "format": "org.matrix.custom.html"
-      }
+      "format": "org.matrix.custom.html"
     },
     "origin_server_ts": 1734900008837,
     "unsigned": {
@@ -331,7 +323,6 @@
     "content": {
       "body": "Alerting should only be triggered when explicitly requested by the user. Currently, there are no open cards, so no alerts are necessary.",
       "msgtype": "app.boxel.command",
-      "formatted_body": "Alerting should only be triggered when explicitly requested by the user. Currently, there are no open cards, so no alerts are necessary.",
       "format": "org.matrix.custom.html",
       "data": "{\"eventId\":\"$0rIdhh15SHHWqVJbKKGGpPP4SJG4ke9HXGRSLw8cHxY\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_AHCj9YjOvc0UjmGLbWcAr3wR\",\"name\":\"AlertTheUser_pcDFLKJ9auSJQfSovb3LT2\",\"arguments\":{\"description\":\"Alerting should only be triggered when explicitly requested by the user. Currently, there are no open cards, so no alerts are necessary.\",\"attributes\":{\"message\":\"Alerting should only be triggered by user request. No open cards are currently present.\"}}}}",
       "m.relates_to": {
@@ -399,7 +390,6 @@
       "msgtype": "app.boxel.cardFragment",
       "format": "app.boxel.card",
       "body": "card fragment 1 of 1",
-      "formatted_body": "card fragment 1 of 1",
       "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\\\",\\\"attributes\\\":{\\\"roomId\\\":\\\"!WmvKSxVjxbOfvhZRJw:localhost\\\",\\\"title\\\":\\\"SEND FORCED FUNCTION\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/new-app-card-test/forcedfunctioncaller\\\",\\\"name\\\":\\\"MessageSender\\\"}}}}\",\"index\":0,\"totalParts\":1}"
     },
     "origin_server_ts": 1734900034778,
@@ -418,7 +408,6 @@
       "msgtype": "app.boxel.message",
       "body": "did you get requested to do that?",
       "format": "org.matrix.custom.html",
-      "formatted_body": "<p>did you get requested to do that?</p>\n",
       "clientGeneratedId": "ffc42b0c-40c0-4693-b005-bcffb4bd3168",
       "data": "{\"attachedCardsEventIds\":[\"$zSyK_aqxFvxAeosa8ZUeSjEAG2g7pI0n1ZXb7UpNe20\"],\"context\":{\"openCardIds\":[\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCard\",\"description\":\"Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"roomId\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}}}}}},\"required\":[\"attributes\",\"description\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"searchCard\",\"description\":\"Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `cardType` attribute.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"title of the card\"},\"cardType\":{\"type\":\"string\",\"description\":\"name of the card type\"}}}},\"required\":[\"attributes\",\"description\"]}}}],\"submode\":\"interact\"}}"
     },
@@ -437,14 +426,7 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "formatted_body": "Thinking...",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "formatted_body": "Thinking...",
-        "format": "org.matrix.custom.html"
-      }
+      "format": "org.matrix.custom.html"
     },
     "origin_server_ts": 1734900035846,
     "unsigned": {
@@ -461,14 +443,7 @@
     "content": {
       "body": "It",
       "msgtype": "m.text",
-      "formatted_body": "It",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It",
-        "msgtype": "m.text",
-        "formatted_body": "It",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -490,14 +465,7 @@
     "content": {
       "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
       "msgtype": "m.text",
-      "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
-        "msgtype": "m.text",
-        "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -519,14 +487,7 @@
     "content": {
       "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
       "msgtype": "m.text",
-      "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
-        "msgtype": "m.text",
-        "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -548,14 +509,7 @@
     "content": {
       "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
       "msgtype": "m.text",
-      "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
-        "msgtype": "m.text",
-        "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": false,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -577,14 +531,7 @@
     "content": {
       "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
       "msgtype": "m.text",
-      "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
       "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
-        "msgtype": "m.text",
-        "formatted_body": "It looks like there was a misunderstanding. I mistakenly initiated an alert without an explicit request from you. My apologies for the oversight. I will ensure that alerts are only triggered when requested. If there's anything specific you need assistance with, please let me know!",
-        "format": "org.matrix.custom.html"
-      },
       "isStreamingFinished": true,
       "m.relates_to": {
         "rel_type": "m.replace",
@@ -607,7 +554,6 @@
       "msgtype": "app.boxel.message",
       "body": "that's alright we're testing some key things here, you were not told to but had a flag that forced it to happen. Now alert with \"testing by consent\"",
       "format": "org.matrix.custom.html",
-      "formatted_body": "<p>that's alright we're testing some key things here, you were not told to but had a flag that forced it to happen. Now alert with \"testing by consent\"</p>\n",
       "clientGeneratedId": "39e2b952-d85a-4120-b499-27d3eebae1e1",
       "data": "{\"attachedCardsEventIds\":[\"$zSyK_aqxFvxAeosa8ZUeSjEAG2g7pI0n1ZXb7UpNe20\"],\"context\":{\"openCardIds\":[\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCard\",\"description\":\"Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"http://localhost:4201/admin/new-app-card-test/MessageSender/102fe7c0-5147-44b4-ae52-b9164480d47c\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"roomId\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}}}}}},\"required\":[\"attributes\",\"description\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"searchCard\",\"description\":\"Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `cardType` attribute.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"filter\":{\"type\":\"object\",\"properties\":{\"contains\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"title of the card\"}},\"required\":[\"title\"]},\"eq\":{\"type\":\"object\",\"properties\":{\"_cardType\":{\"type\":\"string\",\"description\":\"name of the card type\"}},\"required\":[\"_cardType\"]}}}}}},\"required\":[\"attributes\",\"description\"]}}}],\"submode\":\"interact\"}}"
     },
@@ -626,14 +572,7 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "formatted_body": "Thinking...",
-      "format": "org.matrix.custom.html",
-      "m.new_content": {
-        "body": "Thinking...",
-        "msgtype": "m.text",
-        "formatted_body": "Thinking...",
-        "format": "org.matrix.custom.html"
-      }
+      "format": "org.matrix.custom.html"
     },
     "origin_server_ts": 1734900093129,
     "unsigned": {
@@ -650,7 +589,6 @@
     "content": {
       "body": "Testing by consent",
       "msgtype": "app.boxel.command",
-      "formatted_body": "Testing by consent",
       "format": "org.matrix.custom.html",
       "data": "{\"eventId\":\"$LVH0K7CKxMKwIp6Y67D_NUMWr-5BvknhgdZROzfqb_I\",\"toolCall\":{\"type\":\"function\",\"id\":\"call_qTvfsOAC84Zhf7Clq1OmLyz2\",\"name\":\"AlertTheUser_pcDFLKJ9auSJQfSovb3LT2\",\"arguments\":{\"description\":\"Testing by consent\",\"attributes\":{\"message\":\"Testing by consent\"}}}}",
       "m.relates_to": {

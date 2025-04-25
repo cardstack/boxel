@@ -4,6 +4,8 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_REL_TYPE,
 } from '../helpers/matrix-constants';
 
 import {
@@ -162,7 +164,6 @@ test.describe('Commands', () => {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
-      formatted_body: 'some command',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -212,7 +213,6 @@ test.describe('Commands', () => {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       body: 'some command',
-      formatted_body: 'some command',
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
@@ -303,5 +303,168 @@ test.describe('Commands', () => {
         },
       },
     );
+  });
+
+  test('an autoexecuted command does not run again when the message is re-rendered', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass', { url: appURL });
+
+    // create a skill card
+    await page.locator('[data-test-create-new-card-button]').click();
+    await page
+      .locator(
+        '[data-test-select="https://cardstack.com/base/fields/skill-card"]',
+      )
+      .click();
+    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page
+      .locator('[data-test-field="instructions"] textarea')
+      .fill(
+        'Here is a command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
+      );
+    await page
+      .locator('[data-test-field="commands"] [data-test-add-new]')
+      .click();
+    await page
+      .locator('[data-test-field="codeRef"] input')
+      .fill('@cardstack/boxel-host/commands/switch-submode/default');
+    await page
+      .locator('[data-test-field="title"] input')
+      .fill('Automatic Switch Command');
+    await page.waitForSelector('[data-test-last-saved]');
+
+    // close the Skill card
+    await page.locator('[data-test-close-button]').click();
+
+    // Add the skill card to the assistant
+    await page.locator('[data-test-skill-menu]').hover();
+    await expect(
+      page.locator('[data-test-pill-menu-header-button]'),
+    ).toBeVisible();
+    await page.locator('[data-test-pill-menu-header-button]').click();
+    await page.locator('[data-test-pill-menu-add-button]').click();
+    await page
+      .locator('[data-test-card-catalog-item]', {
+        hasText: 'Automatic Switch Command',
+      })
+      .click();
+    await page.locator('[data-test-card-catalog-go-button]').click();
+
+    // fill in message field with "Switch to code mode"
+    await page
+      .locator('[data-test-boxel-input-id="ai-chat-input"]')
+      .fill('Switch to code mode');
+    await page.locator('[data-test-send-message-btn]').click();
+    await page.locator('[data-test-message-idx="0"]').waitFor();
+
+    let roomId = await getRoomId(page);
+    let numEventsBeforeResponse = (await getRoomEvents('user1', 'pass', roomId))
+      .length;
+    // Note: this should really be posted by the aibot user but we can't do that easily
+    // in this test, and this reproduces the bug
+    await putEvent(userCred.accessToken, roomId, 'm.room.message', '1', {
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      body: '',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: '5e226a0f-4014-4e21-b051-ebbb92cabdcc',
+          name: 'switch-submode_dd88',
+          arguments: {
+            description: 'Switching to code submode',
+            attributes: {
+              submode: 'code',
+            },
+          },
+        },
+      ],
+    });
+    await page.locator('[data-test-message-idx="1"]').waitFor();
+
+    // Note: you don't have to click on apply button, because command on Skill
+    // has requireApproval set to false
+    await page.waitForSelector(
+      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
+    );
+
+    await expect(
+      page.locator('[data-test-message-idx="1"] [data-test-command-id]'),
+    ).not.toHaveClass(/is-failed/);
+
+    // check we're in code mode
+    await page.waitForSelector('[data-test-submode-switcher=code]');
+    await expect(page.locator('[data-test-submode-switcher=code]')).toHaveCount(
+      1,
+    );
+
+    // verify that command result event was created correctly
+    await waitUntil(
+      async () =>
+        (await getRoomEvents('user1', 'pass', roomId)).length >
+        numEventsBeforeResponse + 5,
+    );
+    let message = (await getRoomEvents('user1', 'pass', roomId))
+      .reverse()
+      .slice(0, 5)
+      .find((message) => {
+        return (
+          message.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE
+        );
+      });
+    expect(message).toBeDefined();
+    expect(message!.content['m.relates_to']?.rel_type).toStrictEqual(
+      APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+    );
+    expect((message!.content['m.relates_to'] as any)?.key).toStrictEqual(
+      'applied',
+    );
+    expect((message!.content as any).commandRequestId).toStrictEqual(
+      '5e226a0f-4014-4e21-b051-ebbb92cabdcc',
+    );
+
+    await page.fill('[data-test-message-field]', 'OK now switch back');
+    await page.click('[data-test-send-message-btn]');
+
+    await page.waitForSelector('[data-test-message-idx="2"]');
+
+    // Note: this should really be posted by the aibot user but we can't do that easily
+    // in this test, and this reproduces the bug
+    await putEvent(userCred.accessToken, roomId, 'm.room.message', '2', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
+        {
+          id: 'a8fe43a4-7bd3-40a7-8455-50e31038e3a4',
+          name: 'switch-submode_dd88',
+          arguments: {
+            description: 'Switching to interact submode',
+            attributes: {
+              submode: 'interact',
+            },
+          },
+        },
+      ],
+    });
+
+    await page.waitForSelector('[data-test-message-idx="3"]');
+
+    await page.waitForSelector(
+      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
+    );
+
+    await expect(
+      page.locator('[data-test-message-idx="3"] [data-test-command-id]'),
+    ).not.toHaveClass(/is-failed/);
+
+    // check we're in interact mode
+    await page.waitForSelector('[data-test-submode-switcher=interact]');
+    await expect(
+      page.locator('[data-test-submode-switcher=interact]'),
+    ).toHaveCount(1);
   });
 });

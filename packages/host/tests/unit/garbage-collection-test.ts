@@ -5,6 +5,8 @@ import { module, test } from 'qunit';
 import {
   baseRealm,
   localId,
+  LooseSingleCardDocument,
+  isNotLoadedError,
   type Loader,
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
@@ -474,9 +476,41 @@ module('Unit | identity-context garbage collection', function (hooks) {
       undefined,
       'the instance does not exist',
     );
+    assert.deepEqual(
+      identityContext.get(hassan[localId]),
+      undefined,
+      'the instance does not exist via local id',
+    );
 
     assert.deepEqual(
       identityContext.getInstanceOrError(hassan.id),
+      undefined,
+      'the instance does not exist',
+    );
+  });
+
+  test('can delete an instance from the identity map by local id', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest(saveAll);
+
+    identityContext.delete(hassan[localId]);
+
+    assert.deepEqual(
+      identityContext.get(hassan[localId]),
+      undefined,
+      'the instance does not exist',
+    );
+
+    assert.deepEqual(
+      identityContext.get(hassan.id),
+      undefined,
+      'the instance does not exist via remote id',
+    );
+
+    assert.deepEqual(
+      identityContext.getInstanceOrError(hassan[localId]),
       undefined,
       'the instance does not exist',
     );
@@ -625,5 +659,67 @@ module('Unit | identity-context garbage collection', function (hooks) {
       hassan,
       'card instance is returned',
     );
+  });
+
+  test('can get a card from the identity map by correlating the last part of the remote id with the local id for an instance that has a newly assigned remote id', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest();
+
+    assert.strictEqual(
+      identityContext.getInstanceOrError(`${testRealmURL}${hassan[localId]}`),
+      hassan,
+      'card instance is returned',
+    );
+
+    assert.strictEqual(
+      hassan.id,
+      `${testRealmURL}${hassan[localId]}`,
+      'instance has remote id set correctly',
+    );
+  });
+
+  test('can handle encountering a NotLoaded error in an instance during garbage collection', async function (assert) {
+    let { identityContext } = await setupTest();
+    let doc: LooseSingleCardDocument = {
+      data: {
+        id: `${testRealmURL}wu`,
+        type: 'card',
+        attributes: {
+          name: 'Wu',
+        },
+        relationships: {
+          bestFriend: {
+            links: { self: `${testRealmURL}not-loaded` },
+            // this is what a NotLoaded error looks like: a relationship data.id
+            // that has no associated included resource
+            data: {
+              id: `${testRealmURL}not-loaded`,
+              type: 'card',
+            },
+          },
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}test-cards`,
+            name: 'Person',
+          },
+        },
+      },
+    };
+    let instance = await api.createFromSerialized(doc.data, doc, undefined, {
+      identityContext,
+    });
+
+    try {
+      (instance as any).bestFriend;
+      throw new Error('expected NotLoadedError');
+    } catch (err) {
+      assert.true(isNotLoadedError(err), 'instance has NotLoaded error');
+    }
+
+    // success is not throwing
+    identityContext.sweep(api);
   });
 });

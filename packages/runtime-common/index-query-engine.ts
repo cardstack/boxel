@@ -5,7 +5,7 @@ import {
   type CodeRef,
   Loader,
   baseCardRef,
-  loadCard,
+  loadCardDef,
   internalKeyFor,
   identifyCard,
   ResolvedCodeRef,
@@ -1114,7 +1114,7 @@ async function loadFieldOrCard(
   loader: Loader,
 ): Promise<typeof BaseDef> {
   try {
-    return await loadCard(ref, { loader });
+    return await loadCardDef(ref, { loader });
   } catch (e: any) {
     if (!('type' in ref)) {
       throw new Error(

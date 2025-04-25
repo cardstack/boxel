@@ -79,10 +79,10 @@ module(basename(__filename), function () {
           fileSystem: {
             'person.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringCard from "https://cardstack.com/base/string";
+            import StringField from "https://cardstack.com/base/string";
 
             export class Person extends CardDef {
-              @field firstName = contains(StringCard);
+              @field firstName = contains(StringField);
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
                   <h1><@fields.firstName/></h1>
@@ -127,19 +127,19 @@ module(basename(__filename), function () {
           `,
             'pet.gts': `
             import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-            import StringCard from "https://cardstack.com/base/string";
+            import StringField from "https://cardstack.com/base/string";
 
             export class Pet extends CardDef {
-              @field firstName = contains(StringCard);
+              @field firstName = contains(StringField);
             }
           `,
             'fancy-person.gts': `
             import { contains, field, Component } from "https://cardstack.com/base/card-api";
-            import StringCard from "https://cardstack.com/base/string";
+            import StringField from "https://cardstack.com/base/string";
             import { Person } from "./person";
 
             export class FancyPerson extends Person {
-              @field favoriteColor = contains(StringCard);
+              @field favoriteColor = contains(StringField);
 
               static embedded = class Embedded extends Component<typeof this> {
                 <template>
@@ -154,12 +154,12 @@ module(basename(__filename), function () {
           `,
             'post.gts': `
             import { contains, field, linksTo, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringCard from "https://cardstack.com/base/string";
+            import StringField from "https://cardstack.com/base/string";
             import { Person } from "./person";
 
             export class Post extends CardDef {
               @field author = linksTo(Person);
-              @field message = contains(StringCard);
+              @field message = contains(StringField);
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
                   <h1><@fields.message/></h1>
@@ -170,10 +170,10 @@ module(basename(__filename), function () {
           `,
             'boom.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringCard from "https://cardstack.com/base/string";
+            import StringField from "https://cardstack.com/base/string";
 
             export class Boom extends CardDef {
-              @field firstName = contains(StringCard);
+              @field firstName = contains(StringField);
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
                   <h1><@fields.firstName/>{{this.boom}}</h1>
@@ -186,10 +186,10 @@ module(basename(__filename), function () {
           `,
             'boom2.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-            import StringCard from "https://cardstack.com/base/string";
+            import StringField from "https://cardstack.com/base/string";
 
             export class Boom extends CardDef {
-              @field firstName = contains(StringCard);
+              @field firstName = contains(StringField);
               boom = () => {};
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
@@ -509,9 +509,9 @@ module(basename(__filename), function () {
         'pet.gts',
         `
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+          import StringField from "https://cardstack.com/base/string";
           export class Pet extends CardDef {
-            @field firstName = contains(StringCard);
+            @field firstName = contains(StringField);
           }
           throw new Error('boom!');
         `,
@@ -561,10 +561,10 @@ module(basename(__filename), function () {
         'person.gts',
         `
           import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+          import StringField from "https://cardstack.com/base/string";
 
           export class Person extends CardDef {
-            @field firstName = contains(StringCard);
+            @field firstName = contains(StringField);
           }
         `,
       );
@@ -591,6 +591,160 @@ module(basename(__filename), function () {
         result.length,
         2,
         'correct number of instances returned',
+      );
+    });
+
+    test('can recover from a module sequence error', async function (assert) {
+      // introduce errors into 2 gts file with first module has dependency on second module
+      await realm.write(
+        'pet.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { Name } from "./name"; // this is missing
+          export class Pet extends CardDef {
+            @field name = contains(Name);
+          }
+        `,
+      );
+      assert.deepEqual(
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 0,
+          instanceErrors: 2,
+          moduleErrors: 2,
+          modulesIndexed: 0,
+          totalIndexEntries: 9,
+        },
+        'indexed correct number of files',
+      );
+      await realm.write(
+        'name.gts',
+        `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class Name extends FieldDef {
+            @field firstName = contains(StringField);
+            @field lastName = contains(StringField);
+          }
+        `,
+      );
+
+      // Aspect module should be indexed
+      let name = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}name`),
+      );
+      assert.strictEqual(
+        name?.type,
+        'module',
+        'Name module is successfully indexed',
+      );
+
+      // Since the name is ready, the pet should be indexed and not in an error state
+      assert.deepEqual(
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 1,
+          instanceErrors: 1,
+          moduleErrors: 0,
+          modulesIndexed: 3,
+          totalIndexEntries: 13,
+        },
+        'indexed correct number of files',
+      );
+
+      // Fetch the pet module
+      let pet = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}pet`),
+      );
+      // Currently, encountered error loading module "http://test-realm/pet.gts": http://test-realm/name not found
+      assert.strictEqual(
+        pet?.type,
+        'module',
+        'Pet module is successfully indexed',
+      );
+    });
+
+    test('can successfully create instance after module sequence error is resolved', async function (assert) {
+      // First create pet.gts that depends on name.gts which doesn't exist yet
+      await realm.write(
+        'pet.gts',
+        `
+          import { contains, field, CardDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { Name } from "./name";
+          export class Pet extends CardDef {
+            @field name = contains(Name);
+          }
+        `,
+      );
+
+      // Verify initial error state
+      assert.deepEqual(
+        { ...realm.realmIndexUpdater.stats },
+        {
+          instancesIndexed: 0,
+          instanceErrors: 2,
+          moduleErrors: 2,
+          modulesIndexed: 0,
+          totalIndexEntries: 9,
+        },
+        'instance and module are in error state before dependency is available',
+      );
+
+      // Now create the missing name.gts module
+      await realm.write(
+        'name.gts',
+        `
+          import { contains, field, FieldDef } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+
+          export class Name extends FieldDef {
+            @field firstName = contains(StringField);
+            @field lastName = contains(StringField);
+          }
+        `,
+      );
+
+      // Verify the Name module is properly indexed
+      let name = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}name`),
+      );
+      assert.strictEqual(
+        name?.type,
+        'module',
+        'Name module is successfully indexed',
+      );
+
+      // Create a pet instance
+      await realm.write(
+        'pet-apple.json',
+        JSON.stringify({
+          data: {
+            attributes: {
+              name: {
+                firstName: 'Apple',
+                lastName: 'Tangle',
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './pet',
+                name: 'Pet',
+              },
+            },
+          },
+        }),
+      );
+
+      let petApple = await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}pet-apple`),
+      );
+      assert.strictEqual(
+        petApple?.type,
+        'instance',
+        'pet-apple instance is created without error',
       );
     });
 
@@ -623,13 +777,13 @@ module(basename(__filename), function () {
         'post.gts',
         `
         import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
         export class Post extends CardDef {
           @field author = linksTo(Person);
-          @field message = contains(StringCard);
-          @field nickName = contains(StringCard, {
+          @field message = contains(StringField);
+          @field nickName = contains(StringField, {
             computeVia: function() {
               return this.author.firstName + '-poo';
             }
@@ -664,11 +818,11 @@ module(basename(__filename), function () {
         'person.gts',
         `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-          import StringCard from "https://cardstack.com/base/string";
+          import StringField from "https://cardstack.com/base/string";
 
           export class Person extends CardDef {
-            @field firstName = contains(StringCard);
-            @field nickName = contains(StringCard, {
+            @field firstName = contains(StringField);
+            @field nickName = contains(StringField, {
               computeVia: function() {
                 return this.firstName + '-poo';
               }
@@ -755,13 +909,13 @@ module(basename(__filename), function () {
         'post.gts',
         `
         import { contains, linksTo, field, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         import { Person } from "./person";
 
         export class Post extends CardDef {
           @field author = linksTo(Person);
-          @field message = contains(StringCard);
-          @field nickName = contains(StringCard, {
+          @field message = contains(StringField);
+          @field nickName = contains(StringField, {
             computeVia: function() {
               return this.author.firstName + '-poo';
             }
@@ -1006,9 +1160,9 @@ module(basename(__filename), function () {
               fileSystem: {
                 'article.gts': `
               import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
-              import StringCard from "https://cardstack.com/base/string";
+              import StringField from "https://cardstack.com/base/string";
               export class Article extends CardDef {
-                @field title = contains(StringCard);
+                @field title = contains(StringField);
               }
             `,
               },

@@ -9,6 +9,8 @@ import {
   isSingleCardDocument,
   baseRealm,
   Realm,
+  type LooseSingleCardDocument,
+  type SingleCardDocument,
 } from '@cardstack/runtime-common';
 import { stringify } from 'qs';
 import { Query } from '@cardstack/runtime-common/query';
@@ -418,6 +420,621 @@ module(basename(__filename), function () {
             'file contents are correct',
           );
         });
+
+        test('creates card instances when it encounters "lid" in the request', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                relationships: {
+                  friend: {
+                    data: {
+                      lid: 'local-id-1',
+                      type: 'card',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://localhost:4202/node-test/friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'local-id-1',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                  },
+                  relationships: {
+                    'friends.0': {
+                      data: {
+                        lid: 'local-id-2',
+                        type: 'card',
+                      },
+                    },
+                    'friends.1': {
+                      data: {
+                        lid: 'local-id-3',
+                        type: 'card',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  lid: 'local-id-2',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  lid: 'local-id-3',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          let json = response.body as SingleCardDocument;
+          let id = json.data.id!.split('/').pop()!;
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `${id}.json`,
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Hassan',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './local-id-1',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `local-id-1.json`,
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    'friends.0': {
+                      links: {
+                        self: './local-id-2',
+                      },
+                    },
+                    'friends.1': {
+                      links: {
+                        self: './local-id-3',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `local-id-2.json`,
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `local-id-3.json`,
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let response = await request
+              .get(`/Friend/${id}`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json.data, {
+              id: `${testRealmHref}Friend/${id}`,
+              type: 'card',
+              attributes: {
+                firstName: 'Hassan',
+                title: 'Hassan',
+                description: null,
+                thumbnailURL: null,
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: './local-id-1',
+                  },
+                  data: {
+                    type: 'card',
+                    id: `${testRealmHref}Friend/local-id-1`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  name: 'Friend',
+                  module: 'http://localhost:4202/node-test/friend',
+                },
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
+                realmURL: testRealmHref,
+              },
+              links: {
+                self: `${testRealmHref}Friend/${id}`,
+              },
+            });
+
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}Friend/local-id-1`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                    title: 'Jade',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    'friends.0': {
+                      links: {
+                        self: './local-id-2',
+                      },
+                      data: {
+                        id: `${testRealmHref}Friend/local-id-2`,
+                        type: 'card',
+                      },
+                    },
+                    'friends.1': {
+                      links: {
+                        self: './local-id-3',
+                      },
+                      data: {
+                        id: `${testRealmHref}Friend/local-id-3`,
+                        type: 'card',
+                      },
+                    },
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-2`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    title: 'Germaine',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-3`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    title: 'Boris',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
+          }
+          {
+            let response = await request
+              .get(`/Friend/local-id-1`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json.data, {
+              id: `${testRealmHref}Friend/local-id-1`,
+              type: 'card',
+              attributes: {
+                firstName: 'Jade',
+                title: 'Jade',
+                description: null,
+                thumbnailURL: null,
+              },
+              relationships: {
+                'friends.0': {
+                  links: {
+                    self: './local-id-2',
+                  },
+                  data: {
+                    id: `${testRealmHref}Friend/local-id-2`,
+                    type: 'card',
+                  },
+                },
+                'friends.1': {
+                  links: {
+                    self: './local-id-3',
+                  },
+                  data: {
+                    id: `${testRealmHref}Friend/local-id-3`,
+                    type: 'card',
+                  },
+                },
+                friend: {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  name: 'Friend',
+                  module: 'http://localhost:4202/node-test/friend',
+                },
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
+                realmURL: testRealmHref,
+              },
+              links: {
+                self: `${testRealmHref}Friend/local-id-1`,
+              },
+            });
+
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}Friend/local-id-2`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    title: 'Germaine',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-3`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    title: 'Boris',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
+          }
+          {
+            let response = await request
+              .get(`/Friend/local-id-2`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json, {
+              data: {
+                id: `${testRealmHref}Friend/local-id-2`,
+                type: 'card',
+                attributes: {
+                  firstName: 'Germaine',
+                  title: 'Germaine',
+                  description: null,
+                  thumbnailURL: null,
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    name: 'Friend',
+                    module: 'http://localhost:4202/node-test/friend',
+                  },
+                  realmInfo: {
+                    ...testRealmInfo,
+                    realmUserId: '@node-test_realm:localhost',
+                  },
+                  realmURL: testRealmHref,
+                },
+                links: {
+                  self: `${testRealmHref}Friend/local-id-2`,
+                },
+              },
+            });
+          }
+          {
+            let response = await request
+              .get(`/Friend/local-id-3`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json, {
+              data: {
+                id: `${testRealmHref}Friend/local-id-3`,
+                type: 'card',
+                attributes: {
+                  firstName: 'Boris',
+                  title: 'Boris',
+                  description: null,
+                  thumbnailURL: null,
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    name: 'Friend',
+                    module: 'http://localhost:4202/node-test/friend',
+                  },
+                  realmInfo: {
+                    ...testRealmInfo,
+                    realmUserId: '@node-test_realm:localhost',
+                  },
+                  realmURL: testRealmHref,
+                },
+                links: {
+                  self: `${testRealmHref}Friend/local-id-3`,
+                },
+              },
+            });
+          }
+        });
       });
 
       module('permissioned realm', function (hooks) {
@@ -598,6 +1215,635 @@ module(basename(__filename), function () {
 
           assert.strictEqual(response.status, 200, 'HTTP 200 status');
           assert.strictEqual(response.body.data.length, 1, 'found one card');
+        });
+
+        test('creates card instances when it encounters "lid" in the request', async function (assert) {
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Paper',
+                },
+                relationships: {
+                  friend: {
+                    data: {
+                      lid: 'local-id-1',
+                      type: 'card',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './friend.gts',
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'local-id-1',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                  },
+                  relationships: {
+                    'friends.0': {
+                      data: {
+                        lid: 'local-id-2',
+                        type: 'card',
+                      },
+                    },
+                    'friends.1': {
+                      data: {
+                        lid: 'local-id-3',
+                        type: 'card',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  lid: 'local-id-2',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  lid: 'local-id-3',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+
+          let json = response.body;
+          assert.ok(json.data.meta.lastModified, 'lastModified exists');
+
+          assert.true(
+            isSingleCardDocument(json),
+            'response body is a card document',
+          );
+
+          assert.strictEqual(
+            json.data.attributes?.firstName,
+            'Paper',
+            'the field data is correct',
+          );
+          assert.ok(json.data.meta.lastModified, 'lastModified is populated');
+          delete json.data.meta.lastModified;
+          delete json.data.meta.resourceCreatedAt;
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'hassan.json',
+            );
+            assert.ok(existsSync(cardFile), 'card json exists');
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Paper',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: './Friend/local-id-1',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: `./friend`,
+                      name: 'Friend',
+                    },
+                  },
+                },
+              },
+              'file contents are correct',
+            );
+          }
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `local-id-1.json`,
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    'friends.0': {
+                      links: {
+                        self: './local-id-2',
+                      },
+                    },
+                    'friends.1': {
+                      links: {
+                        self: './local-id-3',
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `local-id-2.json`,
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `local-id-3.json`,
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let response = await request
+              .get(`/hassan`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json.data, {
+              id: `${testRealmHref}hassan`,
+              type: 'card',
+              attributes: {
+                firstName: 'Paper',
+                title: 'Paper',
+                description: null,
+                thumbnailURL: null,
+              },
+              relationships: {
+                friend: {
+                  links: {
+                    self: './Friend/local-id-1',
+                  },
+                  data: {
+                    type: 'card',
+                    id: `${testRealmHref}Friend/local-id-1`,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  name: 'Friend',
+                  module: './friend',
+                },
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
+                realmURL: testRealmHref,
+              },
+              links: {
+                self: `${testRealmHref}hassan`,
+              },
+            });
+
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}Friend/local-id-1`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Jade',
+                    title: 'Jade',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    'friends.0': {
+                      links: {
+                        self: './local-id-2',
+                      },
+                      data: {
+                        id: `${testRealmHref}Friend/local-id-2`,
+                        type: 'card',
+                      },
+                    },
+                    'friends.1': {
+                      links: {
+                        self: './local-id-3',
+                      },
+                      data: {
+                        id: `${testRealmHref}Friend/local-id-3`,
+                        type: 'card',
+                      },
+                    },
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-2`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    title: 'Germaine',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-3`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    title: 'Boris',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
+          }
+          {
+            let response = await request
+              .get(`/Friend/local-id-1`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json.data, {
+              id: `${testRealmHref}Friend/local-id-1`,
+              type: 'card',
+              attributes: {
+                firstName: 'Jade',
+                title: 'Jade',
+                description: null,
+                thumbnailURL: null,
+              },
+              relationships: {
+                'friends.0': {
+                  links: {
+                    self: './local-id-2',
+                  },
+                  data: {
+                    id: `${testRealmHref}Friend/local-id-2`,
+                    type: 'card',
+                  },
+                },
+                'friends.1': {
+                  links: {
+                    self: './local-id-3',
+                  },
+                  data: {
+                    id: `${testRealmHref}Friend/local-id-3`,
+                    type: 'card',
+                  },
+                },
+                friend: {
+                  links: {
+                    self: null,
+                  },
+                },
+              },
+              meta: {
+                adoptsFrom: {
+                  name: 'Friend',
+                  module: 'http://localhost:4202/node-test/friend',
+                },
+                realmInfo: {
+                  ...testRealmInfo,
+                  realmUserId: '@node-test_realm:localhost',
+                },
+                realmURL: testRealmHref,
+              },
+              links: {
+                self: `${testRealmHref}Friend/local-id-1`,
+              },
+            });
+
+            for (let resource of json.included!) {
+              delete resource.meta.realmURL;
+              delete resource.meta.realmInfo;
+              delete resource.meta.lastModified;
+              delete resource.meta.resourceCreatedAt;
+              delete resource.links;
+            }
+            assert.deepEqual(
+              json.included,
+              [
+                {
+                  id: `${testRealmHref}Friend/local-id-2`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Germaine',
+                    title: 'Germaine',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+                {
+                  id: `${testRealmHref}Friend/local-id-3`,
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                    title: 'Boris',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: {
+                        self: null,
+                      },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              ],
+              'included is correct',
+            );
+          }
+          {
+            let response = await request
+              .get(`/Friend/local-id-2`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json, {
+              data: {
+                id: `${testRealmHref}Friend/local-id-2`,
+                type: 'card',
+                attributes: {
+                  firstName: 'Germaine',
+                  title: 'Germaine',
+                  description: null,
+                  thumbnailURL: null,
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    name: 'Friend',
+                    module: 'http://localhost:4202/node-test/friend',
+                  },
+                  realmInfo: {
+                    ...testRealmInfo,
+                    realmUserId: '@node-test_realm:localhost',
+                  },
+                  realmURL: testRealmHref,
+                },
+                links: {
+                  self: `${testRealmHref}Friend/local-id-2`,
+                },
+              },
+            });
+          }
+          {
+            let response = await request
+              .get(`/Friend/local-id-3`)
+              .set('Accept', 'application/vnd.card+json');
+
+            assert.strictEqual(response.status, 200, 'HTTP 200 status');
+            let json = response.body;
+            assert.ok(json.data.meta.lastModified, 'lastModified exists');
+            delete json.data.meta.lastModified;
+            delete json.data.meta.resourceCreatedAt;
+            assert.strictEqual(
+              response.get('X-boxel-realm-url'),
+              testRealmHref,
+              'realm url header is correct',
+            );
+            assert.deepEqual(json, {
+              data: {
+                id: `${testRealmHref}Friend/local-id-3`,
+                type: 'card',
+                attributes: {
+                  firstName: 'Boris',
+                  title: 'Boris',
+                  description: null,
+                  thumbnailURL: null,
+                },
+                relationships: {
+                  friend: {
+                    links: {
+                      self: null,
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    name: 'Friend',
+                    module: 'http://localhost:4202/node-test/friend',
+                  },
+                  realmInfo: {
+                    ...testRealmInfo,
+                    realmUserId: '@node-test_realm:localhost',
+                  },
+                  realmURL: testRealmHref,
+                },
+                links: {
+                  self: `${testRealmHref}Friend/local-id-3`,
+                },
+              },
+            });
+          }
         });
 
         test('broadcasts realm events', async function (assert) {

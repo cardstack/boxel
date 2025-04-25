@@ -4,6 +4,7 @@ import Service, { service } from '@ember/service';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
+  formattedError,
   SupportedMimeType,
   type CardDocument,
   type SingleCardDocument,
@@ -100,7 +101,7 @@ export default class CardService extends Service {
           'QUERY');
 
     if (!isReadOperation) {
-      let clientRequestId = uuidv4();
+      let clientRequestId = `instance:${uuidv4()}`;
       this.clientRequestIds.add(clientRequestId);
       headers = { ...headers, 'X-Boxel-Client-Request-Id': clientRequestId };
     }
@@ -139,11 +140,13 @@ export default class CardService extends Service {
 
   async serializeCard(
     card: CardDef,
-    opts?: SerializeOpts,
+    opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
     let serialized = api.serializeCard(card, opts);
-    delete serialized.included;
+    if (!opts?.withIncluded) {
+      delete serialized.included;
+    }
     return serialized;
   }
 
@@ -156,24 +159,36 @@ export default class CardService extends Service {
     return response.text();
   }
 
-  async saveSource(url: URL, content: string) {
-    let response = await this.network.authedFetch(url, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/vnd.card+source',
-      },
-      body: content,
-    });
+  async saveSource(url: URL, content: string, type: string) {
+    try {
+      let clientRequestId = `${type}:${uuidv4()}`;
+      this.clientRequestIds.add(clientRequestId);
 
-    if (!response.ok) {
-      let errorMessage = `Could not write file ${url}, status ${
-        response.status
-      }: ${response.statusText} - ${await response.text()}`;
-      console.error(errorMessage);
-      throw new Error(errorMessage);
+      let response = await this.network.authedFetch(url, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+source',
+          'X-Boxel-Client-Request-Id': clientRequestId,
+        },
+        body: content,
+      });
+
+      if (!response.ok) {
+        let errorMessage = `Could not write file ${url}, status ${
+          response.status
+        }: ${response.statusText} - ${await response.text()}`;
+        console.error(errorMessage);
+        throw new Error(errorMessage);
+      }
+      this.subscriber?.(url, content);
+      return response;
+    } catch (e: any) {
+      let error = formattedError(undefined, e)?.errors?.[0];
+      if (error) {
+        throw error;
+      }
+      throw new Error(e);
     }
-    this.subscriber?.(url, content);
-    return response;
   }
 
   async copySource(fromUrl: URL, toUrl: URL) {
@@ -185,7 +200,7 @@ export default class CardService extends Service {
     });
 
     const content = await response.text();
-    await this.saveSource(toUrl, content);
+    await this.saveSource(toUrl, content, 'copy');
     return response;
   }
 

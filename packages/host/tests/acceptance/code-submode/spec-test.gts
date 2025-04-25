@@ -31,13 +31,13 @@ const testRealm2URL = `http://test-realm/test2/`;
 
 const personCardSource = `
   import { contains, containsMany, field, linksTo, linksToMany, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export class Person extends CardDef {
     static displayName = 'Person';
-    @field firstName = contains(StringCard);
-    @field lastName = contains(StringCard);
-    @field title = contains(StringCard, {
+    @field firstName = contains(StringField);
+    @field lastName = contains(StringField);
+    @field title = contains(StringField, {
       computeVia: function (this: Person) {
         return [this.firstName, this.lastName].filter(Boolean).join(' ');
       },
@@ -68,7 +68,7 @@ const personCardSource = `
 
 const person1CardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export class Person1 extends CardDef {
     static displayName = 'Person1';
@@ -77,12 +77,12 @@ const person1CardSource = `
 
 const petCardSource = `
   import { contains, field, Component, CardDef, FieldDef } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export class Pet extends CardDef {
     static displayName = 'Pet';
-    @field name = contains(StringCard);
-    @field title = contains(StringCard, {
+    @field name = contains(StringField);
+    @field title = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -110,12 +110,12 @@ const petCardSource = `
 
 const employeeCardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import StringCard from "https://cardstack.com/base/string";
+  import StringField from "https://cardstack.com/base/string";
 
   export default class Employee extends CardDef {
     static displayName = 'Employee';
-    @field name = contains(StringCard);
-    @field title = contains(StringCard, {
+    @field name = contains(StringField);
+    @field title = contains(StringField, {
       computeVia: function (this: Pet) {
         return this.name;
       },
@@ -146,7 +146,7 @@ const primitiveFieldCardSource = `
 
    export class PrimitiveField extends FieldDef {
     static displayName = 'PrimitiveField';
-    static [primitive]: number 
+    static [primitive]: number
    }
 
    export class SubclassPrimitiveField extends PrimitiveField {

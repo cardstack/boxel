@@ -66,16 +66,15 @@ export default class CardPrerender extends Component {
     );
   }
 
-  // TODO update to support multiple URLs
   private async incremental(
-    url: URL,
+    urls: URL[],
     realmURL: URL,
     operation: 'delete' | 'update',
     ignoreData: Record<string, string>,
   ): Promise<IndexResults> {
     try {
       let state = await this.doIncremental.perform(
-        url,
+        urls,
         realmURL,
         operation,
         ignoreData,
@@ -87,7 +86,9 @@ export default class CardPrerender extends Component {
       }
     }
     throw new Error(
-      `card-prerender component is missing or being destroyed before incremental index of ${url} was completed`,
+      `card-prerender component is missing or being destroyed before incremental index of ${urls
+        .map((u) => u.href)
+        .join()} was completed`,
     );
   }
 
@@ -117,10 +118,9 @@ export default class CardPrerender extends Component {
     return current;
   });
 
-  // TODO update to support multiple URLs
   private doIncremental = enqueueTask(
     async (
-      url: URL,
+      urls: URL[],
       realmURL: URL,
       operation: 'delete' | 'update',
       ignoreData: Record<string, string>,
@@ -137,7 +137,7 @@ export default class CardPrerender extends Component {
       });
       setOwner(currentRun, getOwner(this)!);
       let current = await CurrentRun.incremental(currentRun, {
-        url,
+        urls,
         operation,
       });
       this.renderService.indexRunDeferred?.fulfill();

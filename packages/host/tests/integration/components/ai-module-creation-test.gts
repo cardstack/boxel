@@ -212,19 +212,17 @@ module('Integration | create app module via ai-assistant', function (hooks) {
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       body: 'Generate code for Preschool CRM based on product requirement document.',
-      formatted_body:
-        'Generate code for Preschool CRM based on product requirement document.',
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'generateAppModule',
           name: 'Generate App Module',
-          arguments: {
+          arguments: JSON.stringify({
             attached_card_id: prdCardId,
             description:
               'Generate code for Preschool CRM based on product requirement document.',
             appTitle: 'Preschool CRM',
             moduleCode,
-          },
+          }),
         },
       ],
       'm.relates_to': {

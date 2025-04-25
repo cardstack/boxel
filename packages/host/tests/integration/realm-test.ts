@@ -468,7 +468,7 @@ module('Integration | realm', function (hooks) {
     let json = await response.json();
     let id: string | undefined;
     if (isSingleCardDocument(json)) {
-      id = json.data.id.split('/').pop()!;
+      id = json.data.id!.split('/').pop()!;
       assert.true(uuidValidate(id), 'card ID is a UUID');
       assert.strictEqual(
         json.data.id,
@@ -496,6 +496,109 @@ module('Integration | realm', function (hooks) {
     assert.strictEqual(
       result?.doc.data.id,
       `${testRealmURL}CardDef/${id}`,
+      'found card in index',
+    );
+  });
+
+  test('realm cannot create card request which is NOT directory', async function (assert) {
+    let { realm } = await setupIntegrationTestRealm({
+      loader,
+      mockMatrixUtils,
+      contents: {},
+    });
+    let dirName = 'SomeDirectory';
+    let notDirPath = `${testRealmURL}${dirName}`;
+    let notFoundResponse = await handle(
+      realm,
+      new Request(notDirPath, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    let notFoundJson = await notFoundResponse.json();
+    assert.strictEqual(notFoundJson.errors[0].status, 404);
+    assert.strictEqual(notFoundResponse.status, 404);
+  });
+
+  test('realm allows create card requests into directories of the realm', async function (assert) {
+    let { realm, adapter } = await setupIntegrationTestRealm({
+      loader,
+      mockMatrixUtils,
+      contents: {},
+    });
+    let dirName = 'SomeDirectory';
+    let dirPath = `${testRealmURL}${dirName}/`; //needs to be a directory
+    let response = await handle(
+      realm,
+      new Request(dirPath, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/vnd.card+json',
+        },
+        body: JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: 'https://cardstack.com/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          },
+          null,
+          2,
+        ),
+      }),
+    );
+    let json = await response.json();
+    let id: string | undefined;
+    if (isSingleCardDocument(json)) {
+      id = json.data.id!.split('/').pop()!;
+      assert.true(uuidValidate(id), 'card ID is a UUID');
+      assert.strictEqual(
+        json.data.id,
+        `${dirPath}CardDef/${id}`,
+        'the card URL is correct',
+      );
+      assert.ok(
+        (await adapter.openFile(`${dirName}/CardDef/${id}.json`))?.content,
+        'file contents exist',
+      );
+    } else {
+      assert.ok(false, 'response body is not a card document');
+    }
+    if (!id) {
+      assert.ok(false, 'card document is missing an ID');
+    }
+    let queryEngine = realm.realmIndexQueryEngine;
+    let result = await queryEngine.cardDocument(new URL(json.data.links.self));
+    if (result?.type === 'error') {
+      throw new Error(
+        `unexpected error when getting card from index: ${result.error.errorDetail.message}`,
+      );
+    }
+    assert.strictEqual(
+      result?.doc.data.id,
+      `${testRealmURL}${dirName}/CardDef/${id}`,
       'found card in index',
     );
   });

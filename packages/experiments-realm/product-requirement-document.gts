@@ -1,4 +1,4 @@
-import { Base64ImageField } from 'https://cardstack.com/base/base64-image';
+import Base64ImageField from 'https://cardstack.com/base/base64-image';
 import TextAreaField from 'https://cardstack.com/base/text-area';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import {

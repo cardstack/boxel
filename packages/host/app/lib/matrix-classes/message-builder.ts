@@ -11,7 +11,10 @@ import {
   ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
-import { CommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  CommandRequest,
+  decodeCommandRequest,
+} from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -73,8 +76,7 @@ export default class MessageBuilder {
       author: this.builderContext.author,
       created: new Date(this.event.origin_server_ts),
       updated: new Date(), // Changes every time an update from AI bot streaming is received, used for detecting timeouts
-      message: this.event.content.body,
-      formattedMessage: this.event.content.formatted_body,
+      body: this.event.content.body,
       // These are not guaranteed to exist in the event
       transactionId: this.event.unsigned?.transaction_id || null,
       attachedCardIds: null,
@@ -160,8 +162,7 @@ export default class MessageBuilder {
       return;
     }
 
-    message.message = this.event.content.body;
-    message.formattedMessage = this.event.content.formatted_body;
+    message.body = this.event.content.body;
     message.reasoningContent =
       (this.event.content as CardMessageContent)[
         APP_BOXEL_REASONING_CONTENT_KEY
@@ -171,20 +172,24 @@ export default class MessageBuilder {
         ? this.event.content.isStreamingFinished
         : undefined;
     message.updated = new Date();
+    message.errorMessage = this.errorMessage;
 
-    let commandRequests =
+    let encodedCommandRequests =
       (this.event.content as CardMessageContent)[
         APP_BOXEL_COMMAND_REQUESTS_KEY
       ] ?? [];
-    for (let commandRequest of commandRequests) {
+    for (let encodedCommandRequest of encodedCommandRequests) {
       let command = message.commands.find(
-        (c) => c.commandRequest.id === commandRequest.id,
+        (c) => c.commandRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.commandRequest = commandRequest;
+        command.commandRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
         message.commands.push(
-          this.buildMessageCommand(message, commandRequest),
+          this.buildMessageCommand(
+            message,
+            decodeCommandRequest(encodedCommandRequest),
+          ),
         );
       }
     }
@@ -219,7 +224,10 @@ export default class MessageBuilder {
     }
     let commands = new TrackedArray<MessageCommand>();
     for (let commandRequest of commandRequests) {
-      let command = this.buildMessageCommand(message, commandRequest);
+      let command = this.buildMessageCommand(
+        message,
+        decodeCommandRequest(commandRequest),
+      );
       commands.push(command);
     }
     return commands;

@@ -661,6 +661,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           readMe: null,
           specType: 'card',
           isCard: true,
+          isComponent: false,
           isField: false,
           thumbnailURL: null,
           ref: {
@@ -697,6 +698,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         title: 'Person Card',
         containedExamples: null,
         isCard: true,
+        isComponent: false,
         isField: false,
       });
     } else {
@@ -777,6 +779,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           readMe: null,
           specType: 'card',
           isCard: true,
+          isComponent: false,
           isField: false,
           thumbnailURL: null,
           ref: {
@@ -813,6 +816,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         title: 'Person Card',
         containedExamples: null,
         isCard: true,
+        isComponent: false,
         isField: false,
       });
     } else {
@@ -2226,6 +2230,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
       ref: 'http://localhost:4202/test/booking/Booking',
       title: 'Booking',
       isCard: true,
+      isComponent: false,
       isField: false,
     });
     // we should be able to perform a structured clone of the search doc (this
@@ -2588,6 +2593,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           moduleHref: `${testModuleRealm}pet-person`,
           containedExamples: [],
           isCard: true,
+          isComponent: false,
           isField: false,
         },
         meta: {
@@ -2627,6 +2633,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         ref: `${testModuleRealm}pet-person/PetPerson`,
         specType: 'card',
         isCard: true,
+        isComponent: false,
         isField: false,
       });
     } else {
@@ -3949,9 +3956,9 @@ posts/ignore-me.json
 
     let realmIndexUpdater = realm.realmIndexUpdater;
     let queryEngine = realm.realmIndexQueryEngine;
-    await realmIndexUpdater.update(
+    await realmIndexUpdater.update([
       new URL(`${testRealmURL}posts/ignore-me.json`),
-    );
+    ]);
 
     let instance = await queryEngine.cardDocument(
       new URL(`${testRealmURL}posts/ignore-me`),

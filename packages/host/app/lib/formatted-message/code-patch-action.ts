@@ -5,7 +5,7 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
@@ -33,20 +33,13 @@ export class CodePatchAction {
   patchCodeTask = dropTask(async () => {
     this.patchCodeTaskState = 'applying';
     try {
-      let source = await this.cardService.getSource(new URL(this.fileUrl));
-
-      let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+      let patchCodeCommand = new PatchCodeCommand(
         this.commandService.commandContext,
       );
-
-      let { resultContent: patchedCode } =
-        await applySearchReplaceBlockCommand.execute({
-          fileContent: source,
-          codeBlock: this.searchReplaceBlock,
-        });
-
-      await this.cardService.saveSource(new URL(this.fileUrl), patchedCode);
-
+      await patchCodeCommand.execute({
+        fileUrl: this.fileUrl,
+        codeBlocks: [this.searchReplaceBlock],
+      });
       this.patchCodeTaskState = 'applied';
     } catch (error) {
       console.error(error);

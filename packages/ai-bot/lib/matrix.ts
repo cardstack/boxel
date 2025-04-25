@@ -2,7 +2,10 @@ import { IContent } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  CommandRequest,
+  encodeCommandRequests,
+} from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
@@ -26,6 +29,7 @@ export interface MatrixClient {
   ): Promise<{ event_id: string }>;
 
   setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
+  getAccessToken(): string | null;
 }
 
 export async function sendMatrixEvent(
@@ -65,23 +69,12 @@ export async function sendMessageEvent(
     ...{
       body,
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: body,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: encodeCommandRequests(commandRequests),
     },
     ...data,
   };
-  if (eventIdToReplace) {
-    contentObject['m.new_content'] = {
-      body,
-      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-      formatted_body: body,
-      format: 'org.matrix.custom.html',
-      [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
-    };
-  }
   return await sendMatrixEvent(
     client,
     roomId,
@@ -103,7 +96,7 @@ export async function sendErrorEvent(
     await sendMessageEvent(
       client,
       roomId,
-      'There was an error processing your request, please try again later',
+      'There was an error processing your request, please try again later.',
       eventIdToReplace,
       {
         isStreamingFinished: true,

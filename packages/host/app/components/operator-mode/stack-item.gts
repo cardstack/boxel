@@ -12,14 +12,12 @@ import Component from '@glimmer/component';
 
 import { tracked, cached } from '@glimmer/tracking';
 
-import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
 import {
   restartableTask,
   timeout,
   waitForProperty,
   dropTask,
 } from 'ember-concurrency';
-import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
@@ -58,14 +56,12 @@ import { type StackItem } from '@cardstack/host/lib/stack-item';
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
 import consumeContext from '../../helpers/consume-context';
-import { htmlComponent } from '../../lib/html-component';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
 import Preview from '../preview';
 
 import CardError from './card-error';
-import CardErrorDetail from './card-error-detail';
 
 import OperatorModeOverlays from './operator-mode-overlays';
 
@@ -93,7 +89,7 @@ interface Signature {
     publicAPI: Actions;
     commandContext: CommandContext;
     close: (item: StackItem) => void;
-    dismissStackedCardsAbove: (stackIndex: number) => void;
+    dismissStackedCardsAbove: (stackIndex: number) => Promise<void>;
     onSelectedCards: (
       selectedCards: CardDefOrId[],
       stackItem: StackItem,
@@ -257,7 +253,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
     };
   }
 
-  private closeItem = dropTask(async () => {
+  private closeItem = () => this._closeItem.perform();
+
+  private _closeItem = dropTask(async () => {
     await this.args.dismissStackedCardsAbove(this.args.index - 1);
   });
 
@@ -348,34 +346,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.cardResource?.cardError;
   }
 
-  @cached
-  private get lastKnownGoodHtml() {
-    if (this.cardError?.meta.lastKnownGoodHtml) {
-      this.loadScopedCSS.perform();
-      return htmlComponent(this.cardError.meta.lastKnownGoodHtml);
-    }
-    return undefined;
-  }
-
-  @cached
-  private get cardErrorSummary() {
-    if (!this.cardError) {
-      return undefined;
-    }
-    return this.cardError.status === 404 &&
-      // a missing link error looks a lot like a missing card error
-      this.cardError.message?.includes('missing')
-      ? `Link Not Found`
-      : this.cardError.title;
-  }
-
-  private get cardErrorTitle() {
-    if (!this.cardError) {
-      return undefined;
-    }
-    return `Card Error: ${this.cardErrorSummary}`;
-  }
-
   private get isWideFormat() {
     if (!this.card) {
       return false;
@@ -401,16 +371,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
     return cardDef.headerColor as string;
   }
-
-  private loadScopedCSS = restartableTask(async () => {
-    if (this.cardError?.meta.scopedCssUrls) {
-      await Promise.all(
-        this.cardError.meta.scopedCssUrls.map((cssModuleUrl) =>
-          this.loaderService.loader.import(cssModuleUrl),
-        ),
-      );
-    }
-  });
 
   private doneEditing = () => {
     let item = this.args.item;
@@ -568,6 +528,17 @@ export default class OperatorModeStackItem extends Component<Signature> {
     }
   };
 
+  private get cardErrorHeaderOptions() {
+    if (!this.cardError) {
+      return undefined;
+    }
+    return {
+      isTopCard: this.isTopCard,
+      moreOptionsMenuItems: this.moreOptionsMenuItemsForErrorCard,
+      onClose: !this.isBuried ? this.closeItem : undefined,
+    };
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     <div
@@ -595,13 +566,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <span class='loading__message'>Loading card...</span>
           </div>
         {{else if this.cardError}}
-          <CardHeader
-            @cardTypeDisplayName={{this.cardErrorTitle}}
-            @cardTypeIcon={{ExclamationCircle}}
-            @isTopCard={{this.isTopCard}}
-            @moreOptionsMenuItems={{this.moreOptionsMenuItemsForErrorCard}}
-            @onClose={{unless this.isBuried (perform this.closeItem)}}
-            class='stack-item-header stack-item-header-error'
+          <CardError
+            @error={{this.cardError}}
+            @viewInCodeMode={{true}}
+            @headerOptions={{this.cardErrorHeaderOptions}}
+            class='stack-item-header'
             style={{cssVar
               boxel-card-header-icon-container-min-width=(if
                 this.isBuried '50px' '95px'
@@ -627,18 +596,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
             }}
             data-test-stack-card-header
           />
-          <div class='stack-item-content card-error' data-test-card-error>
-            {{#if this.lastKnownGoodHtml}}
-              <this.lastKnownGoodHtml />
-            {{else}}
-              <CardError />
-            {{/if}}
-          </div>
-          <CardErrorDetail
-            @error={{this.cardError}}
-            @title={{this.cardErrorSummary}}
-            @viewInCodeMode={{true}}
-          />
         {{else if this.card}}
           {{this.setWindowTitle}}
           {{#let (this.realm.info this.card.id) as |realmInfo|}}
@@ -652,7 +609,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               @realmInfo={{realmInfo}}
               @onEdit={{if this.canEdit (fn @publicAPI.editCard this.card)}}
               @onFinishEditing={{if this.isEditing this.doneEditing}}
-              @onClose={{unless this.isBuried (perform this.closeItem)}}
+              @onClose={{unless this.isBuried this.closeItem}}
               class='stack-item-header'
               style={{cssVar
                 boxel-card-header-icon-container-min-width=(if
@@ -793,9 +750,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         min-width: 100%;
         gap: var(--boxel-sp-xxs);
       }
-      .stack-item-header-error {
-        color: var(--boxel-error-300);
-      }
 
       .stack-item-content {
         overflow: auto;
@@ -842,13 +796,6 @@ export default class OperatorModeStackItem extends Component<Signature> {
         display: flex;
         justify: center;
         align-items: center;
-      }
-      .card-error {
-        flex: 2;
-        opacity: 0.4;
-        border-radius: 0;
-        box-shadow: none;
-        overflow: auto;
       }
     </style>
   </template>

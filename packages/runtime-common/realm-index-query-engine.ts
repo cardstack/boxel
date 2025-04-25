@@ -33,7 +33,7 @@ interface SearchResultDoc {
   type: 'doc';
   doc: SingleCardDocument;
 }
-interface SearchResultError {
+export interface SearchResultError {
   type: 'error';
   error: {
     lastKnownGoodHtml: string | null;
@@ -93,7 +93,7 @@ export class RealmIndexQueryEngine {
       })),
     };
 
-    let omit = doc.data.map((r) => r.id);
+    let omit = doc.data.map((r) => r.id).filter(Boolean) as string[];
     // TODO eventually the links will be cached in the index, and this will only
     // fill in the included resources for links that were not cached (e.g.
     // volatile fields)
@@ -170,7 +170,7 @@ export class RealmIndexQueryEngine {
         {
           realmURL: this.realmURL,
           resource: doc.data,
-          omit: [doc.data.id],
+          omit: [...(doc.data.id ? [doc.data.id] : [])],
         },
         opts,
       );
@@ -226,7 +226,7 @@ export class RealmIndexQueryEngine {
     for (let [fieldName, relationship] of Object.entries(
       resource.relationships ?? {},
     )) {
-      if (!relationship.links.self) {
+      if (!relationship.links?.self) {
         continue;
       }
       let linkURL = new URL(
@@ -280,6 +280,7 @@ export class RealmIndexQueryEngine {
         )) {
           foundLinks = true;
           if (
+            includedResource.id &&
             !omit.includes(includedResource.id) &&
             !included.find((r) => r.id === includedResource.id)
           ) {

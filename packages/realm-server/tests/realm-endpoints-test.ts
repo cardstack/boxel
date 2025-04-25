@@ -6,8 +6,9 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
   baseRealm,
-  loadCard,
+  loadCardDef,
   Realm,
+  SupportedMimeType,
   type LooseSingleCardDocument,
   type QueuePublisher,
   type QueueRunner,
@@ -152,12 +153,73 @@ module(basename(__filename), function () {
       },
     });
 
+    test('can set response ETag and Cache-Control headers for module request', async function (assert) {
+      let response = await request
+        .get(`/person`)
+        .set('Accept', SupportedMimeType.All)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.ok(response.headers['etag'], 'ETag header is present');
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'public, max-age=0',
+        'cache control header is set correctly',
+      );
+    });
+
+    test('can set response Cache-Control header for card source request', async function (assert) {
+      let response = await request
+        .get(`/person.gts`)
+        .set('Accept', SupportedMimeType.CardSource)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'no-store, no-cache, must-revalidate',
+        'cache control header is set correctly',
+      );
+    });
+
+    test('can set response Cache-Control header for card json request', async function (assert) {
+      let response = await request
+        .get(`/hassan`)
+        .set('Accept', SupportedMimeType.CardJson)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'no-store, no-cache, must-revalidate',
+        'cache control header is set correctly',
+      );
+    });
+
+    test('can set response Cache-Control header for json api request', async function (assert) {
+      let response = await request
+        .get(`/_info`)
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set(
+          'Authorization',
+          `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+        );
+      assert.strictEqual(
+        response.headers['cache-control'],
+        'no-store, no-cache, must-revalidate',
+        'cache control header is set correctly',
+      );
+    });
+
     test('can dynamically load a card definition from own realm', async function (assert) {
       let ref = {
         module: `${testRealmHref}person`,
         name: 'Person',
       };
-      await loadCard(ref, { loader });
+      await loadCardDef(ref, { loader });
       let doc = {
         data: {
           attributes: { firstName: 'Mango' },
@@ -180,7 +242,7 @@ module(basename(__filename), function () {
         module: `${testRealm2Href}person`,
         name: 'Person',
       };
-      await loadCard(ref, { loader });
+      await loadCardDef(ref, { loader });
       let doc = {
         data: {
           attributes: { firstName: 'Mango' },
@@ -215,7 +277,7 @@ module(basename(__filename), function () {
         module: `${testRealm2Href}code-ref-test`,
         name: 'TestCard',
       };
-      await loadCard(adoptsFrom, { loader });
+      await loadCardDef(adoptsFrom, { loader });
       let ref = { module: `${testRealm2Href}person`, name: 'Person' };
       let doc = {
         data: {
@@ -389,7 +451,6 @@ module(basename(__filename), function () {
         'index',
         'incremental-index-initiation',
       );
-
       let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
 
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {
