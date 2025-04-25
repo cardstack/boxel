@@ -164,6 +164,7 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
       {{#if @arrayField.children.length}}
         <ul
           {{sortableGroup groupName=@field.name onChange=this.setItems}}
+          class='list'
           ...attributes
         >
           {{#each @arrayField.children as |boxedElement i|}}
