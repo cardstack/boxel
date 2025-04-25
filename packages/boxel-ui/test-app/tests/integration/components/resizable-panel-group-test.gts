@@ -246,7 +246,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         await waitForRerender();
       }
 
-      test(`it can lay out panels with a defined defaultSize and ${orientationProperties.orientation} orientation`, async function (this: MyTestContext, assert) {
+      test<MyTestContext>(`it can lay out panels with a defined defaultSize and ${orientationProperties.orientation} orientation`, async function (assert) {
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;
@@ -311,7 +311,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         });
       });
 
-      test(`it can lay out panels with a defined minSize and ${orientationProperties.orientation} orientation`, async function (this: MyTestContext, assert) {
+      test<MyTestContext>(`it can lay out panels with a defined minSize and ${orientationProperties.orientation} orientation`, async function (assert) {
         this.renderController.panels[0].minSize = 40;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
@@ -387,7 +387,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         });
       });
 
-      test(`it can lay out panels with a defined minSize, not collapsible, and ${orientationProperties.orientation} orientation`, async function (this: MyTestContext, assert) {
+      test<MyTestContext>(`it can lay out panels with a defined minSize, not collapsible, and ${orientationProperties.orientation} orientation`, async function (assert) {
         this.renderController.panels[0].minSize = 40;
         this.renderController.panels[0].collapsible = false;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
@@ -442,7 +442,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         });
       });
 
-      test(`it can lay out panels with a defined maxSize and ${orientationProperties.orientation} orientation`, async function (this: MyTestContext, assert) {
+      test<MyTestContext>(`it can lay out panels with a defined maxSize and ${orientationProperties.orientation} orientation`, async function (assert) {
         this.renderController.panels[0].maxSize = 80;
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
@@ -491,7 +491,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         });
       });
 
-      test(`it can recalculate the panels with ${orientationProperties.orientation} orientation if a panel is hidden`, async function (this: MyTestContext, assert) {
+      test<MyTestContext>(`it can recalculate the panels with ${orientationProperties.orientation} orientation if a panel is hidden`, async function (assert) {
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;
@@ -525,7 +525,7 @@ orientationPropertiesToTest.forEach((orientationProperties) => {
         });
       });
 
-      test(`it stops expanding/shrinking panels with ${orientationProperties.orientation} orientation if cursor is not in the right position`, async function (this: MyTestContext, assert) {
+      test<MyTestContext>(`it stops expanding/shrinking panels with ${orientationProperties.orientation} orientation if cursor is not in the right position`, async function (assert) {
         let containerSize = 300 + RESIZE_HANDLE_WIDTH;
         this.renderController.containerStyle = `
           ${orientationProperties.dimension}: ${containerSize}px;

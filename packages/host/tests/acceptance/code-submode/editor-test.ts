@@ -69,12 +69,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       contents: {
         'pet.gts': `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
 
         export class Pet extends CardDef {
           static displayName = 'Pet';
-          @field name = contains(StringCard);
-          @field title = contains(StringCard, {
+          @field name = contains(StringField);
+          @field title = contains(StringField, {
             computeVia: function (this: Pet) {
               return this.name;
             },
@@ -90,12 +90,12 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       `,
         'shipping-info.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         export class ShippingInfo extends FieldDef {
           static displayName = 'Shipping Info';
-          @field preferredCarrier = contains(StringCard);
-          @field remarks = contains(StringCard);
-          @field title = contains(StringCard, {
+          @field preferredCarrier = contains(StringField);
+          @field remarks = contains(StringField);
+          @field title = contains(StringField, {
             computeVia: function (this: ShippingInfo) {
               return this.preferredCarrier;
             },
@@ -110,14 +110,14 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       `,
         'address.gts': `
         import { contains, field, Component, FieldDef } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         import { ShippingInfo } from "./shipping-info";
         import { FieldContainer } from '@cardstack/boxel-ui/components';
 
         export class Address extends FieldDef {
           static displayName = 'Address';
-          @field city = contains(StringCard);
-          @field country = contains(StringCard);
+          @field city = contains(StringField);
+          @field country = contains(StringField);
           @field shippingInfo = contains(ShippingInfo);
           static embedded = class Embedded extends Component<typeof this> {
             <template>
@@ -146,21 +146,21 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       `,
         'person.gts': `
         import { contains, linksTo, field, Component, CardDef, linksToMany } from "https://cardstack.com/base/card-api";
-        import StringCard from "https://cardstack.com/base/string";
+        import StringField from "https://cardstack.com/base/string";
         import { Pet } from "./pet";
         import { Address } from "./address";
 
         export class Person extends CardDef {
           static displayName = 'Person';
-          @field firstName = contains(StringCard);
+          @field firstName = contains(StringField);
           @field pet = linksTo(Pet);
           @field friends = linksToMany(Pet);
-          @field firstLetterOfTheName = contains(StringCard, {
+          @field firstLetterOfTheName = contains(StringField, {
             computeVia: function (this: Chain) {
               return this.firstName[0];
             },
           });
-          @field title = contains(StringCard, {
+          @field title = contains(StringField, {
             computeVia: function (this: Person) {
               return this.firstName;
             },
@@ -335,7 +335,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     // await percySnapshot(assert);
   });
 
-  test('allows fixing broken cards', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('allows fixing broken cards', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -389,7 +389,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     );
   });
 
-  test('card instance change made in monaco editor is auto-saved', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('card instance change made in monaco editor is auto-saved', async function (assert) {
     assert.expect(4);
 
     let expected: LooseSingleCardDocument = {
@@ -439,7 +439,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
       .containsText('MangoXXX');
   });
 
-  test('card instance change made in card editor is auto-saved', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('card instance change made in card editor is auto-saved', async function (assert) {
     assert.expect(2);
 
     let expected: LooseSingleCardDocument = {
@@ -496,7 +496,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await waitFor('[data-test-save-idle]');
   });
 
-  test('non-card instance change made in monaco editor is auto-saved', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('non-card instance change made in monaco editor is auto-saved', async function (assert) {
     assert.expect(2);
     await visitOperatorMode({
       submode: 'code',
@@ -517,7 +517,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await waitFor('[data-test-save-idle]');
   });
 
-  test('unsaved changes made in monaco editor are saved when switching out of code submode', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('unsaved changes made in monaco editor are saved when switching out of code submode', async function (assert) {
     assert.expect(2);
     await visitOperatorMode({
       submode: 'code',
@@ -538,7 +538,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Interact"]');
   });
 
-  test('unsaved changes made in monaco editor are saved when opening a different file', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('unsaved changes made in monaco editor are saved when opening a different file', async function (assert) {
     let environment = this.owner.lookup(
       'service:environment-service',
     ) as EnvironmentService;
@@ -566,7 +566,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await deferred.promise;
   });
 
-  test('unsaved changes made in card editor are saved when switching out of code submode', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('unsaved changes made in card editor are saved when switching out of code submode', async function (assert) {
     let environment = this.owner.lookup(
       'service:environment-service',
     ) as EnvironmentService;
@@ -607,7 +607,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Interact"]');
   });
 
-  test('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('invalid JSON card instance change made in monaco editor is NOT auto-saved', async function (assert) {
     assert.expect(1);
     await visitOperatorMode({
       stacks: [
@@ -635,15 +635,15 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     assert.strictEqual(getMonacoContent(), `{ this is not actual JSON }`);
   });
 
-  test('card definition change made in monaco editor is auto-saved', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('card definition change made in monaco editor is auto-saved', async function (assert) {
     let expected = `
     import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-    import StringCard from "https://cardstack.com/base/string";
+    import StringField from "https://cardstack.com/base/string";
 
     export class Pet extends CardDef {
       static displayName = 'PetXXX';  // this is the change
-      @field name = contains(StringCard);
-      @field title = contains(StringCard, {
+      @field name = contains(StringField);
+      @field title = contains(StringField, {
         computeVia: function (this: Pet) {
           return this.name;
         },

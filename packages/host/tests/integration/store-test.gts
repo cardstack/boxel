@@ -274,7 +274,7 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('can manually save an instance', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('can manually save an instance', async function (assert) {
     assert.expect(2);
     store.addReference(`${testRealmURL}Person/hassan`);
     await store.flush();
@@ -352,7 +352,7 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('can add a running instance to the store', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('can add a running instance to the store', async function (assert) {
     assert.expect(5);
     this.onSave((_, doc) => {
       assert.strictEqual(
@@ -375,7 +375,7 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(fileJSON.data.attributes.name, 'Andrea', 'file exists');
   });
 
-  test('can add a serialized instance to the store', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('can add a serialized instance to the store', async function (assert) {
     assert.expect(6);
     this.onSave((_, doc) => {
       assert.strictEqual(
@@ -414,7 +414,7 @@ module('Integration | Store', function (hooks) {
     assert.strictEqual(fileJSON.data.attributes.name, 'Andrea', 'file exists');
   });
 
-  test('can skip saving when adding to the store', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('can skip saving when adding to the store', async function (assert) {
     assert.expect(3);
     this.onSave(() => {
       assert.ok(false, 'save should not happen');
@@ -502,7 +502,7 @@ module('Integration | Store', function (hooks) {
     }
   });
 
-  test('added instance that was previously not saved will begin to auto save after being added', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('added instance that was previously not saved will begin to auto save after being added', async function (assert) {
     assert.expect(2);
     let instance = new PersonDef({ name: 'Andrea' });
     await store.add(instance);
@@ -518,7 +518,7 @@ module('Integration | Store', function (hooks) {
     (instance as any).name = 'Air';
   });
 
-  test('an instance will auto save when its data changes', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('an instance will auto save when its data changes', async function (assert) {
     assert.expect(2);
     let instance = await store.get(`${testRealmURL}Person/hassan`);
 
@@ -746,10 +746,10 @@ module('Integration | Store', function (hooks) {
       `person.gts`,
       `
       import { contains, field, Component, CardDef, } from 'https://cardstack.com/base/card-api';
-      import StringCard from 'https://cardstack.com/base/string';
+      import StringField from 'https://cardstack.com/base/string';
 
       export class Person extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <div test-update>Hello</div>

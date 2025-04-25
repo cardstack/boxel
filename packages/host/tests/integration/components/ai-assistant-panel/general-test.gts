@@ -1,10 +1,4 @@
-import {
-  waitFor,
-  waitUntil,
-  click,
-  triggerEvent,
-  type TestContext,
-} from '@ember/test-helpers';
+import { waitFor, waitUntil, click, triggerEvent } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -695,7 +689,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     });
   });
 
-  test('sends read receipts only for bot messages', async function (this: TestContext, assert) {
+  test('sends read receipts only for bot messages', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
     simulateRemoteMessage(roomId, '@testuser:localhost', {

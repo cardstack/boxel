@@ -9,7 +9,6 @@ import {
   triggerKeyEvent,
   typeIn,
   settled,
-  type TestContext,
 } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
@@ -710,7 +709,7 @@ module('Integration | operator-mode', function (hooks) {
     },
   );
 
-  test('it auto saves the field value', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('it auto saves the field value', async function (assert) {
     assert.expect(7);
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
@@ -769,7 +768,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-first-letter-of-the-name]').hasText('E');
   });
 
-  test('it does not auto save when exiting edit mode when there are no changes made', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('it does not auto save when exiting edit mode when there are no changes made', async function (assert) {
     // note that because of the test waiters we can't do the inverse of this
     // test because it is impossible to tell the difference between a normal
     // autosave and an auto save as a result of clicking on the edit button since
@@ -793,7 +792,7 @@ module('Integration | operator-mode', function (hooks) {
     await click('[data-test-edit-button]');
   });
 
-  test('it does not wait for save to complete before switching from edit to isolated mode', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('it does not wait for save to complete before switching from edit to isolated mode', async function (assert) {
     (store as any)._originalPersist = (store as any).persistAndUpdate;
     (store as any).persistAndUpdate = async (
       card: CardDef,
@@ -874,7 +873,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
   });
 
-  test('a 403 from Web Application Firewall is handled gracefully when auto-saving', async function (this: TestContext, assert) {
+  test('a 403 from Web Application Firewall is handled gracefully when auto-saving', async function (assert) {
     let networkService = this.owner.lookup('service:network') as NetworkService;
     networkService.virtualNetwork.mount(
       async (req: Request) => {
@@ -981,7 +980,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists('pet-room spec instance is displayed on cards-grid');
   });
 
-  test('can create a card using the cards-grid', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('can create a card using the cards-grid', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1061,7 +1060,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-stack-card-index="1"]`).doesNotExist();
   });
 
-  test('create new card editor opens in the stack at each nesting level', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('create new card editor opens in the stack at each nesting level', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1249,7 +1248,7 @@ module('Integration | operator-mode', function (hooks) {
       .hasText('Beginnings by R2-D2');
   });
 
-  test('can create a new card to populate a linksTo field', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('can create a new card to populate a linksTo field', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1452,7 +1451,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Mango');
   });
 
-  test('can create a new card to add to a linksToMany field from card chooser', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('can create a new card to add to a linksToMany field from card chooser', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1494,7 +1493,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-field="friends"]').containsText('Woodster');
   });
 
-  test('does not create a new card to add to a linksToMany field from card chooser, if user cancel the edit view', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('does not create a new card to add to a linksToMany field from card chooser, if user cancel the edit view', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/burcu`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2660,7 +2659,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
   });
 
-  test('Choosing a new card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('Choosing a new card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
     assert.expect(5);
     setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
@@ -2728,7 +2727,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom('[data-test-last-saved]').doesNotExist();
   });
 
-  test('Creating a new card from a linksTo field automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('Creating a new card from a linksTo field automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
     assert.expect(5);
     setCardInOperatorModeState(`${testRealmURL}Person/1`, 'edit');
     await renderComponent(
@@ -2788,7 +2787,7 @@ module('Integration | operator-mode', function (hooks) {
       .doesNotExist();
   });
 
-  test('Clicking on "Finish Editing" after creating a card from linksTo field will switch the card into isolated mode', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('Clicking on "Finish Editing" after creating a card from linksTo field will switch the card into isolated mode', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}BlogPost/2`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {

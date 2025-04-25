@@ -132,7 +132,7 @@ module('Integration | text-input-validator', function (hooks) {
       .doesNotExist();
   });
 
-  test('when a user inserts wrong input and saves, it should not save the value', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('when a user inserts wrong input and saves, it should not save the value', async function (assert) {
     assert.expect(2); // expect 2 instead of 3 because this should not run `onSave`
     this.onSave(() => {
       assert.ok(false, 'does not save wrong input');
@@ -152,7 +152,7 @@ module('Integration | text-input-validator', function (hooks) {
   });
 
   // -- below here are happy path test --
-  test('when user inserts field with correct values and saves, the saved document should insert a serialized value into the field', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('when user inserts field with correct values and saves, the saved document should insert a serialized value into the field', async function (assert) {
     assert.expect(4);
     this.onSave((_url, json) => {
       if (typeof json === 'string') {
@@ -183,7 +183,7 @@ module('Integration | text-input-validator', function (hooks) {
       .doesNotExist();
   });
 
-  test('if we modify a model from outside the input box, the input box should update with new value', async function (this: TestContextWithSave, assert) {
+  test<TestContextWithSave>('if we modify a model from outside the input box, the input box should update with new value', async function (assert) {
     //a use case for this test is for exmplae, populating the fields with valid values once the user hits a button "fill in"
     const cardId = `${testRealmURL}Sample/1`;
     assert
