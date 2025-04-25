@@ -7,8 +7,8 @@ settings:
 catalogs:
   default:
     '@types/qunit':
-      specifier: ^2.19.12
-      version: 2.19.12
+      specifier: 2.11.3
+      version: 2.11.3
     ember-qunit:
       specifier: ^8.0.1
       version: 8.0.2
@@ -202,7 +202,7 @@ importers:
         version: 11.0.4
       '@types/qunit':
         specifier: 'catalog:'
-        version: 2.19.12
+        version: 2.11.3
       '@types/sinonjs__fake-timers':
         specifier: ^8.1.5
         version: 8.1.5
@@ -512,7 +512,7 @@ importers:
         version: 3.0.3
       '@types/qunit':
         specifier: 'catalog:'
-        version: 2.19.12
+        version: 2.11.3
       '@types/rsvp':
         specifier: ^4.0.9
         version: 4.0.9
@@ -641,7 +641,7 @@ importers:
         version: 3.0.3
       '@types/qunit':
         specifier: 'catalog:'
-        version: 2.19.12
+        version: 2.11.3
       '@types/rsvp':
         specifier: ^4.0.9
         version: 4.0.9
@@ -1069,7 +1069,7 @@ importers:
         version: 3.0.3
       '@types/qunit':
         specifier: 'catalog:'
-        version: 2.19.12
+        version: 2.11.3
       '@types/rsvp':
         specifier: ^4.0.9
         version: 4.0.9
@@ -1525,7 +1525,7 @@ importers:
         version: 6.9.17
       '@types/qunit':
         specifier: 'catalog:'
-        version: 2.19.12
+        version: 2.11.3
       '@types/rsvp':
         specifier: ^4.0.9
         version: 4.0.9
@@ -1991,7 +1991,7 @@ importers:
         version: 6.9.17
       '@types/qunit':
         specifier: 'catalog:'
-        version: 2.19.12
+        version: 2.11.3
       '@types/sane':
         specifier: ^2.0.1
         version: 2.0.1
@@ -2313,7 +2313,7 @@ importers:
         version: 1.0.1
       '@types/qunit':
         specifier: 'catalog:'
-        version: 2.19.12
+        version: 2.11.3
       '@types/statuses':
         specifier: ^2.0.5
         version: 2.0.5
@@ -5954,8 +5954,8 @@ packages:
   '@types/qs@6.9.17':
     resolution: {integrity: sha512-rX4/bPcfmvxHDv0XjfJELTTr+iB+tn032nPILqHm5wbthUUUuVtNGGqzhya9XUxjTP8Fpr0qYgSZZKxGY++svQ==}
 
-  '@types/qunit@2.19.12':
-    resolution: {integrity: sha512-II+C1wgzUia0g+tGAH+PBb4XiTm8/C/i6sN23r21NNskBYOYrv+qnW0tFQ/IxZzKVwrK4CTglf8YO3poJUclQA==}
+  '@types/qunit@2.11.3':
+    resolution: {integrity: sha512-UF/4jDehcpRlMXzKXi2Z59Id48/uYlMeUDhYdjFrVVwy30Eud/e60Ok3yVjSPlHprafj3B315uFTrF6eqQTeSw==}
 
   '@types/range-parser@1.2.6':
     resolution: {integrity: sha512-+0autS93xyXizIYiyL02FCY8N+KkKPhILhcUSA276HxzreZ16kl+cmwvV2qAM/PuCCwPXzOXOWhiPcw20uSFcA==}
@@ -19970,7 +19970,7 @@ snapshots:
 
   '@types/qs@6.9.17': {}
 
-  '@types/qunit@2.19.12': {}
+  '@types/qunit@2.11.3': {}
 
   '@types/range-parser@1.2.6': {}
 
