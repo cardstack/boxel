@@ -1,0 +1,38 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Ecommerce Baby Diaper",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "categories.0": {
+        "links": {
+          "self": "../cards/5acee332-1af4-4182-b8ad-c144a9e2baa3"
+        }
+      },
+      "categories.1": {
+        "links": {
+          "self": "../cards/cee3321a-f4d1-4278-adc1-44a9e2baa3fd"
+        }
+      },
+      "tags.0": {
+        "links": {
+          "self": "../cards/db33c66c-50eb-41d7-bb84-344cb86ccb5b"
+        }
+      },
+      "tags.1": {
+        "links": {
+          "self": "../cards/cee24ce8-7b75-4387-87ad-122d609f03cf"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../ecommerce-product",
+        "name": "EcommerceProduct"
+      }
+    }
+  }
+}

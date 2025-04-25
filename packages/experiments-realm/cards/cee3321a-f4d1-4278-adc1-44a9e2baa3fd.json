@@ -1,0 +1,21 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Mummy Product",
+      "title": "Mummy Product",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "type": "fieldOf",
+        "field": "categories",
+        "card": {
+          "module": "http://localhost:4201/experiments/ecommerce-product",
+          "name": "EcommerceProduct"
+        }
+      }
+    }
+  }
+}
