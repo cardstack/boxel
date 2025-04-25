@@ -1087,7 +1087,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           </template>
           boom = () => fn();
         }
-      }`;
+      }
+
+      export class WorkingCard extends CardDef {
+        static displayName = 'Working Card';
+        static isolated = class Isolated extends Component<typeof this> {
+          <template>
+            <p>I am not broken!</p>
+          </template>
+        }
+      }
+    `;
 
     hooks.beforeEach(async function () {
       matrixRoomId = createAndJoinRoom({
@@ -1175,6 +1185,77 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').containsText('fn is not defined');
+
+      // fix error
+      await realm.write(
+        'boom-person.gts',
+        `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+          export class BoomPerson extends CardDef {
+            static displayName = 'Boom Person';
+            @field firstName = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                Hello <@fields.firstName />!
+              </template>
+              boom = () => fn();
+            }
+          }
+        `,
+      );
+      await settled();
+      assert.dom('[data-test-error-container]').doesNotExist();
+    });
+
+    test('it can clear card-creation error when file is edited', async function (assert) {
+      await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert.dom('[data-test-error-container]').doesNotExist();
+
+      await createNewInstance();
+      assert
+        .dom('[data-test-error-container]')
+        .containsText('Failed to create');
+
+      await realm.write(
+        'boom-person.gts',
+        `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+          export class BoomPerson extends CardDef {
+            static displayName = 'Boom Person';
+            @field firstName = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                Hello <@fields.firstName />! {{this.boom}}
+              </template>
+              boom = () => fn();
+            }
+          }
+        `,
+      );
+      await settled();
+      assert.dom('[data-test-error-container]').doesNotExist();
+    });
+
+    test('it can clear card-creation error when different card-def is selected', async function (assert) {
+      await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
+      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert.dom('[data-test-error-container]').doesNotExist();
+
+      await createNewInstance();
+      assert
+        .dom('[data-test-error-container]')
+        .containsText('Failed to create');
+
+      await selectDeclaration('WorkingCard');
+      assert
+        .dom('[data-test-error-container]')
+        .doesNotExist('error clears when selecting different card def');
+
+      await selectDeclaration('BoomPerson');
+      assert
+        .dom('[data-test-error-container]')
+        .doesNotExist(
+          'can navigate back to first card def without revalidation errors',
+        );
     });
 
     test('it can render the last known good state for card with error', async function (assert) {
