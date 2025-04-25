@@ -5,6 +5,7 @@ import {
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { module, test } from 'qunit';
 
@@ -12,6 +13,7 @@ import {
   isCardInstance,
   baseRealm,
   localId,
+  baseCardRef,
   type Loader,
   type Realm,
   type SingleCardDocument,
@@ -21,6 +23,9 @@ import {
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import IdentityContext from '@cardstack/host/lib/gc-identity-context';
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
+import { getCard } from '@cardstack/host/resources/card-resource';
+import { getSearch } from '@cardstack/host/resources/search';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type StoreService from '@cardstack/host/services/store';
 import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
@@ -874,5 +879,247 @@ module('Integration | Store', function (hooks) {
       );
     });
     (newInstance as any).name = 'Air';
+  });
+
+  test('reference count is balanced when used with CardResource that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCard(this, () => driver.id);
+      get renderedCard() {
+        return this.resource.card?.constructor.getComponent(this.resource.card);
+      }
+      <template>
+        {{#if this.resource.card}}
+          <this.renderedCard data-test-rendered-card={{this.resource.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    let jade = `${testRealmURL}Person/jade`;
+    let hassan = `${testRealmURL}Person/hassan`;
+
+    driver.id = hassan;
+    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+  });
+
+  test('reference count is balanced when used with CardCollectionResource that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCardCollection(this, () => (driver.id ? [driver.id] : []));
+      get card() {
+        return this.resource.cards[0];
+      }
+      get renderedCard() {
+        return this.card?.constructor.getComponent(this.card);
+      }
+      <template>
+        {{#if this.card}}
+          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    let jade = `${testRealmURL}Person/jade`;
+    let hassan = `${testRealmURL}Person/hassan`;
+
+    driver.id = hassan;
+    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+  });
+
+  test('reference count is balanced when used with SearchResource that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getSearch(this, () =>
+        driver.id
+          ? {
+              filter: {
+                on: baseCardRef,
+                eq: {
+                  id: driver.id,
+                },
+              },
+            }
+          : undefined,
+      );
+      get card() {
+        return this.resource.instances[0];
+      }
+      get renderedCard() {
+        return this.card?.constructor.getComponent(this.card);
+      }
+      <template>
+        {{#if this.card}}
+          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    let jade = `${testRealmURL}Person/jade`;
+    let hassan = `${testRealmURL}Person/hassan`;
+
+    driver.id = hassan;
+    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
   });
 });
