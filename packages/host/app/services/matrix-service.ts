@@ -1,4 +1,3 @@
-import { getOwner } from '@ember/owner';
 import Owner from '@ember/owner';
 import type RouterService from '@ember/routing/router-service';
 import { debounce } from '@ember/runloop';
@@ -32,7 +31,6 @@ import {
   logger,
   ResolvedCodeRef,
   isCardInstance,
-  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 
 import {
@@ -83,7 +81,6 @@ import type {
 import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
-import CardUploader from '../lib/card-uploader';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -146,10 +143,6 @@ export default class MatrixService extends Service {
 
   private roomDataMap: TrackedMap<string, Room> = new TrackedMap();
   private startedAtTs = -1;
-  private cardUploader = new CardUploader(
-    getOwner(this) as Owner,
-    () => this.cardAPI,
-  );
 
   // TODO This seems very bad. we should not be sharing Resources with anyone that
   // wants one--resources are tied to the lifetime of their owner, who knows
@@ -282,7 +275,7 @@ export default class MatrixService extends Service {
     return this.userId ? getMatrixUsername(this.userId) : null;
   }
 
-  private get cardAPI() {
+  get cardAPI() {
     if (this.cardAPIModule.error) {
       throw new Error(
         `Error loading Card API: ${JSON.stringify(this.cardAPIModule.error)}`,
@@ -638,13 +631,11 @@ export default class MatrixService extends Service {
   }
 
   async downloadCardFileDef(cardFileDef: FileAPI.SerializedFile) {
-    return JSON.parse(
-      await this.client.downloadContent(cardFileDef),
-    ) as LooseSingleCardDocument;
+    return await this.client.downloadCardFileDef(cardFileDef);
   }
 
   async uploadCards(cards: CardDef[]) {
-    let cardFileDefs = await this.cardUploader.uploadCards(cards);
+    let cardFileDefs = await this.client.uploadCards(cards);
     return cardFileDefs;
   }
 
@@ -652,7 +643,7 @@ export default class MatrixService extends Service {
     commandDefinitions: SkillCardModule.CommandField[],
   ) {
     let commandFileDefs =
-      await this.cardUploader.uploadCommandDefinitions(commandDefinitions);
+      await this.client.uploadCommandDefinitions(commandDefinitions);
     return commandFileDefs;
   }
 
@@ -664,7 +655,7 @@ export default class MatrixService extends Service {
   ) {
     let cardFileDef: FileDef | undefined;
     if (resultCard) {
-      [cardFileDef] = await this.cardUploader.uploadCards([resultCard]);
+      [cardFileDef] = await this.client.uploadCards([resultCard]);
     }
     let content:
       | CommandResultWithNoOutputContent
@@ -730,7 +721,7 @@ export default class MatrixService extends Service {
         if (!contentType) {
           throw new Error(`File has no content type: ${file.sourceUrl}`);
         }
-        file.url = await this.uploadContent(text, contentType);
+        file.url = await this.client.uploadContent(text, contentType);
         file.contentType = contentType;
 
         return file;
@@ -738,13 +729,6 @@ export default class MatrixService extends Service {
     );
 
     return uploadedFiles;
-  }
-
-  async uploadContent(content: string, contentType: string) {
-    let uploadResponse = await this.client.uploadContent(content, {
-      type: contentType,
-    });
-    return this.client.mxcUrlToHttp(uploadResponse.content_uri);
   }
 
   async sendMessage(
@@ -777,11 +761,22 @@ export default class MatrixService extends Service {
       }
     }
 
-    let cardFileDefs =
-      await this.cardUploader.uploadCardsAndUpdateSkillCommands(
-        attachedCards,
-        roomId,
-      );
+    let roomResource = this.roomResources.get(roomId);
+    if (!roomResource) {
+      throw new Error(`Room resource not found for room ${roomId}`);
+    }
+    let cardFileDefs = await this.client.uploadCardsAndUpdateSkillCommands(
+      attachedCards,
+      roomResource,
+      (
+        roomId: string,
+        eventType: string,
+        stateKey: string,
+        transformContent: (
+          content: Record<string, any>,
+        ) => Promise<Record<string, any>>,
+      ) => this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+    );
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -920,10 +915,6 @@ export default class MatrixService extends Service {
     this.flushRoomState = undefined;
     this.unbindEventListeners();
     this._client = this.matrixSDK.createClient({ baseUrl: matrixURL });
-    this.cardUploader = new CardUploader(
-      getOwner(this) as Owner,
-      () => this.cardAPI,
-    );
     this._currentRoomId = undefined;
     this.messagesToSend = new TrackedMap();
     this.cardsToSend = new TrackedMap();

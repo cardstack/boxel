@@ -99,6 +99,7 @@ module('Integration | commands | search', function (hooks) {
       cardType: 'Author',
       title: undefined,
     });
+    console.log(result);
     assert.strictEqual(result.cardIds.length, 2);
   });
 });
