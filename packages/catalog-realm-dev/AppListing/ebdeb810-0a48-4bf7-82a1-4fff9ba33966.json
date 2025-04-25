@@ -1,0 +1,260 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "CRM App",
+      "summary": null,
+      "images": [],
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "specs.0": {
+        "links": {
+          "self": "../Spec/crm-account"
+        }
+      },
+      "specs.1": {
+        "links": {
+          "self": "../Spec/crm-app-account-header"
+        }
+      },
+      "specs.2": {
+        "links": {
+          "self": "../Spec/crm-app-activity-card"
+        }
+      },
+      "specs.3": {
+        "links": {
+          "self": "../Spec/crm-app-avatar-group"
+        }
+      },
+      "specs.4": {
+        "links": {
+          "self": "../Spec/crm-app-base-task-planner"
+        }
+      },
+      "specs.5": {
+        "links": {
+          "self": "../Spec/crm-app-card-list"
+        }
+      },
+      "specs.6": {
+        "links": {
+          "self": "../Spec/crm-app-card"
+        }
+      },
+      "specs.7": {
+        "links": {
+          "self": "../Spec/crm-app-contact-row"
+        }
+      },
+      "specs.8": {
+        "links": {
+          "self": "../Spec/crm-app-crm-progress-bar"
+        }
+      },
+      "specs.9": {
+        "links": {
+          "self": "../Spec/crm-app-filter-display"
+        }
+      },
+      "specs.10": {
+        "links": {
+          "self": "../Spec/crm-app-filter-dropdown-item"
+        }
+      },
+      "specs.11": {
+        "links": {
+          "self": "../Spec/crm-app-filter-dropdown"
+        }
+      },
+      "specs.12": {
+        "links": {
+          "self": "../Spec/crm-app-filter-trigger"
+        }
+      },
+      "specs.13": {
+        "links": {
+          "self": "../Spec/crm-app-grid"
+        }
+      },
+      "specs.14": {
+        "links": {
+          "self": "../Spec/crm-app-layout"
+        }
+      },
+      "specs.15": {
+        "links": {
+          "self": "../Spec/crm-app-page-layout"
+        }
+      },
+      "specs.16": {
+        "links": {
+          "self": "../Spec/crm-app-search-input"
+        }
+      },
+      "specs.17": {
+        "links": {
+          "self": "../Spec/crm-app-sort"
+        }
+      },
+      "specs.18": {
+        "links": {
+          "self": "../Spec/crm-app-status-pill"
+        }
+      },
+      "specs.19": {
+        "links": {
+          "self": "../Spec/crm-app-summary-card"
+        }
+      },
+      "specs.20": {
+        "links": {
+          "self": "../Spec/crm-app-summary-grid-container"
+        }
+      },
+      "specs.21": {
+        "links": {
+          "self": "../Spec/crm-app"
+        }
+      },
+      "specs.22": {
+        "links": {
+          "self": "../Spec/crm-base-task"
+        }
+      },
+      "specs.23": {
+        "links": {
+          "self": "../Spec/crm-company"
+        }
+      },
+      "specs.24": {
+        "links": {
+          "self": "../Spec/crm-contact-status-tag"
+        }
+      },
+      "specs.25": {
+        "links": {
+          "self": "../Spec/crm-contact"
+        }
+      },
+      "specs.26": {
+        "links": {
+          "self": "../Spec/crm-customer"
+        }
+      },
+      "specs.27": {
+        "links": {
+          "self": "../Spec/crm-deal-event"
+        }
+      },
+      "specs.28": {
+        "links": {
+          "self": "../Spec/crm-deal-priority"
+        }
+      },
+      "specs.29": {
+        "links": {
+          "self": "../Spec/crm-deal-status"
+        }
+      },
+      "specs.30": {
+        "links": {
+          "self": "../Spec/crm-deal-summary"
+        }
+      },
+      "specs.31": {
+        "links": {
+          "self": "../Spec/crm-deal"
+        }
+      },
+      "specs.32": {
+        "links": {
+          "self": "../Spec/crm-document"
+        }
+      },
+      "specs.33": {
+        "links": {
+          "self": "../Spec/crm-kanban-resource"
+        }
+      },
+      "specs.34": {
+        "links": {
+          "self": "../Spec/crm-lead"
+        }
+      },
+      "specs.35": {
+        "links": {
+          "self": "../Spec/crm-representative"
+        }
+      },
+      "specs.36": {
+        "links": {
+          "self": "../Spec/crm-shared"
+        }
+      },
+      "specs.37": {
+        "links": {
+          "self": "../Spec/crm-tag"
+        }
+      },
+      "specs.38": {
+        "links": {
+          "self": "../Spec/crm-task-planner"
+        }
+      },
+      "specs.39": {
+        "links": {
+          "self": "../Spec/crm-task"
+        }
+      },
+      "specs.40": {
+        "links": {
+          "self": "../Spec/crm-todo"
+        }
+      },
+      "specs.41": {
+        "links": {
+          "self": "../Spec/crm-urgency-tag"
+        }
+      },
+      "specs.42": {
+        "links": {
+          "self": "../Spec/crm-user"
+        }
+      },
+      "publisher": {
+        "links": {
+          "self": null
+        }
+      },
+      "categories": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      },
+      "license": {
+        "links": {
+          "self": null
+        }
+      },
+      "examples": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../catalog-app/listing/listing",
+        "name": "AppListing"
+      }
+    }
+  }
+}

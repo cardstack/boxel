@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "PageLayout",
+        "module": "../crm-app/components/page-layout"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Page Layout",
+      "description": "Spec for Page Layout component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

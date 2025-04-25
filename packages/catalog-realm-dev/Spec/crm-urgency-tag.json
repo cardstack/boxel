@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "UrgencyTag",
+        "module": "../crm-app/urgency-tag"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "Urgency Tag",
+      "description": "Spec for Urgency Tag",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
