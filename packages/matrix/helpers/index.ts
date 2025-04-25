@@ -67,8 +67,16 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
+  let isAiAssistantOpen = await page
+    .locator('[data-test-ai-assistant-panel]')
+    .isVisible();
   await page.reload();
-  await openAiAssistant(page);
+  // Persist the ai assistant panel open/closed state
+  if (isAiAssistantOpen) {
+    await expect(page.locator('[data-test-room]')).toHaveCount(1);
+  } else {
+    await openAiAssistant(page);
+  }
 }
 
 export async function openAiAssistant(page: Page) {

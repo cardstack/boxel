@@ -535,6 +535,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
       let expectedURL = `/?operatorModeState=${encodeURIComponent(
         stringify({
+          aiAssistantOpen: false,
           stacks: [
             [
               {
@@ -562,6 +563,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         currentURL(),
         `/?operatorModeState=${encodeURIComponent(
           stringify({
+            aiAssistantOpen: false,
             stacks: [
               [
                 {
