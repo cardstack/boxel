@@ -14,6 +14,7 @@ interface SwitchArgs {
   onChange: () => void;
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export default class Switch extends Component<SwitchSiganture> {
   <template>
     <label

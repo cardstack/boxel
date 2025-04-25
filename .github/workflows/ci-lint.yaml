@@ -119,6 +119,10 @@ jobs:
         if: always()
         run: pnpm run lint
         working-directory: packages/vscode-boxel-tools
+      - name: Lint ESLint Plugin
+        if: always()
+        run: pnpm run lint
+        working-directory: packages/eslint-plugin-boxel
       - name: Lint AI Bot
         if: always()
         run: pnpm run lint

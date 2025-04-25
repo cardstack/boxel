@@ -6,7 +6,7 @@ import {
   Component,
 } from 'https://cardstack.com/base/card-api';
 import NumberField from 'https://cardstack.com/base/number';
-import { ColorField } from 'https://cardstack.com/base/color';
+import ColorField from 'https://cardstack.com/base/color';
 
 import FilterSearch from '@cardstack/boxel-icons/filter-search';
 import FilePen from '@cardstack/boxel-icons/file-pen';

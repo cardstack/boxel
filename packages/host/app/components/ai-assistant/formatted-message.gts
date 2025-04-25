@@ -17,7 +17,7 @@ import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
-import ApplySearchReplaceBlockCommand from '@cardstack/host/commands/apply-search-replace-block';
+import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 
 import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
 import {
@@ -72,6 +72,17 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     | 'applying'
     | 'applied'
     | 'failed' = 'ready';
+
+  private setHtmlGroups = (htmlGroups: HtmlTagGroup[]) => {
+    this.htmlGroups = new TrackedArray(
+      htmlGroups.map((part) => {
+        return new TrackedObject({
+          type: part.type,
+          content: part.content,
+        });
+      }),
+    );
+  };
   // When html is streamed, we need to update htmlParts accordingly,
   // but only the parts that have changed so that we don't needlesly re-render
   // parts of the message that haven't changed. Parts are: <pre> html code, and
@@ -79,20 +90,13 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   // (readonly) Monaco editor
   private updateHtmlGroups = (html: string) => {
     let htmlGroups = parseHtmlContent(html);
-    if (!this.htmlGroups.length) {
-      this.htmlGroups = new TrackedArray(
-        htmlGroups.map((part) => {
-          return new TrackedObject({
-            type: part.type,
-            content: part.content,
-          });
-        }),
-      );
+    let isIncrementalUpdate = htmlGroups.length >= this.htmlGroups.length; // Not incremental update happens when the new html is shorter than the old html (the content was replaced in a way that removed some parts, e.g. replacing the content with an error message if something goes wrong during chunk processing in the AI bot)
+    if (!this.htmlGroups.length || !isIncrementalUpdate) {
+      this.setHtmlGroups(htmlGroups);
     } else {
       this.htmlGroups.forEach((oldPart, index) => {
-        let newPart = htmlGroups[index];
-        if (oldPart.content !== newPart.content) {
-          oldPart.content = newPart.content;
+        if (oldPart.content !== htmlGroups[index].content) {
+          oldPart.content = htmlGroups[index].content;
         }
       });
       if (htmlGroups.length > this.htmlGroups.length) {
@@ -160,24 +164,19 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       {} as Record<string, CodePatchAction[]>,
     );
 
-    let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
+    let patchCodeCommand = new PatchCodeCommand(
       this.commandService.commandContext,
     );
 
     // TODO: Handle possible errors (fetching source, patching, saving source)
     // Handle in CS-8369
     for (let fileUrl in codePatchActionsGroupedByFileUrl) {
-      let source = await this.cardService.getSource(new URL(fileUrl));
-      let patchedCode = source;
-      for (let codePatchAction of codePatchActionsGroupedByFileUrl[fileUrl]) {
-        let { resultContent: patchedCodeResult } =
-          await applySearchReplaceBlockCommand.execute({
-            fileContent: patchedCode,
-            codeBlock: codePatchAction.searchReplaceBlock,
-          });
-        patchedCode = patchedCodeResult;
-      }
-      await this.cardService.saveSource(new URL(fileUrl), patchedCode);
+      await patchCodeCommand.execute({
+        fileUrl,
+        codeBlocks: codePatchActionsGroupedByFileUrl[fileUrl].map(
+          (codePatchAction) => codePatchAction.searchReplaceBlock,
+        ),
+      });
       codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
         codePatchAction.patchCodeTaskState = 'applied';
       });

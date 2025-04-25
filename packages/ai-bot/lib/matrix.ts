@@ -2,7 +2,10 @@ import { IContent } from 'matrix-js-sdk';
 import { logger } from '@cardstack/runtime-common';
 import { OpenAIError } from 'openai/error';
 import * as Sentry from '@sentry/node';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  CommandRequest,
+  encodeCommandRequests,
+} from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
@@ -78,7 +81,7 @@ export async function sendMessageEvent(
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       [APP_BOXEL_REASONING_CONTENT_KEY]: reasoning,
-      [APP_BOXEL_COMMAND_REQUESTS_KEY]: commandRequests,
+      [APP_BOXEL_COMMAND_REQUESTS_KEY]: encodeCommandRequests(commandRequests),
     },
     ...data,
   };

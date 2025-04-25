@@ -21,6 +21,7 @@ import {
   type RealmInfo,
 } from '.';
 import { MatrixClient } from './matrix-client';
+import { lintFix } from './lint';
 
 export interface Stats extends JSONTypes.Object {
   instancesIndexed: number;
@@ -49,7 +50,7 @@ export interface JobInfo extends JSONTypes.Object {
 export type RunnerRegistration = (
   fromScratch: (realmURL: URL) => Promise<IndexResults>,
   incremental: (
-    url: URL,
+    urls: URL[],
     realmURL: URL,
     operation: 'update' | 'delete',
     ignoreData: Record<string, string>,
@@ -69,9 +70,8 @@ export interface WorkerArgs extends JSONTypes.Object {
   realmUsername: string;
 }
 
-// TODO update to support multiple urls
 export interface IncrementalArgs extends WorkerArgs {
-  url: string;
+  urls: string[];
   operation: 'update' | 'delete';
   ignoreData: Record<string, string>;
 }
@@ -145,7 +145,7 @@ export class Worker {
     | undefined;
   #incremental:
     | ((
-        url: URL,
+        urls: URL[],
         realmURL: URL,
         operation: 'update' | 'delete',
         ignoreData: Record<string, string>,
@@ -183,6 +183,7 @@ export class Worker {
       this.#queue.register(`from-scratch-index`, this.fromScratch),
       this.#queue.register(`incremental-index`, this.incremental),
       this.#queue.register(`copy-index`, this.copy),
+      this.#queue.register(`lint-source`, lintFix),
     ]);
     await this.#queue.start();
   }
@@ -331,15 +332,14 @@ export class Worker {
       if (!this.#incremental) {
         throw new Error(`Index runner has not been registered`);
       }
-      // TODO update to support multiple URLs
       let { ignoreData, stats, invalidations } = await this.#incremental(
-        new URL(args.url),
+        args.urls.map((u) => new URL(u)),
         new URL(args.realmURL),
         args.operation,
         { ...args.ignoreData },
       );
       this.#log.debug(
-        `${jobIdentity(args.jobInfo)} completed incremental indexing for  ${args.url}:\n${JSON.stringify(
+        `${jobIdentity(args.jobInfo)} completed incremental indexing for  ${args.urls.join()}:\n${JSON.stringify(
           { ...stats, invalidations },
           null,
           2,

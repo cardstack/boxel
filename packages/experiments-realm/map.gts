@@ -5,7 +5,7 @@ import {
   contains,
   StringField,
 } from 'https://cardstack.com/base/card-api';
-import { Address } from 'https://cardstack.com/base/address';
+import AddressField from 'https://cardstack.com/base/address';
 import { Component } from 'https://cardstack.com/base/card-api';
 import MapIcon from '@cardstack/boxel-icons/map';
 
@@ -17,7 +17,7 @@ export class Map extends CardDef {
   static displayName = 'Map';
   static icon = MapIcon;
 
-  @field address = contains(Address);
+  @field address = contains(AddressField);
 
   @field mapUrl = contains(StringField, {
     computeVia: function (this: Map) {

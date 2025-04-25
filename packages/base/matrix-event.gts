@@ -145,6 +145,11 @@ export interface Tool {
   };
 }
 
+// Synapse JSON does not support decimals, so we encode all arguments as stringified JSON
+export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
+  arguments: string;
+};
+
 export interface CardMessageContent {
   'm.relates_to'?: {
     rel_type: string;
@@ -155,7 +160,7 @@ export interface CardMessageContent {
   body: string;
   isStreamingFinished?: boolean;
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequest>[];
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.

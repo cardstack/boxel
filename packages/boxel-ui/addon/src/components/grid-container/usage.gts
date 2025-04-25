@@ -7,6 +7,7 @@ interface Signature {
   Element: HTMLElement;
 }
 
+// eslint-disable-next-line ember/no-empty-glimmer-component-classes
 export default class GridContainerUsage extends Component<Signature> {
   <template>
     <FreestyleUsage @name='GridContainer'>

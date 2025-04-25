@@ -8,7 +8,7 @@ import {
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import { ContactPhoneNumber } from 'https://cardstack.com/base/phone-number';
-import { EmailField } from 'https://cardstack.com/base/email';
+import EmailField from 'https://cardstack.com/base/email';
 
 import {
   Avatar,

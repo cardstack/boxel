@@ -184,33 +184,33 @@ export class CurrentRun {
     };
   }
 
-  // TODO update to support multiple URLS
   static async incremental(
     current: CurrentRun,
     {
-      url,
+      urls,
       operation,
     }: {
-      url: URL;
+      urls: URL[];
       operation: 'update' | 'delete';
     },
   ): Promise<IndexResults> {
     let start = Date.now();
     log.debug(
-      `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${url.href}`,
+      `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
     );
 
     current.#batch = await current.#indexWriter.createBatch(
       current.realmURL,
       current.#jobInfo,
     );
-    let invalidations = (await current.batch.invalidate(url)).map(
+    let invalidations = (await current.batch.invalidate(urls)).map(
       (href) => new URL(href),
     );
 
+    let hrefs = urls.map((u) => u.href);
     await current.whileIndexing(async () => {
       for (let invalidation of invalidations) {
-        if (operation === 'delete' && invalidation.href === url.href) {
+        if (operation === 'delete' && hrefs.includes(invalidation.href)) {
           // file is deleted, there is nothing to visit
         } else {
           await current.tryToVisit(invalidation);
@@ -221,7 +221,7 @@ export class CurrentRun {
       current.stats.totalIndexEntries = totalIndexEntries;
 
       log.debug(
-        `${jobIdentity(current.#jobInfo)} completed incremental indexing for ${url.href} in ${
+        `${jobIdentity(current.#jobInfo)} completed incremental indexing for ${urls.map((u) => u.href).join()} in ${
           Date.now() - start
         }ms`,
       );
@@ -339,9 +339,7 @@ export class CurrentRun {
     }
 
     let invalidationStart = Date.now();
-    for (let invalidationURL of invalidationList) {
-      await this.batch.invalidate(new URL(invalidationURL));
-    }
+    await this.batch.invalidate(invalidationList.map((u) => new URL(u)));
     perfLog.debug(
       `${jobIdentity(this.#jobInfo)} time to invalidate ${url} ${Date.now() - invalidationStart} ms`,
     );

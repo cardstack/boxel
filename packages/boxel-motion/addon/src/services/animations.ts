@@ -49,6 +49,7 @@ export default class AnimationsService extends Service {
       this.animationParticipantManager.clearSnapshots();
       this.animationParticipantManager.snapshotBeforeRender();
 
+      // eslint-disable-next-line ember/no-runloop
       scheduleOnce('afterRender', this, this.maybeTransition);
     }
   }

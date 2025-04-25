@@ -6,7 +6,9 @@ import {
   FieldDef,
   StringField,
   serialize,
+  linksTo,
 } from 'https://cardstack.com/base/card-api';
+import { Person } from './person';
 
 // this field explodes when serialized (saved)
 export class BoomField extends FieldDef {
@@ -24,4 +26,5 @@ export class BoomField extends FieldDef {
 export class BoomPet extends CardDef {
   static displayName = 'Boom Pet';
   @field boom = contains(BoomField);
+  @field person = linksTo(Person);
 }

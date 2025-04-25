@@ -12,8 +12,6 @@ import mergeWith from 'lodash/mergeWith';
 
 import { stringify } from 'qs';
 
-import status from 'statuses';
-
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -26,7 +24,8 @@ import {
   mergeRelationships,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
-  isCardError,
+  logger,
+  formattedError,
   type Store as StoreInterface,
   type Query,
   type PatchData,
@@ -36,7 +35,6 @@ import {
   type SingleCardDocument,
   type LooseSingleCardDocument,
   type LooseCardResource,
-  type CardError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
 } from '@cardstack/runtime-common';
@@ -67,6 +65,9 @@ import type ResetService from './reset';
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
+
+const realmEventsLogger = logger('realm:events');
+const storeLogger = logger('store');
 
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
@@ -130,10 +131,15 @@ export default class StoreService extends Service implements StoreInterface {
     currentReferenceCount -= 1;
     this.referenceCount.set(id, currentReferenceCount);
 
-    console.debug(
+    storeLogger.debug(
       `dropping reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
     if (currentReferenceCount <= 0) {
+      if (currentReferenceCount < 0) {
+        let message = `current reference count for ${id} is negative: ${this.referenceCount.get(id)}`;
+        storeLogger.error(message);
+        console.trace(message); // this will helps us to understand who dropped the reference that made it negative
+      }
       this.referenceCount.delete(id);
       let autoSaveState = this.autoSaveStates.get(id);
       if (autoSaveState?.hasUnsavedChanges) {
@@ -164,7 +170,7 @@ export default class StoreService extends Service implements StoreInterface {
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
     currentReferenceCount += 1;
     this.referenceCount.set(id, currentReferenceCount);
-    console.debug(
+    storeLogger.debug(
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
@@ -478,24 +484,45 @@ export default class StoreService extends Service implements StoreInterface {
       }
       let instance = this.identityContext.get(invalidation);
       if (instance) {
-        // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
-        // the inputs with past values. This can happen if the user makes edits in the time between the auto
-        // save request and the arrival realm event.
-        if (
-          !event.clientRequestId ||
-          !this.cardService.clientRequestIds.has(event.clientRequestId)
-        ) {
-          this.reloadTask.perform(instance);
-        } else {
-          if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
-            console.debug(
-              'ignoring invalidation for card because clientRequestId is ours',
-              event,
+        // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
+        // overwriting the inputs with past values. This can happen if the user makes edits in the time between
+        // the auto save request and the arrival realm event.
+
+        let clientRequestId = event.clientRequestId;
+        let reloadFile = false;
+
+        if (!clientRequestId) {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${invalidation} because event has no clientRequestId`,
+          );
+        } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
+          if (clientRequestId.startsWith('instance:')) {
+            realmEventsLogger.debug(
+              `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+            );
+          } else {
+            reloadFile = true;
+            realmEventsLogger.debug(
+              `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
             );
           }
+        } else {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
+            Array.from(this.cardService.clientRequestIds.values()),
+          );
+        }
+
+        if (reloadFile) {
+          this.reloadTask.perform(instance);
         }
       } else if (!this.identityContext.get(invalidation)) {
         // load the card using just the ID because we don't have a running card on hand
+        realmEventsLogger.debug(
+          `reloading file resource ${invalidation} because it is not found in the identity context`,
+        );
         this.loadInstanceTask.perform(invalidation);
       }
     }
@@ -949,95 +976,6 @@ export default class StoreService extends Service implements StoreInterface {
       waiter.endAsync(token);
     }
   }
-}
-
-function formattedError(
-  url: string | undefined,
-  error: any,
-  err?: CardError | Partial<CardErrorJSONAPI>,
-): CardErrorsJSONAPI {
-  let errorStatus = err?.status ?? error.status;
-  let errorMessage = err?.message ?? error.message;
-  let title: string | undefined;
-
-  if (errorStatus === 404 && errorMessage?.includes('missing')) {
-    // a missing link error looks a lot like a missing card error
-    title = 'Link Not Found';
-  }
-
-  if (isCardError(err)) {
-    let additionalError = err.additionalErrors?.[0];
-    let cardError = isCardError(additionalError) ? additionalError : err;
-    return {
-      errors: [
-        {
-          id: url,
-          message: cardError.message,
-          status: cardError.status,
-          title:
-            title ??
-            cardError.title ??
-            status.message[cardError.status] ??
-            cardError.message,
-          realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-          meta: {
-            lastKnownGoodHtml: null,
-            scopedCssUrls: [],
-            stack: cardError.stack ?? null,
-            cardTitle: null,
-          },
-          additionalErrors: cardError.additionalErrors,
-        },
-      ],
-    };
-  }
-
-  if (err) {
-    let message = err.message?.length
-      ? err.message
-      : errorStatus
-        ? `Received HTTP ${errorStatus} from server`
-        : `${error.message}: ${error.stack}`;
-    return {
-      errors: [
-        {
-          id: url,
-          message,
-          status: errorStatus ?? 500,
-          title: title ?? err.title ?? status.message[errorStatus] ?? message,
-          realm: err.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
-          meta: err.meta ?? {
-            lastKnownGoodHtml: null,
-            scopedCssUrls: [],
-            stack: error.stack ?? null,
-            cardTitle: null,
-          },
-        },
-      ],
-    };
-  }
-
-  return {
-    errors: [
-      {
-        id: url,
-        status: errorStatus ?? 500,
-        title: title ?? status.message[errorStatus] ?? error.message,
-        message: error.status
-          ? `Received HTTP ${error.status} from server ${
-              error.responseText ?? ''
-            }`.trim()
-          : `${error.message}: ${error.stack}`,
-        realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-        meta: {
-          lastKnownGoodHtml: null,
-          scopedCssUrls: [],
-          stack: null,
-          cardTitle: null,
-        },
-      },
-    ],
-  };
 }
 
 function processCardError(

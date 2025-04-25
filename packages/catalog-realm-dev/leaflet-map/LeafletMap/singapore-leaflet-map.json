@@ -1,0 +1,19 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "lat": 1.3521,
+      "lon": 103.8198,
+      "tileserverUrl": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      "title": "Singapore",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../leaflet-map",
+        "name": "LeafletMap"
+      }
+    }
+  }
+}

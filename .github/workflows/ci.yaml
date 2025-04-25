@@ -258,6 +258,7 @@ jobs:
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",
+            "realm-endpoints/lint-test.ts",
             "realm-endpoints/mtimes-test.ts",
             "realm-endpoints/permissions-test.ts",
             "realm-endpoints/search-test.ts",

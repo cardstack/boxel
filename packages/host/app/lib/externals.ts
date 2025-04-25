@@ -92,4 +92,8 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
   });
   virtualNetwork.shimModule('super-fast-md5', superFastMD5);
   virtualNetwork.shimModule('matrix-js-sdk', matrixJsSDK);
+  virtualNetwork.shimAsyncModule({
+    id: 'uuid',
+    resolve: () => import('uuid'),
+  });
 }

@@ -1,4 +1,5 @@
 import { CardResource } from './card-document';
+import type { ResolvedCodeRef } from './code-ref';
 
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
@@ -22,6 +23,7 @@ export { Deferred } from './deferred';
 export {
   CardError,
   isCardError,
+  formattedError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
 } from './error';
@@ -64,6 +66,8 @@ export interface RealmPrerenderedCards {
   realmInfo: RealmInfo;
   prerenderedCards: PrerenderedCard[];
 }
+// TODO should we use the secure form once we start letting lid's drive the id
+// on the server? address in CS-8343
 export { v4 as uuidv4 } from '@lukeed/uuid'; // isomorphic UUID's using Math.random
 import { RealmPaths, type LocalPath } from './paths';
 import { CardTypeFilter, Query, EveryFilter } from './query';
@@ -151,7 +155,6 @@ export {
   isCardCollectionDocument,
   isSingleCardDocument,
   isCardDocumentString,
-  isLocalResourceID,
 } from './card-document';
 export { sanitizeHtml } from './dompurify-runtime';
 export { markedSync, markdownToHtml } from './marked-sync';
@@ -164,6 +167,7 @@ import type {
   Format,
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import { type Spec } from 'https://cardstack.com/base/spec';
 import { RealmInfo } from './realm';
 import { PrerenderedCard } from './index-query-engine';
 
@@ -383,7 +387,7 @@ export interface SearchQuery {
   isLoading: boolean;
 }
 
-export interface Actions {
+export interface CardActions {
   createCard: (
     ref: CodeRef,
     relativeTo: URL | undefined,
@@ -415,6 +419,26 @@ export interface Actions {
   ) => Promise<void>;
   changeSubmode: (url: URL, submode: 'code' | 'interact') => void;
 }
+
+export interface CopyCardsWithCodeRef {
+  sourceCard: CardDef;
+  codeRef?: ResolvedCodeRef; // if provided the card will point to a new code ref
+}
+
+export interface CatalogActions {
+  create: (spec: Spec, targetRealm: string) => void;
+  copy: (card: CardDef, targetRealm: string) => Promise<CardDef>;
+  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
+  copyCards: (
+    cards: CopyCardsWithCodeRef[],
+    targetUrl: string,
+  ) => Promise<CardDef[]>;
+  allRealmsInfo: () => Promise<
+    Record<string, { canWrite: boolean; info: RealmInfo }>
+  >;
+}
+
+export type Actions = CardActions & CatalogActions;
 
 export function hasExecutableExtension(path: string): boolean {
   for (let extension of executableExtensions) {

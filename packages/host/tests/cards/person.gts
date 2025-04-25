@@ -11,25 +11,25 @@ import {
   CardDef,
   FieldDef,
 } from 'https://cardstack.com/base/card-api';
-import NumberCard from 'https://cardstack.com/base/number';
-import StringCard from 'https://cardstack.com/base/string';
+import NumberField from 'https://cardstack.com/base/number';
+import StringField from 'https://cardstack.com/base/string';
 
 export class Person extends CardDef {
-  @field firstName = contains(StringCard);
-  @field lastName = contains(StringCard);
-  @field email = contains(StringCard);
-  @field posts = contains(NumberCard);
-  @field fullName = contains(StringCard, {
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
+  @field email = contains(StringField);
+  @field posts = contains(NumberField);
+  @field fullName = contains(StringField, {
     computeVia: function (this: Person) {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Person) {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });
-  @field description = contains(StringCard, { computeVia: () => 'Person' });
+  @field description = contains(StringField, { computeVia: () => 'Person' });
 
   static isolated = class Isolated extends Component<typeof this> {
     runSwitchToCodeModeCommandViaAiAssistant = async () => {
@@ -78,21 +78,21 @@ export class Person extends CardDef {
 }
 
 export class PersonField extends FieldDef {
-  @field firstName = contains(StringCard);
-  @field lastName = contains(StringCard);
-  @field email = contains(StringCard);
-  @field posts = contains(NumberCard);
-  @field fullName = contains(StringCard, {
+  @field firstName = contains(StringField);
+  @field lastName = contains(StringField);
+  @field email = contains(StringField);
+  @field posts = contains(NumberField);
+  @field fullName = contains(StringField, {
     computeVia: function (this: Person) {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Person) {
       return `${this.firstName ?? ''} ${this.lastName ?? ''}`;
     },
   });
-  @field description = contains(StringCard, { computeVia: () => 'Person' });
+  @field description = contains(StringField, { computeVia: () => 'Person' });
 
   static isolated = class Isolated extends Component<typeof this> {
     <template>

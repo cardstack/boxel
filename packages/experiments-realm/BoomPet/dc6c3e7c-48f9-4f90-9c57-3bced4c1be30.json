@@ -9,6 +9,13 @@
       "description": "",
       "thumbnailURL": null
     },
+    "relationships": {
+      "person": {
+        "links": {
+          "self": "../Person/1"
+        }
+      }
+    },
     "meta": {
       "adoptsFrom": {
         "module": "../boom-pet",

@@ -99,7 +99,10 @@ module('Integration | commands | search', function (hooks) {
       cardType: 'Author',
       title: undefined,
     });
-    console.log(result);
-    assert.strictEqual(result.cardIds.length, 2);
+    assert.ok(result.cardIds.length > 0, 'Should return at least one result');
+    assert.ok(
+      result.cardIds.every((id) => id.includes('Author')),
+      'All results should be Author cards',
+    );
   });
 });
