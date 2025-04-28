@@ -41,6 +41,7 @@ import { Format } from 'https://cardstack.com/base/card-api';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
+import { isLocalId } from '../lib/gc-identity-context';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -557,9 +558,9 @@ export default class OperatorModeStateService extends Service {
         }
         if (item.id) {
           let instance = this.store.peek(item.id);
-          if (instance?.id) {
+          if (!isLocalId(item.id) || instance?.id) {
             serializedStack.push({
-              id: instance.id,
+              id: instance?.id ?? item.id,
               format: item.format,
             });
           }
