@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "This is a new skill showing the diff when we add something",
+      "title": "New skill boyo",
+      "description": null,
+      "thumbnailURL": null,
+      "commands": [
+        {
+          "codeRef": {
+            "module": "@cardstack/boxel-host/commands/show-card",
+            "name": "default"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "module": "@cardstack/boxel-host/commands/search-cards",
+            "name": "SearchCardsByTypeAndTitleCommand"
+          },
+          "requiresApproval": true
+        }
+      ]
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill-card",
+        "name": "SkillCard"
+      }
+    }
+  }
+}
