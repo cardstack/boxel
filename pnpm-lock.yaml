@@ -27,12 +27,21 @@ catalogs:
     eslint-plugin-ember:
       specifier: ^12.5.0
       version: 12.5.0
+    eslint-plugin-eslint-comments:
+      specifier: ^3.2.0
+      version: 3.2.0
+    eslint-plugin-eslint-plugin:
+      specifier: ^5.5.1
+      version: 5.5.1
     eslint-plugin-qunit:
       specifier: ^8.0.1
       version: 8.1.1
     eslint-plugin-qunit-dom:
       specifier: mainmatter/eslint-plugin-qunit-dom#d66c841
       version: 0.2.0
+    eslint-plugin-unicorn:
+      specifier: ^51.0.1
+      version: 51.0.1
     qunit:
       specifier: ^2.24.1
       version: 2.24.1
@@ -1345,10 +1354,10 @@ importers:
         specifier: 'catalog:'
         version: 1.7.1(eslint@8.57.1)(typescript@5.1.6)
       eslint-plugin-eslint-comments:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.0(eslint@8.57.1)
       eslint-plugin-eslint-plugin:
-        specifier: ^5.5.1
+        specifier: 'catalog:'
         version: 5.5.1(eslint@8.57.1)
       eslint-plugin-filenames:
         specifier: ^1.3.2
@@ -1366,7 +1375,7 @@ importers:
         specifier: ^5.2.6
         version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-unicorn:
-        specifier: ^51.0.1
+        specifier: 'catalog:'
         version: 51.0.1(eslint@8.57.1)
       prettier:
         specifier: ^3.5.3

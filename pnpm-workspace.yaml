@@ -11,7 +11,10 @@ catalog:
   eslint: ^8.57.1
   eslint-doc-generator: ^1.7.1
   eslint-plugin-ember: ^12.5.0
+  eslint-plugin-eslint-comments: ^3.2.0
+  eslint-plugin-eslint-plugin: ^5.5.1
   eslint-plugin-qunit: ^8.0.1
   eslint-plugin-qunit-dom: mainmatter/eslint-plugin-qunit-dom#d66c841
+  eslint-plugin-unicorn: ^51.0.1
   qunit: ^2.24.1
   qunit-dom: ^2.0.0
