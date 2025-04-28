@@ -62,7 +62,7 @@
     "ember-template-lint-plugin-prettier": "^5.0.0",
     "eslint": "catalog:",
     "eslint-config-prettier": "^8.6.0",
-    "eslint-plugin-ember": "^12.5.0",
+    "eslint-plugin-ember": "catalog:",
     "eslint-plugin-n": "^15.6.0",
     "eslint-plugin-prettier": "^5.0.0",
     "http-server": "^14.1.1",

@@ -83,7 +83,7 @@
     "ember-try": "^2.0.0",
     "eslint": "catalog:",
     "eslint-config-prettier": "^9.0.0",
-    "eslint-plugin-ember": "^12.5.0",
+    "eslint-plugin-ember": "catalog:",
     "eslint-plugin-n": "^16.2.0",
     "eslint-plugin-prettier": "^5.0.1",
     "eslint-plugin-qunit": "catalog:",
