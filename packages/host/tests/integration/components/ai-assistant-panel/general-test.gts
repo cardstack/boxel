@@ -11,7 +11,6 @@ import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import {
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -554,34 +553,17 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
 
   test('it can handle an error in a card attached to a matrix message', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    let event1Id = simulateRemoteMessage(roomId, '@aibot:localhost', {
-      body: '',
-      msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-      data: JSON.stringify({
-        index: 0,
-        totalParts: 1,
-        cardFragment: JSON.stringify({
-          data: {
-            id: 'http://this-is-not-a-real-card.com',
-            type: 'card',
-            attributes: {
-              firstName: 'Boom',
-            },
-            meta: {
-              adoptsFrom: {
-                module: 'http://not-a-real-card.com',
-                name: 'Boom',
-              },
-            },
-          },
-        }),
-      }),
-    });
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'card with error',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       data: JSON.stringify({
-        attachedCardsEventIds: [event1Id],
+        attachedCards: [
+          {
+            sourceUrl: 'http://this-is-not-a-real-card.com',
+            url: 'http://this-is-not-a-real-card.com',
+            contentType: 'text/plain',
+          },
+        ],
       }),
       isStreamingFinished: true,
     });
@@ -591,57 +573,6 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .dom('[data-test-card-error]')
       .containsText('Error rendering attached cards');
     await percySnapshot(assert);
-  });
-
-  test(`should handle events in order to prevent 'cardFragment not found' error`, async function (assert) {
-    let roomId = await renderAiAssistantPanel();
-    let cardFragmentsEventId = '!card_fragments_event_id';
-    let now = Date.now();
-    simulateRemoteMessage(
-      roomId,
-      '@aibot:localhost',
-      {
-        body: 'Update mango card',
-        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
-        data: JSON.stringify({
-          attachedCardsEventIds: [cardFragmentsEventId],
-        }),
-        isStreamingFinished: true,
-      },
-      { origin_server_ts: now + 60000 },
-    );
-    simulateRemoteMessage(
-      roomId,
-      '@aibot:localhost',
-      {
-        body: '',
-        msgtype: APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-        data: JSON.stringify({
-          index: 0,
-          totalParts: 1,
-          cardFragment: JSON.stringify({
-            data: {
-              id: `${testRealmURL}Pet/mango`,
-              type: 'card',
-              attributes: {
-                firstName: 'Mango',
-              },
-              meta: {
-                adoptsFrom: {
-                  module: `${testRealmURL}Pet`,
-                  name: 'Mango',
-                },
-              },
-            },
-          }),
-        }),
-      },
-      { event_id: cardFragmentsEventId, origin_server_ts: now },
-    );
-
-    await waitFor('[data-test-message-idx="0"]');
-    assert.dom('[data-test-message-idx="0"]').exists({ count: 1 });
-    assert.dom('[data-test-message-idx="0"]').containsText('Update mango card');
   });
 
   module('suspending global error hook', (hooks) => {

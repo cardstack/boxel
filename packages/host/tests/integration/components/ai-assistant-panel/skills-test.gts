@@ -6,11 +6,7 @@ import { module, test, skip } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import {
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-} from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
@@ -280,7 +276,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     return roomId;
   }
 
-  test('same skill card added twice with no changes results in no-op', async function (assert) {
+  //TODO: Restore this once CS-7970 is implemented
+  skip('same skill card added twice with no changes results in no-op', async function (assert) {
     const roomId = await renderAiAssistantPanel(
       `${testRealmURL}Person/fadhlan`,
     );
@@ -289,9 +286,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
 
-    const initialCardFragmentEvents = getRoomEvents(roomId).filter(
-      (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-    );
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -306,17 +300,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
     await click('[data-test-send-message-btn]');
 
-    const finalCardFragmentEvents = getRoomEvents(roomId).filter(
-      (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-    );
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-    assert.strictEqual(
-      finalCardFragmentEvents.length,
-      initialCardFragmentEvents.length,
-      'No new cards should attached when adding the same unchanged skill card',
     );
     assert.deepEqual(
       finalRoomStateSkillsJson,
@@ -333,9 +319,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
 
-    const initialCardFragmentEvents = getRoomEvents(roomId).filter(
-      (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-    );
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -351,17 +334,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     // skill card will be auto-attached since it is open
     await click('[data-test-send-message-btn]');
 
-    const finalCardFragmentEvents = getRoomEvents(roomId).filter(
-      (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-    );
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-    assert.strictEqual(
-      finalCardFragmentEvents.length,
-      initialCardFragmentEvents.length + 1,
-      'New card should be attached',
     );
     assert.notDeepEqual(
       finalRoomStateSkillsJson,
@@ -379,12 +354,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
 
-    const initialCardFragmentEvents = getRoomEvents(roomId).filter(
-      (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-    );
-    const initialCommandDefEvents = getRoomEvents(roomId).filter(
-      (e) => e.content?.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-    );
     const initialRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -405,26 +374,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await settled();
 
     console.log(getRoomEvents(roomId));
-    const afterCodeModeCardFragmentEvents = getRoomEvents(roomId).filter(
-      (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-    );
-    const afterCodeModeCommandDefEvents = getRoomEvents(roomId).filter(
-      (e) => e.content?.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-    );
     const afterCodeModeRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-
-    assert.strictEqual(
-      afterCodeModeCardFragmentEvents.length,
-      initialCardFragmentEvents.length + 2,
-      '2 New skill cards should be attached',
-    );
-    assert.strictEqual(
-      afterCodeModeCommandDefEvents.length,
-      initialCommandDefEvents.length,
-      'No new command definition events for default code mode skills',
     );
 
     assert.notDeepEqual(
@@ -441,27 +393,9 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await waitFor('[data-test-message-idx]');
 
     console.log(getRoomEvents(roomId));
-    const finalEvents = getRoomEvents(roomId);
-    const finalCommandDefEvents = finalEvents.filter(
-      (e) => e.content?.msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
-    );
-    const finalCardFragmentEvents = finalEvents.filter(
-      (e) => e.content?.msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-    );
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-    );
-
-    assert.strictEqual(
-      finalCardFragmentEvents.length,
-      afterCodeModeCardFragmentEvents.length,
-      'Skill card did not change and so is not re-uploaded',
-    );
-    assert.strictEqual(
-      finalCommandDefEvents.length,
-      afterCodeModeCommandDefEvents.length + 1,
-      'New command definition event should be created since command is updated',
     );
 
     assert.deepEqual(

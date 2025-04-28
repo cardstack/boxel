@@ -661,6 +661,25 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
+  test('can get a card from the identity map by correlating the last part of the remote id with the local id for an instance that has a newly assigned remote id', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest();
+
+    assert.strictEqual(
+      identityContext.getInstanceOrError(`${testRealmURL}${hassan[localId]}`),
+      hassan,
+      'card instance is returned',
+    );
+
+    assert.strictEqual(
+      hassan.id,
+      `${testRealmURL}${hassan[localId]}`,
+      'instance has remote id set correctly',
+    );
+  });
+
   test('can handle encountering a NotLoaded error in an instance during garbage collection', async function (assert) {
     let { identityContext } = await setupTest();
     let doc: LooseSingleCardDocument = {

@@ -13,7 +13,7 @@ interface Signature {
   Args: {
     skills: RoomSkill[];
     onChooseCard?: (cardId: string) => void;
-    onUpdateSkillIsActive?: (skillEventId: string, isActive: boolean) => void;
+    onUpdateSkillIsActive?: (isActive: boolean, skillCardId: string) => void;
   };
 }
 
@@ -107,8 +107,8 @@ export default class AiAssistantSkillMenu extends Component<Signature> {
 
   updateItemIsActive = (item: PillMenuItem, isActive: boolean) => {
     this.args.onUpdateSkillIsActive?.(
-      (item as RoomSkill).skillEventId,
       isActive,
+      (item as RoomSkill).fileDef.sourceUrl,
     );
   };
 }

@@ -974,14 +974,8 @@ We are one!
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
-    let meetingCardEventId = boxelMessageData.attachedCardsEventIds[0];
-    let cardFragment = JSON.parse(
-      getRoomEvents(roomId).find(
-        (event) => event.event_id === meetingCardEventId,
-      )!.content.data,
-    ).cardFragment;
-    let parsedCard = JSON.parse(cardFragment);
-    let meetingCardId = parsedCard.data.id;
+    let meetingCardEventId = boxelMessageData.attachedCards[0];
+    let meetingCardId = meetingCardEventId.sourceUrl;
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
@@ -1115,6 +1109,7 @@ We are one!
     });
     // open assistant
     await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
     // open skill menu
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');

@@ -114,7 +114,7 @@ export class AddSkillsToRoomInput extends CardDef {
 
 export class UpdateSkillActivationInput extends CardDef {
   @field roomId = contains(StringField);
-  @field skillEventId = contains(StringField);
+  @field skillCardId = contains(StringField);
   @field isActive = contains(BooleanField);
 }
 
