@@ -8,7 +8,6 @@ import { isTesting } from '@embroider/macros';
 import { formatDistanceToNow } from 'date-fns';
 import { task, timeout } from 'ember-concurrency';
 
-import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 
 import { stringify } from 'qs';
@@ -867,7 +866,14 @@ export default class StoreService extends Service implements StoreInterface {
     defaultRealmHref?: string,
   ): Promise<void> {
     await this.withTestWaiters(async () => {
+      let cardChanged = false;
+      function onCardChange() {
+        cardChanged = true;
+      }
+      let api: typeof CardAPI | undefined;
       try {
+        api = await this.cardService.getAPI();
+        api.subscribeToChanges(instance, onCardChange);
         let doc = await this.cardService.serializeCard(instance, {
           // for a brand new card that has no id yet, we don't know what we are
           // relativeTo because its up to the realm server to assign us an ID, so
@@ -890,17 +896,24 @@ export default class StoreService extends Service implements StoreInterface {
           realmURL = new URL(defaultRealmHref);
         }
         let json = await this.saveCardDocument(doc, realmURL);
-        // the only server state we really care about is the meta. the host has
-        // a more update to date version of all the other state
-        instance[meta] = merge(instance[meta], json.data.meta);
+        let isNew = !instance.id;
 
+        // if the card changed while the save was in flight then don't load the
+        // server's version of the card--the next auto save will include these
+        // unsaved changes.
+        if (!cardChanged) {
+          await api.updateFromSerialized(instance, json, this.identityContext);
+        } else if (isNew) {
+          // in this case a new card was created, but there is an immediate change
+          // that was made--so we save off the new ID for the card so in the next
+          // save we'll correlate to the correct card ID
+          instance.id = json.data.id!; // resources from the server will have ID's
+        }
         if (this.onSaveSubscriber) {
           this.onSaveSubscriber(new URL(json.data.id!), json);
         }
-        let isNew = !instance.id;
-        if (isNew) {
-          instance.id = json.data.id!; // resources from the server will have ID's
 
+        if (isNew) {
           // now that we have a remote ID make a realm subscription
           this.subscribeToRealm(new URL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
@@ -916,6 +929,8 @@ export default class StoreService extends Service implements StoreInterface {
       } catch (err) {
         console.error(`Failed to save ${instance.id}: `, err);
         throw err;
+      } finally {
+        api?.unsubscribeFromChanges(instance, onCardChange);
       }
     });
   }
