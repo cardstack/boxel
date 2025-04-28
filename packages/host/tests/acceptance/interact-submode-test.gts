@@ -1153,6 +1153,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
+
       this.onSave((url) => {
         if (url.href.includes('Pet')) {
           assert.ok(
@@ -1169,6 +1170,10 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-card-catalog-create-new-button="${testRealm3URL}"]`,
       );
       await click(`[data-test-card-catalog-go-button]`);
+      await fillIn(
+        `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
+        'Mango',
+      );
     });
   });
 

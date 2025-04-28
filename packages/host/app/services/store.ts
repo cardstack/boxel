@@ -920,6 +920,8 @@ export default class StoreService extends Service implements StoreInterface {
             'start-tracking',
             instance,
           );
+          // TODO test this
+          await this.updateForeignConsumersOf(instance);
         }
       } catch (err) {
         console.error(`Failed to save ${instance.id}: `, err);
@@ -928,6 +930,29 @@ export default class StoreService extends Service implements StoreInterface {
         api?.unsubscribeFromChanges(instance, onCardChange);
       }
     });
+  }
+
+  // in the case we are making a cross realm relationship with a link that
+  // hasn't been saved yet, as soon as the link does actually get saved we need
+  // to inform the consuming instances that live in different realms of the new
+  // link's remote id and have those consumers update in their respective
+  // realms.
+  private async updateForeignConsumersOf(instance: CardDef) {
+    let consumers = this.identityContext.consumersOf(
+      await this.cardService.getAPI(),
+      instance,
+    );
+    let instanceRealm = instance[realmURLSymbol]?.href;
+    if (!instanceRealm) {
+      return;
+    }
+
+    for (let consumer of consumers) {
+      let consumerRealm = consumer[realmURLSymbol]?.href;
+      if (consumerRealm !== instanceRealm && consumer.id) {
+        this.save(consumer.id);
+      }
+    }
   }
 
   private async reloadInstance(instance: CardDef): Promise<void> {

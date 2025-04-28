@@ -2408,6 +2408,7 @@ function serializeCardResource(
       opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
     )
     .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
+  let realmURL = getCardMeta(model, 'realmURL');
   return merge(
     {
       attributes: {},
@@ -2415,7 +2416,7 @@ function serializeCardResource(
     ...fieldResources,
     {
       type: 'card',
-      meta: { adoptsFrom },
+      meta: { adoptsFrom, ...(realmURL ? { realmURL } : {}) },
     },
     model.id ? { id: model.id } : { lid: model[localId] },
   );

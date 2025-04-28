@@ -212,6 +212,14 @@ export default class IdentityContextWithGarbageCollection
     this.#nonTrackedCardErrors.delete(remoteId);
   }
 
+  consumersOf(api: typeof CardAPI, instance: CardDef) {
+    let consumptionGraph = this.makeConsumptionGraph(api);
+    let consumers = consumptionGraph.get(instance[localIdSymbol]);
+    return [...(consumers ?? [])]
+      .map((id) => this.get(id))
+      .filter(Boolean) as CardDef[];
+  }
+
   private deleteFromAll(id: string) {
     this.#cards.delete(id);
     this.#cardErrors.delete(id);
