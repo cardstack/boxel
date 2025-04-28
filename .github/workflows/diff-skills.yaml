@@ -41,22 +41,22 @@ jobs:
             # Get the file content from target branch and PR branch
             OLD_CONTENT=$(git show ${{ github.event.pull_request.base.sha }}:$FILE 2>/dev/null || echo "{}")
             NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
-            
+
             # Check if it's a skill card
             IS_SKILL_CARD=$(echo "$NEW_CONTENT" | jq -r '.data.meta.adoptsFrom.module == "https://cardstack.com/base/skill-card"')
-            
+
             if [ "$IS_SKILL_CARD" = "true" ]; then
               # Extract instructions and commands
               OLD_INSTRUCTIONS=$(echo "$OLD_CONTENT" | jq -r '.data.attributes.instructions // ""')
               NEW_INSTRUCTIONS=$(echo "$NEW_CONTENT" | jq -r '.data.attributes.instructions // ""')
-              
+
               OLD_COMMANDS=$(echo "$OLD_CONTENT" | jq -r '.data.attributes.commands // []')
               NEW_COMMANDS=$(echo "$NEW_CONTENT" | jq -r '.data.attributes.commands // []')
-              
+
               # Create diffs
               echo "$OLD_INSTRUCTIONS" > /tmp/skill-diffs/old_instructions.txt
               echo "$NEW_INSTRUCTIONS" > /tmp/skill-diffs/new_instructions.txt
-              
+
               echo "$OLD_COMMANDS" > /tmp/skill-diffs/old_commands.txt
               echo "$NEW_COMMANDS" > /tmp/skill-diffs/new_commands.txt
               # Generate diffs
@@ -104,7 +104,7 @@ jobs:
             });
 
             // Check if we already have a comment from this workflow
-            const existingComment = comments.find(comment => 
+            const existingComment = comments.find(comment =>
               comment.user.login === 'github-actions[bot]' &&
               comment.body.includes('## Skill Card Changes')
             );
