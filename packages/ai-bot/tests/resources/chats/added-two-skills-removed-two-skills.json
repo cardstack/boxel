@@ -281,30 +281,18 @@
     }
   },
   {
-    "type": "m.room.message",
-    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/personal/SkillCard/31a074dd-4a48-46cd-bc5e-41267d4ddc43\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"SKILL_1\\\",\\\"title\\\":\\\"skill 1\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1733487578939,
-    "unsigned": {
-      "age": 59763
-    },
-    "event_id": "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
-    "user_id": "@admin:localhost",
-    "age": 59763
-  },
-  {
     "type": "app.boxel.room.skills",
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledEventIds": ["$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"],
-      "disabledEventIds": []
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill1",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733487579032,
@@ -316,41 +304,37 @@
     "age": 59670
   },
   {
-    "type": "m.room.message",
-    "room_id": "!KzZgWcmsvUozFuULeD:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/personal/SkillCard/4ecb2f52-bb72-4df2-86de-f6162a628933\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"SKILL_2\\\",\\\"title\\\":\\\"skill 2\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1733487583793,
-    "unsigned": {
-      "age": 54909
-    },
-    "event_id": "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80",
-    "user_id": "@admin:localhost",
-    "age": 54909
-  },
-  {
     "type": "app.boxel.room.skills",
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledEventIds": [
-        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
-        "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill1",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "contentType": "text/plain"
+        },
+        {
+          "url": "mxc://mock-server/skill2",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "contentType": "text/plain"
+        }
       ],
-      "disabledEventIds": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733487583858,
     "unsigned": {
       "replaces_state": "$tQJ37hTMp69BRHNDXjxJ1-D01NEPX-l41iASpKD1cWk",
       "prev_content": {
-        "enabledEventIds": ["$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"],
-        "disabledEventIds": []
+        "enabledSkillCards": [
+          {
+            "url": "mxc://mock-server/skill1",
+            "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+            "contentType": "text/plain"
+          }
+        ],
+        "disabledSkillCards": []
       },
       "prev_sender": "@admin:localhost",
       "age": 54844
@@ -360,8 +344,14 @@
     "age": 54844,
     "replaces_state": "$tQJ37hTMp69BRHNDXjxJ1-D01NEPX-l41iASpKD1cWk",
     "prev_content": {
-      "enabledEventIds": ["$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"],
-      "disabledEventIds": []
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill1",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": []
     }
   },
   {
@@ -369,19 +359,39 @@
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledEventIds": ["$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"],
-      "disabledEventIds": ["$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"]
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill2",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill1",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "contentType": "text/plain"
+        }
+      ]
     },
     "state_key": "",
     "origin_server_ts": 1733487586192,
     "unsigned": {
       "replaces_state": "$01XVRKjY9LXrM9E-DCiGeZrm79oRlnKNAKqax7iSJaE",
       "prev_content": {
-        "enabledEventIds": [
-          "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
-          "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+        "enabledSkillCards": [
+          {
+            "url": "mxc://mock-server/skill1",
+            "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+            "contentType": "text/plain"
+          },
+          {
+            "url": "mxc://mock-server/skill2",
+            "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+            "contentType": "text/plain"
+          }
         ],
-        "disabledEventIds": []
+        "disabledSkillCards": []
       },
       "prev_sender": "@admin:localhost",
       "age": 52510
@@ -391,11 +401,19 @@
     "age": 52510,
     "replaces_state": "$01XVRKjY9LXrM9E-DCiGeZrm79oRlnKNAKqax7iSJaE",
     "prev_content": {
-      "enabledEventIds": [
-        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
-        "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill1",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "contentType": "text/plain"
+        },
+        {
+          "url": "mxc://mock-server/skill2",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "contentType": "text/plain"
+        }
       ],
-      "disabledEventIds": []
+      "disabledSkillCards": []
     }
   },
   {
@@ -403,10 +421,18 @@
     "room_id": "!KzZgWcmsvUozFuULeD:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "enabledEventIds": [],
-      "disabledEventIds": [
-        "$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis",
-        "$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"
+      "enabledSkillCards": [],
+      "disabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill1",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "contentType": "text/plain"
+        },
+        {
+          "url": "mxc://mock-server/skill2",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "contentType": "text/plain"
+        }
       ]
     },
     "state_key": "",
@@ -414,8 +440,20 @@
     "unsigned": {
       "replaces_state": "$QwniAlC_XvLP_GV6HD1-5QHpzwjw4n5Cj4GyDO1JGtQ",
       "prev_content": {
-        "enabledEventIds": ["$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"],
-        "disabledEventIds": ["$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"]
+        "enabledSkillCards": [
+          {
+            "url": "mxc://mock-server/skill2",
+            "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+            "contentType": "text/plain"
+          }
+        ],
+        "disabledSkillCards": [
+          {
+            "url": "mxc://mock-server/skill1",
+            "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+            "contentType": "text/plain"
+          }
+        ]
       },
       "prev_sender": "@admin:localhost",
       "age": 50047
@@ -425,8 +463,20 @@
     "age": 50047,
     "replaces_state": "$QwniAlC_XvLP_GV6HD1-5QHpzwjw4n5Cj4GyDO1JGtQ",
     "prev_content": {
-      "enabledEventIds": ["$X4HuI4_nlEJ4ZYe5t6hi8IWfBPEU5xKd5_nvzWa1Y80"],
-      "disabledEventIds": ["$lOqffkvRN5wBqhz92u6NeKywig0t7ul_9mRt-J2syis"]
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill2",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill1",
+          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "contentType": "text/plain"
+        }
+      ]
     }
   },
   {
@@ -438,7 +488,7 @@
       "body": "test",
       "format": "org.matrix.custom.html",
       "clientGeneratedId": "0974e81d-05d0-4ad9-b683-80f7a02c388d",
-      "data": "{\"attachedCardsEventIds\":[],\"context\":{\"openCardIds\":[],\"tools\":[],\"submode\":\"interact\"}}"
+      "data": "{\"attachedCards\":[],\"context\":{\"openCardIds\":[],\"tools\":[],\"submode\":\"interact\"}}"
     },
     "origin_server_ts": 1733487597236,
     "unsigned": {

@@ -5,12 +5,11 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import ExclamationCircle from '@cardstack/boxel-icons/exclamation-circle';
-
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 
 import { Accordion, Button } from '@cardstack/boxel-ui/components';
+import { ExclamationCircle } from '@cardstack/boxel-ui/icons';
 
 import SwitchSubmodeCommand from '../../commands/switch-submode';
 import { type CardErrorJSONAPI } from '../../services/store';
@@ -20,9 +19,11 @@ import type CommandService from '../../services/command-service';
 interface Signature {
   Args: {
     error: CardErrorJSONAPI;
-    viewInCodeMode?: true;
+    viewInCodeMode?: boolean;
     title?: string;
+    headerText?: string;
   };
+  Element: HTMLElement;
 }
 
 export default class CardErrorDetail extends Component<Signature> {
@@ -42,7 +43,11 @@ export default class CardErrorDetail extends Component<Signature> {
   });
 
   <template>
-    <Accordion class='error-detail {{if this.showErrorDetail "open"}}' as |A|>
+    <Accordion
+      class='error-detail {{if this.showErrorDetail "open"}}'
+      ...attributes
+      as |A|
+    >
       <A.Item
         data-test-error-detail-toggle
         @onClick={{fn this.toggleDetail 'schema'}}
@@ -50,7 +55,7 @@ export default class CardErrorDetail extends Component<Signature> {
       >
         <:title>
           <ExclamationCircle class='error-icon' />
-          An error was encountered on this card:
+          {{if @headerText @headerText 'An error was encountered: '}}
           <span data-test-error-title>
             {{if @title @title @error.title}}
           </span>

@@ -369,16 +369,8 @@ module('shouldSetRoomTitle', () => {
             {
               name: 'patchCard',
               id: 'patchCard-1',
-              arguments: {
-                attributes: {
-                  cardId: 'http://localhost:4201/experiments/Friend/1',
-                  patch: {
-                    attributes: {
-                      firstName: 'Dave',
-                    },
-                  },
-                },
-              },
+              arguments:
+                '{"attributes":{"cardId":"http://localhost:4201/experiments/Friend/1","patch":{"attributes":{"firstName":"Dave"}}}}',
             },
           ],
         },
@@ -434,16 +426,8 @@ module('shouldSetRoomTitle', () => {
             {
               name: 'patchCard',
               id: 'patchCard-1',
-              arguments: {
-                attributes: {
-                  cardId: 'http://localhost:4201/drafts/Friend/1',
-                  patch: {
-                    attributes: {
-                      firstName: 'Dave',
-                    },
-                  },
-                },
-              },
+              arguments:
+                '{"attributes":{"cardId":"http://localhost:4201/drafts/Friend/1","patch":{"attributes":{"firstName":"Dave"}}}}',
             },
           ],
         },

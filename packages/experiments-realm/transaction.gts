@@ -5,30 +5,30 @@ import {
   CardDef,
   linksTo,
 } from 'https://cardstack.com/base/card-api';
-import BooleanCard from 'https://cardstack.com/base/boolean';
-import StringCard from 'https://cardstack.com/base/string';
+import BooleanField from 'https://cardstack.com/base/boolean';
+import StringField from 'https://cardstack.com/base/string';
 import { FieldContainer } from '@cardstack/boxel-ui/components';
 import { GridContainer } from '@cardstack/boxel-ui/components';
-import BigIntegerCard from 'https://cardstack.com/base/big-integer';
-import NumberCard from 'https://cardstack.com/base/number';
+import BigIntegerField from 'https://cardstack.com/base/big-integer';
+import NumberField from 'https://cardstack.com/base/number';
 import { Chain } from './chain';
-import EthereumAddressCard from 'https://cardstack.com/base/ethereum-address';
+import EthereumAddressField from 'https://cardstack.com/base/ethereum-address';
 import ShieldCheckIcon from '@cardstack/boxel-icons/shield-check';
 
 export class Transaction extends CardDef {
   static displayName = 'Transaction';
   static icon = ShieldCheckIcon;
-  @field transactionHash = contains(StringCard);
-  @field status = contains(BooleanCard);
-  @field blockHash = contains(StringCard);
-  @field blockNumber = contains(NumberCard);
-  @field from = contains(EthereumAddressCard);
-  @field to = contains(EthereumAddressCard);
-  @field memo = contains(StringCard);
+  @field transactionHash = contains(StringField);
+  @field status = contains(BooleanField);
+  @field blockHash = contains(StringField);
+  @field blockNumber = contains(NumberField);
+  @field from = contains(EthereumAddressField);
+  @field to = contains(EthereumAddressField);
+  @field memo = contains(StringField);
   @field chain = linksTo(Chain);
-  @field gasUsed = contains(BigIntegerCard);
-  @field effectiveGasPrice = contains(BigIntegerCard);
-  @field blockExplorerLink = contains(StringCard, {
+  @field gasUsed = contains(BigIntegerField);
+  @field effectiveGasPrice = contains(BigIntegerField);
+  @field blockExplorerLink = contains(StringField, {
     computeVia: function (this: Transaction) {
       if (!this.chain) {
         return;
@@ -36,7 +36,7 @@ export class Transaction extends CardDef {
       return `${this.chain.blockExplorer}/tx/${this.transactionHash}`;
     },
   });
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: Transaction) {
       if (!this.transactionHash) {
         return;

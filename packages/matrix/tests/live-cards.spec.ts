@@ -196,4 +196,35 @@ test.describe('Live Cards', () => {
 
     await expect(page.locator('[data-test-file="hello.gts"]')).toHaveCount(1);
   });
+
+  test.skip('updating a card in code mode edit updates its source', async ({
+    page,
+  }) => {
+    await clearLocalStorage(page, serverIndexUrl);
+    await login(page, 'user1', 'pass', {
+      url: serverIndexUrl,
+      skipOpeningAssistant: true,
+    });
+    await createRealm(page, realmName);
+
+    await page.goto(
+      `${realmURL}?operatorModeState=${encodeURIComponent(
+        JSON.stringify({
+          stacks: [],
+          codePath: `${realmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
+          fileView: 'browser',
+          submode: 'code',
+        }),
+      )}`,
+    );
+
+    await page.locator('[data-test-format-chooser="edit"]').click();
+    await page
+      .locator('[data-test-field="fullName"] input')
+      .fill('Replacement');
+
+    await expect(
+      page.locator('[data-test-monaco-container-operator-mode]'),
+    ).toContainText('Replacement');
+  });
 });

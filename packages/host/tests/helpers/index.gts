@@ -208,7 +208,7 @@ class MockLocalIndexer extends Service {
   #fromScratch: ((realmURL: URL) => Promise<IndexResults>) | undefined;
   #incremental:
     | ((
-        url: URL,
+        urls: URL[],
         realmURL: URL,
         operation: 'update' | 'delete',
         ignoreData: Record<string, string>,
@@ -217,7 +217,7 @@ class MockLocalIndexer extends Service {
   setup(
     fromScratch: (realmURL: URL) => Promise<IndexResults>,
     incremental: (
-      url: URL,
+      urls: URL[],
       realmURL: URL,
       operation: 'update' | 'delete',
       ignoreData: Record<string, string>,
@@ -423,16 +423,10 @@ async function setupTestRealm({
 
   // TODO this is the only use of Realm.maybeHandle left--can we get rid of it?
   virtualNetwork.mount(realm.maybeHandle);
+  await mockMatrixUtils.start();
   await adapter.ready;
   await worker.run();
   await realm.start();
-
-  // Workaround to refetch realm info, as it is first fetched before the virtual network
-  // is present, and the fetch fails, leading to realmUserId being undefined.
-  let realmResource = (
-    owner.lookup('service:realm') as any
-  ).getOrCreateRealmResource(realmURL);
-  await realmResource.fetchInfo();
 
   return { realm, adapter };
 }

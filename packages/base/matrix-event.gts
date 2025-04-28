@@ -1,4 +1,3 @@
-import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { EventStatus, MatrixError } from 'matrix-js-sdk';
 import type {
   AttributesSchema,
@@ -7,9 +6,6 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_CARD_FORMAT,
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -20,6 +16,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -130,18 +127,7 @@ export interface MessageEvent extends BaseMatrixEvent {
 
 export interface CardMessageEvent extends BaseMatrixEvent {
   type: 'm.room.message';
-  content: CardMessageContent | CardFragmentContent | CommandDefinitionsContent;
-  unsigned: {
-    age: number;
-    transaction_id: string;
-    prev_content?: any;
-    prev_sender?: string;
-  };
-}
-
-export interface CommandDefinitionsEvent extends BaseMatrixEvent {
-  type: 'm.room.message';
-  content: CommandDefinitionsContent;
+  content: CardMessageContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -159,6 +145,11 @@ export interface Tool {
   };
 }
 
+// Synapse JSON does not support decimals, so we encode all arguments as stringified JSON
+export type EncodedCommandRequest = Omit<CommandRequest, 'arguments'> & {
+  arguments: string;
+};
+
 export interface CardMessageContent {
   'm.relates_to'?: {
     rel_type: string;
@@ -169,20 +160,15 @@ export interface CardMessageContent {
   body: string;
   isStreamingFinished?: boolean;
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<CommandRequest>[];
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
   clientGeneratedId?: string;
   data: {
-    // we use this field over the wire since the matrix message protocol
-    // limits us to 65KB per message
-    attachedFiles?: SerializedFile[];
-    attachedCardsEventIds?: string[];
-    // we materialize this field on the server from the card
-    // fragments that we receive
-    attachedCards?: LooseSingleCardDocument[];
-    skillCards?: LooseSingleCardDocument[];
+    // we retrieve the content on the server side by downloading the file
+    attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
+    attachedCards?: (SerializedFile & { content?: string; error?: string })[];
     context: {
       openCardIds?: string[];
       tools?: Tool[];
@@ -196,28 +182,12 @@ export interface CardMessageContent {
   };
 }
 
-export interface CardFragmentContent {
-  'm.relates_to'?: {
-    rel_type: string;
-    event_id: string;
-  };
-  msgtype: typeof APP_BOXEL_CARDFRAGMENT_MSGTYPE;
-  format: typeof APP_BOXEL_CARD_FORMAT;
-  body: string;
-  errorMessage?: string;
-  data: {
-    nextFragment?: string;
-    cardFragment: string;
-    index: number;
-    totalParts: number;
-  };
-}
-
 export interface SkillsConfigEvent extends RoomStateEvent {
   type: typeof APP_BOXEL_ROOM_SKILLS_EVENT_TYPE;
   content: {
-    enabledEventIds: string[];
-    disabledEventIds: string[];
+    enabledSkillCards: SerializedFile[];
+    disabledSkillCards: SerializedFile[];
+    commandDefinitions?: SerializedFile[];
   };
 }
 
@@ -246,13 +216,6 @@ export interface CommandDefinitionSchema {
   tool: Tool;
 }
 
-export interface CommandDefinitionsContent {
-  msgtype: typeof APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE;
-  body: string;
-  data: {
-    commandDefinitions: CommandDefinitionSchema[];
-  };
-}
 export interface CommandResultWithOutputContent {
   'm.relates_to': {
     rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
@@ -261,9 +224,8 @@ export interface CommandResultWithOutputContent {
   };
   commandRequestId: string;
   data: {
-    cardEventId: string;
-    // we materialize this field on the server
-    card?: LooseSingleCardDocument;
+    // we retrieve the content on the server side by downloading the file
+    card?: SerializedFile & { content?: string; error?: string };
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE;
 }
@@ -353,7 +315,6 @@ export type MatrixEvent =
   | RoomPowerLevels
   | MessageEvent
   | CommandResultEvent
-  | CommandDefinitionsEvent
   | CardMessageEvent
   | RealmServerEvent
   | RealmEvent

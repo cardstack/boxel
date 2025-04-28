@@ -12,8 +12,6 @@ import mergeWith from 'lodash/mergeWith';
 
 import { stringify } from 'qs';
 
-import status from 'statuses';
-
 import { TrackedObject, TrackedMap } from 'tracked-built-ins';
 
 import {
@@ -26,7 +24,8 @@ import {
   mergeRelationships,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
-  isCardError,
+  logger,
+  formattedError,
   type Store as StoreInterface,
   type Query,
   type PatchData,
@@ -36,7 +35,6 @@ import {
   type SingleCardDocument,
   type LooseSingleCardDocument,
   type LooseCardResource,
-  type CardError,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
 } from '@cardstack/runtime-common';
@@ -51,6 +49,7 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import IdentityContext, {
   getDeps,
+  isLocalId,
   type ReferenceCount,
 } from '../lib/gc-identity-context';
 
@@ -67,6 +66,9 @@ import type ResetService from './reset';
 export { CardErrorJSONAPI, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
+
+const realmEventsLogger = logger('realm:events');
+const storeLogger = logger('store');
 
 export default class StoreService extends Service implements StoreInterface {
   @service declare private realm: RealmService;
@@ -130,10 +132,15 @@ export default class StoreService extends Service implements StoreInterface {
     currentReferenceCount -= 1;
     this.referenceCount.set(id, currentReferenceCount);
 
-    console.debug(
+    storeLogger.debug(
       `dropping reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
     if (currentReferenceCount <= 0) {
+      if (currentReferenceCount < 0) {
+        let message = `current reference count for ${id} is negative: ${this.referenceCount.get(id)}`;
+        storeLogger.error(message);
+        console.trace(message); // this will helps us to understand who dropped the reference that made it negative
+      }
       this.referenceCount.delete(id);
       let autoSaveState = this.autoSaveStates.get(id);
       if (autoSaveState?.hasUnsavedChanges) {
@@ -145,32 +152,36 @@ export default class StoreService extends Service implements StoreInterface {
       (async () => {
         await Promise.resolve();
         this.autoSaveStates.delete(id);
+        let instance = this.identityContext.get(id);
+        if (instance) {
+          if (isLocalId(id)) {
+            this.autoSaveStates.delete(instance.id);
+          } else {
+            this.autoSaveStates.delete(instance[localIdSymbol]);
+          }
+        }
       })();
 
       this.unsubscribeFromInstance(id);
     }
   }
 
-  addReference(idOrDoc: string | SingleCardDocument | undefined) {
-    if (!idOrDoc) {
-      return;
-    }
-    let id = asURL(idOrDoc);
+  addReference(id: string | undefined) {
     if (!id) {
-      throw new Error(`Cannot add reference with no id`);
+      return;
     }
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
     let currentReferenceCount = this.referenceCount.get(id) ?? 0;
     currentReferenceCount += 1;
     this.referenceCount.set(id, currentReferenceCount);
-    console.debug(
+    storeLogger.debug(
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
     // intentionally not awaiting this. we keep track of the promise in
     // this.newReferencePromises
-    this.wireUpNewReference(idOrDoc);
+    this.wireUpNewReference(id);
   }
 
   // This method creates a new instance in the store and return the new card ID
@@ -221,14 +232,30 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     }
+
+    let maybeOldInstance = instance.id
+      ? this.identityContext.get(instance.id)
+      : undefined;
+    if (maybeOldInstance) {
+      await this.updateInstanceChangeSubscription(
+        'stop-tracking',
+        maybeOldInstance,
+      );
+    }
+
     this.identityContext.set(instance.id ?? instance[localIdSymbol], instance);
 
     if (!opts?.doNotPersist) {
+      // in this branch we wire up the instance change subscription after the
+      // initial save since the caller indicated they are willing to await the
+      // save and we may not actually have an instance yet
       if (instance.id) {
         this.save(instance.id);
       } else {
         await this.persistAndUpdate(instance, opts?.realm);
       }
+    } else {
+      await this.updateInstanceChangeSubscription('start-tracking', instance);
     }
     return instance;
   }
@@ -349,42 +376,40 @@ export default class StoreService extends Service implements StoreInterface {
     return await Promise.allSettled(this.newReferencePromises);
   }
 
-  private async wireUpNewReference(idOrDoc: string | SingleCardDocument) {
+  getReferenceCount(id: string) {
+    return this.referenceCount.get(id) ?? 0;
+  }
+
+  private async wireUpNewReference(id: string) {
     let deferred = new Deferred<void>();
     await this.withTestWaiters(async () => {
       this.newReferencePromises.push(deferred.promise);
-      let maybeUrl: string | undefined;
-      let isDoc = typeof idOrDoc !== 'string';
       try {
         await this.ready;
-        maybeUrl = asURL(idOrDoc);
-        if (!maybeUrl?.startsWith('http')) {
+        if (isLocalId(id)) {
           deferred.fulfill();
           return;
         }
-        if (!maybeUrl) {
-          throw new Error(`Cannot wire up a reference without an id`);
-        }
-        let url = maybeUrl;
-        let urlOrDoc = idOrDoc;
-        let instanceOrError = this.peek(url);
-        if (!instanceOrError || isDoc) {
+        let instanceOrError = this.peek(id);
+        if (!instanceOrError) {
           instanceOrError = await this.getInstance({
-            urlOrDoc,
-            opts: { noCache: isDoc },
+            urlOrDoc: id,
           });
         }
-        this.subscribeToRealm(new URL(url));
-        await this.trackSavedInstance('start-tracking', instanceOrError);
+        this.subscribeToRealm(new URL(id));
+        await this.updateInstanceChangeSubscription(
+          'start-tracking',
+          instanceOrError,
+        );
 
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
-          this.identityContext.addInstanceOrError(url, instanceOrError);
+          this.identityContext.addInstanceOrError(id, instanceOrError);
         }
         deferred.fulfill();
       } catch (e) {
         console.error(
-          `error encountered wiring up new reference for ${JSON.stringify(idOrDoc)}`,
+          `error encountered wiring up new reference for ${JSON.stringify(id)}`,
           e,
         );
         deferred.reject(e);
@@ -478,24 +503,45 @@ export default class StoreService extends Service implements StoreInterface {
       }
       let instance = this.identityContext.get(invalidation);
       if (instance) {
-        // Do not reload if the event is a result of a request that we made. Otherwise we risk overwriting
-        // the inputs with past values. This can happen if the user makes edits in the time between the auto
-        // save request and the arrival realm event.
-        if (
-          !event.clientRequestId ||
-          !this.cardService.clientRequestIds.has(event.clientRequestId)
-        ) {
-          this.reloadTask.perform(instance);
-        } else {
-          if (this.cardService.clientRequestIds.has(event.clientRequestId)) {
-            console.debug(
-              'ignoring invalidation for card because clientRequestId is ours',
-              event,
+        // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
+        // overwriting the inputs with past values. This can happen if the user makes edits in the time between
+        // the auto save request and the arrival realm event.
+
+        let clientRequestId = event.clientRequestId;
+        let reloadFile = false;
+
+        if (!clientRequestId) {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${invalidation} because event has no clientRequestId`,
+          );
+        } else if (this.cardService.clientRequestIds.has(clientRequestId)) {
+          if (clientRequestId.startsWith('instance:')) {
+            realmEventsLogger.debug(
+              `ignoring invalidation for card ${invalidation} because request id ${clientRequestId} is ours and an instance type`,
+            );
+          } else {
+            reloadFile = true;
+            realmEventsLogger.debug(
+              `reloading file resource ${invalidation} because request id ${clientRequestId} is not instance type`,
             );
           }
+        } else {
+          reloadFile = true;
+          realmEventsLogger.debug(
+            `reloading file resource ${invalidation} because request id ${clientRequestId} is not contained within known clientRequestIds`,
+            Array.from(this.cardService.clientRequestIds.values()),
+          );
+        }
+
+        if (reloadFile) {
+          this.reloadTask.perform(instance);
         }
       } else if (!this.identityContext.get(invalidation)) {
         // load the card using just the ID because we don't have a running card on hand
+        realmEventsLogger.debug(
+          `reloading file resource ${invalidation} because it is not found in the identity context`,
+        );
         this.loadInstanceTask.perform(invalidation);
       }
     }
@@ -510,9 +556,15 @@ export default class StoreService extends Service implements StoreInterface {
         opts: { noCache: true },
       });
       if (oldInstance) {
-        await this.trackSavedInstance('stop-tracking', oldInstance);
+        await this.updateInstanceChangeSubscription(
+          'stop-tracking',
+          oldInstance,
+        );
       }
-      await this.trackSavedInstance('start-tracking', instanceOrError);
+      await this.updateInstanceChangeSubscription(
+        'start-tracking',
+        instanceOrError,
+      );
     },
   );
 
@@ -533,63 +585,58 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
     if (!isCardInstance(maybeReloadedInstance)) {
-      await this.trackSavedInstance('stop-tracking', instance);
+      await this.updateInstanceChangeSubscription('stop-tracking', instance);
     }
     if (maybeReloadedInstance) {
-      await this.trackSavedInstance('start-tracking', maybeReloadedInstance);
+      await this.updateInstanceChangeSubscription(
+        'start-tracking',
+        maybeReloadedInstance,
+      );
     }
     if (isDelete) {
-      await this.trackSavedInstance('stop-tracking', instance);
+      await this.updateInstanceChangeSubscription('stop-tracking', instance);
       this.identityContext.delete(instance.id);
     }
   });
 
   private onInstanceUpdated = (instance: BaseDef) => {
-    if (
-      isCardInstance(instance) &&
-      'id' in instance &&
-      typeof instance.id === 'string'
-    ) {
-      let autoSaveState = this.initOrGetAutoSaveState(instance.id);
+    if (isCardInstance(instance)) {
+      let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
-      this.initiateAutoSaveTask.perform(instance.id);
+      this.initiateAutoSaveTask.perform(instance);
     }
   };
 
-  private async trackSavedInstance(
+  private async updateInstanceChangeSubscription(
     operation: 'start-tracking' | 'stop-tracking',
     instanceOrError: CardDef | CardErrorJSONAPI,
   ) {
-    if (!instanceOrError.id) {
-      return;
-    }
-
     let instance = isCardInstance(instanceOrError)
       ? instanceOrError
       : undefined;
+    if (!instance && !instanceOrError.id) {
+      return;
+    }
     if (operation === 'start-tracking') {
       this.identityContext.addInstanceOrError(
-        instanceOrError.id,
+        instance
+          ? (instance.id ?? instance[localIdSymbol])
+          : instanceOrError.id!, // we checked above to make sure errors have id's
         instanceOrError,
       );
     }
     // module updates will break the cached api. so don't hang on to this longer
     // than necessary
     this.cardApiCache = await this.cardService.getAPI();
-    let autoSaveState = instance
-      ? this.autoSaveStates.get(instance.id)
-      : undefined;
     if (operation === 'stop-tracking' && instance) {
       this.cardApiCache.unsubscribeFromChanges(
         instance,
         this.onInstanceUpdated,
       );
       this.autoSaveStates.delete(instance.id);
+      this.autoSaveStates.delete(instance[localIdSymbol]);
     } else if (operation === 'start-tracking' && instance) {
       this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
-      if (autoSaveState) {
-        this.autoSaveStates.set(instance.id, autoSaveState);
-      }
     }
   }
 
@@ -658,7 +705,7 @@ export default class StoreService extends Service implements StoreInterface {
       this.identityContext.set(url, instance);
       deferred?.fulfill(instance);
       if (!existingInstance) {
-        await this.trackSavedInstance('start-tracking', instance);
+        await this.updateInstanceChangeSubscription('start-tracking', instance);
       }
       return instance as T;
     } catch (error: any) {
@@ -678,12 +725,18 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private initiateAutoSaveTask = task(
-    async (id: string, opts?: { isImmediate?: true }) => {
-      let instance = this.identityContext.get(id);
-      if (!instance) {
-        return;
+    async (idOrInstance: string | CardDef, opts?: { isImmediate?: true }) => {
+      let instance: CardDef | undefined;
+      if (typeof idOrInstance === 'string') {
+        instance = this.identityContext.get(idOrInstance);
+        if (!instance) {
+          return;
+        }
+      } else {
+        instance = idOrInstance;
       }
-      let autoSaveState = this.initOrGetAutoSaveState(id);
+      let isNew = !instance.id;
+      let autoSaveState = this.initOrGetAutoSaveState(instance);
       try {
         autoSaveState.isSaving = true;
         autoSaveState.lastSaveError = undefined;
@@ -704,12 +757,17 @@ export default class StoreService extends Service implements StoreInterface {
       } finally {
         autoSaveState.isSaving = false;
         this.calculateLastSavedMsg(autoSaveState);
+        if (isNew && instance.id) {
+          this.autoSaveStates.set(instance.id, autoSaveState);
+        }
       }
     },
   );
 
-  private initOrGetAutoSaveState(url: string): AutoSaveState {
-    let autoSaveState = this.autoSaveStates.get(url);
+  private initOrGetAutoSaveState(instance: CardDef): AutoSaveState {
+    let autoSaveState = this.autoSaveStates.get(
+      instance.id ?? instance[localIdSymbol],
+    );
     if (!autoSaveState) {
       autoSaveState = new TrackedObject({
         isSaving: false,
@@ -718,9 +776,12 @@ export default class StoreService extends Service implements StoreInterface {
         lastSavedErrorMsg: undefined,
         lastSaveError: undefined,
       });
-      this.autoSaveStates.set(url, autoSaveState!);
+      this.autoSaveStates.set(instance[localIdSymbol], autoSaveState);
     }
-    return autoSaveState!;
+    if (instance.id && !this.autoSaveStates.get(instance.id)) {
+      this.autoSaveStates.set(instance.id, autoSaveState);
+    }
+    return autoSaveState;
   }
 
   private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
@@ -795,6 +856,7 @@ export default class StoreService extends Service implements StoreInterface {
           // relativeTo because its up to the realm server to assign us an ID, so
           // URL's should be absolute
           useAbsoluteURL: true,
+          withIncluded: true,
         });
 
         // send doc over the wire with absolute URL's. The realm server will convert
@@ -835,7 +897,10 @@ export default class StoreService extends Service implements StoreInterface {
         if (isNew) {
           // now that we have a remote ID make a realm subscription
           this.subscribeToRealm(new URL(instance.id));
-          await this.trackSavedInstance('start-tracking', instance);
+          await this.updateInstanceChangeSubscription(
+            'start-tracking',
+            instance,
+          );
         }
       } catch (err) {
         console.error(`Failed to save ${instance.id}: `, err);
@@ -949,95 +1014,6 @@ export default class StoreService extends Service implements StoreInterface {
       waiter.endAsync(token);
     }
   }
-}
-
-function formattedError(
-  url: string | undefined,
-  error: any,
-  err?: CardError | Partial<CardErrorJSONAPI>,
-): CardErrorsJSONAPI {
-  let errorStatus = err?.status ?? error.status;
-  let errorMessage = err?.message ?? error.message;
-  let title: string | undefined;
-
-  if (errorStatus === 404 && errorMessage?.includes('missing')) {
-    // a missing link error looks a lot like a missing card error
-    title = 'Link Not Found';
-  }
-
-  if (isCardError(err)) {
-    let additionalError = err.additionalErrors?.[0];
-    let cardError = isCardError(additionalError) ? additionalError : err;
-    return {
-      errors: [
-        {
-          id: url,
-          message: cardError.message,
-          status: cardError.status,
-          title:
-            title ??
-            cardError.title ??
-            status.message[cardError.status] ??
-            cardError.message,
-          realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-          meta: {
-            lastKnownGoodHtml: null,
-            scopedCssUrls: [],
-            stack: cardError.stack ?? null,
-            cardTitle: null,
-          },
-          additionalErrors: cardError.additionalErrors,
-        },
-      ],
-    };
-  }
-
-  if (err) {
-    let message = err.message?.length
-      ? err.message
-      : errorStatus
-        ? `Received HTTP ${errorStatus} from server`
-        : `${error.message}: ${error.stack}`;
-    return {
-      errors: [
-        {
-          id: url,
-          message,
-          status: errorStatus ?? 500,
-          title: title ?? err.title ?? status.message[errorStatus] ?? message,
-          realm: err.realm ?? error.responseHeaders?.get('X-Boxel-Realm-Url'),
-          meta: err.meta ?? {
-            lastKnownGoodHtml: null,
-            scopedCssUrls: [],
-            stack: error.stack ?? null,
-            cardTitle: null,
-          },
-        },
-      ],
-    };
-  }
-
-  return {
-    errors: [
-      {
-        id: url,
-        status: errorStatus ?? 500,
-        title: title ?? status.message[errorStatus] ?? error.message,
-        message: error.status
-          ? `Received HTTP ${error.status} from server ${
-              error.responseText ?? ''
-            }`.trim()
-          : `${error.message}: ${error.stack}`,
-        realm: error.responseHeaders?.get('X-Boxel-Realm-Url'),
-        meta: {
-          lastKnownGoodHtml: null,
-          scopedCssUrls: [],
-          stack: null,
-          cardTitle: null,
-        },
-      },
-    ],
-  };
 }
 
 function processCardError(

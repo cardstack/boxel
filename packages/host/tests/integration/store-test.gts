@@ -5,6 +5,7 @@ import {
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
 import { module, test } from 'qunit';
 
@@ -12,6 +13,7 @@ import {
   isCardInstance,
   baseRealm,
   localId,
+  baseCardRef,
   type Loader,
   type Realm,
   type SingleCardDocument,
@@ -21,6 +23,9 @@ import {
 import CardPrerender from '@cardstack/host/components/card-prerender';
 import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import IdentityContext from '@cardstack/host/lib/gc-identity-context';
+import { getCardCollection } from '@cardstack/host/resources/card-collection';
+import { getCard } from '@cardstack/host/resources/card-resource';
+import { getSearch } from '@cardstack/host/resources/search';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type StoreService from '@cardstack/host/services/store';
 import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
@@ -492,7 +497,7 @@ module('Integration | Store', function (hooks) {
       typeof CardDefType
     >(doc.data, doc, undefined);
     try {
-      await store.add(conflictingInstance);
+      await store.add(conflictingInstance, { doNotPersist: true });
       throw new Error('expected exception to be thrown');
     } catch (err: any) {
       assert.ok(
@@ -531,6 +536,60 @@ module('Integration | Store', function (hooks) {
       );
     });
     (instance as any).name = 'Paper';
+  });
+
+  test<TestContextWithSave>('an unsaved instance will auto save when its data changes', async function (assert) {
+    assert.expect(2);
+    let instance = new PersonDef({ name: 'Andrea' });
+    await store.add(instance, { doNotPersist: true });
+
+    this.onSave((url, doc) => {
+      assert.strictEqual(
+        url.href.split('/').pop()!,
+        instance[localId],
+        'the new card url ends with the local id',
+      );
+      assert.strictEqual(
+        (doc as SingleCardDocument).data.attributes?.name,
+        'Air',
+        'card data is correct',
+      );
+    });
+
+    (instance as any).name = 'Air';
+  });
+
+  test<TestContextWithSave>('getSaveState works for initially unsaved instance', async function (assert) {
+    let instance = new PersonDef({ name: 'Andrea' });
+    await store.add(instance, { doNotPersist: true });
+
+    assert.strictEqual(
+      store.getSaveState(instance[localId]),
+      undefined,
+      'save state is undefined',
+    );
+
+    (instance as any).name = 'Air';
+
+    assert.true(
+      store.getSaveState(instance[localId])?.isSaving,
+      'isSaving state is correct',
+    );
+
+    await waitUntil(() => store.getSaveState(instance[localId])?.lastSaved);
+
+    assert.false(
+      store.getSaveState(instance[localId])?.isSaving,
+      'isSaving state is correct',
+    );
+    assert.false(
+      store.getSaveState(instance.id)?.isSaving,
+      'isSaving state is correct (by remote id)',
+    );
+    assert.ok(
+      store.getSaveState(instance.id)?.lastSaved,
+      'lastSaved state is correct (by remote id)',
+    );
   });
 
   test('can capture error when auto saving', async function (assert) {
@@ -692,10 +751,10 @@ module('Integration | Store', function (hooks) {
       `person.gts`,
       `
       import { contains, field, Component, CardDef, } from 'https://cardstack.com/base/card-api';
-      import StringCard from 'https://cardstack.com/base/string';
+      import StringField from 'https://cardstack.com/base/string';
 
       export class Person extends CardDef {
-        @field name = contains(StringCard);
+        @field name = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
           <template>
             <div test-update>Hello</div>
@@ -773,5 +832,294 @@ module('Integration | Store', function (hooks) {
     assert
       .dom('[data-test-stack-card] [data-test-field="name"]')
       .containsText('Hassan', 'card is still rendered');
+  });
+
+  test('an unsaved instance live updates when realm event matching local ID is received', async function (assert) {
+    let newInstance = new PersonDef({ name: 'Andrea' });
+    await store.add(newInstance, { doNotPersist: true });
+
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+    let instance = store.peek(`${testRealmURL}Person/hassan`) as CardDefType;
+
+    (instance as any).friends = [newInstance];
+
+    await waitUntil(() => store.getSaveState(newInstance[localId])?.lastSaved, {
+      timeout: 5_000,
+    });
+
+    assert.strictEqual(
+      newInstance.id.split('/').pop()!,
+      newInstance[localId],
+      'the new instance was live updated with a remote id',
+    );
+  });
+
+  test<TestContextWithSave>('an unsaved instance will auto save after it has been assigned a remote ID', async function (assert) {
+    assert.expect(2);
+    let newInstance = new PersonDef({ name: 'Andrea' });
+    await store.add(newInstance, { doNotPersist: true });
+
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+    let instance = store.peek(`${testRealmURL}Person/hassan`) as CardDefType;
+
+    (instance as any).friends = [newInstance];
+
+    await waitUntil(() => store.getSaveState(newInstance[localId])?.lastSaved, {
+      timeout: 5_000,
+    });
+
+    this.onSave((url, doc) => {
+      assert.strictEqual(url.href, newInstance.id, 'the save url is correct');
+      assert.strictEqual(
+        (doc as SingleCardDocument).data.attributes?.name,
+        'Air',
+        'card data is correct',
+      );
+    });
+    (newInstance as any).name = 'Air';
+  });
+
+  test('reference count is balanced when used with CardResource that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCard(this, () => driver.id);
+      get renderedCard() {
+        return this.resource.card?.constructor.getComponent(this.resource.card);
+      }
+      <template>
+        {{#if this.resource.card}}
+          <this.renderedCard data-test-rendered-card={{this.resource.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    let jade = `${testRealmURL}Person/jade`;
+    let hassan = `${testRealmURL}Person/hassan`;
+
+    driver.id = hassan;
+    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+  });
+
+  test('reference count is balanced when used with CardCollectionResource that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCardCollection(this, () => (driver.id ? [driver.id] : []));
+      get card() {
+        return this.resource.cards[0];
+      }
+      get renderedCard() {
+        return this.card?.constructor.getComponent(this.card);
+      }
+      <template>
+        {{#if this.card}}
+          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    let jade = `${testRealmURL}Person/jade`;
+    let hassan = `${testRealmURL}Person/hassan`;
+
+    driver.id = hassan;
+    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+  });
+
+  test('reference count is balanced when used with SearchResource that is destroyed', async function (assert) {
+    class Driver {
+      @tracked showComponent = false;
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getSearch(this, () =>
+        driver.id
+          ? {
+              filter: {
+                on: baseCardRef,
+                eq: {
+                  id: driver.id,
+                },
+              },
+            }
+          : undefined,
+      );
+      get card() {
+        return this.resource.instances[0];
+      }
+      get renderedCard() {
+        return this.card?.constructor.getComponent(this.card);
+      }
+      <template>
+        {{#if this.card}}
+          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          {{#if driver.showComponent}}
+            <ResourceConsumer />
+          {{/if}}
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    driver.showComponent = true;
+    let jade = `${testRealmURL}Person/jade`;
+    let hassan = `${testRealmURL}Person/hassan`;
+
+    driver.id = hassan;
+    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
+
+    driver.showComponent = false;
+    await waitFor(`[data-test-rendered-card]`, { count: 0 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      0,
+      `reference count for ${jade} is 0`,
+    );
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      0,
+      `reference count for ${hassan} is 0`,
+    );
   });
 });

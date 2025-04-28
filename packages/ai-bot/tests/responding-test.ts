@@ -1,7 +1,5 @@
 import { module, test, assert } from 'qunit';
 import { Responder } from '../lib/responder';
-import { IContent } from 'matrix-js-sdk';
-import { MatrixClient } from '../lib/matrix';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
@@ -10,63 +8,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
-import OpenAI from 'openai';
-
-class FakeMatrixClient implements MatrixClient {
-  private eventId = 0;
-  private sentEvents: {
-    eventId: string;
-    roomId: string;
-    eventType: string;
-    content: IContent;
-  }[] = [];
-
-  async sendEvent(
-    roomId: string,
-    eventType: string,
-    content: IContent,
-  ): Promise<{ event_id: string }> {
-    const messageEventId = this.eventId.toString();
-    this.sentEvents.push({
-      eventId: messageEventId,
-      roomId,
-      eventType,
-      content,
-    });
-    this.eventId++;
-    return { event_id: messageEventId.toString() };
-  }
-
-  async setRoomName(
-    _roomId: string,
-    _title: string,
-  ): Promise<{ event_id: string }> {
-    this.eventId++;
-    return { event_id: this.eventId.toString() };
-  }
-
-  getSentEvents() {
-    return this.sentEvents;
-  }
-
-  sendStateEvent(
-    _roomId: string,
-    _eventType: string,
-    _content: IContent,
-    _stateKey: string,
-  ): Promise<{ event_id: string }> {
-    throw new Error('Method not implemented.');
-  }
-
-  resetSentEvents() {
-    this.sentEvents = [];
-    this.eventId = 0;
-  }
-
-  getAccessToken() {
-    return 'fake-access-token';
-  }
-}
+import type OpenAI from 'openai';
+import { FakeMatrixClient } from './helpers/fake-matrix-client';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -352,17 +295,8 @@ module('Responding', (hooks) => {
         {
           id: 'some-tool-call-id',
           name: 'patchCard',
-          arguments: {
-            description: 'A new thing',
-            attributes: {
-              cardId: 'card/1',
-              patch: {
-                attributes: {
-                  some: 'thing',
-                },
-              },
-            },
-          },
+          arguments:
+            '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
       ],
       'Tool call event should be sent with correct content',
@@ -441,9 +375,7 @@ module('Responding', (hooks) => {
       [
         {
           name: 'patchCard',
-          arguments: {
-            description: 'A new',
-          },
+          arguments: '{"description":"A new"}',
         },
       ],
       'Partial tool call event should be sent with correct content',
@@ -454,17 +386,8 @@ module('Responding', (hooks) => {
         {
           id: 'some-tool-call-id',
           name: 'patchCard',
-          arguments: {
-            description: 'A new thing',
-            attributes: {
-              cardId: 'card/1',
-              patch: {
-                attributes: {
-                  some: 'thing',
-                },
-              },
-            },
-          },
+          arguments:
+            '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
       ],
       'Tool call event should be sent with correct content',
@@ -585,22 +508,14 @@ module('Responding', (hooks) => {
         {
           id: 'tool-call-1-id',
           name: 'checkWeather',
-          arguments: {
-            description: 'Check the weather in NYC',
-            attributes: {
-              zipCode: '10011',
-            },
-          },
+          arguments:
+            '{"description":"Check the weather in NYC","attributes":{"zipCode":"10011"}}',
         },
         {
           id: 'tool-call-2-id',
           name: 'checkWeather',
-          arguments: {
-            description: 'Check the weather in Beverly Hills',
-            attributes: {
-              zipCode: '90210',
-            },
-          },
+          arguments:
+            '{"description":"Check the weather in Beverly Hills","attributes":{"zipCode":"90210"}}',
         },
       ],
       'Command requests should be sent with correct content',
@@ -701,5 +616,21 @@ module('Responding', (hooks) => {
         `Update ${i} replaced original message`,
       );
     }
+  });
+
+  test('Chunk processing will result in an error if matrix sending fails', async () => {
+    fakeMatrixClient.sendEvent = async () => {
+      throw new Error('MatrixError: [413] event too large');
+    };
+
+    let result = await responder.onChunk(
+      {} as any,
+      snapshotWithContent('super long content that is too large'),
+    );
+
+    assert.equal(
+      (result[0] as { errorMessage: string }).errorMessage,
+      'MatrixError: [413] event too large',
+    );
   });
 });

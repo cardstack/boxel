@@ -280,7 +280,7 @@ function getConstrainedImageSize(maxHeight: number) {
   };
 }
 
-export class Base64ImageField extends FieldDef {
+export default class Base64ImageField extends FieldDef {
   static displayName = 'Base64 Image Card';
   static icon = PhotoIcon;
   @field altText = contains(StringField);

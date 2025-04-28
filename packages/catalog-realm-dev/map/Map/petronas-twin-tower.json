@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "address": {
+        "addressLine1": "Petronas Twin Towers",
+        "addressLine2": "Kuala Lumpur City Centre",
+        "city": "Kuala Lumpur",
+        "state": null,
+        "postalCode": "50088",
+        "country": {
+          "name": "Malaysia",
+          "code": "MY"
+        },
+        "poBoxNumber": null
+      },
+      "mapWidth": 600,
+      "mapHeight": 400,
+      "description": null,
+      "thumbnailURL": null,
+      "title": "Petronas Twin Towers"
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../map",
+        "name": "Map"
+      }
+    }
+  }
+}

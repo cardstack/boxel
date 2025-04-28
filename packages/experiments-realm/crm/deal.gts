@@ -15,9 +15,9 @@ import {
 import BooleanField from 'https://cardstack.com/base/boolean';
 import DateField from 'https://cardstack.com/base/date';
 import MarkdownField from 'https://cardstack.com/base/markdown';
-import { Address as AddressField } from 'https://cardstack.com/base/address';
-import { WebsiteField } from 'https://cardstack.com/base/website';
-import { PercentageField } from 'https://cardstack.com/base/percentage';
+import AddressField from 'https://cardstack.com/base/address';
+import WebsiteField from 'https://cardstack.com/base/website';
+import PercentageField from 'https://cardstack.com/base/percentage';
 
 import { Query } from '@cardstack/runtime-common';
 import type { LooseSingleCardDocument } from '@cardstack/runtime-common';

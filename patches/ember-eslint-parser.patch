@@ -1,0 +1,13 @@
+diff --git a/src/preprocessor/noop.js b/src/preprocessor/noop.js
+index b173262bd1f52e657ce41799cbb32e7ee5a0a27e..feb7c67f111f62993a41397ee6528e4986680159 100644
+--- a/src/preprocessor/noop.js
++++ b/src/preprocessor/noop.js
+@@ -24,6 +24,8 @@ module.exports = {
+       msgs[0].message +=
+         'To lint Gjs/Gts files please follow the setup guide at https://github.com/ember-cli/eslint-plugin-ember#gtsgjs' +
+         '\nNote that this error can also happen if you have multiple versions of eslint-plugin-ember in your node_modules';
++      // We want this to fail in CI so we notice if linting is broken
++      msgs[0].fatal = true;
+     }
+     parsedFiles.delete(fileName); // required for tests
+     return msgs;

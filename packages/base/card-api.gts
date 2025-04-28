@@ -29,7 +29,7 @@ import {
   primitive,
   identifyCard,
   isCardInstance as _isCardInstance,
-  loadCard,
+  loadCardDef,
   humanReadable,
   maybeURL,
   maybeRelativeURL,
@@ -39,7 +39,6 @@ import {
   realmURL,
   localId,
   formats,
-  isLocalResourceID,
   type Format,
   type Meta,
   type CardFields,
@@ -977,9 +976,6 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
         `linksTo field '${this.name}' cannot deserialize a list of resource ids`,
       );
     }
-    if (isLocalResourceID(value.data)) {
-      throw new Error(`lid is not supported in deserialization`);
-    }
     if (value?.links?.self == null || value.links.self === '') {
       return null;
     }
@@ -995,7 +991,10 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
     //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
     //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
     //that means that the serialization is incorrect and is not JSON-API compliant.
-    let resource = resourceFrom(doc, value.data?.id);
+    let resource =
+      value.data && 'id' in value.data
+        ? resourceFrom(doc, value.data?.id)
+        : undefined;
     if (!resource) {
       if (loadedValue !== undefined) {
         return loadedValue;
@@ -1364,10 +1363,6 @@ class LinksToMany<FieldT extends CardDefConstructor>
             `linksToMany field '${this.name}' cannot deserialize a list of resource ids`,
           );
         }
-        if (isLocalResourceID(value.data)) {
-          throw new Error(`lid is not supported in deserialization`);
-        }
-        // TODO support lid (e,g, value.links will not exist in this case)
         if (value.links?.self == null) {
           return null;
         }
@@ -1383,7 +1378,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
         //consider data.id when calling the resourceFrom() function (which actually loads the resource out of the included
         //bucket). we should never used links.self as part of that consideration. If there is a missing data.id in the resource entity
         //that means that the serialization is incorrect and is not JSON-API compliant.
-        let resourceId = value.data?.id;
+        let resourceId =
+          value.data && 'id' in value.data ? value.data?.id : undefined;
         if (loadedValues && Array.isArray(loadedValues)) {
           let loadedValue = loadedValues.find(
             (v) => isCardOrField(v) && 'id' in v && v.id === resourceId,
@@ -2490,7 +2486,7 @@ export async function createFromSerialized<T extends BaseDefConstructor>(
   let {
     meta: { adoptsFrom },
   } = resource;
-  let card: typeof BaseDef | undefined = await loadCard(adoptsFrom, {
+  let card: typeof BaseDef | undefined = await loadCardDef(adoptsFrom, {
     loader: myLoader(),
     relativeTo,
   });
@@ -2736,7 +2732,7 @@ async function cardClassFromResource<CardT extends BaseDefConstructor>(
     );
   }
   if (resource && !isEqual(resource.meta.adoptsFrom, cardIdentity)) {
-    let card: typeof BaseDef | undefined = await loadCard(
+    let card: typeof BaseDef | undefined = await loadCardDef(
       resource.meta.adoptsFrom,
       {
         loader: myLoader(),

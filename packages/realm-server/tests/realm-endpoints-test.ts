@@ -6,7 +6,7 @@ import { dirSync, type DirResult } from 'tmp';
 import { copySync, ensureDirSync } from 'fs-extra';
 import {
   baseRealm,
-  loadCard,
+  loadCardDef,
   Realm,
   SupportedMimeType,
   type LooseSingleCardDocument,
@@ -219,7 +219,7 @@ module(basename(__filename), function () {
         module: `${testRealmHref}person`,
         name: 'Person',
       };
-      await loadCard(ref, { loader });
+      await loadCardDef(ref, { loader });
       let doc = {
         data: {
           attributes: { firstName: 'Mango' },
@@ -242,7 +242,7 @@ module(basename(__filename), function () {
         module: `${testRealm2Href}person`,
         name: 'Person',
       };
-      await loadCard(ref, { loader });
+      await loadCardDef(ref, { loader });
       let doc = {
         data: {
           attributes: { firstName: 'Mango' },
@@ -277,7 +277,7 @@ module(basename(__filename), function () {
         module: `${testRealm2Href}code-ref-test`,
         name: 'TestCard',
       };
-      await loadCard(adoptsFrom, { loader });
+      await loadCardDef(adoptsFrom, { loader });
       let ref = { module: `${testRealm2Href}person`, name: 'Person' };
       let doc = {
         data: {
@@ -451,7 +451,6 @@ module(basename(__filename), function () {
         'index',
         'incremental-index-initiation',
       );
-
       let incrementalEvent = findRealmEvent(messages, 'index', 'incremental');
 
       assert.deepEqual(incrementalIndexInitiationEvent?.content, {

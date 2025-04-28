@@ -6,12 +6,12 @@ import {
   Component,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 
 export class Person extends CardDef {
   static displayName = 'Person';
-  @field firstName = contains(StringCard);
-  @field title = contains(StringCard, {
+  @field firstName = contains(StringField);
+  @field title = contains(StringField, {
     computeVia: function (this: Person) {
       return this.firstName;
     },
@@ -33,19 +33,19 @@ export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
   return `
 import { setComponentTemplate } from "@ember/component";
 import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import { createTemplateFactory } from "@ember/template-factory";
 export class Person extends CardDef {
   static displayName = 'Person';
   static {
     dt7948.g(this.prototype, "firstName", [field], function () {
-      return contains(StringCard);
+      return contains(StringField);
     });
   }
   #firstName = (dt7948.i(this, "firstName"), void 0);
   static {
     dt7948.g(this.prototype, "title", [field], function () {
-      return contains(StringCard, {
+      return contains(StringField, {
         computeVia: function () {
           return this.firstName;
         }

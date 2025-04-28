@@ -13,7 +13,7 @@ const displayPercentage = (num: number) => {
   return `${nearestDecimal(num, 2)}%`;
 };
 
-export class PercentageField extends NumberField {
+export default class PercentageField extends NumberField {
   static icon = PercentageIcon;
   static displayName = 'Percentage';
 

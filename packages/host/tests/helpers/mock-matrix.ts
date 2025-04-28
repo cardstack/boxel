@@ -34,12 +34,25 @@ export function setupMockMatrix(
     opts: undefined,
   };
 
-  let mockUtils = new MockUtils(testState);
+  let mockUtils = new MockUtils(testState, async () => {
+    if (opts?.autostart) {
+      if (!testState?.owner) {
+        throw new Error(`Cannot start mock matrix without a test state owner`);
+      }
+      let matrixService = testState.owner.lookup(
+        'service:matrix-service',
+      ) as MatrixService;
+      await matrixService.ready;
+      await matrixService.start();
+    } else {
+      console.warn(`auto starting of mock matrix is disabled`);
+    }
+  });
 
   hooks.beforeEach(async function () {
     testState.owner = this.owner;
     testState.opts = { ...opts };
-    let sdk = new MockSDK(testState.opts);
+    let sdk = new MockSDK(testState.opts, this.owner);
     testState.sdk = sdk;
 
     // Needed for realm event subscriptions to receive events
@@ -99,13 +112,6 @@ export function setupMockMatrix(
         instantiate: false,
       },
     );
-    if (opts.autostart) {
-      let matrixService = this.owner.lookup(
-        'service:matrix-service',
-      ) as MatrixService;
-      await matrixService.ready;
-      await matrixService.start();
-    }
   });
   return mockUtils;
 }

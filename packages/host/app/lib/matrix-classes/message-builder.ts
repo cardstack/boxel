@@ -6,12 +6,12 @@ import { inject as service } from '@ember/service';
 
 import { TrackedArray } from 'tracked-built-ins';
 
-import {
-  LooseSingleCardDocument,
-  ResolvedCodeRef,
-} from '@cardstack/runtime-common';
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
 
-import { CommandRequest } from '@cardstack/runtime-common/commands';
+import {
+  CommandRequest,
+  decodeCommandRequest,
+} from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
@@ -54,7 +54,6 @@ export default class MessageBuilder {
       effectiveEventId: string;
       author: RoomMember;
       index: number;
-      serializedCardFromFragments: (eventId: string) => LooseSingleCardDocument;
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
       commandResultEvent?: CommandResultEvent;
@@ -93,20 +92,9 @@ export default class MessageBuilder {
 
   get attachedCardIds() {
     let content = this.event.content as CardMessageContent;
-    // Safely skip over cases that don't have attached cards or a data type
-    let cardDocs = content.data?.attachedCardsEventIds
-      ? content.data.attachedCardsEventIds.map((eventId) =>
-          this.builderContext.serializedCardFromFragments(eventId),
-        )
-      : [];
     let attachedCardIds: string[] = [];
-    cardDocs.map((c) => {
-      if (c.data.id) {
-        attachedCardIds.push(c.data.id);
-      }
-    });
-    if (attachedCardIds.length < cardDocs.length) {
-      throw new Error(`cannot handle cards in room without an ID`);
+    if (content.data?.attachedCards) {
+      attachedCardIds = content.data.attachedCards.map((c) => c.sourceUrl);
     }
     return attachedCardIds;
   }
@@ -171,19 +159,22 @@ export default class MessageBuilder {
     message.updated = new Date();
     message.errorMessage = this.errorMessage;
 
-    let commandRequests =
+    let encodedCommandRequests =
       (this.event.content as CardMessageContent)[
         APP_BOXEL_COMMAND_REQUESTS_KEY
       ] ?? [];
-    for (let commandRequest of commandRequests) {
+    for (let encodedCommandRequest of encodedCommandRequests) {
       let command = message.commands.find(
-        (c) => c.commandRequest.id === commandRequest.id,
+        (c) => c.commandRequest.id === encodedCommandRequest.id,
       );
       if (command) {
-        command.commandRequest = commandRequest;
+        command.commandRequest = decodeCommandRequest(encodedCommandRequest);
       } else {
         message.commands.push(
-          this.buildMessageCommand(message, commandRequest),
+          this.buildMessageCommand(
+            message,
+            decodeCommandRequest(encodedCommandRequest),
+          ),
         );
       }
     }
@@ -202,9 +193,9 @@ export default class MessageBuilder {
       if (messageCommand) {
         messageCommand.commandStatus = event.content['m.relates_to']
           .key as CommandStatus;
-        messageCommand.commandResultCardEventId =
+        messageCommand.commandResultFileDef =
           event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-            ? event.content.data.cardEventId
+            ? event.content.data.card
             : undefined;
       }
     }
@@ -218,7 +209,10 @@ export default class MessageBuilder {
     }
     let commands = new TrackedArray<MessageCommand>();
     for (let commandRequest of commandRequests) {
-      let command = this.buildMessageCommand(message, commandRequest);
+      let command = this.buildMessageCommand(
+        message,
+        decodeCommandRequest(commandRequest),
+      );
       commands.push(command);
     }
     return commands;
@@ -257,6 +251,7 @@ export default class MessageBuilder {
         }
       }
     }
+
     let messageCommand = new MessageCommand(
       message,
       commandRequest,
@@ -267,7 +262,7 @@ export default class MessageBuilder {
         'ready') as CommandStatus,
       commandResultEvent?.content.msgtype ===
       APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-        ? commandResultEvent.content.data.cardEventId
+        ? commandResultEvent.content.data.card
         : undefined,
       getOwner(this)!,
     );

@@ -1,3 +1,5 @@
+import Owner from '@ember/owner';
+
 import { MatrixEvent } from 'matrix-js-sdk';
 
 import * as MatrixSDK from 'matrix-js-sdk';
@@ -7,7 +9,11 @@ import {
   MSC3575SlidingSyncResponse,
 } from 'matrix-js-sdk/lib/sliding-sync';
 
-import { baseRealm, unixTime } from '@cardstack/runtime-common';
+import {
+  LooseSingleCardDocument,
+  baseRealm,
+  unixTime,
+} from '@cardstack/runtime-common';
 
 import {
   APP_BOXEL_ACTIVE_LLM,
@@ -17,9 +23,18 @@ import {
   APP_BOXEL_REALM_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
+import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
+import { RoomResource } from '@cardstack/host/resources/room';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
+import MatrixService from '@cardstack/host/services/matrix-service';
 import { assertNever } from '@cardstack/host/utils/assert-never';
+
+import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { SerializedFile } from 'https://cardstack.com/base/file-api';
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { CommandField } from 'https://cardstack.com/base/skill-card';
 
 import { MockSDK } from './_sdk';
 
@@ -41,13 +56,25 @@ export class MockClient implements ExtendedClient {
   private listeners: Partial<Plural<MatrixSDK.ClientEventHandlerMap>> = {};
 
   private txnCtr = 0;
+  private fileDefManager: FileDefManager;
 
   constructor(
+    private owner: Owner,
     private sdk: MockSDK,
     private serverState: ServerState,
     private clientOpts: MatrixSDK.ICreateClientOpts,
     private sdkOpts: Config,
-  ) {}
+  ) {
+    let matrixService = this.owner.lookup(
+      'service:matrix-service',
+    ) as MatrixService;
+    this.fileDefManager = new FileDefManagerImpl({
+      client: this as unknown as MatrixSDK.MatrixClient,
+      owner,
+      getCardAPI: () => matrixService.cardAPI,
+      getFileAPI: () => matrixService.fileAPI,
+    });
+  }
 
   async getAccountDataFromServer<T extends { [k: string]: any }>(
     _eventType: string,
@@ -132,7 +159,7 @@ export class MockClient implements ExtendedClient {
   }
 
   getAccessToken(): string | null {
-    throw new Error('Method not implemented.');
+    return "shhh! it's a secret";
   }
 
   setAccountData<T>(type: string, data: T): Promise<{}> {
@@ -612,11 +639,57 @@ export class MockClient implements ExtendedClient {
     return this.loggedInAs ?? null;
   }
 
+  async uploadCards(cards: CardDef[]): Promise<FileDef[]> {
+    return await this.fileDefManager.uploadCards(cards);
+  }
+
+  async uploadCommandDefinitions(
+    commandDefinitions: CommandField[],
+  ): Promise<FileDef[]> {
+    return await this.fileDefManager.uploadCommandDefinitions(
+      commandDefinitions,
+    );
+  }
+
+  async uploadCardsAndUpdateSkillCommands(
+    cards: CardDef[],
+    roomResource: RoomResource,
+    updateStateEvent: (
+      roomId: string,
+      eventType: string,
+      stateKey: string,
+      transformContent: (
+        content: Record<string, any>,
+      ) => Promise<Record<string, any>>,
+    ) => Promise<void>,
+  ): Promise<FileDef[]> {
+    return await this.fileDefManager.uploadCardsAndUpdateSkillCommands(
+      cards,
+      roomResource,
+      updateStateEvent,
+    );
+  }
+
   async uploadContent(
-    _content: ArrayBuffer,
+    _content: string,
     _opts?: { type?: string; name?: string },
-  ): Promise<{ content_uri: string }> {
-    return { content_uri: `mxc://mock-server/${Math.random()}` };
+  ): Promise<any> {
+    let contentUri = `mxc://mock-server/${Math.random()}`;
+    this.serverState.addContent(
+      this.mxcUrlToHttp(contentUri),
+      _content as unknown as ArrayBuffer,
+    );
+    return { content_uri: contentUri };
+  }
+
+  async downloadCardFileDef(
+    serializedFile: SerializedFile,
+  ): Promise<LooseSingleCardDocument> {
+    let content = this.serverState.getContent(serializedFile.url);
+    if (!content) {
+      throw new Error(`content not found for ${serializedFile.url}`);
+    }
+    return JSON.parse(content.toString()) as LooseSingleCardDocument;
   }
 
   mxcUrlToHttp(mxcUrl: string): string {

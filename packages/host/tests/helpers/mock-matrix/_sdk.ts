@@ -1,3 +1,5 @@
+import Owner from '@ember/owner';
+
 import type { ExtendedMatrixSDK } from '@cardstack/host/services/matrix-sdk-loader';
 
 import { MockClient } from './_client';
@@ -14,7 +16,10 @@ type PublicAPI<T> = { [K in keyof T]: T[K] };
 export class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   serverState: ServerState;
 
-  constructor(private sdkOpts: Config) {
+  constructor(
+    private sdkOpts: Config,
+    private owner: Owner,
+  ) {
     this.serverState = new ServerState({
       displayName: sdkOpts.displayName ?? '',
       now: sdkOpts.now ?? Date.now,
@@ -22,7 +27,13 @@ export class MockSDK implements PublicAPI<ExtendedMatrixSDK> {
   }
 
   createClient(clientOpts: MatrixSDK.ICreateClientOpts) {
-    return new MockClient(this, this.serverState, clientOpts, this.sdkOpts);
+    return new MockClient(
+      this.owner,
+      this,
+      this.serverState,
+      clientOpts,
+      this.sdkOpts,
+    );
   }
 
   getRoomEvents(roomId: string) {

@@ -242,14 +242,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Dave' },
               },
             },
-          },
+          }),
         },
       ],
       'm.relates_to': {
@@ -331,14 +331,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         {
           id: 'fb8fef81-2142-4861-a902-d5614b0aea52',
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Dave' },
               },
             },
-          },
+          }),
         },
       ],
     });
@@ -408,24 +408,24 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Evie' },
               },
             },
-          },
+          }),
         },
         {
           id: 'f2da5504-b92f-480a-986a-56ec606d240e',
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/hassan`,
               patch: { attributes: { firstName: 'Ivana' } },
             },
-          },
+          }),
         },
       ],
       isStreamingFinished: false,
@@ -450,24 +450,24 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Evie' },
               },
             },
-          },
+          }),
         },
         {
           id: 'f2da5504-b92f-480a-986a-56ec606d240e',
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/hassan`,
               patch: { attributes: { firstName: 'Ivana' } },
             },
-          },
+          }),
         },
       ],
       isStreamingFinished: true,
@@ -511,14 +511,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Evie' },
               },
             },
-          },
+          }),
         },
       ],
     });
@@ -584,14 +584,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Evie' },
               },
             },
-          },
+          }),
         },
       ],
     });
@@ -637,7 +637,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         {
           id: 'search1',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               description: 'Searching for card',
               type: {
@@ -645,7 +645,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
                 name: 'Pet',
               },
             },
-          },
+          }),
         },
       ],
     });
@@ -680,12 +680,12 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         {
           id: 'search1',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Searching for card',
             attributes: {
               title: 'Mango',
             },
-          },
+          }),
         },
       ],
     });
@@ -716,7 +716,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         {
           id: '721c8c78-d8c1-4cc1-a7e9-51d2d3143e4d',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               description: 'Searching for card',
               type: {
@@ -724,7 +724,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
                 name: 'Person',
               },
             },
-          },
+          }),
         },
       ],
     });
@@ -776,7 +776,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         {
           id: 'fd4515fb-ed4d-4005-9782-4e844d7d4d9c',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
-          arguments: toolArgs,
+          arguments: JSON.stringify(toolArgs),
         },
       ],
     });
@@ -843,7 +843,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         {
           id: 'ffd1a3d0-0bd4-491a-a907-b96ec9d8902c',
           name: 'SearchCardsByTypeAndTitleCommand_a959',
-          arguments: toolArgs,
+          arguments: JSON.stringify(toolArgs),
         },
       ],
     });
@@ -920,14 +920,14 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: 'patchCard',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
               patch: {
                 attributes: { firstName: 'Evie' },
               },
             },
-          },
+          }),
         },
       ],
     });

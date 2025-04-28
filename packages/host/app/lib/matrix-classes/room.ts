@@ -8,6 +8,7 @@ import {
   DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   ActiveLLMEvent,
   MatrixEvent as DiscreteMatrixEvent,
@@ -23,8 +24,9 @@ export type TempEvent = Partial<IEvent> & {
 };
 
 export type SkillsConfig = {
-  enabledEventIds: string[];
-  disabledEventIds: string[];
+  enabledSkillCards: SerializedFile[];
+  disabledSkillCards: SerializedFile[];
+  commandDefinitions: SerializedFile[];
 };
 
 export default class Room {
@@ -62,12 +64,27 @@ export default class Room {
   }
 
   get skillsConfig() {
-    return (this._roomState?.events
+    const content = this._roomState?.events
       .get(APP_BOXEL_ROOM_SKILLS_EVENT_TYPE)
       ?.get('')?.event.content ?? {
-      enabledEventIds: [],
-      disabledEventIds: [],
-    }) as { enabledEventIds: string[]; disabledEventIds: string[] };
+      enabledSkillCards: [],
+      disabledSkillCards: [],
+      commandDefinitions: [],
+    };
+
+    return {
+      enabledSkillCards: content.enabledSkillCards
+        ? content.enabledSkillCards
+        : [],
+      disabledSkillCards: content.disabledSkillCards
+        ? content.disabledSkillCards
+        : [],
+      commandDefinitions: content.commandDefinitions ?? [],
+    } as {
+      enabledSkillCards: SerializedFile[];
+      disabledSkillCards: SerializedFile[];
+      commandDefinitions: SerializedFile[];
+    };
   }
 
   get activeLLM() {

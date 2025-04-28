@@ -636,12 +636,12 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: '1',
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
-          },
+          }),
         },
       ],
     });
@@ -697,10 +697,10 @@ module('Acceptance | Commands tests', function (hooks) {
         {
           id: '1',
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Delaying 1 second',
             attributes: {},
-          },
+          }),
         },
       ],
     });
@@ -905,11 +905,11 @@ We are one!
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               submode: 'code',
             },
-          },
+          }),
         },
       ],
     });
@@ -974,14 +974,8 @@ We are one!
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
-    let meetingCardEventId = boxelMessageData.attachedCardsEventIds[0];
-    let cardFragment = JSON.parse(
-      getRoomEvents(roomId).find(
-        (event) => event.event_id === meetingCardEventId,
-      )!.content.data,
-    ).cardFragment;
-    let parsedCard = JSON.parse(cardFragment);
-    let meetingCardId = parsedCard.data.id;
+    let meetingCardEventId = boxelMessageData.attachedCards[0];
+    let meetingCardId = meetingCardEventId.sourceUrl;
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
@@ -991,7 +985,7 @@ We are one!
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             description:
               'Change the topic of the meeting to "Meeting with Hassan"',
             attributes: {
@@ -1002,7 +996,7 @@ We are one!
                 },
               },
             },
-          },
+          }),
         },
       ],
     });
@@ -1055,12 +1049,12 @@ We are one!
         {
           id: 'abc123',
           name: 'switch-submode_dd88',
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Switching to code submode',
             attributes: {
               submode: 'code',
             },
-          },
+          }),
         },
       ],
     });
@@ -1077,8 +1071,19 @@ We are one!
     assert.dom('[data-test-submode-switcher=code]').exists();
 
     // verify that command result event was created correctly
-    await waitUntil(() => getRoomIds().length > 0);
-    let message = getRoomEvents(roomId).pop()!;
+    await waitUntil(
+      () =>
+        getRoomIds().length > 0 &&
+        getRoomEvents(roomId).find(
+          (m) =>
+            m.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+        ),
+    );
+    let message = getRoomEvents(roomId).find(
+      (m) =>
+        m.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    )!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -1104,6 +1109,7 @@ We are one!
     });
     // open assistant
     await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
     // open skill menu
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
@@ -1126,12 +1132,12 @@ We are one!
             module: `${testRealmURL}search-and-open-card-command`,
             name: 'default',
           }),
-          arguments: {
+          arguments: JSON.stringify({
             description: 'Finding and opening Hassan card',
             attributes: {
               title: 'Hassan',
             },
-          },
+          }),
         },
       ],
     });
@@ -1199,14 +1205,14 @@ We are one!
         {
           id: '1554f297-e9f2-43fe-8b95-55b29251444d',
           name: 'show-card_566f',
-          arguments: {
+          arguments: JSON.stringify({
             description:
               'Displaying the card with the Latin word for milkweed in the title.',
             attributes: {
               cardIdToShow: 'http://test-realm/test/Person/hassan',
               title: 'Asclepias',
             },
-          },
+          }),
         },
       ],
     });
@@ -1273,16 +1279,16 @@ We are one!
         {
           id: 'a4237eca-b73e-4256-bf3a-45849fa07d02',
           name: 'get-boxel-ui-state_dd88',
-          arguments: {},
+          arguments: JSON.stringify({}),
         },
         {
           id: '2b48526b-d599-4789-a47b-dff349948c37',
           name: 'search-cards-by-type-and-title_dd88',
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               query: 'test',
             },
-          },
+          }),
         },
       ],
     });
@@ -1353,9 +1359,9 @@ We are one!
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {},
-          },
+          }),
         },
       ],
     });
@@ -1409,11 +1415,11 @@ We are one!
         {
           id: 'fd1606f6-4d81-414a-8901-d6017eaf1fe9',
           name: toolName,
-          arguments: {
+          arguments: JSON.stringify({
             attributes: {
               location: 'London',
             },
-          },
+          }),
         },
       ],
     });
@@ -1466,7 +1472,7 @@ We are one!
           {
             id: '8406a6eb-a3d5-494f-a7f3-ae9880115756',
             name: toolName,
-            arguments: {},
+            arguments: JSON.stringify({}),
           },
         ],
       });

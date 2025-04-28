@@ -8,8 +8,8 @@ import {
   containsMany,
 } from 'https://cardstack.com/base/card-api';
 import { Component } from 'https://cardstack.com/base/card-api';
-import { Coordinate } from 'https://cardstack.com/base/coordinate';
-import { PositionedCard } from 'https://cardstack.com/base/positioned-card';
+import CoordinateField from 'https://cardstack.com/base/coordinate';
+import PositionedCardField from 'https://cardstack.com/base/positioned-card';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -282,8 +282,8 @@ class Isolated extends Component<typeof GardenDesign> {
     let newValues = [...this.gridMap.entries()]
       .filter((el) => el[1] != null)
       .map((el) => {
-        let coordinate = new Coordinate(this.decomposeId(el[0]));
-        let positionedGardenItem = new PositionedCard({
+        let coordinate = new CoordinateField(this.decomposeId(el[0]));
+        let positionedGardenItem = new PositionedCardField({
           coordinate,
           card: el[1],
         });
@@ -397,7 +397,7 @@ export class GardenItem extends CardDef {
 export class GardenDesign extends CardDef {
   @field rows = contains(NumberField);
   @field columns = contains(NumberField);
-  @field items = containsMany(PositionedCard);
+  @field items = containsMany(PositionedCardField);
   static displayName = 'Garden Design';
   static icon = LayoutBoardSplitIcon;
   static isolated = Isolated;

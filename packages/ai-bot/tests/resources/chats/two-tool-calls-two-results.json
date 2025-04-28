@@ -301,29 +301,11 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/admin/onnx/AiCommandExample/86ed3d35-c97c-4c2c-a7cb-88c3dba6e1ec\\\",\\\"attributes\\\":{\\\"locations\\\":[\\\"New York\\\"],\\\"title\\\":\\\"AI COMMAND TEST\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"AiCommandExample\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1736864363215,
-    "unsigned": {
-      "age": 70944
-    },
-    "event_id": "$YSkK-gX0AH0fT_t23m_BDabQB4f4f6dE0c8JSV-3CXE",
-    "user_id": "@admin:localhost",
-    "age": 70944
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
-    "content": {
       "msgtype": "app.boxel.message",
       "body": "I'm planning to visit these locations: New York, Beverly Hills. \n                Can you check the weather for each location and give me advice about:\n                1. Which locations currently have the best weather for traveling\n                2. Any weather-related travel tips or warnings\n                3. Suggested order of visits based on weather conditions",
       "format": "org.matrix.custom.html",
       "clientGeneratedId": "4a3d6e7f-f492-48de-b3e5-7ef8c5bda696",
-      "data": "{\"attachedCardsEventIds\":[\"$YSkK-gX0AH0fT_t23m_BDabQB4f4f6dE0c8JSV-3CXE\"],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":false}}"
+      "data": "{\"attachedCards\":[],\"context\":{\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"GetWeatherCommand_qPbgi8D3nYdEvEMwj6DVUX\",\"description\":\"\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"location\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}},\"required\":[\"attributes\",\"description\"]}}}],\"requireToolCall\":false}}"
     },
     "origin_server_ts": 1736864363324,
     "unsigned": {
@@ -391,24 +373,6 @@
     "age": 63517
   },
   {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"attributes\\\":{\\\"temperature\\\":\\\"22°C\\\",\\\"conditions\\\":\\\"Cloudy\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"WeatherReport\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1736864370828,
-    "unsigned": {
-      "age": 63331
-    },
-    "event_id": "$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc",
-    "user_id": "@admin:localhost",
-    "age": 63331
-  },
-  {
     "type": "app.boxel.commandResult",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
@@ -420,7 +384,7 @@
         "rel_type": "app.boxel.commandAnnotation"
       },
       "commandRequestId": "call_or0qFTa8y9Ef8ZVyRDNR2P1T",
-      "data": "{\"cardEventId\":\"$dKXYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGFmc\"}"
+      "data": "{\"card\":{\"url\":\"mxc://mock-server/weather-report-1\",\"sourceUrl\":\"weather-report-1\",\"name\":\"WeatherReport\",\"contentType\":\"text/plain\"}}"
     },
     "origin_server_ts": 1736864370892,
     "unsigned": {
@@ -429,24 +393,6 @@
     "event_id": "$92DJh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOEJTk",
     "user_id": "@admin:localhost",
     "age": 63267
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
-    "sender": "@admin:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"attributes\\\":{\\\"temperature\\\":\\\"26°C\\\",\\\"conditions\\\":\\\"Sunny\\\",\\\"title\\\":null,\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/admin/onnx/commandexample\\\",\\\"name\\\":\\\"WeatherReport\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1736864370828,
-    "unsigned": {
-      "age": 63331
-    },
-    "event_id": "$aBcYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGF12",
-    "user_id": "@admin:localhost",
-    "age": 63331
   },
   {
     "type": "app.boxel.commandResult",
@@ -460,7 +406,7 @@
         "rel_type": "app.boxel.commandAnnotation"
       },
       "commandRequestId": "call_or1e5Ta8y9Ef8ZVyRDNRabcd",
-      "data": "{\"cardEventId\":\"$aBcYGWZLmS42Yib6sDHwP1surO2PiGCr5t2XHFIGF12\"}"
+      "data": "{\"card\":{\"url\":\"mxc://mock-server/weather-report-2\",\"sourceUrl\":\"weather-report-2\",\"name\":\"WeatherReport\",\"contentType\":\"text/plain\"}}"
     },
     "origin_server_ts": 1736864370892,
     "unsigned": {

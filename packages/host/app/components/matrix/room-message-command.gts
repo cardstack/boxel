@@ -80,7 +80,7 @@ export default class RoomMessageCommand extends Component<Signature> {
   @use private commandResultCard = resource(() => {
     let initialState = { card: undefined } as { card: CardDef | undefined };
     let state = new TrackedObject(initialState);
-    if (this.args.messageCommand.commandResultCardDoc !== undefined) {
+    if (this.args.messageCommand.commandResultFileDef) {
       this.args.messageCommand.getCommandResultCard().then((card) => {
         state.card = card;
       });
@@ -137,13 +137,13 @@ export default class RoomMessageCommand extends Component<Signature> {
 
   @action async copyToWorkspace() {
     let { commandContext } = this.commandService;
-    const { newCard } = await new CopyCardCommand(commandContext).execute({
+    const { newCardId } = await new CopyCardCommand(commandContext).execute({
       sourceCard: this.commandResultCard.card as CardDef,
     });
 
     let showCardCommand = new ShowCardCommand(commandContext);
     await showCardCommand.execute({
-      cardIdToShow: newCard.id,
+      cardIdToShow: newCardId,
     });
   }
 

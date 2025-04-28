@@ -6,17 +6,17 @@ import {
   Component,
   CardDef,
 } from 'https://cardstack.com/base/card-api';
-import StringCard from 'https://cardstack.com/base/string';
+import StringField from 'https://cardstack.com/base/string';
 import { Pet } from './pet';
 import { Person } from './person';
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
 export class PetPerson extends CardDef {
   static displayName = 'Pet Person';
-  @field firstName = contains(StringCard);
+  @field firstName = contains(StringField);
   @field pets = linksToMany(Pet);
   @field friend = linksTo(Person);
-  @field title = contains(StringCard, {
+  @field title = contains(StringField, {
     computeVia: function (this: PetPerson) {
       return `${this.firstName} Pet Person`;
     },

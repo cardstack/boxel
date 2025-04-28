@@ -247,7 +247,7 @@ test.describe('Commands', () => {
       );
       await expect(commandResultEvent).toBeDefined();
       await expect(
-        JSON.parse(commandResultEvent.content.data).cardEventId,
+        JSON.parse(commandResultEvent.content.data).card,
       ).toBeDefined();
     }).toPass();
   });
@@ -403,7 +403,7 @@ test.describe('Commands', () => {
     await waitUntil(
       async () =>
         (await getRoomEvents('user1', 'pass', roomId)).length >
-        numEventsBeforeResponse + 5,
+        numEventsBeforeResponse + 2,
     );
     let message = (await getRoomEvents('user1', 'pass', roomId))
       .reverse()

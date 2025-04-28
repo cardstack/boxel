@@ -14,7 +14,7 @@ import {
   GetCardContextName,
   type getCard,
   chooseCard,
-  loadCard,
+  loadCardDef,
   specRef,
   type Query,
   type LooseSingleCardDocument,
@@ -102,12 +102,14 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
+  @tracked private cardCreationError: CardErrorJSONAPI | undefined = undefined;
 
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
   }
 
   private get isLoading() {
+    this.clearCardCreationError();
     return this.args.isFieldDef && this.args.isUpdating;
   }
 
@@ -127,8 +129,12 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
-    return this.cardResource?.cardError;
+    return this.cardCreationError ?? this.cardResource?.cardError;
   }
+
+  private clearCardCreationError = () => {
+    this.cardCreationError = undefined;
+  };
 
   private get specCard(): Spec | undefined {
     let card = this.card;
@@ -256,12 +262,6 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.realm.canWrite(this.currentRealm);
   }
 
-  @action handleClick(e: MouseEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    return false;
-  }
-
   @action
   private onFieldSelect(index: number) {
     if (!this.card?.id) {
@@ -346,9 +346,10 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private createNewCard = restartableTask(async () => {
+    this.clearCardCreationError();
     let newCardJSON: LooseSingleCardDocument;
     if (this.args.isFieldDef) {
-      let fieldCard = await loadCard(this.args.codeRef, {
+      let fieldCard = await loadCardDef(this.args.codeRef, {
         loader: this.loaderService.loader,
       });
       // for field def, create a new spec card instance
@@ -389,14 +390,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       this.currentRealm,
     );
     if (typeof maybeId !== 'string') {
-      let error = maybeId;
-      this.cardResource = {
-        id: undefined,
-        card: undefined,
-        cardError: error,
-        isLoaded: false,
-        autoSaveState: undefined,
-      };
+      this.cardCreationError = maybeId;
     } else {
       let cardId = maybeId;
       this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
@@ -410,7 +404,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   });
 
   private createNewField = restartableTask(async (specCard: Spec) => {
-    let fieldCard = await loadCard(this.args.codeRef, {
+    let fieldCard = await loadCardDef(this.args.codeRef, {
       loader: this.loaderService.loader,
     });
     let examples = specCard.containedExamples;
