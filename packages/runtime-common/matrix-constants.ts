@@ -7,6 +7,8 @@ export const APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE =
   'app.boxel.commandResultWithOutput';
 export const APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE =
   'app.boxel.commandResultWithNoOutput';
+export const APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE =
+  'app.boxel.applyCodeChangeResult';
 export const APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE =
   'app.boxel.realm-server-event';
 export const APP_BOXEL_ROOM_SKILLS_EVENT_TYPE = 'app.boxel.room.skills';

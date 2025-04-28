@@ -2430,6 +2430,41 @@ Attached files:
     );
   });
 
+  test('Code blocks are connected to their results', async () => {
+    // Set up mock responses for file downloads
+    mockResponses.set('http://test.com/spaghetti-recipe.gts', {
+      ok: true,
+      text: 'this is the riveting content of the spaghetti-recipe.gts file',
+    });
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/connect-code-blocks-to-results.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    // find the message with the tool call and its id
+    // it should have the result deserialised
+    const codeBlockMessage = messages!.find((message) =>
+      message.content?.includes('<<<<<<< SEARCH'),
+    );
+    assert.ok(codeBlockMessage, 'Should have a codeblock message');
+    assert.ok(
+      codeBlockMessage!.content!.includes(
+        'Edit applied to http://test.com/spaghetti-recipe.gts',
+      ),
+      'Code block message should indicate that the code block was applied',
+    );
+  });
+
   test('Tools on enabled skills are available in prompt', async () => {
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(

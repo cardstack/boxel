@@ -13,6 +13,7 @@ import type {
   CommandResultEvent,
   CardMessageContent,
   EncodedCommandRequest,
+  ApplyCodeChangeResultContent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -560,9 +561,8 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
 
 function toPromptMessageWithToolResults(
   event: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
+  commandResults: CommandResultEvent[] = [],
 ): OpenAIPromptMessage[] {
-  let commandResults = getCommandResults(event, history);
   const messageContent = event.content as CardMessageContent;
   return (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
     (commandRequest: Partial<EncodedCommandRequest>) => {
@@ -626,6 +626,11 @@ export async function getModifyPrompt(
     let body = event.content.body;
     if (event.sender === aiBotUserId) {
       let toolCalls = toToolCalls(event as CardMessageEvent);
+      let commandResults = getCommandResults(
+        event as CardMessageEvent,
+        history,
+      );
+      body = annotateCodeBlocks(body, commandResults);
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
         content: body,
@@ -637,7 +642,7 @@ export async function getModifyPrompt(
       if (toolCalls.length) {
         toPromptMessageWithToolResults(
           event as CardMessageEvent,
-          history,
+          commandResults,
         ).forEach((message) => historicalMessages.push(message));
       }
     }
@@ -765,4 +770,30 @@ export function isCommandResultEvent(
     event.content['m.relates_to']?.rel_type ===
       APP_BOXEL_COMMAND_RESULT_REL_TYPE
   );
+}
+
+function annotateCodeBlocks(
+  body: string,
+  commandResults: CommandResultEvent[],
+) {
+  let applyCodeResults = commandResults.filter(
+    (commandResult) =>
+      commandResult.content.msgtype === 'app.boxel.applyCodeChangeResult',
+  );
+  let appliedCodeBlockIndices = applyCodeResults.map(
+    (result) => (result.content as ApplyCodeChangeResultContent).codeBlockIndex,
+  );
+  let index = 0;
+  let annoatedBody = body.replace(
+    /File url: (.+)\n<<<<<<< SEARCH\n.*=======\n.*>>>>>>> REPLACE\n/gs,
+    (match: string, fileName: string) => {
+      let replacementString = match;
+      if (appliedCodeBlockIndices.includes(index)) {
+        replacementString = replacementString + `Edit applied to ${fileName}\n`;
+      }
+      index++;
+      return replacementString;
+    },
+  );
+  return annoatedBody;
 }

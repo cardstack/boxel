@@ -6,6 +6,7 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -200,7 +201,10 @@ export interface ActiveLLMEvent extends RoomStateEvent {
 
 export interface CommandResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
-  content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
+  content:
+    | CommandResultWithOutputContent
+    | CommandResultWithNoOutputContent
+    | ApplyCodeChangeResultContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -238,6 +242,16 @@ export interface CommandResultWithNoOutputContent {
   };
   msgtype: typeof APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE;
   commandRequestId: string;
+}
+
+export interface ApplyCodeChangeResultContent {
+  'm.relates_to': {
+    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
+    key: string;
+    event_id: string;
+  };
+  msgtype: typeof APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE;
+  codeBlockIndex: number;
 }
 
 export interface RealmServerEvent extends BaseMatrixEvent {
