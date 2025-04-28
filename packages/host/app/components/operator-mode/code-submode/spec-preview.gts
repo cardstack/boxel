@@ -175,6 +175,7 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 
     <style scoped>
       .has-spec {
+        display: flex;
         color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xl);
