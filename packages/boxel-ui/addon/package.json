@@ -46,7 +46,7 @@
     "dayjs": "^1.11.7",
     "ember-basic-dropdown": "^8.0.0",
     "ember-css-url": "^1.0.0",
-    "ember-concurrency": "^4.0.1",
+    "ember-concurrency": "catalog:",
     "ember-concurrency-ts": "^0.3.1",
     "ember-draggable-modifiers": "^1.0.0",
     "ember-focus-trap": "^1.0.1",
