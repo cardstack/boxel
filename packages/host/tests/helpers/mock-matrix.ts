@@ -52,7 +52,7 @@ export function setupMockMatrix(
   hooks.beforeEach(async function () {
     testState.owner = this.owner;
     testState.opts = { ...opts };
-    let sdk = new MockSDK(testState.opts);
+    let sdk = new MockSDK(testState.opts, this.owner);
     testState.sdk = sdk;
 
     // Needed for realm event subscriptions to receive events

@@ -12,6 +12,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 
 import { Message } from './message';
 
@@ -20,7 +21,7 @@ type CommandStatus = 'applied' | 'ready' | 'applying';
 export default class MessageCommand {
   @tracked commandRequest: Partial<CommandRequest>;
   @tracked commandStatus?: CommandStatus;
-  @tracked commandResultCardEventId?: string;
+  @tracked commandResultFileDef?: SerializedFile;
 
   constructor(
     public message: Message,
@@ -29,14 +30,14 @@ export default class MessageCommand {
     public eventId: string,
     public requiresApproval: boolean,
     commandStatus: CommandStatus,
-    commandResultCardEventId: string | undefined,
+    commandResultFileDef: SerializedFile | undefined,
     owner: Owner,
   ) {
     setOwner(this, owner);
 
     this.commandRequest = commandRequest;
     this.commandStatus = commandStatus;
-    this.commandResultCardEventId = commandResultCardEventId;
+    this.commandResultFileDef = commandResultFileDef;
   }
 
   @service declare commandService: CommandService;
@@ -67,8 +68,8 @@ export default class MessageCommand {
     return this.commandStatus;
   }
 
-  get commandResultCardDoc() {
-    if (!this.commandResultCardEventId) {
+  async commandResultCardDoc() {
+    if (!this.commandResultFileDef) {
       return undefined;
     }
     let roomResource = this.matrixService.roomResources.get(
@@ -78,8 +79,11 @@ export default class MessageCommand {
       return undefined;
     }
     try {
-      let cardDoc = roomResource.serializedCardFromFragments(
-        this.commandResultCardEventId,
+      if (!this.commandResultFileDef) {
+        return undefined;
+      }
+      let cardDoc = await this.matrixService.downloadCardFileDef(
+        this.commandResultFileDef,
       );
       return cardDoc;
     } catch {
@@ -89,11 +93,11 @@ export default class MessageCommand {
   }
 
   async getCommandResultCard(): Promise<CardDef | undefined> {
-    let cardDoc = this.commandResultCardDoc;
-    if (!cardDoc) {
-      return undefined;
+    let cardDoc = await this.commandResultCardDoc();
+    let card: CardDef | undefined;
+    if (cardDoc) {
+      card = (await this.store.add(cardDoc, { doNotPersist: true })) as CardDef;
     }
-    let card = await this.store.add(cardDoc, { doNotPersist: true });
     return card;
   }
 }

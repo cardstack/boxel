@@ -235,7 +235,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
 
     let boxelMessageData = JSON.parse(lastMessage.content.data);
     assert.strictEqual(
-      boxelMessageData.attachedCardsEventIds.length,
+      boxelMessageData.attachedCards.length,
       2,
       'Two attached cards should be present',
     );
@@ -375,7 +375,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     );
     assert.ok(skillsState, 'Skills state should be present in room');
     assert.strictEqual(
-      skillsState.enabledEventIds.length,
+      skillsState.enabledSkillCards.length,
       2,
       'At least two skills should be added to room',
     );
@@ -404,7 +404,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
     );
     assert.ok(skillsState, 'Skills state should be present in room');
     assert.strictEqual(
-      skillsState.enabledEventIds.length,
+      skillsState.enabledSkillCards.length,
       2,
       'At least two skills should be added to room',
     );
@@ -435,7 +435,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
 
     let boxelMessageData = JSON.parse(lastMessage.content.data);
     assert.strictEqual(
-      boxelMessageData.attachedCardsEventIds.length,
+      boxelMessageData.attachedCards.length,
       2,
       'Two attached cards should be present',
     );

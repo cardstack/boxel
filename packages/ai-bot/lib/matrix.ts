@@ -29,7 +29,17 @@ export interface MatrixClient {
   ): Promise<{ event_id: string }>;
 
   setRoomName(roomId: string, title: string): Promise<{ event_id: string }>;
+
   getAccessToken(): string | null;
+}
+
+export interface SerializedFileDef {
+  url: string;
+  sourceUrl: string;
+  name: string;
+  contentType: string;
+  content?: string;
+  error?: string;
 }
 
 export async function sendMatrixEvent(
@@ -119,4 +129,61 @@ function getErrorMessage(error: any): string {
     return error;
   }
   return 'Unknown error';
+}
+
+interface CacheEntry {
+  content: string;
+  timestamp: number;
+}
+
+const fileCache: Map<string, CacheEntry> = new Map();
+const CACHE_EXPIRATION_MS = 30 * 60 * 1000; // 30 minutes
+
+function cleanupCache() {
+  const now = Date.now();
+  for (const [url, entry] of fileCache.entries()) {
+    if (now - entry.timestamp > CACHE_EXPIRATION_MS) {
+      fileCache.delete(url);
+    }
+  }
+}
+
+export async function downloadFile(
+  client: MatrixClient,
+  attachedFile: SerializedFileDef,
+): Promise<string> {
+  if (!attachedFile?.contentType?.includes('text/')) {
+    throw new Error(
+      `Unsupported file type: ${attachedFile.contentType}. For now, only text files are supported.`,
+    );
+  }
+
+  const cachedEntry = fileCache.get(attachedFile.url);
+  if (cachedEntry) {
+    cachedEntry.timestamp = Date.now();
+    return cachedEntry.content;
+  }
+
+  // Download the file if not in cache
+  let response = await (globalThis as any).fetch(attachedFile.url, {
+    headers: {
+      Authorization: `Bearer ${client.getAccessToken()}`,
+    },
+  });
+  if (!response.ok) {
+    throw new Error(`HTTP error. Status: ${response.status}`);
+  }
+
+  const content = await response.text();
+
+  fileCache.set(attachedFile.url, {
+    content,
+    timestamp: Date.now(),
+  });
+
+  if (fileCache.size > 100) {
+    cleanupCache();
+  }
+
+  return content;
 }

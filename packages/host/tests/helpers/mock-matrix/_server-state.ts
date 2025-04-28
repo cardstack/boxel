@@ -15,6 +15,7 @@ export class ServerState {
   > = new Map();
   #listeners: ((event: IEvent) => void)[] = [];
   #displayName: string;
+  #contents: Map<string, ArrayBuffer> = new Map();
   #now: () => number;
 
   constructor(opts: { displayName: string; now: () => number }) {
@@ -303,5 +304,13 @@ export class ServerState {
     } else {
       this.#displayName = name;
     }
+  }
+
+  addContent(mxcUrl: string, content: ArrayBuffer) {
+    this.#contents.set(mxcUrl, content);
+  }
+
+  getContent(mxcUrl: string) {
+    return this.#contents.get(mxcUrl);
   }
 }
