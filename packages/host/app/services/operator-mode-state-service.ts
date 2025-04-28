@@ -506,6 +506,18 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  // when a stack item's card has been saved we need to update the URL to reflect the saved card's remote ID
+  // TODO make test for reloading after card has been saved
+  handleCardIdAssignment(localId: string) {
+    if (
+      this.state.stacks.find((stack) =>
+        stack.find((item) => item.id === localId),
+      )
+    ) {
+      this.schedulePersist();
+    }
+  }
+
   private schedulePersist() {
     // When multiple stack manipulations are bunched together in a loop, for example when closing multiple cards in a loop,
     // we get into a async race condition where the change to cardController.operatorModeState will reload the route and
@@ -524,8 +536,8 @@ export default class OperatorModeStateService extends Service {
 
   // Serialized POJO version of state, with only cards that have been saved.
   // The state can have cards that have not been saved yet, for example when
-  // clicking on "Crate New" in linked card editor. Here we want to draw a boundary
-  // between navigatable states in the query parameter
+  // clicking on "Create New" in linked card editor. Here we want to draw a boundary
+  // between navigable states in the query parameter
   rawStateWithSavedCardsOnly() {
     let state: SerializedState = {
       stacks: [],
@@ -544,10 +556,13 @@ export default class OperatorModeStateService extends Service {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
         if (item.id) {
-          serializedStack.push({
-            id: item.id,
-            format: item.format,
-          });
+          let instance = this.store.peek(item.id);
+          if (instance?.id) {
+            serializedStack.push({
+              id: instance.id,
+              format: item.format,
+            });
+          }
         }
       }
       state.stacks.push(serializedStack);

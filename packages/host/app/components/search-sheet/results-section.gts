@@ -27,7 +27,7 @@ interface SearchResultSignature {
   };
 }
 
-// Render CardDef default fitted template for visual consistency of cards insearch results
+// Render CardDef default fitted template for visual consistency of cards in search results
 let resultsCardRef = {
   name: 'CardDef',
   module: 'https://cardstack.com/base/card-api',
@@ -37,13 +37,9 @@ class SearchResult extends Component<SearchResultSignature> {
   @service declare realm: RealmService;
 
   private get urlForRealmLookup() {
-    let url = this.args.card ? urlForRealmLookup(this.args.card) : undefined;
-    if (!url) {
-      throw new Error(
-        `bug: cannot determine a URL to use for realm lookup of a card--this should always be set even for new cards`,
-      );
-    }
-    return url;
+    return this.args.card
+      ? urlForRealmLookup(this.args.card)
+      : this.args.cardId;
   }
 
   <template>
@@ -68,9 +64,11 @@ class SearchResult extends Component<SearchResultSignature> {
           ...attributes
         />
       {{/if}}
-      {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
-        <div class='realm-name' data-test-realm-name>{{realmInfo.name}}</div>
-      {{/let}}
+      {{#if this.urlForRealmLookup}}
+        {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
+          <div class='realm-name' data-test-realm-name>{{realmInfo.name}}</div>
+        {{/let}}
+      {{/if}}
     </div>
     <style scoped>
       .container {

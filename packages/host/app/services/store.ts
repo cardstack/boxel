@@ -62,6 +62,7 @@ import EnvironmentService from './environment-service';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
+import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
@@ -79,6 +80,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
@@ -911,6 +913,9 @@ export default class StoreService extends Service implements StoreInterface {
         if (isNew) {
           // now that we have a remote ID make a realm subscription
           this.subscribeToRealm(new URL(instance.id));
+          this.operatorModeStateService.handleCardIdAssignment(
+            instance[localIdSymbol],
+          );
           await this.updateInstanceChangeSubscription(
             'start-tracking',
             instance,
