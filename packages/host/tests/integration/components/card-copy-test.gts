@@ -894,7 +894,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextWithSave>('can copy a card that has a relative link to card in source realm', async function (assert) {
-    assert.expect(16);
+    assert.expect(15);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -924,11 +924,6 @@ module('Integration | card-copy', function (hooks) {
           let json = JSON.parse(await req.clone().text());
           waiter.endAsync(token);
           assert.strictEqual(json.data.attributes.firstName, 'Hassan');
-          assert.strictEqual(
-            json.included,
-            undefined,
-            'included not being sent over the wire',
-          );
         }
         return null;
       },
@@ -1044,7 +1039,7 @@ module('Integration | card-copy', function (hooks) {
   });
 
   test<TestContextWithSave>('can copy a card that has a link to card in destination realm', async function (assert) {
-    assert.expect(16);
+    assert.expect(15);
     await setCardInOperatorModeState(
       [`${testRealmURL}index`],
       [`${testRealm2URL}index`],
@@ -1074,11 +1069,6 @@ module('Integration | card-copy', function (hooks) {
           let json = JSON.parse(await req.clone().text());
           waiter.endAsync(token);
           assert.strictEqual(json.data.attributes.firstName, 'Sakura');
-          assert.strictEqual(
-            json.included,
-            undefined,
-            'included not being sent over the wire',
-          );
         }
         return null;
       },

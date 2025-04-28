@@ -140,11 +140,13 @@ export default class CardService extends Service {
 
   async serializeCard(
     card: CardDef,
-    opts?: SerializeOpts,
+    opts?: SerializeOpts & { withIncluded?: true },
   ): Promise<LooseSingleCardDocument> {
     let api = await this.getAPI();
     let serialized = api.serializeCard(card, opts);
-    delete serialized.included;
+    if (!opts?.withIncluded) {
+      delete serialized.included;
+    }
     return serialized;
   }
 

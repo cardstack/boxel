@@ -6,9 +6,7 @@ import {
   FieldDef,
   StringField,
   serialize,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
-import { Person } from './person';
 
 // this field explodes when serialized (saved)
 export class BoomField extends FieldDef {
@@ -26,5 +24,39 @@ export class BoomField extends FieldDef {
 export class BoomPet extends CardDef {
   static displayName = 'Boom Pet';
   @field boom = contains(BoomField);
-  @field person = linksTo(Person);
+}
+
+export class BoomPerson extends CardDef {
+  static displayName = 'Boom Person';
+  @field firstName = contains(StringField);
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      Hello
+      <@fields.firstName />!
+      {{!-- {{this.causeError}} --}}
+    </template>
+    // causeError = () => fn();
+  };
+}
+
+export class WorkingCard extends CardDef {
+  static displayName = 'Working Card';
+  static isolated = class Isolated extends Component<typeof this> {
+    <template>
+      <p>I am not broken!</p>
+    </template>
+  };
+}
+
+export class FailingField extends FieldDef {
+  static displayName = 'Failing Field';
+  @field title = contains(StringField);
+  static embedded = class Embedded extends Component<typeof this> {
+    <template>
+      <p>This will fail.</p> {{this.boom}}
+    </template>
+    boom = () => {
+      throw new Error('boom!');
+    };
+  };
 }
