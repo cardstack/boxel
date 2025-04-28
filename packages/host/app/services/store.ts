@@ -8,6 +8,7 @@ import { isTesting } from '@embroider/macros';
 import { formatDistanceToNow } from 'date-fns';
 import { task, timeout } from 'ember-concurrency';
 
+import merge from 'lodash/merge';
 import mergeWith from 'lodash/mergeWith';
 
 import { stringify } from 'qs';
@@ -889,6 +890,7 @@ export default class StoreService extends Service implements StoreInterface {
           realmURL = new URL(defaultRealmHref);
         }
         let json = await this.saveCardDocument(doc, realmURL);
+        instance[meta] = merge(instance[meta], doc.data.meta);
         if (this.onSaveSubscriber) {
           this.onSaveSubscriber(new URL(json.data.id!), json);
         }
