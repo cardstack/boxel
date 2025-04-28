@@ -890,7 +890,10 @@ export default class StoreService extends Service implements StoreInterface {
           realmURL = new URL(defaultRealmHref);
         }
         let json = await this.saveCardDocument(doc, realmURL);
-        instance[meta] = merge(instance[meta], doc.data.meta);
+        // the only server state we really care about is the meta. the host has
+        // a more update to date version of all the other state
+        instance[meta] = merge(instance[meta], json.data.meta);
+
         if (this.onSaveSubscriber) {
           this.onSaveSubscriber(new URL(json.data.id!), json);
         }
