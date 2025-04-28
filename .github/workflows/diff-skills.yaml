@@ -92,7 +92,7 @@ jobs:
           echo "DIFF_CONTENT: $DIFF_CONTENT"
 
       - name: Create comment if there are changes
-        if: steps.process-changes.outputs.diff_content == 'BLANK'
+        if: steps.process-changes.outputs.diff_content != ''
         uses: actions/github-script@v7
         with:
           script: |
