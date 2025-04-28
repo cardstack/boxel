@@ -154,16 +154,16 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
     if (
-      item.url &&
-      this.state.stacks[stackIndex].find((i: StackItem) => i.url === item.url)
+      item.id &&
+      this.state.stacks[stackIndex].find((i: StackItem) => i.id === item.id)
     ) {
       // this card is already in the stack, do nothing (maybe we could hoist
       // this card to the top instead?)
       return;
     }
     this.state.stacks[stackIndex].push(item);
-    if (item.url) {
-      this.recentCardsService.add(item.url);
+    if (item.id) {
+      this.recentCardsService.add(item.id);
     }
     this.schedulePersist();
   }
@@ -183,7 +183,7 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this.state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i: StackItem) => i.url && removeFileExtension(i.url) === cardId,
+          (i: StackItem) => i.id && removeFileExtension(i.id) === cardId,
         ) as StackItem[]),
       );
     }
@@ -307,7 +307,7 @@ export default class OperatorModeStateService extends Service {
     if (this.state.submode === Submodes.Interact) {
       return this.topMostStackItems()
         .filter((stackItem: StackItem) => stackItem)
-        .map((stackItem: StackItem) => stackItem.url)
+        .map((stackItem: StackItem) => stackItem.id)
         .filter(Boolean) as string[];
     }
     return;
@@ -462,7 +462,7 @@ export default class OperatorModeStateService extends Service {
     } else {
       let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
       return (
-        (itemForTitle?.url ? this.cardTitles.get(itemForTitle.url) : 'Boxel') ??
+        (itemForTitle?.id ? this.cardTitles.get(itemForTitle.id) : 'Boxel') ??
         'Boxel'
       );
     }
@@ -543,9 +543,9 @@ export default class OperatorModeStateService extends Service {
         if (item.format !== 'isolated' && item.format !== 'edit') {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
-        if (item.url) {
+        if (item.id) {
           serializedStack.push({
-            id: item.url,
+            id: item.id,
             format: item.format,
           });
         }
@@ -562,12 +562,12 @@ export default class OperatorModeStateService extends Service {
   }
 
   createStackItem(
-    url: string,
+    id: string,
     stackIndex: number,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
     let stackItem = new StackItem({
-      url,
+      id,
       stackIndex,
       format,
     });
@@ -601,7 +601,7 @@ export default class OperatorModeStateService extends Service {
         let { format } = item;
         newStack.push(
           new StackItem({
-            url: item.id,
+            id: item.id,
             format,
             stackIndex,
           }),
@@ -716,10 +716,10 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  openCardInInteractMode(url: string, format: Format = 'isolated') {
+  openCardInInteractMode(id: string, format: Format = 'isolated') {
     this.clearStacks();
     let newItem = new StackItem({
-      url,
+      id,
       stackIndex: 0,
       format,
     });
@@ -728,9 +728,9 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspace = (realmUrl: string) => {
-    let url = `${realmUrl}index`;
+    let id = `${realmUrl}index`;
     let stackItem = new StackItem({
-      url,
+      id,
       format: 'isolated',
       stackIndex: 0,
     });
@@ -743,7 +743,7 @@ export default class OperatorModeStateService extends Service {
     this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(url),
+        : new URL(id),
     );
 
     this.operatorModeController.workspaceChooserOpened = false;

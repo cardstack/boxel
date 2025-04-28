@@ -26,11 +26,10 @@ import {
   GetCardCollectionContextName,
   Deferred,
   codeRefWithAbsoluteURL,
-  moduleFrom,
-  RealmPaths,
   isCardInstance,
   CardError,
   loadCardDef,
+  localId as localIdSymbol,
   realmURL as realmURLSymbol,
   type getCard,
   type getCards,
@@ -195,56 +194,40 @@ export default class InteractSubmode extends Component {
         relativeTo: URL | undefined,
         opts?: {
           realmURL?: URL;
-          isLinkedCard?: boolean;
+          closeAfterCreating?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
           cardModeAfterCreation?: Format;
         },
       ): Promise<string | undefined> => {
-        let cardModule = new URL(moduleFrom(ref), relativeTo);
-        // we make the code ref use an absolute URL for safety in
-        // the case it's being created in a different realm than where the card
-        // definition comes from
-        if (
-          opts?.realmURL &&
-          !new RealmPaths(opts.realmURL).inRealm(cardModule)
-        ) {
-          ref = codeRefWithAbsoluteURL(ref, relativeTo);
-        }
-        let doc: LooseSingleCardDocument = opts?.doc ?? {
-          data: {
-            meta: {
-              adoptsFrom: ref,
-              ...(opts?.realmURL ? { realmURL: opts.realmURL.href } : {}),
-            },
-          },
-        };
-
-        if (opts?.realmURL && !doc.data.meta.realmURL) {
-          doc.data.meta.realmURL = opts.realmURL.href;
-        }
-
-        let maybeUrl = await here.store.create(
-          doc,
-          relativeTo,
-          opts?.realmURL?.href,
-        );
-        if (typeof maybeUrl === 'string') {
-          let url = maybeUrl;
-          let newItem = new StackItem({
-            url,
-            format: opts?.cardModeAfterCreation ?? 'edit',
-            request: new Deferred(),
-            isLinkedCard: opts?.isLinkedCard,
-            stackIndex,
+        let instance: CardDef;
+        if (opts?.doc) {
+          instance = await here.store.add(opts.doc, {
+            doNotPersist: true,
+            realm: opts?.realmURL?.href,
           });
-          here.addToStack(newItem);
-          return url;
         } else {
-          console.error(
-            `Error creating card: ${JSON.stringify(maybeUrl, null, 2)}`,
+          let CardKlass = await loadCardDef(
+            codeRefWithAbsoluteURL(ref, relativeTo),
+            {
+              loader: here.loaderService.loader,
+            },
           );
-          return undefined;
+          instance = new CardKlass() as CardDef;
+          await here.store.add(instance, {
+            doNotPersist: true,
+            realm: opts?.realmURL?.href,
+          });
         }
+        let localId = instance[localIdSymbol];
+        let newItem = new StackItem({
+          id: localId,
+          format: opts?.cardModeAfterCreation ?? 'edit',
+          request: new Deferred(),
+          closeAfterSaving: opts?.closeAfterCreating,
+          stackIndex,
+        });
+        here.addToStack(newItem);
+        return localId;
       },
       viewCard: (
         cardOrURL: CardDef | URL,
@@ -255,7 +238,7 @@ export default class InteractSubmode extends Component {
           stackIndex = this.stacks.length;
         }
         let newItem = new StackItem({
-          url: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
+          id: cardOrURL instanceof URL ? cardOrURL.href : cardOrURL.id,
           format,
           stackIndex,
         });
@@ -342,7 +325,7 @@ export default class InteractSubmode extends Component {
       ): Promise<void> => {
         let stackItem: StackItem | undefined;
         for (let stack of here.stacks) {
-          stackItem = stack.find((item: StackItem) => item.url === card.id);
+          stackItem = stack.find((item: StackItem) => item.id === card.id);
           if (stackItem) {
             let doWithStableScroll =
               stackItemComponentAPI.get(stackItem)?.doWithStableScroll;
@@ -404,7 +387,7 @@ export default class InteractSubmode extends Component {
 
   private findCardInStack(card: CardDef, stackIndex: number): StackItem {
     let item = this.stacks[stackIndex].find(
-      (item: StackItem) => item.url === card.id,
+      (item: StackItem) => item.id === card.id,
     );
     if (!item) {
       throw new Error(`Could not find card ${card.id} in stack ${stackIndex}`);
@@ -415,14 +398,14 @@ export default class InteractSubmode extends Component {
   private close = (item: StackItem) => {
     // close the item first so user doesn't have to wait for the save to complete
     this.operatorModeStateService.trimItemsFromStack(item);
-    let { request, url } = item;
+    let { request, id } = item;
 
     // only save when closing a stack item in edit mode. there should be no unsaved
     // changes in isolated mode because they were saved when user toggled between
     // edit and isolated formats
-    if (url && item.format === 'edit') {
-      this.store.save(url);
-      request?.fulfill(url);
+    if (id && item.format === 'edit') {
+      this.store.save(id);
+      request?.fulfill(id);
     }
   };
 
@@ -564,7 +547,7 @@ export default class InteractSubmode extends Component {
       }
 
       await this.withTestWaiters(async () => {
-        let destinationIndexCardUrl = destinationItem.url;
+        let destinationIndexCardUrl = destinationItem.id;
         if (!destinationIndexCardUrl) {
           throw new Error(`destination index card has no URL`);
         }
@@ -686,7 +669,7 @@ export default class InteractSubmode extends Component {
           SearchSheetTriggers.DropCardToLeftNeighborStackButton
         ) {
           let newItem = new StackItem({
-            url: url.href,
+            id: url.href,
             format: 'isolated',
             stackIndex: 0,
           });
@@ -731,7 +714,7 @@ export default class InteractSubmode extends Component {
               let bottomMostItem = stack[0];
               if (bottomMostItem) {
                 let stackItem = new StackItem({
-                  url: url.href,
+                  id: url.href,
                   format: 'isolated',
                   stackIndex,
                 });

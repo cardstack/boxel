@@ -675,7 +675,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       let firstStack = operatorModeStateService.state.stacks[0];
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
       recentCardsService.ascendingRecentCardIds = firstStack.map(
-        (item) => item.url,
+        (item) => item.id,
       );
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
@@ -781,7 +781,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
       recentCardsService.ascendingRecentCardIds =
-        operatorModeStateService.state.stacks[0].map((item) => item.url);
+        operatorModeStateService.state.stacks[0].map((item) => item.id);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();

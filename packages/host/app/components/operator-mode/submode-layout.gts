@@ -133,7 +133,7 @@ export default class SubmodeLayout extends Component<Signature> {
     }
 
     let stackItem = this.allStackItems[this.allStackItems.length - 1];
-    return stackItem.url;
+    return stackItem.id;
   }
 
   private get isToggleWorkspaceChooserDisabled() {

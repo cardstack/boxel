@@ -52,6 +52,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -138,6 +139,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get permissions(): Permissions | undefined {
     if (this.url) {
       return this.realm.permissions(this.url);
+    } else if (this.card?.[realmURL]) {
+      return this.realm.permissions(this.card[realmURL]?.href);
     }
     return undefined;
   }
@@ -160,7 +163,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.item.url);
+    this.cardResource = this.getCard(this, () => this.args.item.id);
   };
 
   private get url() {
@@ -339,6 +342,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
   @cached
   private get card() {
     return this.cardResource?.card;
+  }
+
+  private get urlForRealmLookup() {
+    if (!this.card) {
+      throw new Error(
+        `bug: cannot determine url for card realm lookup when there is no card. this is likely a template error, card must be present before this is invoked in template`,
+      );
+    }
+    return urlForRealmLookup(this.card);
   }
 
   @cached
@@ -598,7 +610,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           />
         {{else if this.card}}
           {{this.setWindowTitle}}
-          {{#let (this.realm.info this.card.id) as |realmInfo|}}
+          {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.card}}

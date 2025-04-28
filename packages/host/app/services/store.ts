@@ -24,6 +24,7 @@ import {
   mergeRelationships,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
+  meta,
   logger,
   formattedError,
   type Store as StoreInterface,
@@ -33,6 +34,7 @@ import {
   type AutoSaveState,
   type CardDocument,
   type SingleCardDocument,
+  type CardResourceMeta,
   type LooseSingleCardDocument,
   type LooseCardResource,
   type CardErrorJSONAPI,
@@ -231,6 +233,13 @@ export default class StoreService extends Service implements StoreInterface {
           this.identityContext.set(dep.id ?? dep[localIdSymbol], dep);
         }
       }
+    }
+    //TODO test this
+    if (opts?.realm) {
+      instance[meta] = {
+        ...instance[meta],
+        ...{ realmURL: opts.realm },
+      } as CardResourceMeta;
     }
 
     let maybeOldInstance = instance.id
@@ -680,6 +689,11 @@ export default class StoreService extends Service implements StoreInterface {
       if (!opts?.noCache && existingInstance) {
         deferred?.fulfill(existingInstance);
         return existingInstance as T;
+      }
+      if (isLocalId(url)) {
+        throw new Error(
+          `instance with local id ${url} does not exist in the store`,
+        );
       }
 
       let doc = (typeof urlOrDoc !== 'string' ? urlOrDoc : undefined) as

@@ -23,6 +23,8 @@ import {
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -288,10 +290,11 @@ export default class PlaygroundContent extends Component<Signature> {
   }
 
   private get realmInfo() {
-    if (!this.args.card?.id) {
+    let url = this.args.card ? urlForRealmLookup(this.args.card) : undefined;
+    if (!url) {
       return undefined;
     }
-    return this.realm.info(this.args.card.id);
+    return this.realm.info(url);
   }
 
   private get canEditCard() {
