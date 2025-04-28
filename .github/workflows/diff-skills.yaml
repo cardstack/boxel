@@ -68,15 +68,15 @@ jobs:
                 DIFFS+=("### Changes in $FILE")
                 if [ -n "$INSTRUCTIONS_DIFF" ]; then
                   DIFFS+=("#### Instructions Changes")
-                  DIFFS+=("\`\`\`diff")
+                  DIFFS+=("```diff")
                   DIFFS+=("$INSTRUCTIONS_DIFF")
-                  DIFFS+=("\`\`\`")
+                  DIFFS+=("```")
                 fi
                 if [ -n "$COMMANDS_DIFF" ]; then
                   DIFFS+=("#### Commands Changes")
-                  DIFFS+=("\`\`\`diff")
+                  DIFFS+=("```diff")
                   DIFFS+=("$COMMANDS_DIFF")
-                  DIFFS+=("\`\`\`")
+                  DIFFS+=("```")
                 fi
               fi
             fi
