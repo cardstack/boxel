@@ -34,8 +34,6 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import { pauseTest } from '@ember/test-helpers';
-
 import {
   percySnapshot,
   testRealmURL,
