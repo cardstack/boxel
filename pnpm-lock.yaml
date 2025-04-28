@@ -51,6 +51,12 @@ catalogs:
     eslint-plugin-qunit-dom:
       specifier: mainmatter/eslint-plugin-qunit-dom#d66c841
       version: 0.2.0
+    eslint-plugin-simple-import-sort:
+      specifier: ^8.0.0
+      version: 8.0.0
+    eslint-plugin-typescript-sort-keys:
+      specifier: ^3.2.0
+      version: 3.2.0
     eslint-plugin-unicorn:
       specifier: ^51.0.1
       version: 51.0.1
@@ -592,10 +598,10 @@ importers:
         specifier: 'catalog:'
         version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
       eslint-plugin-simple-import-sort:
-        specifier: ^8.0.0
+        specifier: 'catalog:'
         version: 8.0.0(eslint@8.57.1)
       eslint-plugin-typescript-sort-keys:
-        specifier: ^3.2.0
+        specifier: 'catalog:'
         version: 3.2.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       npm-run-all:
         specifier: ^4.1.5
