@@ -55,7 +55,7 @@
     "eslint-plugin-import": "catalog:",
     "eslint-plugin-markdown": "^5.1.0",
     "eslint-plugin-n": "catalog:",
-    "eslint-plugin-prettier": "^5.2.6",
+    "eslint-plugin-prettier": "catalog:",
     "eslint-plugin-unicorn": "catalog:",
     "prettier": "^3.5.3",
     "typescript": "~5.1.6",
