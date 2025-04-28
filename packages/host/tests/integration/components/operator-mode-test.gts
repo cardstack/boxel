@@ -34,6 +34,8 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
+import { pauseTest } from '@ember/test-helpers';
+
 import {
   percySnapshot,
   testRealmURL,
@@ -1587,7 +1589,11 @@ module('Integration | operator-mode', function (hooks) {
     );
 
     await waitFor(`[data-test-stack-card="${testRealmURL}Person/burcu"]`);
-    assert.dom(`[data-test-plural-view-item]`).exists({ count: 3 });
+    assert
+      .dom(
+        `[data-test-plural-view-field="friends"] [data-test-plural-view-item]`,
+      )
+      .exists({ count: 3 });
     await click('[data-test-edit-button]');
     assert.dom('[data-test-field="friends"]').containsText('Jackie Woody');
 
@@ -1606,7 +1612,11 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-stack-card="${testRealmURL}Person/burcu"]`)
       .doesNotContainText('Jackie');
-    assert.dom(`[data-test-plural-view-item]`).doesNotExist();
+    assert
+      .dom(
+        `[data-test-plural-view-field="friends"] [data-test-plural-view-item]`,
+      )
+      .doesNotExist();
   });
 
   test('can close cards by clicking the header of a card deeper in the stack', async function (assert) {
@@ -3134,7 +3144,8 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
+
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 11 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -3148,7 +3159,7 @@ module('Integration | operator-mode', function (hooks) {
     await fillIn('[data-test-field="title"] input', 'New Skill');
     await click('[data-test-close-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 11 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -3158,7 +3169,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-confirm-delete-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 10 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 11 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
     assert
       .dom(`[data-test-boxel-filter-list-button="All Cards"]`)
