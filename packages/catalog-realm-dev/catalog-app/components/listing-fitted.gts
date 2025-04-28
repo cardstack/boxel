@@ -158,184 +158,176 @@ class CarouselComponent extends GlimmerComponent<Signature> {
     </div>
 
     <style scoped>
-      @layer {
-        :global(:root) {
-          --boxel-carousel-z-index: 1;
-        }
-        :global(.actions-overlay.hovered) {
-          z-index: calc(var(--boxel-carousel-z-index) + 1) !important;
-        }
+      .carousel {
+        --boxel-carousel-z-index: 1;
+        position: relative;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        container-type: inline-size;
+        outline: none;
+      }
+      .carousel:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
+      .carousel-items {
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+      }
+      .carousel-item {
+        position: absolute;
+        visibility: hidden;
+        flex: 0 0 100%;
+        justify-content: center;
+        align-items: center;
+        padding: var(--boxel-sp) var(--boxel-sp-xs);
+        display: flex;
+        opacity: 0;
+        transition:
+          opacity 1s ease,
+          visibility 0s linear 1s;
+      }
+      .carousel-item.is-active {
+        visibility: visible;
+        opacity: 1;
+        transition:
+          opacity 1s ease,
+          visibility 0s;
+      }
+      .carousel-item img {
+        width: 100%;
+        height: auto;
+        object-fit: cover;
+        display: block;
+        border-radius: var(--boxel-border-radius-sm);
+        box-shadow:
+          0 15px 20px rgba(0, 0, 0, 0.12),
+          0 5px 10px rgba(0, 0, 0, 0.1);
+      }
 
-        .carousel {
-          position: relative;
-          width: 100%;
-          height: 100%;
-          overflow: hidden;
-          container-type: inline-size;
-          outline: none;
+      .carousel-arrow {
+        cursor: pointer;
+        user-select: none;
+        padding: 0px;
+        width: 2rem;
+        height: 2rem;
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .carousel-arrow-prev {
+        position: absolute;
+        left: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: calc(var(--boxel-carousel-z-index));
+      }
+      .carousel-arrow-next {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: calc(var(--boxel-carousel-z-index));
+      }
+
+      .carousel-arrow-next {
+        position: absolute;
+        right: 0;
+        top: 50%;
+        transform: translateY(-50%);
+      }
+      .carousel-dots {
+        position: absolute;
+        bottom: 5px;
+        left: 50%;
+        z-index: var(--boxel-carousel-z-index);
+        transform: translateX(-50%);
+        display: flex;
+        justify-content: center;
+        gap: 0.5rem;
+      }
+      .carousel-dot {
+        width: 10px;
+        height: 10px;
+        background-color: var(--boxel-100);
+        border: 1px solid var(--boxel-500);
+        border-radius: 50%;
+        cursor: pointer;
+        padding: 0px;
+      }
+      .carousel-dot.is-active {
+        background-color: var(--boxel-400);
+        border: 1px solid var(--boxel-700);
+      }
+
+      .preview-button-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: var(--boxel-carousel-z-index);
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        opacity: 0;
+        background-color: rgba(0, 0, 0, 0.5);
+        transition: opacity 0.3s ease;
+      }
+
+      .carousel:hover .carousel-item img {
+        box-shadow:
+          0 15px 20px rgba(0, 0, 0, 0.2),
+          0 7px 10px rgba(0, 0, 0, 0.12);
+      }
+      .carousel:hover .preview-button-container {
+        opacity: 1;
+      }
+      .carousel:hover .carousel-arrow {
+        color: var(--boxel-300);
+      }
+
+      .preview-button {
+        --boxel-button-font: 600 var(--boxel-font-sm);
+        --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+        --boxel-button-border: 1px solid var(--boxel-light);
+        --boxel-button-color: var(--boxel-purple);
+        --boxel-button-text-color: var(--boxel-100);
+        box-shadow:
+          0 15px 20px rgba(0, 0, 0, 0.12),
+          0 5px 10px rgba(0, 0, 0, 0.1);
+        pointer-events: auto;
+      }
+      .preview-button:hover {
+        --boxel-button-text-color: var(--boxel-light);
+        box-shadow:
+          0 15px 25px rgba(0, 0, 0, 0.2),
+          0 7px 15px rgba(0, 0, 0, 0.15);
+      }
+
+      @container (inline-size <= 300px) {
+        .carousel-nav {
+          display: none;
         }
-        .carousel:focus-visible {
-          outline: 2px solid var(--boxel-highlight);
-          outline-offset: 2px;
-        }
-        .carousel-items {
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          position: relative;
+      }
+
+      @container (max-height: 100px) {
+        .carousel-nav,
+        .preview-button-container,
+        .carousel-dots {
+          display: none;
         }
         .carousel-item {
-          position: absolute;
-          visibility: hidden;
-          flex: 0 0 100%;
-          justify-content: center;
-          align-items: center;
-          padding: var(--boxel-sp) var(--boxel-sp-xs);
-          display: flex;
-          opacity: 0;
-          transition:
-            opacity 1s ease,
-            visibility 0s linear 1s;
+          padding: var(--boxel-sp-4xs);
         }
-        .carousel-item.is-active {
-          visibility: visible;
-          opacity: 1;
-          transition:
-            opacity 1s ease,
-            visibility 0s;
-        }
-        .carousel-item img {
-          width: 100%;
-          height: auto;
-          object-fit: cover;
-          display: block;
-          border-radius: var(--boxel-border-radius-sm);
-          box-shadow:
-            0 15px 20px rgba(0, 0, 0, 0.12),
-            0 5px 10px rgba(0, 0, 0, 0.1);
-        }
-
-        .carousel-arrow {
-          cursor: pointer;
-          user-select: none;
-          padding: 0px;
-          width: 2rem;
-          height: 2rem;
-          display: inline-flex;
-          justify-content: center;
-          align-items: center;
-        }
-        .carousel-arrow-prev {
-          position: absolute;
-          left: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: calc(var(--boxel-carousel-z-index));
-        }
-        .carousel-arrow-next {
-          position: absolute;
-          right: 0;
-          top: 50%;
-          transform: translateY(-50%);
-          z-index: calc(var(--boxel-carousel-z-index));
-        }
-
-        .carousel-arrow-next {
-          position: absolute;
-          right: 0;
-          top: 50%;
-          transform: translateY(-50%);
-        }
-        .carousel-dots {
-          position: absolute;
-          bottom: 5px;
-          left: 50%;
-          z-index: var(--boxel-carousel-z-index);
-          transform: translateX(-50%);
-          display: flex;
-          justify-content: center;
-          gap: 0.5rem;
-        }
-        .carousel-dot {
-          width: 10px;
-          height: 10px;
-          background-color: var(--boxel-100);
-          border: 1px solid var(--boxel-500);
-          border-radius: 50%;
-          cursor: pointer;
-          padding: 0px;
-        }
-        .carousel-dot.is-active {
-          background-color: var(--boxel-400);
-          border: 1px solid var(--boxel-700);
-        }
-
-        .preview-button-container {
-          position: absolute;
-          top: 0;
-          left: 0;
-          z-index: var(--boxel-carousel-z-index);
-          width: 100%;
-          height: 100%;
-          display: flex;
-          justify-content: center;
-          align-items: center;
-          opacity: 0;
-          background-color: rgba(0, 0, 0, 0.5);
-          transition: opacity 0.3s ease;
-        }
-
+        .carousel-item img,
         .carousel:hover .carousel-item img {
-          box-shadow:
-            0 15px 20px rgba(0, 0, 0, 0.2),
-            0 7px 10px rgba(0, 0, 0, 0.12);
-        }
-        .carousel:hover .preview-button-container {
-          opacity: 1;
-        }
-        .carousel:hover .carousel-arrow {
-          color: var(--boxel-300);
-        }
-
-        .preview-button {
-          --boxel-button-font: 600 var(--boxel-font-sm);
-          --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
-          --boxel-button-border: 1px solid var(--boxel-light);
-          --boxel-button-color: var(--boxel-purple);
-          --boxel-button-text-color: var(--boxel-100);
-          box-shadow:
-            0 15px 20px rgba(0, 0, 0, 0.12),
-            0 5px 10px rgba(0, 0, 0, 0.1);
-          pointer-events: auto;
-        }
-        .preview-button:hover {
-          --boxel-button-text-color: var(--boxel-light);
-          box-shadow:
-            0 15px 25px rgba(0, 0, 0, 0.2),
-            0 7px 15px rgba(0, 0, 0, 0.15);
-        }
-
-        @container (inline-size <= 300px) {
-          .carousel-nav {
-            display: none;
-          }
-        }
-
-        @container (max-height: 100px) {
-          .carousel-nav,
-          .preview-button-container,
-          .carousel-dots {
-            display: none;
-          }
-          .carousel-item {
-            padding: var(--boxel-sp-4xs);
-          }
-          .carousel-item img,
-          .carousel:hover .carousel-item img {
-            box-shadow: none;
-            border-radius: var(--boxel-border-radius-xs);
-          }
+          box-shadow: none;
+          border-radius: var(--boxel-border-radius-xs);
         }
       }
     </style>
