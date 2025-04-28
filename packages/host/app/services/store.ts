@@ -214,11 +214,18 @@ export default class StoreService extends Service implements StoreInterface {
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: {
+      // TODO: apparently this is getting abused by the catalog actions and we
+      // are using this to tell the store the folder _within_ the realm to
+      // upload an instance to, this is not always the actual realm...
       realm?: string;
       relativeTo?: URL | undefined;
       doNotPersist?: true;
     },
   ) {
+    // need to figure out the actual realm because opts.realm is being abused
+    let realmURL = opts?.realm
+      ? this.realm.realmOfURL(new URL(opts.realm))?.href
+      : undefined;
     let instance: T;
     if (!isCardInstance(instanceOrDoc)) {
       instance = await this.createFromSerialized(
@@ -237,10 +244,10 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
     //TODO test this
-    if (opts?.realm) {
+    if (realmURL) {
       instance[meta] = {
         ...instance[meta],
-        ...{ realmURL: opts.realm },
+        ...{ realmURL },
       } as CardResourceMeta;
     }
 
