@@ -13,7 +13,9 @@ module.exports = function () {
     buildSandboxGlobals(defaultGlobals) {
       return Object.assign({}, defaultGlobals, {
         URL: globalThis.URL,
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
         Request: globalThis.Request,
+        // eslint-disable-next-line n/no-unsupported-features/node-builtins
         fetch: globalThis.fetch,
         btoa,
       });
