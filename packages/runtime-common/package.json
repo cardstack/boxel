@@ -77,7 +77,7 @@
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
-    "lint:js": "eslint . ",
+    "lint:js": "eslint . --report-unused-disable-directives ",
     "lint:js:fix": "eslint . --fix",
     "lint:types": "glint"
   }

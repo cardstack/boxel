@@ -2,7 +2,6 @@
 
 module.exports = {
   root: true,
-  reportUnusedDisableDirectives: true,
   parser: '@typescript-eslint/parser',
   parserOptions: {
     sourceType: 'script',

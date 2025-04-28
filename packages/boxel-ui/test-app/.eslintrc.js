@@ -4,7 +4,6 @@ const MISSING_INVOKABLES_CONFIG = require('../../runtime-common/etc/eslint/missi
 
 module.exports = {
   root: true,
-  reportUnusedDisableDirectives: true,
   parser: '@typescript-eslint/parser',
   parserOptions: {
     ecmaVersion: 'latest',
