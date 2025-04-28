@@ -1782,7 +1782,7 @@ export class Realm {
       let source = await request.text();
       let job = await this.#queue.publish<LintResult>({
         jobType: `lint-source`,
-        concurrencyGroup: null,
+        concurrencyGroup: `lint:${this.url}:${Math.random().toString().slice(-1)}`,
         timeout: 10,
         priority: userInitiatedPriority,
         args: { source } satisfies LintArgs,
