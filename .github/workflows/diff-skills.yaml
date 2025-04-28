@@ -39,10 +39,8 @@ jobs:
           # Process each changed JSON file
           for FILE in $CHANGED_FILES; do
             # Get the file content from target branch and PR branch
-            # github.sha is a temporary merge commit that is what things would look like *if* the PR was merged
-            BASE_SHA=$(git rev-parse ${{ github.sha }}^1)
-            OLD_CONTENT=$(git show $BASE_SHA:$FILE 2>/dev/null || echo "{}")
-            NEW_CONTENT=$(git show ${{ github.sha }}:$FILE 2>/dev/null || echo "{}")
+            OLD_CONTENT=$(git show ${{ github.event.pull_request.base.sha }}:$FILE 2>/dev/null || echo "{}")
+            NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
             
             # Check if it's a skill card
             IS_SKILL_CARD=$(echo "$NEW_CONTENT" | jq -r '.data.meta.adoptsFrom.module == "https://cardstack.com/base/skill-card"')
