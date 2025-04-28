@@ -253,7 +253,7 @@
     "compile:development": "node esbuild.mjs",
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
-    "lint:js": "eslint . --cache",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
     "lint:js:fix": "eslint . --fix",
     "lint:glint": "glint",
     "watch": "node esbuild.mjs --watch"

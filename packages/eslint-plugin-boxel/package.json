@@ -16,7 +16,7 @@
   },
   "scripts": {
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint:fix": "eslint . --report-unused-disable-directives --fix",
     "start": "pnpm test:watch",
     "test": "vitest run",
     "test:coverage": "vitest --coverage",
