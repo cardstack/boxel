@@ -82,6 +82,7 @@ export async function reloadAndOpenAiAssistant(page: Page) {
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
   await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
+  await expect(page.locator('[data-test-ai-assistant-panel]')).toBeVisible();
   await expect(page.locator('[data-test-room]')).toHaveCount(1);
 }
 
