@@ -12,7 +12,6 @@ import * as glimmerTracking from '@glimmer/tracking';
 
 import * as dateFns from 'date-fns';
 import * as emberConcurrency from 'ember-concurrency';
-//@ts-expect-error no types available
 import * as emberConcurrencyAsyncArrowRuntime from 'ember-concurrency/-private/async-arrow-runtime';
 import * as cssUrl from 'ember-css-url';
 import * as emberModifier2 from 'ember-modifier';
