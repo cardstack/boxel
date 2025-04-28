@@ -67,22 +67,24 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
-  let isAiAssistantOpen = await page
-    .locator('[data-test-ai-assistant-panel]')
-    .isVisible();
+  const currentUrl = new URL(page.url());
+  const searchParams = new URLSearchParams(currentUrl.search);
+  const operatorModeState = JSON.parse(
+    decodeURIComponent(searchParams.get('operatorModeState')!),
+  );
+
   await page.reload();
-  // Persist the ai assistant panel open/closed state
-  if (isAiAssistantOpen) {
-    await expect(page.locator('[data-test-room]')).toHaveCount(1);
-  } else {
+  if (!operatorModeState.aiAssistantOpen) {
     await openAiAssistant(page);
+  } else {
+    await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
+    await expect(page.locator('[data-test-room]')).toHaveCount(1);
   }
 }
 
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
   await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
-  await expect(page.locator('[data-test-ai-assistant-panel]')).toBeVisible();
   await expect(page.locator('[data-test-room]')).toHaveCount(1);
 }
 
