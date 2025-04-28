@@ -4,6 +4,7 @@ const MISSING_INVOKABLES_CONFIG = require('../runtime-common/etc/eslint/missing-
 
 module.exports = {
   root: true,
+  reportUnusedDisableDirectives: true,
   env: {
     browser: true,
   },

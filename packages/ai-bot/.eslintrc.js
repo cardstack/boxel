@@ -2,6 +2,7 @@
 
 module.exports = {
   root: true,
+  reportUnusedDisableDirectives: true,
   env: {
     node: true,
   },
