@@ -18,7 +18,6 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Company } from './company';
 import { Contact } from './contact';
-import { CrmApp } from './crm-app';
 import { Deal } from './deal';
 import { StatusTagField } from './contact-status-tag';
 import { UrgencyTag } from './urgency-tag';
@@ -68,9 +67,6 @@ class EditTemplate extends Component<typeof Account> {
       </FieldContainer>
       <FieldContainer @label='Urgency Tag'>
         <@fields.urgencyTag />
-      </FieldContainer>
-      <FieldContainer @label='CRM App'>
-        <@fields.crmApp />
       </FieldContainer>
       <FieldContainer @label='Logo URL'>
         <@fields.thumbnailURL />
@@ -1256,7 +1252,6 @@ export class Account extends CardDef {
   static displayName = 'Account';
   static headerColor = '#f8f7fa';
   static icon = AccountIcon;
-  @field crmApp = linksTo(() => CrmApp);
   @field company = linksTo(() => Company);
   @field primaryContact = linksTo(() => Contact);
   @field contacts = linksToMany(() => Contact);

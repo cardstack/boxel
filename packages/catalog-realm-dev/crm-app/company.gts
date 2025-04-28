@@ -7,10 +7,8 @@ import {
   CardDef,
   field,
   contains,
-  linksTo,
 } from 'https://cardstack.com/base/card-api';
 
-import { CrmApp } from './crm-app';
 import {
   EntityDisplayWithIcon,
   FieldContainer,
@@ -37,9 +35,6 @@ class CompanyEditTemplate extends Component<typeof Company> {
       </FieldContainer>
       <FieldContainer @label='Stock Symbol'>
         <@fields.stockSymbol />
-      </FieldContainer>
-      <FieldContainer @label='CRM App'>
-        <@fields.crmApp />
       </FieldContainer>
     </div>
     <style scoped>
@@ -68,7 +63,6 @@ class ViewCompanyTemplate extends Component<typeof Company> {
 export class Company extends CardDef {
   static displayName = 'Company';
   static icon = CompanyIcon;
-  @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field industry = contains(StringField);
   @field headquartersAddress = contains(AddressField);

@@ -94,13 +94,6 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
       throw new Error('No realm url');
     }
 
-    if (!this.parentId) {
-      console.log('No CRM App');
-      everyArr.push({ eq: { 'crmApp.id': null } });
-    } else {
-      everyArr.push({ eq: { 'crmApp.id': this.parentId } });
-    }
-
     if (this.args.searchFilter) {
       everyArr.push(...this.args.searchFilter);
     }
@@ -208,11 +201,6 @@ export class CRMTaskPlanner extends GlimmerComponent<CRMTaskPlannerArgs> {
                 assignee: {
                   links: {
                     self: null,
-                  },
-                },
-                crmApp: {
-                  links: {
-                    self: this.parentId ?? null,
                   },
                 },
               },

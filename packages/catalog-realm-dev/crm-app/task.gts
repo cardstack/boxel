@@ -17,7 +17,6 @@ import {
 import CheckboxIcon from '@cardstack/boxel-icons/checkbox';
 import Calendar from '@cardstack/boxel-icons/calendar';
 
-import { CrmApp } from './crm-app';
 import { Contact } from './contact';
 import { Account } from './account';
 import { Deal } from './deal';
@@ -79,9 +78,6 @@ class TaskEdit extends Component<typeof CRMTask> {
       </FieldContainer>
       <FieldContainer @label='Tags'>
         <@fields.tags />
-      </FieldContainer>
-      <FieldContainer @label='CRM App'>
-        <@fields.crmApp />
       </FieldContainer>
     </div>
     <style scoped>
@@ -560,7 +556,6 @@ export class TaskEmbedded extends Component<typeof CRMTask> {
 export class CRMTask extends Task {
   static displayName = 'CRM Task';
   static icon = CheckboxIcon;
-  @field crmApp = linksTo(() => CrmApp);
   @field subtasks = linksToMany(() => CRMTask);
   @field status = contains(CRMTaskStatusField);
 

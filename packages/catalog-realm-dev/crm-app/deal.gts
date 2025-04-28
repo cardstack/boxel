@@ -29,7 +29,6 @@ import { on } from '@ember/modifier';
 import { Account } from './account';
 import { Company } from './company';
 import { Contact } from './contact';
-import { CrmApp } from './crm-app';
 import { DealEvent } from './deal-event';
 import { DealPriority } from './deal-priority';
 import { DealStatus } from './deal-status';
@@ -109,9 +108,6 @@ class EditTemplate extends Component<typeof Deal> {
       </FieldContainer>
       <FieldContainer @label='Event'>
         <@fields.event />
-      </FieldContainer>
-      <FieldContainer @label='CRM App'>
-        <@fields.crmApp />
       </FieldContainer>
       <FieldContainer @label='Logo URL'>
         <@fields.thumbnailURL />
@@ -1573,7 +1569,6 @@ export class Deal extends CardDef {
   static displayName = 'Deal';
   static headerColor = '#f8f7fa';
   static icon = DealIcon;
-  @field crmApp = linksTo(() => CrmApp);
   @field name = contains(StringField);
   @field account = linksTo(() => Account);
   @field status = contains(DealStatus);

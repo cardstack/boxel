@@ -22,7 +22,6 @@ import Email from '@cardstack/boxel-icons/mail';
 import Linkedin from '@cardstack/boxel-icons/linkedin';
 import XIcon from '@cardstack/boxel-icons/brand-x';
 
-import { CrmApp } from './crm-app';
 import { Company } from './company';
 import { StatusTagField } from './contact-status-tag';
 
@@ -85,9 +84,6 @@ class EditTemplate extends Component<typeof Contact> {
       </FieldContainer>
       <FieldContainer @label='Social Links'>
         <@fields.socialLinks />
-      </FieldContainer>
-      <FieldContainer @label='CRM App'>
-        <@fields.crmApp />
       </FieldContainer>
       <FieldContainer @label='Status'>
         <@fields.statusTag />
@@ -495,7 +491,6 @@ export class Contact extends CardDef {
   @field firstName = contains(StringField);
   @field lastName = contains(StringField);
   @field position = contains(StringField);
-  @field crmApp = linksTo(() => CrmApp);
   @field company = linksTo(() => Company);
   @field department = contains(StringField);
   @field primaryEmail = contains(EmailField);

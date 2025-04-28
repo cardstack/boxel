@@ -361,13 +361,6 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     let doc: LooseSingleCardDocument = {
       data: {
         type: 'card',
-        relationships: {
-          crmApp: {
-            links: {
-              self: this.args.model.id ?? null,
-            },
-          },
-        },
         meta: {
           adoptsFrom: ref,
         },
@@ -395,12 +388,6 @@ class CrmAppTemplate extends Component<typeof CrmApp> {
     const defaultFilter = [
       {
         type: activeFilter.cardRef,
-      },
-      {
-        on: activeFilter.cardRef,
-        eq: {
-          'crmApp.id': this.args.model.id,
-        },
       },
     ];
 
