@@ -179,7 +179,7 @@ export default class CopyButton extends Component<Signature> {
           // selections then don't show the copy button
           return undefined;
         }
-        // eslint-disable-next-line no-case-declarations
+
         let sourceCard =
           this.topMostCardCollection?.cards[
             indexCardIndicies[0] === LEFT ? RIGHT : LEFT
