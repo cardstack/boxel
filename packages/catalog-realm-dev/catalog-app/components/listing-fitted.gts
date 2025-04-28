@@ -295,7 +295,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           opacity: 1;
         }
         .carousel:hover .carousel-arrow {
-          color: var(--boxel-300);
+          color: var(--boxel-200);
         }
 
         .preview-button {
@@ -314,12 +314,6 @@ class CarouselComponent extends GlimmerComponent<Signature> {
           box-shadow:
             0 15px 25px rgba(0, 0, 0, 0.2),
             0 7px 15px rgba(0, 0, 0, 0.15);
-        }
-
-        @container (inline-size <= 300px) {
-          .carousel-nav {
-            display: none;
-          }
         }
 
         @container (max-height: 100px) {
