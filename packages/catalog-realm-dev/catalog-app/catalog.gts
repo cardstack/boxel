@@ -577,9 +577,6 @@ class Isolated extends Component<typeof Catalog> {
     </CatalogLayout>
 
     <style scoped>
-      :global(:root) {
-        --catalog-layout-padding-top: var(--boxel-sp-lg);
-      }
       .catalog-tab-header :deep(.app-title-group) {
         display: none;
       }

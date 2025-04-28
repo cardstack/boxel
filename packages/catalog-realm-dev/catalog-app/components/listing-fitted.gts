@@ -159,14 +159,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 
     <style scoped>
       @layer {
-        :global(:root) {
-          --boxel-carousel-z-index: 1;
-        }
-        :global(.actions-overlay.hovered) {
-          z-index: calc(var(--boxel-carousel-z-index) + 1) !important;
-        }
-
         .carousel {
+          --boxel-carousel-z-index: 1;
           position: relative;
           width: 100%;
           height: 100%;
