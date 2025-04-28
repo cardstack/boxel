@@ -87,7 +87,7 @@
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
     "eslint-plugin-qunit": "catalog:",
-    "glimmer-scoped-css": "^0.6.0",
+    "glimmer-scoped-css": "catalog:",
     "loader.js": "^4.7.0",
     "normalize.css": "8.0.1",
     "prettier": "^3.0.3",

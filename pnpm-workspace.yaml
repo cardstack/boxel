@@ -24,5 +24,6 @@ catalog:
   eslint-plugin-simple-import-sort: ^8.0.0
   eslint-plugin-typescript-sort-keys: ^3.2.0
   eslint-plugin-unicorn: ^51.0.1
+  glimmer-scoped-css: ^0.8.1
   qunit: ^2.24.1
   qunit-dom: ^2.0.0
