@@ -17,7 +17,7 @@
     "lint:hbs": "ember-template-lint .",
     "lint:hbs:fix": "ember-template-lint . --fix",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
-    "lint:js:fix": "eslint . --fix",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint",
     "start": "ember serve",
     "test": "concurrently \"pnpm:lint\" \"pnpm:test:*\" --names \"lint,test:\"",

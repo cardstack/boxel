@@ -106,7 +106,7 @@
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
     "lint:js": "eslint . --report-unused-disable-directives --cache",
-    "lint:js:fix": "eslint . --fix",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint",
     "lint:test-shards": "ts-node --transpileOnly scripts/lint-test-shards.ts",
     "full-reset": "./scripts/full-reset.sh",
