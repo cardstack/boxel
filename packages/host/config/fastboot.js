@@ -13,7 +13,9 @@ module.exports = function () {
     buildSandboxGlobals(defaultGlobals) {
       return Object.assign({}, defaultGlobals, {
         URL: globalThis.URL,
+        // @ts-expect-error Request experimental until Node 21
         Request: globalThis.Request,
+        // @ts-expect-error fetch experimental until Node 21
         fetch: globalThis.fetch,
         btoa,
       });
