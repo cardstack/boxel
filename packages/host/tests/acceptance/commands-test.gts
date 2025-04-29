@@ -757,6 +757,21 @@ Hi, world!
     await waitFor('[data-test-apply-code-button]');
     await click('[data-test-apply-code-button]');
     await waitUntil(() => getMonacoContent() === 'Hi, world!');
+
+    let commandResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      1,
+      'command result event is dispatched',
+    );
+
+    // TODO: assert that matrix events exist to reflect that the patch was applied
   });
 
   test('can patch code when there are multiple patches using "Accept All" button', async function (assert) {
@@ -826,6 +841,19 @@ We are one!
     // We can see content that is the result of 2 patches made to this file (hi.txt)
     await waitUntil(
       () => getMonacoContent() === 'Greetings, world!\nWe are one!',
+    );
+
+    let commandResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      commandResultEvents.length,
+      2,
+      'command result events are dispatched',
     );
   });
 

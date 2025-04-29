@@ -5,14 +5,15 @@ import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 
-import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 
 export class CodePatchAction {
+  eventId: string;
   fileUrl: string;
+  index: number;
   searchReplaceBlock: string;
 
   @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
@@ -23,23 +24,32 @@ export class CodePatchAction {
 
   constructor(owner: Owner, codeData: CodeData) {
     setOwner(this, owner);
-    if (!codeData.fileUrl || !codeData.searchReplaceBlock) {
-      throw new Error('fileUrl and searchReplaceBlock are required');
+    if (
+      !codeData.fileUrl ||
+      !codeData.searchReplaceBlock ||
+      !codeData.index ||
+      !codeData.eventId
+    ) {
+      throw new Error(
+        'fileUrl and searchReplaceBlock and index and eventId are required',
+      );
     }
     this.fileUrl = codeData.fileUrl;
+    this.index = codeData.index;
+    this.eventId = codeData.eventId;
     this.searchReplaceBlock = codeData.searchReplaceBlock;
   }
 
   patchCodeTask = dropTask(async () => {
     this.patchCodeTaskState = 'applying';
     try {
-      let patchCodeCommand = new PatchCodeCommand(
-        this.commandService.commandContext,
-      );
-      await patchCodeCommand.execute({
-        fileUrl: this.fileUrl,
-        codeBlocks: [this.searchReplaceBlock],
-      });
+      this.commandService.patchCode(this.fileUrl, [
+        {
+          codeBlock: this.searchReplaceBlock,
+          eventId: this.eventId,
+          index: this.index,
+        },
+      ]);
       this.patchCodeTaskState = 'applied';
     } catch (error) {
       console.error(error);

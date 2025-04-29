@@ -448,6 +448,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
             ApplyCodePatchButton
             codePatch=@codeData.searchReplaceBlock
             fileUrl=@codeData.fileUrl
+            index=@codeData.index
           )
         )
       }}

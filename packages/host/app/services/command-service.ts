@@ -20,6 +20,7 @@ import {
   delay,
 } from '@cardstack/runtime-common';
 
+import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
@@ -277,6 +278,18 @@ export default class CommandService extends Service {
       typedInput = undefined;
     }
     return typedInput;
+  }
+
+  async patchCode(
+    fileUrl: string,
+    codeBlocks: { codeBlock: string; eventId: string; index: number }[],
+  ) {
+    let patchCodeCommand = new PatchCodeCommand(this.commandContext);
+    await patchCodeCommand.execute({
+      fileUrl,
+      codeBlocks: codeBlocks.map((codeBlock) => codeBlock.codeBlock),
+    });
+    // TODO: create command result events
   }
 }
 

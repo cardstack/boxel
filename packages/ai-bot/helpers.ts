@@ -249,8 +249,11 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
     (commandRequest: Partial<EncodedCommandRequest>) => {
       return history.slice(lastEventIndex).some((event) => {
         return (
-          event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-          event.content.commandRequestId === commandRequest.id
+          (event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+            event.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE) ||
+          (event.content.msgtype === APP_BOXEL_COMMAND_Re &&
+            event.content.commandRequestId === commandRequest.id)
         );
       });
     },

@@ -17,8 +17,6 @@ import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
-import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-
 import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
 import {
   type HtmlTagGroup,
@@ -41,12 +39,15 @@ export interface CodeData {
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
+  eventId: string | null;
+  index: number;
 }
 
 interface FormattedMessageSignature {
   Element: HTMLDivElement;
   Args: {
     html: SafeString;
+    eventId: string;
     monacoSDK: MonacoSDK;
     renderCodeBlocks: boolean;
     isStreaming: boolean;
@@ -164,19 +165,19 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       {} as Record<string, CodePatchAction[]>,
     );
 
-    let patchCodeCommand = new PatchCodeCommand(
-      this.commandService.commandContext,
-    );
-
     // TODO: Handle possible errors (fetching source, patching, saving source)
     // Handle in CS-8369
     for (let fileUrl in codePatchActionsGroupedByFileUrl) {
-      await patchCodeCommand.execute({
+      this.commandService.patchCode(
         fileUrl,
-        codeBlocks: codePatchActionsGroupedByFileUrl[fileUrl].map(
-          (codePatchAction) => codePatchAction.searchReplaceBlock,
-        ),
-      });
+        codePatchActionsGroupedByFileUrl[fileUrl].map((codePatchAction) => {
+          return {
+            codeBlock: codePatchAction.searchReplaceBlock,
+            eventId: codePatchAction.eventId,
+            index: codePatchAction.index,
+          };
+        }),
+      );
       codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
         codePatchAction.patchCodeTaskState = 'applied';
       });
@@ -212,7 +213,10 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         }}
         {{#each this.htmlGroups as |htmlGroup index|}}
           {{#if (eq htmlGroup.type 'pre_tag')}}
-            {{#let (extractCodeData htmlGroup.content) as |codeData|}}
+            {{#let
+              (extractCodeData htmlGroup.content @eventId index)
+              as |codeData|
+            }}
               <CodeBlock
                 @monacoSDK={{@monacoSDK}}
                 @codeData={{codeData}}
