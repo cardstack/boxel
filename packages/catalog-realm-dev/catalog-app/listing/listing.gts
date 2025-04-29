@@ -14,6 +14,7 @@ import {
   isResolvedCodeRef,
   type CopyCardsWithCodeRef,
   type ResolvedCodeRef,
+  Actions,
 } from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
@@ -63,6 +64,95 @@ function getNewPackageName(listingName?: string) {
   return newPackageName;
 }
 
+export async function installListing(args: any, realmUrl: string) {
+  const listing = args.model as Partial<Listing>;
+  const copyMeta: CopyMeta[] = [];
+
+  const newModulePath = getNewPackageName(listing.name).concat('/');
+  const targetUrl = new URL(newModulePath, realmUrl).href;
+
+  // Copy the gts file based on the attached spec's moduleHref
+  for (const spec of listing.specs ?? []) {
+    const absoluteModulePath = spec.moduleHref;
+    const relativeModulePath = spec.ref.module;
+    const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
+    const newPath = newModulePath.concat(normalizedPath);
+    const fileTargetUrl = new URL(newPath, realmUrl).href;
+    const targetFilePath = fileTargetUrl.concat('.gts');
+
+    await args.context?.actions?.copySource?.(
+      absoluteModulePath,
+      targetFilePath,
+    );
+
+    copyMeta.push({
+      sourceCodeRef: {
+        module: absoluteModulePath,
+        name: spec.ref.name,
+      },
+      targetCodeRef: {
+        module: fileTargetUrl,
+        name: spec.ref.name,
+      },
+    });
+  }
+
+  if (listing.examples) {
+    // Create serialized objects for each example with modified adoptsFrom
+    const results = listing.examples.map((instance: CardDef) => {
+      let adoptsFrom = instance[meta]?.adoptsFrom;
+      if (!adoptsFrom) {
+        return null;
+      }
+      let exampleCodeRef = instance.id
+        ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
+        : adoptsFrom;
+      if (!isResolvedCodeRef(exampleCodeRef)) {
+        throw new Error('exampleCodeRef is NOT resolved');
+      }
+      let maybeCopyMeta = copyMeta.find(
+        (meta) =>
+          meta.sourceCodeRef.module ===
+            (exampleCodeRef as ResolvedCodeRef).module &&
+          meta.sourceCodeRef.name === (exampleCodeRef as ResolvedCodeRef).name,
+      );
+      if (maybeCopyMeta) {
+        return {
+          sourceCard: instance,
+          codeRef: maybeCopyMeta.targetCodeRef,
+        };
+      }
+      return null;
+    });
+    const copyCardsWithCodeRef = results.filter(
+      (result) => result !== null,
+    ) as CopyCardsWithCodeRef[];
+    await args.context?.actions?.copyCards?.(copyCardsWithCodeRef, targetUrl);
+  }
+
+  if (listing instanceof SkillListing) {
+    await Promise.all(
+      listing.skills.map((skill) => {
+        args.context?.actions?.copy?.(skill, realmUrl);
+      }),
+    );
+  }
+}
+
+export async function setupAllRealmsInfo(args: any) {
+  let allRealmsInfo =
+    (await (args.context?.actions as Actions)?.allRealmsInfo?.()) ?? {};
+  let writableRealms: string[] = [];
+  if (allRealmsInfo) {
+    Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
+      if (realmInfo.canWrite) {
+        writableRealms.push(realmUrl);
+      }
+    });
+  }
+  return writableRealms;
+}
+
 class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
   @tracked createdInstances = false;
@@ -95,17 +185,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   _setup = task(async () => {
-    let allRealmsInfo =
-      (await this.args.context?.actions?.allRealmsInfo?.()) ?? {};
-    let writableRealms: string[] = [];
-    if (allRealmsInfo) {
-      Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
-        if (realmInfo.canWrite) {
-          writableRealms.push(realmUrl);
-        }
-      });
-    }
-    this.writableRealms = writableRealms;
+    this.writableRealms = await setupAllRealmsInfo(this.args);
   });
 
   _use = task(async (realmUrl: string) => {
@@ -138,82 +218,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   });
 
   _install = task(async (realmUrl: string) => {
-    const copyMeta: CopyMeta[] = [];
-
-    const newModulePath = getNewPackageName(this.args.model?.name).concat('/');
-    const targetUrl = new URL(newModulePath, realmUrl).href;
-
-    // Copy the gts file based on the attached spec's moduleHref
-    for (const spec of this.args.model?.specs ?? []) {
-      const absoluteModulePath = spec.moduleHref;
-      const relativeModulePath = spec.ref.module;
-      const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-      const newPath = newModulePath.concat(normalizedPath);
-      const fileTargetUrl = new URL(newPath, realmUrl).href;
-      const targetFilePath = fileTargetUrl.concat('.gts');
-
-      await this.args.context?.actions?.copySource?.(
-        absoluteModulePath,
-        targetFilePath,
-      );
-
-      copyMeta.push({
-        sourceCodeRef: {
-          module: absoluteModulePath,
-          name: spec.ref.name,
-        },
-        targetCodeRef: {
-          module: fileTargetUrl,
-          name: spec.ref.name,
-        },
-      });
-    }
-
-    if (this.args.model.examples) {
-      // Create serialized objects for each example with modified adoptsFrom
-      const results = this.args.model.examples.map((instance: CardDef) => {
-        let adoptsFrom = instance[meta]?.adoptsFrom;
-        if (!adoptsFrom) {
-          return null;
-        }
-        let exampleCodeRef = instance.id
-          ? codeRefWithAbsoluteURL(adoptsFrom, new URL(instance.id))
-          : adoptsFrom;
-        if (!isResolvedCodeRef(exampleCodeRef)) {
-          throw new Error('exampleCodeRef is NOT resolved');
-        }
-        let maybeCopyMeta = copyMeta.find(
-          (meta) =>
-            meta.sourceCodeRef.module ===
-              (exampleCodeRef as ResolvedCodeRef).module &&
-            meta.sourceCodeRef.name ===
-              (exampleCodeRef as ResolvedCodeRef).name,
-        );
-        if (maybeCopyMeta) {
-          return {
-            sourceCard: instance,
-            codeRef: maybeCopyMeta.targetCodeRef,
-          };
-        }
-        return null;
-      });
-      const copyCardsWithCodeRef = results.filter(
-        (result) => result !== null,
-      ) as CopyCardsWithCodeRef[];
-      await this.args.context?.actions?.copyCards?.(
-        copyCardsWithCodeRef,
-        targetUrl,
-      );
-    }
-
-    if (this.args.model instanceof SkillListing) {
-      await Promise.all(
-        this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copy?.(skill, realmUrl);
-        }),
-      );
-    }
-
+    await installListing(this.args, realmUrl);
     this.installedListing = true;
   });
 
