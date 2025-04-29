@@ -10,10 +10,11 @@ import {
 
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+
 import HostBaseCommand from '../lib/host-base-command';
 
 import type MatrixService from '../services/matrix-service';
-import type { FileDef } from 'https://cardstack.com/base/file-api';
 
 export default class CreateAiAssistantRoomCommand extends HostBaseCommand<
   typeof BaseCommandModule.CreateAIAssistantRoomInput,
