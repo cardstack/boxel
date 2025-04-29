@@ -7,6 +7,7 @@ interface CatalogLayoutSignature {
     showSidebar?: boolean; // Control visibility of sidebar
   };
   Blocks: {
+    header?: []; //  header content
     sidebar?: []; //  sidebar content
     content: []; // Main content (required)
   };
@@ -20,6 +21,8 @@ export default class CatalogLayout extends GlimmerComponent<CatalogLayoutSignatu
 
   <template>
     <div class='layout-container' ...attributes>
+      {{yield to='header'}}
+
       <div class='layout-body'>
         {{#if (and (has-block 'sidebar') this.showSidebar)}}
           <aside class='sidebar'>
