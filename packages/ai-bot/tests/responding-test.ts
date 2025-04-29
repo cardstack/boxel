@@ -638,7 +638,7 @@ module('Responding', (hooks) => {
     );
   });
 
-  test('When content exceeds max event size threshold, it will be split into multiple events', async () => {
+  test('When content exceeds max event size threshold, it will be split into a new event', async () => {
     responder.matrixResponsePublisher.eventSizeMax = 1024 * 2.5; // 2.5KB max event size
 
     let longContentPart1 = 'a'.repeat(1024); // 1KB of content
@@ -711,8 +711,61 @@ module('Responding', (hooks) => {
     );
   });
 
+  test('When new content is too large to fit in eventMaxSize, it will be split into multiple events', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024; // 1KB max event size
+
+    let longContentPart1 = 'a'.repeat(512); // 0.5KB of content
+    let longContentPart2 = 'b'.repeat(1024) + 'c'.repeat(1024); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent(longContentPart1));
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(longContentPart1 + longContentPart2),
+    );
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    console.log(JSON.stringify(sentEvents, null, 2));
+    assert.equal(sentEvents.length, 5, 'Five events should be sent');
+
+    assert.true(sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.true(
+      sentEvents[2].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.true(sentEvents[2].content.body.startsWith('a'));
+    assert.true(sentEvents[2].content.body.endsWith('b'));
+
+    assert.true(sentEvents[3].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.true(
+      sentEvents[3].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.equal(
+      sentEvents[3].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.true(sentEvents[3].content.body.startsWith('b'));
+    assert.true(sentEvents[3].content.body.endsWith('c'));
+
+    assert.strictEqual(
+      sentEvents[4].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.true(
+      sentEvents[4].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.equal(
+      sentEvents[4].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[3].eventId,
+    );
+    assert.true(sentEvents[4].content.body.startsWith('c'));
+    assert.true(sentEvents[4].content.body.endsWith('c'));
+  });
+
   // TODO test when error happens after continuation in progress
-  // TODO test when new content is too large to fit in eventMaxSize
   // TODO test when reasoning is too large to fit in eventMaxSize
   // TODO test when reasoning + content is too large to fit in eventMaxSize
 });

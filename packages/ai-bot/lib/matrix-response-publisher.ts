@@ -36,13 +36,27 @@ export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
 
 class ResponseEventData {
   needsContinuation = false;
+  eventId?: string;
   contentStartIndex: number = 0;
   contentEndIndex: number = 0;
   constructor(
-    readonly eventId: string,
+    eventId: string | undefined,
+    readonly eventSizeMax: number,
     contentStartIndex: number = 0,
   ) {
+    this.eventId = eventId;
     this.contentStartIndex = contentStartIndex;
+  }
+
+  contentWouldExceedMaxSize(content: string): boolean {
+    return content.length - this.contentStartIndex > this.eventSizeMax;
+  }
+
+  contentForNextMessage(content: string): string {
+    return content.slice(
+      this.contentStartIndex,
+      this.contentStartIndex + this.eventSizeMax,
+    );
   }
 }
 
@@ -81,18 +95,15 @@ export default class MatrixResponsePublisher {
         'No current response event. Ensure that the initial message has been sent.',
       );
     }
-    if (
-      this.responseState.latestContent.length -
-        this.currentResponseEvent.contentStartIndex >
-      this.eventSizeMax
+    while (
+      this.currentResponseEvent.contentWouldExceedMaxSize(
+        this.responseState.latestContent,
+      )
     ) {
-      let contentForCurrentEvent = this.responseState.latestContent.slice(
-        this.currentResponseEvent.contentStartIndex,
-        this.currentResponseEvent.contentStartIndex + this.eventSizeMax,
-      );
-      this.currentResponseEvent.contentEndIndex =
-        this.currentResponseEvent.contentStartIndex +
-        contentForCurrentEvent.length;
+      let contentForCurrentEvent =
+        this.currentResponseEvent.contentForNextMessage(
+          this.responseState.latestContent,
+        );
       // TODO: type as Partial<CardMessageContent>
       let extraData: any = {
         isStreamingFinished: true,
@@ -102,7 +113,7 @@ export default class MatrixResponsePublisher {
         extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
           this.previousResponseEventId;
       }
-      await sendMessageEvent(
+      let messageEvent = await sendMessageEvent(
         this.client,
         this.roomId,
         contentForCurrentEvent,
@@ -113,7 +124,20 @@ export default class MatrixResponsePublisher {
         ),
         this.responseState.latestReasoning,
       );
+      this.currentResponseEvent.contentEndIndex =
+        this.currentResponseEvent.contentStartIndex +
+        contentForCurrentEvent.length;
       this.currentResponseEvent.needsContinuation = true;
+      if (!this.currentResponseEvent.eventId) {
+        this.currentResponseEvent.eventId = messageEvent.event_id;
+      }
+      this.responseEvents?.push(
+        new ResponseEventData(
+          undefined,
+          this.eventSizeMax,
+          this.currentResponseEvent.contentEndIndex,
+        ),
+      );
     }
 
     let contentForCurrentEvent;
@@ -131,35 +155,27 @@ export default class MatrixResponsePublisher {
     let extraData: any = {
       isStreamingFinished: this.responseState.isStreamingFinished,
     };
-    if (this.previousResponseEventId) {
-      extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
-        this.previousResponseEventId;
-    }
     if (this.currentResponseEvent.needsContinuation) {
       extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
         this.currentResponseEventId;
+    } else if (this.previousResponseEventId) {
+      extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
+        this.previousResponseEventId;
     }
 
-    let message = await sendMessageEvent(
+    let messageEvent = await sendMessageEvent(
       this.client,
       this.roomId,
       contentForCurrentEvent,
-      this.currentResponseEvent.needsContinuation
-        ? undefined
-        : this.currentResponseEventId,
+      this.currentResponseEventId,
       extraData,
       this.responseState.toolCalls.map((toolCall) =>
         toCommandRequest(toolCall as ChatCompletionMessageToolCall),
       ),
       this.responseState.latestReasoning,
     );
-    if (this.currentResponseEvent.needsContinuation) {
-      this.responseEvents?.push(
-        new ResponseEventData(
-          message.event_id,
-          this.currentResponseEvent.contentEndIndex + 1,
-        ),
-      );
+    if (!this.currentResponseEvent.eventId) {
+      this.currentResponseEvent.eventId = messageEvent.event_id;
     }
   }
 
@@ -186,6 +202,8 @@ export default class MatrixResponsePublisher {
       [],
       thinkingMessage,
     );
-    this.responseEvents = [new ResponseEventData(initialMessage.event_id)];
+    this.responseEvents = [
+      new ResponseEventData(initialMessage.event_id, this.eventSizeMax),
+    ];
   }
 }
