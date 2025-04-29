@@ -71,6 +71,12 @@ export async function installListing(args: any, realmUrl: string) {
   const newModulePath = getNewPackageName(listing.name).concat('/');
   const targetUrl = new URL(newModulePath, realmUrl).href;
 
+  // first spec as the selected code ref with new url
+  // if there are examples, take the first example's code ref
+  let selectedCodeRef;
+  let shouldPersistPlaygroundSelection = false;
+  let firstExampleCardId;
+
   // Copy the gts file based on the attached spec's moduleHref
   for (const spec of listing.specs ?? []) {
     const absoluteModulePath = spec.moduleHref;
@@ -95,6 +101,13 @@ export async function installListing(args: any, realmUrl: string) {
         name: spec.ref.name,
       },
     });
+
+    if (!selectedCodeRef) {
+      selectedCodeRef = {
+        module: fileTargetUrl,
+        name: spec.ref.name,
+      };
+    }
   }
 
   if (listing.examples) {
@@ -117,6 +130,11 @@ export async function installListing(args: any, realmUrl: string) {
           meta.sourceCodeRef.name === (exampleCodeRef as ResolvedCodeRef).name,
       );
       if (maybeCopyMeta) {
+        if (!shouldPersistPlaygroundSelection) {
+          selectedCodeRef = maybeCopyMeta.targetCodeRef;
+          shouldPersistPlaygroundSelection = true;
+        }
+
         return {
           sourceCard: instance,
           codeRef: maybeCopyMeta.targetCodeRef,
@@ -127,7 +145,11 @@ export async function installListing(args: any, realmUrl: string) {
     const copyCardsWithCodeRef = results.filter(
       (result) => result !== null,
     ) as CopyCardsWithCodeRef[];
-    await args.context?.actions?.copyCards?.(copyCardsWithCodeRef, targetUrl);
+    const copyCardResults = await args.context?.actions?.copyCards?.(
+      copyCardsWithCodeRef,
+      targetUrl,
+    );
+    firstExampleCardId = copyCardResults[0].newCardId;
   }
 
   if (listing instanceof SkillListing) {
@@ -137,6 +159,12 @@ export async function installListing(args: any, realmUrl: string) {
       }),
     );
   }
+
+  return {
+    selectedCodeRef,
+    shouldPersistPlaygroundSelection,
+    firstExampleCardId,
+  };
 }
 
 export async function setupAllRealmsInfo(args: any) {

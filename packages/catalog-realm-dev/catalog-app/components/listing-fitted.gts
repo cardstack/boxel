@@ -384,8 +384,43 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   }
 
   _remix = task(async (realmUrl: string) => {
-    await installListing(this.args, realmUrl);
+    const {
+      selectedCodeRef,
+      shouldPersistPlaygroundSelection,
+      firstExampleCardId,
+    } = await installListing(this.args, realmUrl);
+    if (
+      selectedCodeRef &&
+      shouldPersistPlaygroundSelection &&
+      firstExampleCardId
+    ) {
+      const codePath = selectedCodeRef.module.concat('.gts');
+      const moduleId = [selectedCodeRef.module, selectedCodeRef.name].join('/');
+      await this.args.context?.actions?.updatePlaygroundSelection(
+        moduleId,
+        firstExampleCardId,
+        'isolated',
+      );
+
+      await window.localStorage.setItem(
+        'code-mode-panel-selections',
+        JSON.stringify({
+          [codePath]: 'playground',
+        }),
+      );
+    }
+
     this.installedListing = true;
+
+    if (selectedCodeRef) {
+      const codePath = selectedCodeRef.module.concat('.gts');
+      await this.args.context?.actions?.updateCodePathWithSelection(
+        selectedCodeRef,
+        selectedCodeRef.name,
+        undefined,
+      );
+      await this.args.context?.actions?.switchSubmode('code', codePath);
+    }
   });
 
   @action remix(realmUrl: string) {

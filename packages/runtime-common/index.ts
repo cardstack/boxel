@@ -433,6 +433,20 @@ export interface CatalogActions {
     cards: CopyCardsWithCodeRef[],
     targetUrl: string,
   ) => Promise<CardDef[]>;
+  updateCodePathWithSelection: (
+    codeRef?: CodeRef,
+    localName?: string,
+    fieldName?: string,
+  ) => Promise<void>;
+  updatePlaygroundSelection: (
+    moduleId: string,
+    cardId: string,
+    format: Format,
+  ) => Promise<void>;
+  switchSubmode: (
+    submode: 'interact' | 'code',
+    codePath: string,
+  ) => Promise<void>;
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;

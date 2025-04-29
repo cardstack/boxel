@@ -48,6 +48,9 @@ import {
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
 import CopySourceCommand from '@cardstack/host/commands/copy-source';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
+import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
+import UpdateCodePathWithSelectionCommand from '@cardstack/host/commands/update-code-path-with-selection';
+import UpdatePlaygroundSelectionCommand from '@cardstack/host/commands/update-playground-selection';
 
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -379,6 +382,27 @@ export default class InteractSubmode extends Component {
       ): Promise<CardDef[]> => {
         return await here._copyCards.perform(cards, targetUrl);
       },
+      updateCodePathWithSelection: async (
+        codeRef?: CodeRef,
+        localName?: string,
+        fieldName?: string,
+      ) => {
+        await here._updateCodePathWithSelection.perform(
+          codeRef,
+          localName,
+          fieldName,
+        );
+      },
+      updatePlaygroundSelection: async (
+        moduleId: string,
+        cardId: string,
+        format: Format,
+      ) => {
+        await here._updatePlaygroundSelection.perform(moduleId, cardId, format);
+      },
+      switchSubmode: async (submode: Submode, codePath: string) => {
+        await here._switchSubmode.perform(submode, codePath);
+      },
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
       },
@@ -548,6 +572,36 @@ export default class InteractSubmode extends Component {
           return newCard;
         }),
       );
+    },
+  );
+
+  private _switchSubmode = task(async (submode: Submode, codePath: string) => {
+    let { commandContext } = this.commandService;
+    await new SwitchSubmodeCommand(commandContext).execute({
+      submode,
+      codePath,
+    });
+  });
+
+  private _updateCodePathWithSelection = task(
+    async (codeRef?: CodeRef, localName?: string, fieldName?: string) => {
+      let { commandContext } = this.commandService;
+      await new UpdateCodePathWithSelectionCommand(commandContext).execute({
+        codeRef: isResolvedCodeRef(codeRef) ? codeRef : undefined,
+        localName,
+        fieldName,
+      });
+    },
+  );
+
+  private _updatePlaygroundSelection = task(
+    async (moduleId: string, cardId: string, format: Format) => {
+      let { commandContext } = this.commandService;
+      await new UpdatePlaygroundSelectionCommand(commandContext).execute({
+        moduleId,
+        cardId,
+        format,
+      });
     },
   );
 
