@@ -11,13 +11,22 @@ import cssUrl from 'ember-css-url';
 
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
+import { task } from 'ember-concurrency';
 import { on } from '@ember/modifier';
-import { add, eq } from '@cardstack/boxel-ui/helpers';
+import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
-import { type Listing } from '../listing/listing';
+import {
+  type Listing,
+  setupAllRealmsInfo,
+  installListing,
+} from '../listing/listing';
 
-import { BoxelButton } from '@cardstack/boxel-ui/components';
+import {
+  BoxelDropdown,
+  BoxelButton,
+  Menu as BoxelMenu,
+} from '@cardstack/boxel-ui/components';
 
 interface Signature {
   Element: HTMLElement;
@@ -331,6 +340,32 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 }
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
+  @tracked installedListing = false;
+  @tracked writableRealms: string[] = [];
+
+  constructor(owner: any, args: any) {
+    super(owner, args);
+    this._setup.perform();
+  }
+
+  _setup = task(async () => {
+    this.writableRealms = await setupAllRealmsInfo(this.args);
+  });
+
+  get remixRealmOptions() {
+    return this.writableRealms.map((realmUrl) => {
+      return new MenuItem(realmUrl, 'action', {
+        action: () => {
+          this.remix(realmUrl);
+        },
+      });
+    });
+  }
+
+  get remixButtonDisabled() {
+    return this.installedListing || !this.args.context?.actions?.copySource;
+  }
+
   get firstImage() {
     return this.args.model.images?.[0];
   }
@@ -348,9 +383,18 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.tags?.[0]?.name;
   }
 
-  @action remix(e: MouseEvent) {
+  _remix = task(async (realmUrl: string) => {
+    await installListing(this.args, realmUrl);
+    this.installedListing = true;
+  });
+
+  @action remix(realmUrl: string) {
+    this._remix.perform(realmUrl);
+  }
+
+  @action
+  _stopPropagation(e: MouseEvent) {
     e.stopPropagation();
-    console.log('remix');
   }
 
   <template>
@@ -380,14 +424,33 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           {{#if this.hasTags}}
             <span class='card-tags'># {{this.firstTagName}}</span>
           {{/if}}
-          <BoxelButton
-            @kind='primary'
-            @size='extra-small'
-            class='card-remix-button'
-            {{on 'click' this.remix}}
-          >
-            Remix
-          </BoxelButton>
+          <BoxelDropdown>
+            <:trigger as |bindings|>
+              <BoxelButton
+                data-test-catalog-listing-remix-button
+                @kind='primary'
+                @size='extra-small'
+                class='card-remix-button'
+                @disabled={{this.remixButtonDisabled}}
+                {{on 'click' (fn this._stopPropagation)}}
+                {{bindings}}
+              >
+                {{#if this._remix.isRunning}}
+                  Installing...
+                {{else if this.installedListing}}
+                  Installed
+                {{else}}
+                  Remix
+                {{/if}}
+              </BoxelButton>
+            </:trigger>
+            <:content as |dd|>
+              <BoxelMenu
+                @closeMenu={{dd.close}}
+                @items={{this.remixRealmOptions}}
+              />
+            </:content>
+          </BoxelDropdown>
         </div>
       </div>
     </div>
