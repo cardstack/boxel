@@ -1141,8 +1141,8 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(`[data-test-card-catalog-go-button]`);
     });
 
-    test<TestContextWithSave>('new card is created in the realm that has no results from card chooser', async function (assert) {
-      assert.expect(2);
+    test<TestContextWithSave>('new linked card is created in a different realm than its consuming reference', async function (assert) {
+      assert.expect(6);
       await visitOperatorMode({
         stacks: [
           [
@@ -1154,8 +1154,39 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      this.onSave((url) => {
+      let consumerSaved = new Deferred<void>();
+      let consumerSaveCount = 0;
+      let newLinkId: string | undefined;
+      this.onSave((url, doc) => {
+        doc = doc as SingleCardDocument;
+        if (url.href === `${testRealmURL}Person/fadhlan`) {
+          consumerSaveCount++;
+          if (consumerSaveCount === 1) {
+            // the first time we save the consumer we set the relationship to null
+            // as we are still waiting for the other realm to assign an ID to the new linked card
+            assert.strictEqual(doc.included!.length, 1);
+            assert.strictEqual(
+              doc.included![0].id,
+              `${testRealmURL}Pet/mango`,
+              "the side loaded resources don't include the newly created card yet",
+            );
+          }
+          if (consumerSaveCount === 2) {
+            // as soon as the other realm assigns an id to the linked card we then
+            // save the consumer with a relationship to the linked card's id
+            assert.deepEqual(
+              doc.data?.relationships?.['friends.1'],
+              {
+                links: { self: newLinkId! },
+                data: { type: 'card', id: newLinkId! },
+              },
+              'the "friends.1" relationship was populated with the linked card\'s new id',
+            );
+            consumerSaved.fulfill();
+          }
+        }
         if (url.href.includes('Pet')) {
+          newLinkId = url.href;
           assert.ok(
             url.href.startsWith(testRealm3URL),
             `The pet card is saved in the selected realm ${testRealm3URL}`,
@@ -1172,8 +1203,10 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(`[data-test-card-catalog-go-button]`);
       await fillIn(
         `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
-        'Mango',
+        'Paper',
       );
+
+      await consumerSaved.promise;
     });
   });
 

@@ -919,7 +919,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       let resource: JSONAPIResource = {
         relationships: {
           [this.name]: {
-            ...(value[isSavedInstance]
+            ...(value.id
               ? {
                   links: {
                     self: makeRelativeURL(value.id, opts),
@@ -1317,7 +1317,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
 
       relationships[`${this.name}\.${i}`] = {
-        ...(value[isSavedInstance]
+        ...(value.id
           ? {
               links: {
                 self: makeRelativeURL(value.id, opts),

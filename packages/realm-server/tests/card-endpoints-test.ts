@@ -1035,6 +1035,113 @@ module(basename(__filename), function () {
             });
           }
         });
+
+        test('ignores "lid" for other realms', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Hassan',
+                },
+                relationships: {
+                  friend: {
+                    data: {
+                      lid: 'local-id-3',
+                      type: 'card',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: 'http://localhost:4202/node-test/friend',
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'local-id-3',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                    realmURL: `http://some-other-realm/`,
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 201, 'HTTP 201 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          let json = response.body as SingleCardDocument;
+          let id = json.data.id!.split('/').pop()!;
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `${id}.json`,
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Hassan',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: { self: null },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `local-id-3.json`,
+            );
+            assert.false(
+              existsSync(cardFile),
+              `card json ${cardFile} does not exist`,
+            );
+          }
+        });
       });
 
       module('permissioned realm', function (hooks) {
@@ -1843,6 +1950,110 @@ module(basename(__filename), function () {
                 },
               },
             });
+          }
+        });
+
+        test('ignores "lid" for other realms', async function (assert) {
+          let response = await request
+            .patch('/hassan')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {
+                  firstName: 'Paper',
+                },
+                relationships: {
+                  friend: {
+                    data: {
+                      lid: 'local-id-3',
+                      type: 'card',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './friend.gts',
+                    name: 'Friend',
+                  },
+                },
+              },
+              included: [
+                {
+                  lid: 'local-id-3',
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Boris',
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: 'http://localhost:4202/node-test/friend',
+                      name: 'Friend',
+                    },
+                    realmURL: `http://some-other-realm/`,
+                  },
+                },
+              ],
+            } as LooseSingleCardDocument)
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(response.status, 200, 'HTTP 200 status');
+          assert.strictEqual(
+            response.get('X-boxel-realm-url'),
+            testRealmHref,
+            'realm url header is correct',
+          );
+          assert.strictEqual(
+            response.get('X-boxel-realm-public-readable'),
+            'true',
+            'realm is public readable',
+          );
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'hassan.json',
+            );
+            assert.ok(existsSync(cardFile), `card json ${cardFile} exists`);
+            let card = readJSONSync(cardFile);
+            assert.deepEqual(
+              card,
+              {
+                data: {
+                  type: 'card',
+                  attributes: {
+                    firstName: 'Paper',
+                    description: null,
+                    thumbnailURL: null,
+                  },
+                  relationships: {
+                    friend: {
+                      links: { self: './jade' },
+                    },
+                  },
+                  meta: {
+                    adoptsFrom: {
+                      module: './friend',
+                      name: 'Friend',
+                    },
+                  },
+                },
+              } as LooseSingleCardDocument,
+              `file contents ${cardFile} are correct`,
+            );
+          }
+          {
+            let cardFile = join(
+              dir.name,
+              'realm_server_1',
+              'test',
+              'Friend',
+              `local-id-3.json`,
+            );
+            assert.false(
+              existsSync(cardFile),
+              `card json ${cardFile} does not exist`,
+            );
           }
         });
 

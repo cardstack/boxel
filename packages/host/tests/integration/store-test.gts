@@ -14,6 +14,7 @@ import {
   baseRealm,
   localId,
   baseCardRef,
+  realmURL,
   type Loader,
   type Realm,
   type SingleCardDocument,
@@ -451,6 +452,26 @@ module('Integration | Store', function (hooks) {
       (instance as any).name,
       'Andrea',
       'instance data is correct',
+    );
+  });
+
+  test('can set realmURL when adding to the store', async function (assert) {
+    let instance = new PersonDef({ name: 'Andrea' });
+    assert.strictEqual(
+      instance[realmURL]?.href,
+      undefined,
+      'realmURL meta is not set on the instance',
+    );
+
+    await store.add(instance, {
+      doNotPersist: true,
+      realm: testRealmURL,
+    });
+
+    assert.strictEqual(
+      instance[realmURL]?.href,
+      testRealmURL,
+      'realmURL meta was set on the instance',
     );
   });
 

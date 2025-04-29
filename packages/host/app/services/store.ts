@@ -243,7 +243,6 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     }
-    //TODO test this
     if (realmURL) {
       instance[meta] = {
         ...instance[meta],
@@ -898,10 +897,12 @@ export default class StoreService extends Service implements StoreInterface {
         let json = await this.saveCardDocument(doc, realmURL);
         let isNew = !instance.id;
 
-        // if the card changed while the save was in flight then don't load the
-        // server's version of the card--the next auto save will include these
-        // unsaved changes.
-        if (!cardChanged) {
+        // if the card changed while the save was in flight then don't merge the
+        // server state--the next auto save will include these
+        // unsaved changes. also if there are new foreign links we'll hold off
+        // on merging the server state until we have received the new foreign
+        // link ID's from the other realm(s) (handled in this.updateForeignConsumersOf())
+        if (!cardChanged && !this.hasNewForeignLinks(instance)) {
           await api.updateFromSerialized(instance, json, this.identityContext);
         } else if (isNew) {
           // in this case a new card was created, but there is an immediate change
@@ -914,17 +915,15 @@ export default class StoreService extends Service implements StoreInterface {
         }
 
         if (isNew) {
-          // now that we have a remote ID make a realm subscription
           this.subscribeToRealm(new URL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
           );
+          await this.updateForeignConsumersOf(instance);
           await this.updateInstanceChangeSubscription(
             'start-tracking',
             instance,
           );
-          // TODO test this
-          await this.updateForeignConsumersOf(instance);
         }
       } catch (err) {
         console.error(`Failed to save ${instance.id}: `, err);
@@ -933,6 +932,25 @@ export default class StoreService extends Service implements StoreInterface {
         api?.unsubscribeFromChanges(instance, onCardChange);
       }
     });
+  }
+
+  private async hasNewForeignLinks(instance: CardDef) {
+    let instanceRealm = instance[realmURLSymbol]?.href;
+    if (!instanceRealm) {
+      return;
+    }
+    let deps = this.identityContext.dependenciesOf(
+      await this.cardService.getAPI(),
+      instance,
+    );
+    return Boolean(
+      deps.find(
+        (c) =>
+          !c.id &&
+          c[realmURLSymbol]?.href &&
+          c[realmURLSymbol].href !== instanceRealm,
+      ),
+    );
   }
 
   // in the case we are making a cross realm relationship with a link that
