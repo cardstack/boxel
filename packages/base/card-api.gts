@@ -2615,7 +2615,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
-      let relativeToVal = instance[relativeTo];
+      let relativeToVal =
+        'id' in instance && typeof instance.id === 'string'
+          ? new URL(instance.id)
+          : instance[relativeTo];
       return [
         field,
         await getDeserializedValue({
