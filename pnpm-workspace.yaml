@@ -28,5 +28,6 @@ catalog:
   eslint-plugin-unicorn: ^51.0.1
   glimmer-scoped-css: ^0.8.1
   prettier: ^3.5.3
+  prettier-plugin-ember-template-tag: ^1.1.0
   qunit: ^2.24.1
   qunit-dom: ^2.0.0

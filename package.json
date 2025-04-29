@@ -71,7 +71,7 @@
     "eslint-plugin-prettier": "catalog:",
     "hcl2-parser": "^1.0.3",
     "prettier": "catalog:",
-    "prettier-plugin-ember-template-tag": "^1.1.0",
+    "prettier-plugin-ember-template-tag": "catalog:",
     "typescript": "~5.1.6"
   },
   "engines": {

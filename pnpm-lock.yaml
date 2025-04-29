@@ -78,6 +78,9 @@ catalogs:
     prettier:
       specifier: ^3.5.3
       version: 3.5.3
+    prettier-plugin-ember-template-tag:
+      specifier: ^1.1.0
+      version: 1.1.0
     qunit:
       specifier: ^2.24.1
       version: 2.24.1
@@ -197,7 +200,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       typescript:
         specifier: ~5.1.6
@@ -468,7 +471,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
@@ -628,7 +631,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
@@ -841,7 +844,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       qunit:
         specifier: 'catalog:'
@@ -1049,7 +1052,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
@@ -1269,7 +1272,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       qunit:
         specifier: 'catalog:'
@@ -1854,7 +1857,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       qs:
         specifier: ^6.13.0
@@ -2140,7 +2143,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
+        specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
       qs:
         specifier: ^6.13.0

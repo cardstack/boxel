@@ -91,7 +91,7 @@
     "eslint-plugin-qunit": "catalog:",
     "loader.js": "^4.7.0",
     "prettier": "catalog:",
-    "prettier-plugin-ember-template-tag": "^1.1.0",
+    "prettier-plugin-ember-template-tag": "catalog:",
     "qunit": "catalog:",
     "qunit-dom": "catalog:",
     "tracked-built-ins": "^3.3.0",
