@@ -21,16 +21,15 @@ export default class MatrixResponsePublisher {
     readonly responseState: ResponseState,
   ) {}
 
-  async sendMessage(
-    data: any = {},
-    commandRequests: Partial<CommandRequest>[] = [],
-  ) {
+  async sendMessage(commandRequests: Partial<CommandRequest>[] = []) {
     return sendMessageEvent(
       this.client,
       this.roomId,
       this.responseState.latestContent,
       this.currentResponseEventId,
-      data,
+      {
+        isStreamingFinished: this.responseState.isStreamingFinished,
+      },
       commandRequests,
       this.responseState.latestReasoning,
     );

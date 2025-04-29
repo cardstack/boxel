@@ -7,6 +7,7 @@ export default class ResponseState {
   latestContent: string = '';
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   private toolCallsJson: string | undefined;
+  isStreamingFinished = false;
 
   updateToolCalls(
     toolCallsSnapshot: ChatCompletionSnapshot.Choice.Message.ToolCall[],
@@ -40,6 +41,14 @@ export default class ResponseState {
         this.latestReasoning = '';
       }
       this.latestReasoning = this.latestReasoning + newReasoningContent;
+      return true;
+    }
+    return false;
+  }
+
+  updateIsStreamingFinished(isStreamingFinished: boolean) {
+    if (this.isStreamingFinished !== isStreamingFinished) {
+      this.isStreamingFinished = isStreamingFinished;
       return true;
     }
     return false;

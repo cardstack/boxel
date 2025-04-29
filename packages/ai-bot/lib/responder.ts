@@ -66,7 +66,6 @@ export class Responder {
 
   responseState = new ResponseState();
 
-  isStreamingFinished = false;
   needsMessageSend = false;
 
   async ensureThinkingMessageSent() {
@@ -86,9 +85,6 @@ export class Responder {
   sendMessageEvent = async () => {
     const messagePromise = this.matrixResponsePublisher
       .sendMessage(
-        {
-          isStreamingFinished: this.isStreamingFinished,
-        },
         this.responseState.toolCalls.map((toolCall) =>
           this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
         ),
@@ -132,8 +128,9 @@ export class Responder {
     }
 
     if (snapshot.choices?.[0]?.finish_reason === 'stop') {
-      if (!this.isStreamingFinished) {
-        this.isStreamingFinished = true;
+      let isStreamingFinishedChanged =
+        this.responseState.updateIsStreamingFinished(true);
+      if (isStreamingFinishedChanged) {
         await this.sendMessageEventWithThrottling();
       }
     }
@@ -210,8 +207,9 @@ export class Responder {
   }
 
   async finalize() {
-    if (!this.isStreamingFinished) {
-      this.isStreamingFinished = true;
+    let isStreamingFinishedChanged =
+      this.responseState.updateIsStreamingFinished(true);
+    if (isStreamingFinishedChanged) {
       await this.sendMessageEventWithThrottling();
     }
     await this.flush();
