@@ -726,7 +726,7 @@ module('Responding', (hooks) => {
     await responder.finalize();
 
     let sentEvents = fakeMatrixClient.getSentEvents();
-    console.log(JSON.stringify(sentEvents, null, 2));
+    // console.log(JSON.stringify(sentEvents, null, 2));
     assert.equal(sentEvents.length, 5, 'Five events should be sent');
 
     assert.true(sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
@@ -765,7 +765,120 @@ module('Responding', (hooks) => {
     assert.true(sentEvents[4].content.body.endsWith('c'));
   });
 
+  test('When reasoning is too large to fit in eventMaxSize, it will be split into multiple events', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024; // 1KB max event size
+    let longReasoningPart1 = 'a'.repeat(512); // 0.5KB of reasoning
+    let longReasoningPart2 = 'b'.repeat(1024) + 'c'.repeat(1024); // 2KB of reasoning
+
+    await responder.ensureThinkingMessageSent();
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.onChunk(chunkWithReasoning(longReasoningPart1), {} as any);
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.onChunk(chunkWithReasoning(longReasoningPart2), {} as any);
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.onChunk({} as any, snapshotWithContent('my content'));
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    // console.log(JSON.stringify(sentEvents, null, 2));
+    assert.equal(sentEvents.length, 7, 'Seven events should be sent');
+
+    assert.true(sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.true(
+      sentEvents[2].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.true(
+      sentEvents[2].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('a'),
+    );
+    assert.true(
+      sentEvents[2].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('b'),
+    );
+
+    assert.true(sentEvents[3].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.true(
+      sentEvents[3].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.equal(
+      sentEvents[3].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.true(
+      sentEvents[3].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('b'),
+    );
+    assert.true(
+      sentEvents[3].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('c'),
+    );
+
+    assert.strictEqual(
+      sentEvents[4].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.false(
+      sentEvents[4].content.isStreamingFinished,
+      'isStreamingFinished should be false',
+    );
+    assert.equal(
+      sentEvents[4].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[3].eventId,
+    );
+    assert.true(
+      sentEvents[4].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('c'),
+    );
+    assert.true(
+      sentEvents[4].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('c'),
+    );
+    assert.strictEqual(sentEvents[4].content.body, '');
+
+    assert.strictEqual(
+      sentEvents[5].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.false(
+      sentEvents[5].content.isStreamingFinished,
+      'isStreamingFinished should be false',
+    );
+    assert.equal(
+      sentEvents[5].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[3].eventId,
+    );
+    assert.true(
+      sentEvents[5].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('c'),
+    );
+    assert.true(
+      sentEvents[5].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('c'),
+    );
+
+    assert.strictEqual(
+      sentEvents[6].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.true(
+      sentEvents[6].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.equal(
+      sentEvents[6].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[3].eventId,
+    );
+    assert.true(
+      sentEvents[6].content.body.startsWith('my content'),
+      'Content message body starts with my content',
+    );
+    assert.true(
+      sentEvents[6].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('c'),
+    );
+    assert.true(
+      sentEvents[6].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('c'),
+    );
+    assert.deepEqual(sentEvents[6].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[4].eventId,
+    });
+  });
+
   // TODO test when error happens after continuation in progress
-  // TODO test when reasoning is too large to fit in eventMaxSize
   // TODO test when reasoning + content is too large to fit in eventMaxSize
 });

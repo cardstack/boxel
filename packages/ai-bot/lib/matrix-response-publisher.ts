@@ -39,6 +39,8 @@ class ResponseEventData {
   eventId?: string;
   contentStartIndex: number = 0;
   contentEndIndex: number = 0;
+  reasoningStartIndex: number = 0;
+  reasoningEndIndex: number = 0;
   constructor(
     eventId: string | undefined,
     readonly eventSizeMax: number,
@@ -48,15 +50,52 @@ class ResponseEventData {
     this.contentStartIndex = contentStartIndex;
   }
 
-  contentWouldExceedMaxSize(content: string): boolean {
-    return content.length - this.contentStartIndex > this.eventSizeMax;
+  wouldExceedMaxSize(reasoning: string, content: string): boolean {
+    let proposedSize = reasoning.length - this.reasoningStartIndex;
+    proposedSize += content.length - this.contentStartIndex;
+    return proposedSize > this.eventSizeMax;
   }
 
-  contentForNextMessage(content: string): string {
-    return content.slice(
-      this.contentStartIndex,
-      this.contentStartIndex + this.eventSizeMax,
+  reasoningAndContentForNextMessage(
+    reasoning: string,
+    content: string,
+  ): { reasoning: string; content: string } {
+    let reasoningForNextMessage = reasoning.slice(
+      this.reasoningStartIndex,
+      this.reasoningStartIndex + this.eventSizeMax,
     );
+    let remainingBudget = this.eventSizeMax - reasoningForNextMessage.length;
+    if (remainingBudget <= 0) {
+      return {
+        reasoning: reasoningForNextMessage,
+        content: '',
+      };
+    }
+    let contentForNextMessage = content.slice(
+      this.contentStartIndex,
+      this.contentStartIndex + remainingBudget,
+    );
+    return {
+      reasoning: reasoningForNextMessage,
+      content: contentForNextMessage,
+    };
+  }
+
+  updateEndIndices(reasoningAndContent: {
+    reasoning: string;
+    content: string;
+  }): void {
+    this.reasoningEndIndex =
+      this.reasoningStartIndex + reasoningAndContent.reasoning.length;
+    this.contentEndIndex =
+      this.contentStartIndex + reasoningAndContent.content.length;
+  }
+
+  buildNextEvent(): ResponseEventData {
+    let nextEvent = new ResponseEventData(undefined, this.eventSizeMax);
+    nextEvent.contentStartIndex = this.contentEndIndex;
+    nextEvent.reasoningStartIndex = this.reasoningEndIndex;
+    return nextEvent;
   }
 }
 
@@ -96,12 +135,14 @@ export default class MatrixResponsePublisher {
       );
     }
     while (
-      this.currentResponseEvent.contentWouldExceedMaxSize(
+      this.currentResponseEvent.wouldExceedMaxSize(
+        this.responseState.latestReasoning,
         this.responseState.latestContent,
       )
     ) {
-      let contentForCurrentEvent =
-        this.currentResponseEvent.contentForNextMessage(
+      let reasoningAndContent =
+        this.currentResponseEvent.reasoningAndContentForNextMessage(
+          this.responseState.latestReasoning,
           this.responseState.latestContent,
         );
       // TODO: type as Partial<CardMessageContent>
@@ -116,42 +157,27 @@ export default class MatrixResponsePublisher {
       let messageEvent = await sendMessageEvent(
         this.client,
         this.roomId,
-        contentForCurrentEvent,
+        reasoningAndContent.content,
         this.currentResponseEventId,
         extraData,
         this.responseState.toolCalls.map((toolCall) =>
           toCommandRequest(toolCall as ChatCompletionMessageToolCall),
         ),
-        this.responseState.latestReasoning,
+        reasoningAndContent.reasoning,
       );
-      this.currentResponseEvent.contentEndIndex =
-        this.currentResponseEvent.contentStartIndex +
-        contentForCurrentEvent.length;
+      this.currentResponseEvent.updateEndIndices(reasoningAndContent);
       this.currentResponseEvent.needsContinuation = true;
       if (!this.currentResponseEvent.eventId) {
         this.currentResponseEvent.eventId = messageEvent.event_id;
       }
-      this.responseEvents?.push(
-        new ResponseEventData(
-          undefined,
-          this.eventSizeMax,
-          this.currentResponseEvent.contentEndIndex,
-        ),
-      );
+      this.responseEvents?.push(this.currentResponseEvent.buildNextEvent());
     }
 
-    let contentForCurrentEvent;
-    if (this.currentResponseEvent.needsContinuation) {
-      contentForCurrentEvent = this.responseState.latestContent.slice(
-        this.currentResponseEvent.contentEndIndex + 1,
-        this.currentResponseEvent.contentEndIndex + 1 + this.eventSizeMax,
+    let contentAndReasoning =
+      this.currentResponseEvent.reasoningAndContentForNextMessage(
+        this.responseState.latestReasoning,
+        this.responseState.latestContent,
       );
-    } else {
-      contentForCurrentEvent = this.responseState.latestContent.slice(
-        this.currentResponseEvent.contentStartIndex,
-        this.currentResponseEvent.contentStartIndex + this.eventSizeMax,
-      );
-    }
     let extraData: any = {
       isStreamingFinished: this.responseState.isStreamingFinished,
     };
@@ -166,13 +192,13 @@ export default class MatrixResponsePublisher {
     let messageEvent = await sendMessageEvent(
       this.client,
       this.roomId,
-      contentForCurrentEvent,
+      contentAndReasoning.content,
       this.currentResponseEventId,
       extraData,
       this.responseState.toolCalls.map((toolCall) =>
         toCommandRequest(toolCall as ChatCompletionMessageToolCall),
       ),
-      this.responseState.latestReasoning,
+      contentAndReasoning.reasoning,
     );
     if (!this.currentResponseEvent.eventId) {
       this.currentResponseEvent.eventId = messageEvent.event_id;

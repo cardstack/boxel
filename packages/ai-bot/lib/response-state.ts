@@ -10,7 +10,7 @@ export default class ResponseState {
   isStreamingFinished = false;
 
   update(
-    reasoningSnapshot: string | undefined,
+    newReasoning: string | undefined,
     contentSnapshot: string | null | undefined,
     toolCallsSnapshot:
       | ChatCompletionSnapshot.Choice.Message.ToolCall[]
@@ -18,7 +18,7 @@ export default class ResponseState {
     isStreamingFinished: boolean,
   ): boolean {
     let updated = false;
-    updated = this.updateReasoning(reasoningSnapshot) || updated;
+    updated = this.updateReasoning(newReasoning) || updated;
     updated = this.updateContent(contentSnapshot) || updated;
     updated = this.updateToolCalls(toolCallsSnapshot) || updated;
     updated = this.updateIsStreamingFinished(isStreamingFinished) || updated;
