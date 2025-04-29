@@ -159,6 +159,8 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   isStreamingFinished?: boolean;
+  hasContinuation?: boolean;
+  continuationOf?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
   [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
   errorMessage?: string;

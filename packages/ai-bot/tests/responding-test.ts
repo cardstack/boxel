@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { Responder } from '../lib/responder';
+import { DEFAULT_EVENT_SIZE_MAX, Responder } from '../lib/responder';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
@@ -100,6 +100,7 @@ module('Responding', (hooks) => {
     clock.uninstall();
     responder.finalize();
     fakeMatrixClient.resetSentEvents();
+    responder.eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
   });
 
   test('Sends thinking message', async () => {
@@ -633,4 +634,72 @@ module('Responding', (hooks) => {
       'MatrixError: [413] event too large',
     );
   });
+
+  test('When content exceeds max event size threshold, it will be split into multiple events', async () => {
+    responder.eventSizeMax = 1024 * 2.5; // 2.5KB max event size
+
+    let longContentPart1 = 'a'.repeat(1024); // 1KB of content
+    let longContentPart2 = 'b'.repeat(2048); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+
+    await responder.onChunk({} as any, snapshotWithContent(longContentPart1));
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 2, 'Two events should be sent');
+    assert.equal(
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      thinkingMessage,
+      'First event is the initial thinking message',
+    );
+    assert.equal(
+      sentEvents[1].content.body,
+      longContentPart1,
+      'Initial message content',
+    );
+    assert.equal(
+      sentEvents[1].content.isStreamingFinished,
+      false,
+      'isStreamingFinished should be false',
+    );
+
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(longContentPart1 + longContentPart2),
+    );
+    await responder.finalize();
+
+    sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 4, 'Four events should be sent');
+
+    // verify 3rd event is an update to the first event that sets hasContinuation to true
+    assert.equal(sentEvents[2].content['m.relates_to']?.key, {
+      rel_type: 'm.replace',
+      event_id: sentEvents[0].eventId,
+    });
+    assert.ok(
+      sentEvents[2].content.body.startsWith('a'),
+      'Continuation message content starts with a',
+    );
+    assert.ok(
+      sentEvents[2].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+    assert.equal(sentEvents[2].content.hasContinuation, true);
+    assert.equal(sentEvents[2].content.isStreamingFinished, true);
+
+    // verify 4th event has continuationOf pointing to 3rd event and isStreamingFinished to true
+    assert.equal(sentEvents[3].content.continuationOf, sentEvents[0].eventId);
+    assert.equal(sentEvents[3].content.isStreamingFinished, true);
+    assert.ok(
+      sentEvents[3].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[3].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+  });
+
+  // TODO test when error happens after continuation in progress
 });

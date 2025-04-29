@@ -20,7 +20,114 @@ import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
 
+export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
+
+class MatrixResponsePublisher {
+  private initialMessageSent = false;
+  responseEventIds: string[] | undefined;
+  get currentResponseEventId() {
+    return this.responseEventIds?.[this.responseEventIds.length - 1];
+  }
+
+  get originalResponseEventId() {
+    return this.responseEventIds?.[0];
+  }
+
+  constructor(
+    readonly client: MatrixClient,
+    readonly roomId: string,
+    readonly responseState: ResponseState,
+  ) {}
+
+  async sendMessage(
+    data: any = {},
+    commandRequests: Partial<CommandRequest>[] = [],
+  ) {
+    return sendMessageEvent(
+      this.client,
+      this.roomId,
+      this.responseState.latestContent,
+      this.currentResponseEventId,
+      data,
+      commandRequests,
+      this.responseState.latestReasoning,
+    );
+  }
+
+  async sendError(error: any) {
+    sendErrorEvent(
+      this.client,
+      this.roomId,
+      error,
+      this.originalResponseEventId,
+    );
+  }
+
+  async ensureThinkingMessageSent() {
+    if (!this.initialMessageSent) {
+      let initialMessage = await sendMessageEvent(
+        this.client,
+        this.roomId,
+        '',
+        undefined,
+        { isStreamingFinished: false },
+        [],
+        thinkingMessage,
+      );
+      this.responseEventIds = [initialMessage.event_id];
+      this.initialMessageSent = true;
+    }
+  }
+}
+
+class ResponseState {
+  latestReasoning: string = '';
+  latestContent: string = '';
+  toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
+  private toolCallsJson: string | undefined;
+
+  updateToolCalls(
+    toolCallsSnapshot: ChatCompletionSnapshot.Choice.Message.ToolCall[],
+  ) {
+    let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
+    if (this.toolCallsJson !== latestToolCallsJson) {
+      this.toolCalls = toolCallsSnapshot;
+      this.toolCallsJson = latestToolCallsJson;
+      return true;
+    }
+    return false;
+  }
+
+  updateContent(contentSnapshot: string | null | undefined) {
+    if (contentSnapshot?.length) {
+      contentSnapshot = cleanContent(contentSnapshot);
+      if (this.latestContent !== contentSnapshot) {
+        if (this.latestReasoning === thinkingMessage) {
+          this.latestReasoning = '';
+        }
+        this.latestContent = contentSnapshot;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  updateReasoning(newReasoningContent: string | undefined) {
+    if (newReasoningContent?.length) {
+      if (this.latestReasoning === thinkingMessage) {
+        this.latestReasoning = '';
+      }
+      this.latestReasoning = this.latestReasoning + newReasoningContent;
+      return true;
+    }
+    return false;
+  }
+}
+
 export class Responder {
+  eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
+  matrixResponsePublisher: MatrixResponsePublisher;
+
   static eventMayTriggerResponse(event: DiscreteMatrixEvent) {
     // If it's a message, we should respond unless it's a card fragment
     if (event.getType() === 'm.room.message') {
@@ -47,23 +154,26 @@ export class Responder {
     );
   }
 
-  constructor(
-    readonly client: MatrixClient,
-    readonly roomId: string,
-  ) {}
+  constructor(client: MatrixClient, roomId: string) {
+    this.matrixResponsePublisher = new MatrixResponsePublisher(
+      client,
+      roomId,
+      this.responseState,
+    );
+  }
 
   messagePromises: Promise<
     ISendEventResponse | void | { errorMessage: string }
   >[] = [];
 
-  initialMessageSent = false;
-  responseEventId: string | undefined;
-  latestReasoning = '';
-  latestContent = '';
-  toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
-  toolCallsJson: string | undefined;
+  responseState = new ResponseState();
+
   isStreamingFinished = false;
   needsMessageSend = false;
+
+  async ensureThinkingMessageSent() {
+    await this.matrixResponsePublisher.ensureThinkingMessageSent();
+  }
 
   sendMessageEventWithThrottling = () => {
     this.needsMessageSend = true;
@@ -76,42 +186,23 @@ export class Responder {
   }, 250);
 
   sendMessageEvent = async () => {
-    const messagePromise = sendMessageEvent(
-      this.client,
-      this.roomId,
-      this.latestContent,
-      this.responseEventId,
-      {
-        isStreamingFinished: this.isStreamingFinished,
-      },
-      this.toolCalls.map((toolCall) =>
-        this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
-      ),
-      this.latestReasoning,
-    ).catch((e) => {
-      return {
-        errorMessage: e.message,
-      };
-    });
+    const messagePromise = this.matrixResponsePublisher
+      .sendMessage(
+        {
+          isStreamingFinished: this.isStreamingFinished,
+        },
+        this.responseState.toolCalls.map((toolCall) =>
+          this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
+        ),
+      )
+      .catch((e) => {
+        return {
+          errorMessage: e.message,
+        };
+      });
     this.messagePromises.push(messagePromise);
     await messagePromise;
   };
-
-  async ensureThinkingMessageSent() {
-    if (!this.initialMessageSent) {
-      let initialMessage = await sendMessageEvent(
-        this.client,
-        this.roomId,
-        '',
-        undefined,
-        { isStreamingFinished: false },
-        [],
-        thinkingMessage,
-      );
-      this.responseEventId = initialMessage.event_id;
-      this.initialMessageSent = true;
-    }
-  }
 
   async onChunk(
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
@@ -119,35 +210,26 @@ export class Responder {
   ) {
     const toolCallsSnapshot = snapshot.choices?.[0]?.message?.tool_calls;
     if (toolCallsSnapshot?.length) {
-      let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
-      if (this.toolCallsJson !== latestToolCallsJson) {
-        this.toolCalls = toolCallsSnapshot;
-        this.toolCallsJson = latestToolCallsJson;
+      let toolCallsChanged =
+        this.responseState.updateToolCalls(toolCallsSnapshot);
+      if (toolCallsChanged) {
         await this.sendMessageEventWithThrottling();
       }
     }
 
     let contentSnapshot = snapshot.choices?.[0]?.message?.content;
-    if (contentSnapshot?.length) {
-      contentSnapshot = cleanContent(contentSnapshot);
-      if (this.latestContent !== contentSnapshot) {
-        if (this.latestReasoning === thinkingMessage) {
-          this.latestReasoning = '';
-        }
-        this.latestContent = contentSnapshot;
-        await this.sendMessageEventWithThrottling();
-      }
+    let contentChanged = this.responseState.updateContent(contentSnapshot);
+    if (contentChanged) {
+      await this.sendMessageEventWithThrottling();
     }
 
     // reasoning does not support snapshots, so we need to handle the delta
     let newReasoningContent = (
       chunk.choices?.[0]?.delta as { reasoning?: string }
     )?.reasoning;
-    if (newReasoningContent?.length) {
-      if (this.latestReasoning === thinkingMessage) {
-        this.latestReasoning = '';
-      }
-      this.latestReasoning = this.latestReasoning + newReasoningContent;
+    let reasoningChanged =
+      this.responseState.updateReasoning(newReasoningContent);
+    if (reasoningChanged) {
       await this.sendMessageEventWithThrottling();
     }
 
@@ -207,12 +289,7 @@ export class Responder {
 
   async onError(error: OpenAIError | string) {
     Sentry.captureException(error);
-    return await sendErrorEvent(
-      this.client,
-      this.roomId,
-      error,
-      this.responseEventId,
-    );
+    return await this.matrixResponsePublisher.sendError(error);
   }
 
   async flush() {
