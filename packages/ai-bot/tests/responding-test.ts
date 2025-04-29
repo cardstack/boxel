@@ -879,6 +879,89 @@ module('Responding', (hooks) => {
     });
   });
 
+  test('when reasoning plus content is too large to fit in eventMaxSize, it will be split into a new event', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024 * 1.5; // 1.5KB max event size
+
+    let longReasoning = 'a'.repeat(1024); // 1KB of content
+    let longContent = 'b'.repeat(2048); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+    clock.tick(250);
+    await responder.onChunk(chunkWithReasoning(longReasoning), {} as any);
+    clock.tick(250);
+    await responder.onChunk({} as any, snapshotWithContent(longContent));
+    clock.tick(250);
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 5, 'Five events should be sent');
+    assert.equal(
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      thinkingMessage,
+      'First event is the initial thinking message',
+    );
+    assert.equal(
+      sentEvents[1].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      longReasoning,
+      'Initial reasoning content',
+    );
+    assert.equal(
+      sentEvents[1].content.isStreamingFinished,
+      false,
+      'isStreamingFinished should be false',
+    );
+
+    // console.log(JSON.stringify(sentEvents, null, 2));
+    assert.deepEqual(sentEvents[2].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[0].eventId,
+    });
+    assert.ok(
+      sentEvents[2].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[2].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+    assert.equal(
+      sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      true,
+    );
+    assert.equal(sentEvents[2].content.isStreamingFinished, true);
+
+    assert.equal(
+      sentEvents[3].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.equal(sentEvents[3].content.isStreamingFinished, false);
+    assert.ok(
+      sentEvents[3].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[3].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+
+    assert.strictEqual(
+      sentEvents[4].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.equal(
+      sentEvents[4].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.equal(sentEvents[4].content.isStreamingFinished, true);
+    assert.ok(
+      sentEvents[4].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[4].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+  });
+
   // TODO test when error happens after continuation in progress
-  // TODO test when reasoning + content is too large to fit in eventMaxSize
 });
