@@ -90,7 +90,7 @@
     "ember-template-lint": "^5.11.2",
     "ember-template-lint-plugin-prettier": "^5.0.0",
     "eslint": "catalog:",
-    "eslint-config-prettier": "^8.6.0",
+    "eslint-config-prettier": "catalog:",
     "eslint-plugin-ember": "catalog:",
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",

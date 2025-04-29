@@ -65,7 +65,7 @@
     "ember-source": "~5.4.0",
     "ember-template-imports": "^4.1.1",
     "eslint": "catalog:",
-    "eslint-config-prettier": "^8.4.0",
+    "eslint-config-prettier": "catalog:",
     "eslint-plugin-import": "catalog:",
     "eslint-plugin-prefer-let": "catalog:",
     "eslint-plugin-prettier": "catalog:",

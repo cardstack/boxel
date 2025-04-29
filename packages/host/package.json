@@ -134,7 +134,7 @@
     "ember-velcro": "^2.1.3",
     "ember-window-mock": "^1.0.1",
     "eslint": "catalog:",
-    "eslint-config-prettier": "^9.0.0",
+    "eslint-config-prettier": "catalog:",
     "eslint-plugin-ember": "catalog:",
     "eslint-plugin-import": "catalog:",
     "eslint-plugin-n": "catalog:",
