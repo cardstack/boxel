@@ -162,7 +162,7 @@ export interface CardMessageContent {
   hasContinuation?: boolean;
   continuationOf?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
-  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[];
+  [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[]; // TODO
   errorMessage?: string;
   // ID from the client and can be used by client
   // to verify whether the message is already sent or not.
@@ -179,8 +179,6 @@ export interface CardMessageContent {
       requireToolCall?: boolean;
       functions: Tool['function'][];
     };
-    cardEventId?: string;
-    card?: LooseSingleCardDocument;
   };
 }
 

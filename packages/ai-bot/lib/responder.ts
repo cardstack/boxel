@@ -7,7 +7,6 @@ import throttle from 'lodash/throttle';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import {
@@ -20,10 +19,7 @@ import ResponseState from './response-state';
 
 let log = logger('ai-bot');
 
-export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
-
 export class Responder {
-  eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
   matrixResponsePublisher: MatrixResponsePublisher;
 
   static eventMayTriggerResponse(event: DiscreteMatrixEvent) {
@@ -84,11 +80,7 @@ export class Responder {
 
   sendMessageEvent = async () => {
     const messagePromise = this.matrixResponsePublisher
-      .sendMessage(
-        this.responseState.toolCalls.map((toolCall) =>
-          this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
-        ),
-      )
+      .sendMessage()
       .catch((e) => {
         return {
           errorMessage: e.message,
@@ -102,37 +94,19 @@ export class Responder {
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
     snapshot: ChatCompletionSnapshot,
   ) {
-    const toolCallsSnapshot = snapshot.choices?.[0]?.message?.tool_calls;
-    if (toolCallsSnapshot?.length) {
-      let toolCallsChanged =
-        this.responseState.updateToolCalls(toolCallsSnapshot);
-      if (toolCallsChanged) {
-        await this.sendMessageEventWithThrottling();
-      }
-    }
-
-    let contentSnapshot = snapshot.choices?.[0]?.message?.content;
-    let contentChanged = this.responseState.updateContent(contentSnapshot);
-    if (contentChanged) {
-      await this.sendMessageEventWithThrottling();
-    }
-
     // reasoning does not support snapshots, so we need to handle the delta
-    let newReasoningContent = (
+    const newReasoningContent = (
       chunk.choices?.[0]?.delta as { reasoning?: string }
     )?.reasoning;
-    let reasoningChanged =
-      this.responseState.updateReasoning(newReasoningContent);
-    if (reasoningChanged) {
-      await this.sendMessageEventWithThrottling();
-    }
 
-    if (snapshot.choices?.[0]?.finish_reason === 'stop') {
-      let isStreamingFinishedChanged =
-        this.responseState.updateIsStreamingFinished(true);
-      if (isStreamingFinishedChanged) {
-        await this.sendMessageEventWithThrottling();
-      }
+    const responseStateChanged = this.responseState.update(
+      newReasoningContent,
+      snapshot.choices?.[0]?.message?.content,
+      snapshot.choices?.[0]?.message?.tool_calls,
+      chunk.choices?.[0]?.finish_reason === 'stop',
+    );
+    if (responseStateChanged) {
+      await this.sendMessageEventWithThrottling();
     }
 
     // This usage value is set *once* and *only once* at the end of the conversation
@@ -156,30 +130,6 @@ export class Responder {
       name: f.name,
       arguments: JSON.parse(f.arguments),
     };
-  }
-
-  toCommandRequest(
-    toolCall: ChatCompletionMessageToolCall,
-  ): Partial<CommandRequest> {
-    let { id, function: f } = toolCall;
-    let result = {} as Partial<CommandRequest>;
-    if (id) {
-      result['id'] = id;
-    }
-    if (f.name) {
-      result['name'] = f.name;
-    }
-    if (f.arguments) {
-      try {
-        result['arguments'] = JSON.parse(f.arguments);
-      } catch (error) {
-        // If the arguments are not valid JSON, we'll just return an empty object
-        // This will happen during streaming, when the tool call is not yet complete
-        // and the arguments are not yet available
-        result['arguments'] = {};
-      }
-    }
-    return result;
   }
 
   async onError(error: OpenAIError | string) {

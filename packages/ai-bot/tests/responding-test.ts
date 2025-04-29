@@ -1,5 +1,6 @@
 import { module, test, assert } from 'qunit';
-import { DEFAULT_EVENT_SIZE_MAX, Responder } from '../lib/responder';
+import { Responder } from '../lib/responder';
+import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix-response-publisher';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
@@ -100,7 +101,7 @@ module('Responding', (hooks) => {
     clock.uninstall();
     responder.finalize();
     fakeMatrixClient.resetSentEvents();
-    responder.eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
+    responder.matrixResponsePublisher.eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
   });
 
   test('Sends thinking message', async () => {
@@ -620,10 +621,10 @@ module('Responding', (hooks) => {
   });
 
   test('Chunk processing will result in an error if matrix sending fails', async () => {
+    await responder.ensureThinkingMessageSent();
     fakeMatrixClient.sendEvent = async () => {
       throw new Error('MatrixError: [413] event too large');
     };
-
     let result = await responder.onChunk(
       {} as any,
       snapshotWithContent('super long content that is too large'),
@@ -635,8 +636,8 @@ module('Responding', (hooks) => {
     );
   });
 
-  test('When content exceeds max event size threshold, it will be split into multiple events', async () => {
-    responder.eventSizeMax = 1024 * 2.5; // 2.5KB max event size
+  test.only('When content exceeds max event size threshold, it will be split into multiple events', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024 * 2.5; // 2.5KB max event size
 
     let longContentPart1 = 'a'.repeat(1024); // 1KB of content
     let longContentPart2 = 'b'.repeat(2048); // 2KB of content
@@ -673,7 +674,8 @@ module('Responding', (hooks) => {
     assert.equal(sentEvents.length, 4, 'Four events should be sent');
 
     // verify 3rd event is an update to the first event that sets hasContinuation to true
-    assert.equal(sentEvents[2].content['m.relates_to']?.key, {
+    console.log(JSON.stringify(sentEvents, null, 2));
+    assert.deepEqual(sentEvents[2].content['m.relates_to'], {
       rel_type: 'm.replace',
       event_id: sentEvents[0].eventId,
     });
@@ -685,11 +687,14 @@ module('Responding', (hooks) => {
       sentEvents[2].content.body.endsWith('b'),
       'Continuation message content ends with b',
     );
-    assert.equal(sentEvents[2].content.hasContinuation, true);
+    assert.equal(sentEvents[2].content['app.boxel.hasContinuation'], true);
     assert.equal(sentEvents[2].content.isStreamingFinished, true);
 
     // verify 4th event has continuationOf pointing to 3rd event and isStreamingFinished to true
-    assert.equal(sentEvents[3].content.continuationOf, sentEvents[0].eventId);
+    assert.equal(
+      sentEvents[3].content['app.boxel.continuationOf'],
+      sentEvents[0].eventId,
+    );
     assert.equal(sentEvents[3].content.isStreamingFinished, true);
     assert.ok(
       sentEvents[3].content.body.startsWith('b'),
@@ -702,4 +707,7 @@ module('Responding', (hooks) => {
   });
 
   // TODO test when error happens after continuation in progress
+  // TODO test when new content is too large to fit in eventMaxSize
+  // TODO test when reasoning is too large to fit in eventMaxSize
+  // TODO test when reasoning + content is too large to fit in eventMaxSize
 });

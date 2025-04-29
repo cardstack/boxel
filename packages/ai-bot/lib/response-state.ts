@@ -9,19 +9,39 @@ export default class ResponseState {
   private toolCallsJson: string | undefined;
   isStreamingFinished = false;
 
-  updateToolCalls(
-    toolCallsSnapshot: ChatCompletionSnapshot.Choice.Message.ToolCall[],
+  update(
+    reasoningSnapshot: string | undefined,
+    contentSnapshot: string | null | undefined,
+    toolCallsSnapshot:
+      | ChatCompletionSnapshot.Choice.Message.ToolCall[]
+      | undefined,
+    isStreamingFinished: boolean,
+  ): boolean {
+    let updated = false;
+    updated = this.updateReasoning(reasoningSnapshot) || updated;
+    updated = this.updateContent(contentSnapshot) || updated;
+    updated = this.updateToolCalls(toolCallsSnapshot) || updated;
+    updated = this.updateIsStreamingFinished(isStreamingFinished) || updated;
+    return updated;
+  }
+
+  private updateToolCalls(
+    toolCallsSnapshot:
+      | ChatCompletionSnapshot.Choice.Message.ToolCall[]
+      | undefined,
   ) {
-    let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
-    if (this.toolCallsJson !== latestToolCallsJson) {
-      this.toolCalls = toolCallsSnapshot;
-      this.toolCallsJson = latestToolCallsJson;
-      return true;
+    if (toolCallsSnapshot?.length) {
+      let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
+      if (this.toolCallsJson !== latestToolCallsJson) {
+        this.toolCalls = toolCallsSnapshot;
+        this.toolCallsJson = latestToolCallsJson;
+        return true;
+      }
     }
     return false;
   }
 
-  updateContent(contentSnapshot: string | null | undefined) {
+  private updateContent(contentSnapshot: string | null | undefined) {
     if (contentSnapshot?.length) {
       contentSnapshot = cleanContent(contentSnapshot);
       if (this.latestContent !== contentSnapshot) {
@@ -35,7 +55,7 @@ export default class ResponseState {
     return false;
   }
 
-  updateReasoning(newReasoningContent: string | undefined) {
+  private updateReasoning(newReasoningContent: string | undefined) {
     if (newReasoningContent?.length) {
       if (this.latestReasoning === thinkingMessage) {
         this.latestReasoning = '';
