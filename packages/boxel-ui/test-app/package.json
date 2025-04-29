@@ -90,7 +90,7 @@
     "eslint-plugin-prettier": "catalog:",
     "eslint-plugin-qunit": "catalog:",
     "loader.js": "^4.7.0",
-    "prettier": "^3.0.3",
+    "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "^1.1.0",
     "qunit": "catalog:",
     "qunit-dom": "catalog:",

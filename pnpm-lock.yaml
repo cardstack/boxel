@@ -75,6 +75,9 @@ catalogs:
     glimmer-scoped-css:
       specifier: ^0.8.1
       version: 0.8.1
+    prettier:
+      specifier: ^3.5.3
+      version: 3.5.3
     qunit:
       specifier: ^2.24.1
       version: 2.24.1
@@ -186,16 +189,16 @@ importers:
         version: 3.0.1
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       hcl2-parser:
         specifier: ^1.0.3
         version: 1.0.3
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
         specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        version: 1.1.0(prettier@3.5.3)
       typescript:
         specifier: ~5.1.6
         version: 5.1.6
@@ -439,7 +442,7 @@ importers:
         version: 5.11.2
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.1)
+        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -454,7 +457,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       http-server:
         specifier: ^14.1.1
         version: 14.1.1
@@ -462,11 +465,11 @@ importers:
         specifier: ^0.447.0
         version: 0.447.0
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
         specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
         version: 4.18.1
@@ -596,7 +599,7 @@ importers:
         version: 5.11.2
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.1)
+        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -611,7 +614,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-simple-import-sort:
         specifier: 'catalog:'
         version: 8.0.0(eslint@8.57.1)
@@ -622,11 +625,11 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
         specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
         version: 4.18.1
@@ -821,7 +824,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.1.1(eslint@8.57.1)
@@ -835,11 +838,11 @@ importers:
         specifier: 8.0.1
         version: 8.0.1
       prettier:
-        specifier: ^3.0.3
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
         specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        version: 1.1.0(prettier@3.5.3)
       qunit:
         specifier: 'catalog:'
         version: 2.24.1
@@ -1023,7 +1026,7 @@ importers:
         version: 5.11.2
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.1)
+        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
@@ -1038,16 +1041,16 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       glimmer-scoped-css:
         specifier: 'catalog:'
         version: 0.8.1
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
         specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
         version: 4.18.1
@@ -1255,7 +1258,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.1.1(eslint@8.57.1)
@@ -1263,11 +1266,11 @@ importers:
         specifier: ^4.7.0
         version: 4.7.0
       prettier:
-        specifier: ^3.0.3
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
         specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        version: 1.1.0(prettier@3.5.3)
       qunit:
         specifier: 'catalog:'
         version: 2.24.1
@@ -1411,7 +1414,7 @@ importers:
         specifier: 'catalog:'
         version: 51.0.1(eslint@8.57.1)
       prettier:
-        specifier: ^3.5.3
+        specifier: 'catalog:'
         version: 3.5.3
       typescript:
         specifier: ~5.1.6
@@ -1783,7 +1786,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.1.1(eslint@8.57.1)
@@ -1848,11 +1851,11 @@ importers:
         specifier: ^8.0.0
         version: 8.0.0
       prettier:
-        specifier: ^3.0.3
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
         specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        version: 1.1.0(prettier@3.5.3)
       qs:
         specifier: ^6.13.0
         version: 6.13.0
@@ -2134,11 +2137,11 @@ importers:
         specifier: ^8.0.0
         version: 8.0.0
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
         specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        version: 1.1.0(prettier@3.5.3)
       qs:
         specifier: ^6.13.0
         version: 6.13.0
@@ -2630,7 +2633,7 @@ importers:
         version: 11.1.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: ^3.3.1
-        version: 3.3.1(eslint-config-prettier@7.2.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8)
+        version: 3.3.1(eslint-config-prettier@7.2.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       loader.js:
         specifier: ^4.7.0
         version: 4.7.0
@@ -2638,8 +2641,8 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5
       prettier:
-        specifier: ^2.2.1
-        version: 2.8.8
+        specifier: 'catalog:'
+        version: 3.5.3
       qunit:
         specifier: ^2.14.0
         version: 2.24.1
@@ -13053,11 +13056,6 @@ packages:
     engines: {node: '>=10.13.0'}
     hasBin: true
 
-  prettier@3.5.1:
-    resolution: {integrity: sha512-hPpFQvHwL3Qv5AdRvBFMhnKo4tYxp0ReXiPn2bxkiohEX6mBeBwEpBSQTkD458RaaDKQMYSp4hX4UtfUTA5wDw==}
-    engines: {node: '>=14'}
-    hasBin: true
-
   prettier@3.5.3:
     resolution: {integrity: sha512-QQtaxnoDJeAkDvDKWCLiwIXkTgRhwYDEQCghU9Z6q03iyek/rxRh/2lC3HB7P8sWT2xC/y5JDctPLBIGzHKbhw==}
     engines: {node: '>=14'}
@@ -19101,9 +19099,9 @@ snapshots:
       '@pnpm/error': 5.0.3
       find-up: 5.0.0
 
-  '@prettier/sync@0.2.1(prettier@3.5.1)':
+  '@prettier/sync@0.2.1(prettier@3.5.3)':
     dependencies:
-      prettier: 3.5.1
+      prettier: 3.5.3
 
   '@prisma/instrumentation@5.19.1':
     dependencies:
@@ -24833,11 +24831,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-template-lint-plugin-prettier@5.0.0(ember-template-lint@5.11.2)(prettier@3.5.1):
+  ember-template-lint-plugin-prettier@5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3):
     dependencies:
-      '@prettier/sync': 0.2.1(prettier@3.5.1)
+      '@prettier/sync': 0.2.1(prettier@3.5.3)
       ember-template-lint: 5.11.2
-      prettier: 3.5.1
+      prettier: 3.5.3
       prettier-linter-helpers: 1.0.0
 
   ember-template-lint@2.18.1:
@@ -25502,33 +25500,23 @@ snapshots:
     dependencies:
       requireindex: 1.2.0
 
-  eslint-plugin-prettier@3.3.1(eslint-config-prettier@7.2.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8):
+  eslint-plugin-prettier@3.3.1(eslint-config-prettier@7.2.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3):
     dependencies:
       eslint: 8.57.1
-      prettier: 2.8.8
+      prettier: 3.5.3
       prettier-linter-helpers: 1.0.0
     optionalDependencies:
       eslint-config-prettier: 7.2.0(eslint@8.57.1)
 
-  eslint-plugin-prettier@5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1):
+  eslint-plugin-prettier@5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3):
     dependencies:
       eslint: 8.57.1
-      prettier: 3.5.1
+      prettier: 3.5.3
       prettier-linter-helpers: 1.0.0
       synckit: 0.11.4
     optionalDependencies:
       '@types/eslint': 8.56.5
       eslint-config-prettier: 8.8.0(eslint@8.57.1)
-
-  eslint-plugin-prettier@5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1):
-    dependencies:
-      eslint: 8.57.1
-      prettier: 3.5.1
-      prettier-linter-helpers: 1.0.0
-      synckit: 0.11.4
-    optionalDependencies:
-      '@types/eslint': 8.56.5
-      eslint-config-prettier: 9.1.0(eslint@8.57.1)
 
   eslint-plugin-prettier@5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3):
     dependencies:
@@ -29680,19 +29668,17 @@ snapshots:
     dependencies:
       fast-diff: 1.3.0
 
-  prettier-plugin-ember-template-tag@1.1.0(prettier@3.5.1):
+  prettier-plugin-ember-template-tag@1.1.0(prettier@3.5.3):
     dependencies:
       '@babel/core': 7.26.10(supports-color@8.1.1)
       '@glimmer/syntax': 0.84.3
       ember-cli-htmlbars: 6.3.0
       ember-template-imports: 3.4.2
-      prettier: 3.5.1
+      prettier: 3.5.3
     transitivePeerDependencies:
       - supports-color
 
   prettier@2.8.8: {}
-
-  prettier@3.5.1: {}
 
   prettier@3.5.3: {}
 

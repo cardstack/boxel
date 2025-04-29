@@ -67,7 +67,7 @@
     "eslint-plugin-prettier": "catalog:",
     "http-server": "^14.1.1",
     "lucide-static": "^0.447.0",
-    "prettier": "^3.5.1",
+    "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "^1.1.0",
     "rollup": "^4.18.1",
     "rollup-plugin-copy": "^3.5.0",

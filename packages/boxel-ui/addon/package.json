@@ -95,7 +95,7 @@
     "eslint-plugin-n": "catalog:",
     "eslint-plugin-prettier": "catalog:",
     "glimmer-scoped-css": "catalog:",
-    "prettier": "^3.5.1",
+    "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "^1.1.0",
     "rollup": "^4.18.1",
     "rollup-plugin-copy": "^3.5.0",
