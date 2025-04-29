@@ -12,7 +12,9 @@ import {
   internalKeyFor,
   type ResolvedCodeRef,
   GetCardContextName,
+  GetCardsContextName,
   type getCard,
+  type getCards,
   chooseCard,
   loadCardDef,
   specRef,
@@ -21,6 +23,7 @@ import {
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
+import consumeContext from '@cardstack/host/helpers/consume-context';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -92,6 +95,7 @@ interface Signature {
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
+  @consume(GetCardsContextName) private declare getCards: getCards;
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
@@ -101,8 +105,10 @@ export default class PlaygroundPanel extends Component<Signature> {
   @service private declare store: StoreService;
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
+  @tracked private search: ReturnType<getCards> | undefined;
   @tracked private fieldChooserIsOpen = false;
   @tracked private cardCreationError: CardErrorJSONAPI | undefined = undefined;
+  @tracked private defaultCard: CardDef | undefined = undefined;
 
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
@@ -116,7 +122,9 @@ export default class PlaygroundPanel extends Component<Signature> {
   private makeCardResource = () => {
     this.cardResource = this.getCard(
       this,
-      () => this.playgroundSelection?.cardId,
+      () =>
+        this.playgroundSelection?.cardId ??
+        (!this.args.isFieldDef ? this.defaultCard?.id : undefined),
     );
   };
 
@@ -230,10 +238,29 @@ export default class PlaygroundPanel extends Component<Signature> {
     return this.args.isFieldDef ? 0 : undefined;
   }
 
+  private makeSearch = () => {
+    this.search = this.getCards(
+      this,
+      () => this.query,
+      () => this.recentRealms,
+      { isLive: true },
+    ) as ReturnType<getCards>;
+  };
+
+  private get cards() {
+    return this.search?.instances ?? [];
+  }
+
   private get dropdownSelection(): SelectedInstance | undefined {
     if (!this.card) {
-      return undefined;
+      let card = this.cards?.[0];
+      if (card) {
+        this.defaultCard = card;
+        return { card, fieldIndex: undefined };
+      }
+      return;
     }
+    this.defaultCard = undefined;
     return {
       card: this.card,
       fieldIndex: this.args.isFieldDef ? this.fieldIndex : undefined,
@@ -422,6 +449,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     )?.click();
 
   <template>
+    {{consumeContext this.makeSearch}}
     {{yield
       (component
         PlaygroundTitle
