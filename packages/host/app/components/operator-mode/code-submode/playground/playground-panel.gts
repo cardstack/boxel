@@ -446,7 +446,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     )?.click();
 
   <template>
-    {{consumeContext this.makeSearch}}
+    {{#unless @isFieldDef}}
+      {{consumeContext this.makeSearch}}
+    {{/unless}}
     {{yield
       (component
         PlaygroundTitle
