@@ -1,6 +1,5 @@
-import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import { MatrixClient, sendErrorEvent, sendMessageEvent } from './matrix';
+import type { MatrixClient } from './matrix';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -9,7 +8,6 @@ import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
-import { thinkingMessage } from '../constants';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import {
@@ -17,112 +15,12 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
+import MatrixResponsePublisher from './matrix-response-publisher';
+import ResponseState from './response-state';
 
 let log = logger('ai-bot');
 
 export const DEFAULT_EVENT_SIZE_MAX = 1024 * 16; // 16kB
-
-class MatrixResponsePublisher {
-  private initialMessageSent = false;
-  responseEventIds: string[] | undefined;
-  get currentResponseEventId() {
-    return this.responseEventIds?.[this.responseEventIds.length - 1];
-  }
-
-  get originalResponseEventId() {
-    return this.responseEventIds?.[0];
-  }
-
-  constructor(
-    readonly client: MatrixClient,
-    readonly roomId: string,
-    readonly responseState: ResponseState,
-  ) {}
-
-  async sendMessage(
-    data: any = {},
-    commandRequests: Partial<CommandRequest>[] = [],
-  ) {
-    return sendMessageEvent(
-      this.client,
-      this.roomId,
-      this.responseState.latestContent,
-      this.currentResponseEventId,
-      data,
-      commandRequests,
-      this.responseState.latestReasoning,
-    );
-  }
-
-  async sendError(error: any) {
-    sendErrorEvent(
-      this.client,
-      this.roomId,
-      error,
-      this.originalResponseEventId,
-    );
-  }
-
-  async ensureThinkingMessageSent() {
-    if (!this.initialMessageSent) {
-      let initialMessage = await sendMessageEvent(
-        this.client,
-        this.roomId,
-        '',
-        undefined,
-        { isStreamingFinished: false },
-        [],
-        thinkingMessage,
-      );
-      this.responseEventIds = [initialMessage.event_id];
-      this.initialMessageSent = true;
-    }
-  }
-}
-
-class ResponseState {
-  latestReasoning: string = '';
-  latestContent: string = '';
-  toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
-  private toolCallsJson: string | undefined;
-
-  updateToolCalls(
-    toolCallsSnapshot: ChatCompletionSnapshot.Choice.Message.ToolCall[],
-  ) {
-    let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
-    if (this.toolCallsJson !== latestToolCallsJson) {
-      this.toolCalls = toolCallsSnapshot;
-      this.toolCallsJson = latestToolCallsJson;
-      return true;
-    }
-    return false;
-  }
-
-  updateContent(contentSnapshot: string | null | undefined) {
-    if (contentSnapshot?.length) {
-      contentSnapshot = cleanContent(contentSnapshot);
-      if (this.latestContent !== contentSnapshot) {
-        if (this.latestReasoning === thinkingMessage) {
-          this.latestReasoning = '';
-        }
-        this.latestContent = contentSnapshot;
-        return true;
-      }
-    }
-    return false;
-  }
-
-  updateReasoning(newReasoningContent: string | undefined) {
-    if (newReasoningContent?.length) {
-      if (this.latestReasoning === thinkingMessage) {
-        this.latestReasoning = '';
-      }
-      this.latestReasoning = this.latestReasoning + newReasoningContent;
-      return true;
-    }
-    return false;
-  }
-}
 
 export class Responder {
   eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
