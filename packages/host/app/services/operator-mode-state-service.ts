@@ -126,13 +126,13 @@ export default class OperatorModeStateService extends Service {
     return this.state.aiAssistantOpen;
   }
 
-  set aiAssistantOpen(value: boolean) {
-    this.state.aiAssistantOpen = value;
+  openAiAssistant = () => {
+    this.state.aiAssistantOpen = true;
     this.schedulePersist();
-  }
+  };
 
-  toggleAiAssistant = () => {
-    this.aiAssistantOpen = !this.aiAssistantOpen;
+  closeAiAssistant = () => {
+    this.state.aiAssistantOpen = false;
     this.schedulePersist();
   };
 

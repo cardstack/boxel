@@ -119,6 +119,7 @@ export default class Index extends Route<void> {
           operatorModeState: stringify({
             stacks,
             submode: Submodes.Interact,
+            aiAssistantOpen: this.operatorModeStateService.aiAssistantOpen,
           } as OperatorModeSerializedState),
         },
       });
