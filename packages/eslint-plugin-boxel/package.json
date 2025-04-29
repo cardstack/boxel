@@ -45,7 +45,7 @@
     "@babel/plugin-proposal-class-properties": "^7.18.6",
     "@eslint/eslintrc": "^2.1.4",
     "@eslint/js": "^8.57.1",
-    "@typescript-eslint/eslint-plugin": "^7.18.0",
+    "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "^7.18.0",
     "eslint": "catalog:",
     "eslint-doc-generator": "catalog:",

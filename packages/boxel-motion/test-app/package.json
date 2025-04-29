@@ -46,7 +46,7 @@
     "@types/htmlbars-inline-precompile": "^3.0.3",
     "@types/qunit": "catalog:",
     "@types/rsvp": "^4.0.9",
-    "@typescript-eslint/eslint-plugin": "^7.16.1",
+    "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "^7.18.0",
     "broccoli-asset-rev": "^3.0.0",
     "concurrently": "^8.2.2",

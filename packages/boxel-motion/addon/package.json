@@ -66,7 +66,7 @@
     "@types/htmlbars-inline-precompile": "^3.0.3",
     "@types/qunit": "catalog:",
     "@types/rsvp": "^4.0.9",
-    "@typescript-eslint/eslint-plugin": "^7.16.1",
+    "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "^7.18.0",
     "babel-plugin-ember-template-compilation": "^2.2.1",
     "concurrently": "^8.0.1",
