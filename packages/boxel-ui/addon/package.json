@@ -83,7 +83,7 @@
     "@types/lodash": "^4.14.182",
     "@types/pluralize": "^0.0.30",
     "@typescript-eslint/eslint-plugin": "catalog:",
-    "@typescript-eslint/parser": "^7.18.0",
+    "@typescript-eslint/parser": "catalog:",
     "babel-plugin-ember-template-compilation": "^2.2.1",
     "concurrently": "^8.0.1",
     "ember-template-imports": "^4.1.1",

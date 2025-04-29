@@ -67,7 +67,7 @@
     "@types/qunit": "catalog:",
     "@types/rsvp": "^4.0.9",
     "@typescript-eslint/eslint-plugin": "catalog:",
-    "@typescript-eslint/parser": "^7.18.0",
+    "@typescript-eslint/parser": "catalog:",
     "babel-plugin-ember-template-compilation": "^2.2.1",
     "concurrently": "^8.0.1",
     "ember-source": "~5.4.0",

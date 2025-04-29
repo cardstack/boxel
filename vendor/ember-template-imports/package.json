@@ -51,7 +51,7 @@
     "@types/line-column": "^1.0.0",
     "@types/string.prototype.matchall": "^4.0.1",
     "@typescript-eslint/eslint-plugin": "catalog:",
-    "@typescript-eslint/parser": "^7.18.0",
+    "@typescript-eslint/parser": "catalog:",
     "babel-eslint": "^10.1.0",
     "broccoli-asset-rev": "^3.0.0",
     "ember-auto-import": "^2.7.2",

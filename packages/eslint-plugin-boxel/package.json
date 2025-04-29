@@ -46,7 +46,7 @@
     "@eslint/eslintrc": "^2.1.4",
     "@eslint/js": "^8.57.1",
     "@typescript-eslint/eslint-plugin": "catalog:",
-    "@typescript-eslint/parser": "^7.18.0",
+    "@typescript-eslint/parser": "catalog:",
     "eslint": "catalog:",
     "eslint-doc-generator": "catalog:",
     "eslint-plugin-eslint-comments": "catalog:",
