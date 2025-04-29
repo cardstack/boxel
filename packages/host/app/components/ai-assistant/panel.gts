@@ -26,7 +26,6 @@ import ENV from '@cardstack/host/config/environment';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import AddSkillsToRoomCommand from '../../commands/add-skills-to-room';
 import CreateAiAssistantRoomCommand from '../../commands/create-ai-assistant-room';
 import { Message } from '../../lib/matrix-classes/message';
 import { isMatrixError, eventDebounceMs } from '../../lib/matrix-utils';
@@ -464,29 +463,18 @@ export default class AiAssistantPanel extends Component<Signature> {
   private doCreateRoom = restartableTask(async (name: string) => {
     try {
       console.time('Total room creation time');
-
-      console.time('CreateAiAssistantRoomCommand execution');
-      let createRoomCommand = new CreateAiAssistantRoomCommand(
-        this.commandService.commandContext,
-      );
-      let { roomId } = await createRoomCommand.execute({ name });
-      console.timeEnd('CreateAiAssistantRoomCommand execution');
-
       console.time('Load default skills');
       const defaultSkills = await this.matrixService.loadDefaultSkills(
         this.operatorModeStateService.state.submode,
       );
       console.timeEnd('Load default skills');
 
-      console.time('AddSkillsToRoomCommand execution');
-      let addSkillsToRoomCommand = new AddSkillsToRoomCommand(
+      console.time('CreateAiAssistantRoomCommand execution');
+      let createRoomCommand = new CreateAiAssistantRoomCommand(
         this.commandService.commandContext,
       );
-      await addSkillsToRoomCommand.execute({
-        roomId,
-        skills: defaultSkills,
-      });
-      console.timeEnd('AddSkillsToRoomCommand execution');
+      let { roomId } = await createRoomCommand.execute({ name, defaultSkills });
+      console.timeEnd('CreateAiAssistantRoomCommand execution');
 
       window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
       this.enterRoom(roomId);
