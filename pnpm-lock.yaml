@@ -181,9 +181,6 @@ importers:
       eslint-plugin-prettier:
         specifier: 'catalog:'
         version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
-      hcl2-parser:
-        specifier: ^1.0.3
-        version: 1.0.3
       prettier:
         specifier: ^3.5.1
         version: 3.5.1
@@ -10615,9 +10612,6 @@ packages:
   hasown@2.0.2:
     resolution: {integrity: sha512-0hJU9SCPvmMzIBdZFqNPXWa6dqh7WdH0cII9y+CyS8rG3nL48Bclra9HmKhVVUHyPWNH5Y7xDwAB7bfgSjkUMQ==}
     engines: {node: '>= 0.4'}
-
-  hcl2-parser@1.0.3:
-    resolution: {integrity: sha512-NQUm/BFF+2nrBfeqDhhsy4DxxiLHgkeE3FywtjFiXnjSUaio3w4Tz1MQ3vGJBUhyArzOXJ24pO7JwE5LAn7Ncg==}
 
   he@1.2.0:
     resolution: {integrity: sha512-F/1DnUGPopORZi0ni+CvrCgHQ5FyEAHRLSApuYWMmrbSwoN2Mn/7k+Gl38gJnR7yyDZk6WLXwiGod1JOWNDKGw==}
@@ -27063,8 +27057,6 @@ snapshots:
   hasown@2.0.2:
     dependencies:
       function-bind: 1.1.2
-
-  hcl2-parser@1.0.3: {}
 
   he@1.2.0: {}
 
