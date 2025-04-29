@@ -11,6 +11,8 @@ import {
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
@@ -159,8 +161,8 @@ export interface CardMessageContent {
   format: 'org.matrix.custom.html';
   body: string;
   isStreamingFinished?: boolean;
-  hasContinuation?: boolean;
-  continuationOf?: string; // event_id of the message we are continuing
+  [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]?: boolean;
+  [APP_BOXEL_CONTINUATION_OF_CONTENT_KEY]?: string; // event_id of the message we are continuing
   [APP_BOXEL_REASONING_CONTENT_KEY]?: string;
   [APP_BOXEL_COMMAND_REQUESTS_KEY]?: Partial<EncodedCommandRequest>[]; // TODO
   errorMessage?: string;

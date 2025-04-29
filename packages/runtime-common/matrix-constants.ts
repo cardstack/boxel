@@ -14,7 +14,10 @@ export const APP_BOXEL_REALMS_EVENT_TYPE = 'app.boxel.realms';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';
 export const APP_BOXEL_REASONING_CONTENT_KEY = 'app.boxel.reasoning';
-
+export const APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY =
+  'app.boxel.has-continuation';
+export const APP_BOXEL_CONTINUATION_OF_CONTENT_KEY =
+  'app.boxel.continuation-of';
 export const DEFAULT_LLM = 'openai/gpt-4o';
 export const DEFAULT_LLM_LIST = [
   'anthropic/claude-3.5-sonnet',

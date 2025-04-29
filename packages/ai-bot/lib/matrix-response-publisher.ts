@@ -3,6 +3,10 @@ import { CommandRequest } from '@cardstack/runtime-common/commands';
 import { MatrixClient, sendErrorEvent, sendMessageEvent } from './matrix';
 import { thinkingMessage } from '../constants';
 import ResponseState from './response-state';
+import {
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
+} from '@cardstack/runtime-common';
 
 function toCommandRequest(
   toolCall: ChatCompletionMessageToolCall,
@@ -92,10 +96,11 @@ export default class MatrixResponsePublisher {
       // TODO: type as Partial<CardMessageContent>
       let extraData: any = {
         isStreamingFinished: true,
-        hasContinuation: true,
+        [APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]: true,
       };
       if (this.previousResponseEventId) {
-        extraData['continuationOf'] = this.previousResponseEventId;
+        extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
+          this.previousResponseEventId;
       }
       await sendMessageEvent(
         this.client,
@@ -127,10 +132,12 @@ export default class MatrixResponsePublisher {
       isStreamingFinished: this.responseState.isStreamingFinished,
     };
     if (this.previousResponseEventId) {
-      extraData['continuationOf'] = this.previousResponseEventId;
+      extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
+        this.previousResponseEventId;
     }
     if (this.currentResponseEvent.needsContinuation) {
-      extraData['continuationOf'] = this.currentResponseEventId;
+      extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
+        this.currentResponseEventId;
     }
 
     let message = await sendMessageEvent(

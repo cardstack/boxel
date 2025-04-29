@@ -8,6 +8,8 @@ import { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
@@ -636,7 +638,7 @@ module('Responding', (hooks) => {
     );
   });
 
-  test.only('When content exceeds max event size threshold, it will be split into multiple events', async () => {
+  test('When content exceeds max event size threshold, it will be split into multiple events', async () => {
     responder.matrixResponsePublisher.eventSizeMax = 1024 * 2.5; // 2.5KB max event size
 
     let longContentPart1 = 'a'.repeat(1024); // 1KB of content
@@ -674,7 +676,7 @@ module('Responding', (hooks) => {
     assert.equal(sentEvents.length, 4, 'Four events should be sent');
 
     // verify 3rd event is an update to the first event that sets hasContinuation to true
-    console.log(JSON.stringify(sentEvents, null, 2));
+    // console.log(JSON.stringify(sentEvents, null, 2));
     assert.deepEqual(sentEvents[2].content['m.relates_to'], {
       rel_type: 'm.replace',
       event_id: sentEvents[0].eventId,
@@ -687,12 +689,15 @@ module('Responding', (hooks) => {
       sentEvents[2].content.body.endsWith('b'),
       'Continuation message content ends with b',
     );
-    assert.equal(sentEvents[2].content['app.boxel.hasContinuation'], true);
+    assert.equal(
+      sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      true,
+    );
     assert.equal(sentEvents[2].content.isStreamingFinished, true);
 
     // verify 4th event has continuationOf pointing to 3rd event and isStreamingFinished to true
     assert.equal(
-      sentEvents[3].content['app.boxel.continuationOf'],
+      sentEvents[3].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
       sentEvents[0].eventId,
     );
     assert.equal(sentEvents[3].content.isStreamingFinished, true);
