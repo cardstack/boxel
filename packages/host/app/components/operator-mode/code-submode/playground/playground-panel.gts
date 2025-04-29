@@ -108,7 +108,6 @@ export default class PlaygroundPanel extends Component<Signature> {
   @tracked private search: ReturnType<getCards> | undefined;
   @tracked private fieldChooserIsOpen = false;
   @tracked private cardCreationError: CardErrorJSONAPI | undefined = undefined;
-  @tracked private defaultCard: CardDef | undefined = undefined;
 
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
@@ -124,7 +123,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       this,
       () =>
         this.playgroundSelection?.cardId ??
-        (!this.args.isFieldDef ? this.defaultCard?.id : undefined),
+        (!this.args.isFieldDef ? this.cards?.[0]?.id : undefined),
     );
   };
 
@@ -255,12 +254,10 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (!this.card) {
       let card = this.cards?.[0];
       if (card) {
-        this.defaultCard = card;
         return { card, fieldIndex: undefined };
       }
-      return;
+      return undefined;
     }
-    this.defaultCard = undefined;
     return {
       card: this.card,
       fieldIndex: this.args.isFieldDef ? this.fieldIndex : undefined,
