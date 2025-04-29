@@ -316,7 +316,14 @@ export default class SubmodeLayout extends Component<Signature> {
           <AiAssistantButton
             class='chat-btn'
             @isActive={{this.operatorModeStateService.aiAssistantOpen}}
-            {{on 'click' this.operatorModeStateService.openAiAssistant}}
+            {{on
+              'click'
+              (if
+                this.operatorModeStateService.aiAssistantOpen
+                this.operatorModeStateService.closeAiAssistant
+                this.operatorModeStateService.openAiAssistant
+              )
+            }}
           />
         </ResizablePanel>
         {{#if this.operatorModeStateService.aiAssistantOpen}}
