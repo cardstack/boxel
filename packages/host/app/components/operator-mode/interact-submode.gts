@@ -51,6 +51,8 @@ import SaveCardCommand from '@cardstack/host/commands/save-card';
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import UpdateCodePathWithSelectionCommand from '@cardstack/host/commands/update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from '@cardstack/host/commands/update-playground-selection';
+import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
 
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -406,6 +408,12 @@ export default class InteractSubmode extends Component {
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
       },
+      createAiAssistantRoom: async (name: string) => {
+        return await here._createAiAssistantRoom.perform(name);
+      },
+      openAiAssistantRoom: async (roomId: string) => {
+        await here._openAiAssistantRoom.perform(roomId);
+      },
     };
     return { ...actions, ...catalogActions };
   }
@@ -604,6 +612,22 @@ export default class InteractSubmode extends Component {
       });
     },
   );
+
+  private _createAiAssistantRoom = task(async (name: string) => {
+    return await new CreateAiAssistantRoomCommand(
+      this.commandService.commandContext,
+    ).execute({
+      name,
+    });
+  });
+
+  private _openAiAssistantRoom = task(async (roomId: string) => {
+    await new OpenAiAssistantRoomCommand(
+      this.commandService.commandContext,
+    ).execute({
+      roomId,
+    });
+  });
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(

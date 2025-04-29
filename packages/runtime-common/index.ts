@@ -450,6 +450,8 @@ export interface CatalogActions {
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;
+  createAiAssistantRoom: (name: string) => Promise<{ roomId: string }>;
+  openAiAssistantRoom: (roomId: string) => Promise<void>;
 }
 
 export type Actions = CardActions & CatalogActions;

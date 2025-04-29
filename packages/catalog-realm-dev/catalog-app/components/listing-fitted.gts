@@ -342,6 +342,7 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 export class ListingFittedTemplate extends Component<typeof Listing> {
   @tracked installedListing = false;
   @tracked writableRealms: string[] = [];
+  roomId: string | null = null;
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -419,6 +420,19 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
         selectedCodeRef.name,
         undefined,
       );
+
+      if (!this.roomId && this.args.context?.actions?.createAiAssistantRoom) {
+        const { roomId } =
+          await this.args.context?.actions?.createAiAssistantRoom(
+            this.args.model.name ? `Remix of ${this.args.model.name}` : 'Remix',
+          );
+        this.roomId = roomId;
+      }
+
+      if (this.roomId && this.args.context?.actions?.openAiAssistantRoom) {
+        await this.args.context?.actions?.openAiAssistantRoom(this.roomId);
+      }
+
       await this.args.context?.actions?.switchSubmode('code', codePath);
     }
   });
