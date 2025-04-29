@@ -253,6 +253,11 @@ export class PgQueueRunner implements QueueRunner {
   }
 
   register<A, T>(jobType: string, handler: (arg: A) => Promise<T>) {
+    log.info(
+      `registering job handler for %s, workerId: %s`,
+      jobType,
+      this.#workerId,
+    );
     this.#handlers.set(jobType, handler);
   }
 

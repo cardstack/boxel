@@ -33,6 +33,7 @@ export class CardCollectionResource<
   T extends CardDef = CardDef,
 > extends Resource<Args> {
   #ids: string[] | undefined;
+  #hasRegisteredDestructor = false;
   private _cards = new TrackedArray<T>();
   private _cardErrors = new TrackedArray<CardError>();
   @tracked private _isLoaded = false;
@@ -52,11 +53,14 @@ export class CardCollectionResource<
       }
       this.load.perform();
     }
-    registerDestructor(this, () => {
-      for (let id of this.#ids ?? []) {
-        this.store.dropReference(id);
-      }
-    });
+    if (!this.#hasRegisteredDestructor) {
+      this.#hasRegisteredDestructor = true;
+      registerDestructor(this, () => {
+        for (let id of this.#ids ?? []) {
+          this.store.dropReference(id);
+        }
+      });
+    }
   }
 
   private load = restartableTask(async () => {

@@ -166,13 +166,9 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  addReference(idOrDoc: string | SingleCardDocument | undefined) {
-    if (!idOrDoc) {
-      return;
-    }
-    let id = asURL(idOrDoc);
+  addReference(id: string | undefined) {
     if (!id) {
-      throw new Error(`Cannot add reference with no id`);
+      return;
     }
     // synchronously update the reference count so we don't run into race
     // conditions requiring a mutex
@@ -185,7 +181,7 @@ export default class StoreService extends Service implements StoreInterface {
 
     // intentionally not awaiting this. we keep track of the promise in
     // this.newReferencePromises
-    this.wireUpNewReference(idOrDoc);
+    this.wireUpNewReference(id);
   }
 
   // This method creates a new instance in the store and return the new card ID
@@ -236,6 +232,17 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     }
+
+    let maybeOldInstance = instance.id
+      ? this.identityContext.get(instance.id)
+      : undefined;
+    if (maybeOldInstance) {
+      await this.updateInstanceChangeSubscription(
+        'stop-tracking',
+        maybeOldInstance,
+      );
+    }
+
     this.identityContext.set(instance.id ?? instance[localIdSymbol], instance);
 
     if (!opts?.doNotPersist) {
@@ -369,32 +376,27 @@ export default class StoreService extends Service implements StoreInterface {
     return await Promise.allSettled(this.newReferencePromises);
   }
 
-  private async wireUpNewReference(idOrDoc: string | SingleCardDocument) {
+  getReferenceCount(id: string) {
+    return this.referenceCount.get(id) ?? 0;
+  }
+
+  private async wireUpNewReference(id: string) {
     let deferred = new Deferred<void>();
     await this.withTestWaiters(async () => {
       this.newReferencePromises.push(deferred.promise);
-      let maybeUrl: string | undefined;
-      let isDoc = typeof idOrDoc !== 'string';
       try {
         await this.ready;
-        maybeUrl = asURL(idOrDoc);
-        if (!maybeUrl?.startsWith('http')) {
+        if (isLocalId(id)) {
           deferred.fulfill();
           return;
         }
-        if (!maybeUrl) {
-          throw new Error(`Cannot wire up a reference without an id`);
-        }
-        let url = maybeUrl;
-        let urlOrDoc = idOrDoc;
-        let instanceOrError = this.peek(url);
-        if (!instanceOrError || isDoc) {
+        let instanceOrError = this.peek(id);
+        if (!instanceOrError) {
           instanceOrError = await this.getInstance({
-            urlOrDoc,
-            opts: { noCache: isDoc },
+            urlOrDoc: id,
           });
         }
-        this.subscribeToRealm(new URL(url));
+        this.subscribeToRealm(new URL(id));
         await this.updateInstanceChangeSubscription(
           'start-tracking',
           instanceOrError,
@@ -402,12 +404,12 @@ export default class StoreService extends Service implements StoreInterface {
 
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
-          this.identityContext.addInstanceOrError(url, instanceOrError);
+          this.identityContext.addInstanceOrError(id, instanceOrError);
         }
         deferred.fulfill();
       } catch (e) {
         console.error(
-          `error encountered wiring up new reference for ${JSON.stringify(idOrDoc)}`,
+          `error encountered wiring up new reference for ${JSON.stringify(id)}`,
           e,
         );
         deferred.reject(e);

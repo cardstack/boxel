@@ -52,6 +52,7 @@ export class SearchResource extends Resource<Args> {
   #isLive = false;
   #previousQuery: Query | undefined;
   #previousRealms: string[] | undefined;
+  #hasRegisteredDestructor = false;
 
   modify(_positional: never[], named: Args['named']) {
     let { query, realms, isLive, doWhileRefreshing } = named;
@@ -74,6 +75,10 @@ export class SearchResource extends Resource<Args> {
     }
     this.#previousQuery = query;
     this.#previousRealms = realms;
+
+    for (let instance of this._instances) {
+      this.store.dropReference(instance.id);
+    }
 
     this.loaded = this.search.perform(query);
 
@@ -101,7 +106,9 @@ export class SearchResource extends Resource<Args> {
           }
         }),
       }));
-
+    }
+    if (!this.#hasRegisteredDestructor) {
+      this.#hasRegisteredDestructor = true;
       registerDestructor(this, () => {
         for (let instance of this._instances) {
           this.store.dropReference(instance.id);
@@ -149,9 +156,6 @@ export class SearchResource extends Resource<Args> {
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
     let token = waiter.beginAsync();
-    for (let instance of this._instances) {
-      this.store.dropReference(instance.id);
-    }
     try {
       let results = flatMap(
         await Promise.all(
@@ -171,9 +175,11 @@ export class SearchResource extends Resource<Args> {
             }
             let collectionDoc = json;
             for (let data of collectionDoc.data) {
-              this.store.addReference({ data });
+              await this.store.add(
+                { data },
+                { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
+              );
             }
-            await this.store.flush();
             return collectionDoc.data
               .map((r) => this.store.peek(r.id!)) // all results will have id's
               .filter((i) => isCardInstance(i)) as CardDef[];
@@ -197,6 +203,10 @@ export class SearchResource extends Resource<Args> {
         this._instances.length,
         ...results.map((instance) => instance),
       );
+      for (let instance of this._instances) {
+        this.store.addReference(instance.id);
+      }
+      await this.store.flush();
     } finally {
       waiter.endAsync(token);
     }

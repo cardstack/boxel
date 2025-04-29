@@ -2,13 +2,12 @@ import './instrument';
 import './setup-logger'; // This should be first
 import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
 import OpenAI from 'openai';
-import { logger, aiBotUsername } from '@cardstack/runtime-common';
+import { logger, aiBotUsername, DEFAULT_LLM } from '@cardstack/runtime-common';
 import {
   type PromptParts,
   constructHistory,
   isCommandResultStatusApplied,
   getPromptParts,
-  extractCardFragmentsFromEvents,
 } from './helpers';
 
 import {
@@ -88,16 +87,16 @@ class Assistant {
     // Sending tools to models that don't support them results in an error
     // from openrouter.
     if (
-      prompt.tools.length === 0 ||
-      !this.toolCallCapableModels.has(prompt.model)
+      prompt.tools?.length === 0 ||
+      (prompt.model && !this.toolCallCapableModels.has(prompt.model))
     ) {
       return this.openai.beta.chat.completions.stream({
-        model: prompt.model,
+        model: prompt.model ?? DEFAULT_LLM,
         messages: prompt.messages as ChatCompletionMessageParam[],
       });
     } else {
       return this.openai.beta.chat.completions.stream({
-        model: prompt.model,
+        model: prompt.model ?? DEFAULT_LLM,
         messages: prompt.messages as ChatCompletionMessageParam[],
         tools: prompt.tools,
         tool_choice: prompt.toolChoice,
@@ -352,10 +351,9 @@ Common issues are:
       if (roomTitleAlreadySet(eventList)) {
         return;
       }
-      let cardFragments = extractCardFragmentsFromEvents(eventList);
-      let history: DiscreteMatrixEvent[] = constructHistory(
+      let history: DiscreteMatrixEvent[] = await constructHistory(
         eventList,
-        cardFragments,
+        client,
       );
       return await assistant.setTitle(
         room.roomId,

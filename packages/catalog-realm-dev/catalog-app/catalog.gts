@@ -500,18 +500,19 @@ class Isolated extends Component<typeof Catalog> {
   getComponent = (card: CardDef) => card.constructor.getComponent(card);
 
   <template>
-    <TabbedHeader
-      @tabs={{this.tabFilterOptions}}
-      @setActiveTab={{this.setActiveTab}}
-      @activeTabId={{this.activeTabId}}
-      @headerBackgroundColor={{this.headerColor}}
-      class='catalog-tab-header'
-    />
-
     <CatalogLayout
       @showSidebar={{this.shouldShowSidebar}}
       class='catalog-layout {{this.activeTabId}}'
     >
+      <:header>
+        <TabbedHeader
+          @tabs={{this.tabFilterOptions}}
+          @setActiveTab={{this.setActiveTab}}
+          @activeTabId={{this.activeTabId}}
+          @headerBackgroundColor={{this.headerColor}}
+          class='catalog-tab-header'
+        />
+      </:header>
       <:sidebar>
         <div class='sidebar-content'>
           <BoxelButton
@@ -577,8 +578,10 @@ class Isolated extends Component<typeof Catalog> {
     </CatalogLayout>
 
     <style scoped>
-      :global(:root) {
-        --catalog-layout-padding-top: var(--boxel-sp-lg);
+      .catalog-tab-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
       }
       .catalog-tab-header :deep(.app-title-group) {
         display: none;
@@ -635,7 +638,6 @@ class Isolated extends Component<typeof Catalog> {
       }
       .catalog-content {
         display: block;
-        overflow-y: auto;
       }
       .catalog-listing {
         background-color: transparent;

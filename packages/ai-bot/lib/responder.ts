@@ -13,8 +13,6 @@ import { thinkingMessage } from '../constants';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import {
-  APP_BOXEL_CARDFRAGMENT_MSGTYPE,
-  APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -26,12 +24,6 @@ export class Responder {
   static eventMayTriggerResponse(event: DiscreteMatrixEvent) {
     // If it's a message, we should respond unless it's a card fragment
     if (event.getType() === 'm.room.message') {
-      if (
-        event.getContent().msgtype === APP_BOXEL_CARDFRAGMENT_MSGTYPE ||
-        event.getContent().msgtype === APP_BOXEL_COMMAND_DEFINITIONS_MSGTYPE
-      ) {
-        return false;
-      }
       return true;
     }
 
