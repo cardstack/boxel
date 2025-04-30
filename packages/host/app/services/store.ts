@@ -879,6 +879,7 @@ export default class StoreService extends Service implements StoreInterface {
         cardChanged = true;
       }
       let api: typeof CardAPI | undefined;
+      let isNew = !instance.id;
       try {
         api = await this.cardService.getAPI();
         api.subscribeToChanges(instance, onCardChange);
@@ -904,7 +905,6 @@ export default class StoreService extends Service implements StoreInterface {
           realmURL = new URL(defaultRealmHref);
         }
         let json = await this.saveCardDocument(doc, realmURL);
-        let isNew = !instance.id;
 
         // if the card changed while the save was in flight then don't load the
         // server's version of the card--the next auto save will include these
@@ -939,6 +939,7 @@ export default class StoreService extends Service implements StoreInterface {
         let errorResponse = processCardError(
           instance.id ?? instance[localIdSymbol],
           err,
+          isNew,
         );
         let cardError = errorResponse.errors[0];
         await this.updateInstanceChangeSubscription(
@@ -1060,21 +1061,32 @@ export default class StoreService extends Service implements StoreInterface {
 function processCardError(
   url: string | undefined,
   error: any,
+  isCreationError?: boolean,
 ): CardErrorsJSONAPI {
   try {
     let errorResponse = JSON.parse(error.responseText);
-    return formattedError(url, error, errorResponse.errors?.[0]);
+    return formattedError(
+      url,
+      error,
+      errorResponse.errors?.[0],
+      isCreationError,
+    );
   } catch (parseError) {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        return formattedError(url, error, {
-          status: 404,
-          title: 'Card Not Found',
-          message: `The card ${url} does not exist`,
-        });
+        return formattedError(
+          url,
+          error,
+          {
+            status: 404,
+            title: 'Card Not Found',
+            message: `The card ${url} does not exist`,
+          },
+          isCreationError,
+        );
       default:
-        return formattedError(url, error);
+        return formattedError(url, error, undefined, isCreationError);
     }
   }
 }

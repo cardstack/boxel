@@ -37,6 +37,7 @@ export interface CardErrorJSONAPI {
     cardTitle: string | null;
     scopedCssUrls: string[];
     stack: string | null;
+    isCreationError?: true;
   };
   additionalErrors?: (CardError | SearchResultError['error'] | Error)[] | null;
 }
@@ -49,6 +50,7 @@ export function formattedError(
   url: string | undefined,
   error: any,
   err?: CardError | Partial<CardErrorJSONAPI>,
+  isCreationError?: boolean,
 ): CardErrorsJSONAPI {
   if (isCardError(err)) {
     let cardError;
@@ -64,6 +66,7 @@ export function formattedError(
         scopedCssUrls,
         stack: cardError.stack ?? err.stack ?? error.stack ?? null,
         cardTitle,
+        ...(isCreationError ? { isCreationError } : {}),
       };
     } else if (isCardError(additionalError)) {
       cardError = additionalError;
@@ -88,6 +91,7 @@ export function formattedError(
             scopedCssUrls: [],
             stack: cardError.stack ?? err.stack ?? error.stack ?? null,
             cardTitle: null,
+            ...(isCreationError ? { isCreationError } : {}),
           },
           additionalErrors: cardError.additionalErrors,
         },
@@ -117,6 +121,7 @@ export function formattedError(
           scopedCssUrls: [],
           stack: error.stack ?? null,
           cardTitle: null,
+          ...(isCreationError ? { isCreationError } : {}),
         },
       },
     ],

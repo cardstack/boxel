@@ -11,7 +11,7 @@ import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -61,7 +61,6 @@ interface Signature {
     card?: CardDef;
     field?: FieldDef;
     cardError?: CardErrorJSONAPI;
-    cardCreationError?: boolean;
   };
 }
 
@@ -79,7 +78,7 @@ export default class PlaygroundContent extends Component<Signature> {
             >
               <CardError
                 @error={{@cardError}}
-                @cardCreationError={{not @cardError.id}}
+                @cardCreationError={{@cardError.meta.isCreationError}}
               />
             </CardContainer>
           {{else if card}}
