@@ -62,6 +62,7 @@ interface Signature {
     field?: FieldDef;
     cardError?: CardErrorJSONAPI;
     cardCreationError?: boolean;
+    query: Query;
   };
 }
 
@@ -70,7 +71,7 @@ export default class PlaygroundContent extends Component<Signature> {
     {{consumeContext @makeCardResource}}
     <section class='playground-panel' data-test-playground-panel>
       <div class='playground-panel-content'>
-        {{#let (if @isFieldDef @field @card) as |card|}}
+        {{#let this.currentItem as |card|}}
           {{#if @cardError}}
             <CardContainer
               class='error-container'
@@ -197,6 +198,14 @@ export default class PlaygroundContent extends Component<Signature> {
 
   private get maybeGenerateFieldSpec() {
     return this.args.isFieldDef && !this.args.card;
+  }
+
+  private get currentItem(): FieldDef | CardDef | undefined {
+    if (this.args.isFieldDef) {
+      return this.args.field;
+    }
+
+    return this.args.card;
   }
 
   private get defaultFormat() {

@@ -758,11 +758,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           }
       }`;
       await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
+      assert.dom('[data-test-selected-item]').hasText('Mad As a Hatter');
       assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
       assert.dom('[data-test-byline]').containsText('Jane Doe');
 
       await realm.write('blog-post.gts', blogPostCard);
       await settled();
+      assert.dom('[data-test-selected-item]').hasText('Mad As a Hatter');
       assert
         .dom('[data-test-post-title]')
         .containsText('Hello Mad As a Hatter');

@@ -37,6 +37,7 @@ interface Signature {
     onFieldSelect: (index: number) => void;
     closeFieldChooser: () => void;
     fieldChooserIsOpen: boolean;
+    moduleId: string;
   };
 }
 
@@ -64,6 +65,7 @@ export default class PlaygroundTitle extends Component<Signature> {
         @chooseCard={{@chooseCard}}
         @createNew={{if @canWriteRealm @createNew}}
         @createNewIsRunning={{@createNewIsRunning}}
+        @moduleId={{@moduleId}}
       />
     </button>
 

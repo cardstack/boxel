@@ -23,7 +23,6 @@ import {
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
 import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -121,14 +120,16 @@ export default class PlaygroundPanel extends Component<Signature> {
   private makeCardResource = () => {
     this.cardResource = this.getCard(
       this,
-      () =>
-        this.playgroundSelection?.cardId ??
-        (!this.args.isFieldDef ? this.cards?.[0]?.id : undefined),
+      () => this.playgroundSelection?.cardId,
     );
   };
 
   private get playgroundSelection() {
     return this.playgroundPanelService.getSelection(this.moduleId);
+  }
+
+  private get peekPlaygroundSelection() {
+    return this.playgroundPanelService.peekSelection(this.moduleId);
   }
 
   private get card(): CardDef | undefined {
@@ -242,7 +243,6 @@ export default class PlaygroundPanel extends Component<Signature> {
       this,
       () => this.query,
       () => this.recentRealms,
-      { isLive: true },
     ) as ReturnType<getCards>;
   };
 
@@ -252,10 +252,18 @@ export default class PlaygroundPanel extends Component<Signature> {
 
   private get dropdownSelection(): SelectedInstance | undefined {
     if (!this.card) {
-      let card = this.cards?.[0];
-      if (card) {
-        return { card, fieldIndex: undefined };
-      }
+      // let card = this.cards?.[0];
+      // if (card) {
+      //   if (!this.peekPlaygroundSelection) {
+      //     this.playgroundPanelService.persistSelections(
+      //       this.moduleId,
+      //       card.id,
+      //       'isolated',
+      //       undefined,
+      //     );
+      //     return { card, fieldIndex: undefined };
+      //   }
+      // }
       return undefined;
     }
     return {
@@ -310,7 +318,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     selectedFormat = this.format,
     index = this.fieldIndex,
   ) => {
-    let selection = this.playgroundPanelService.getSelection(this.moduleId);
+    let selection = this.playgroundPanelService.peekSelection(this.moduleId);
     if (selection?.cardId) {
       let { cardId, format, fieldIndex } = selection;
       if (
@@ -445,10 +453,19 @@ export default class PlaygroundPanel extends Component<Signature> {
       ) as BoxelSelect | null
     )?.click();
 
+  // private get runMakeSearch() {
+  //   if (!this.args.isFieldDef && !this.peekPlaygroundSelection) {
+  //     return true;
+  //   }
+
+  //   this.search = undefined;
+  //   return false;
+  // }
+
   <template>
-    {{#unless @isFieldDef}}
+    {{!-- {{#if this.runMakeSearch}}
       {{consumeContext this.makeSearch}}
-    {{/unless}}
+    {{/if}} --}}
     {{yield
       (component
         PlaygroundTitle
@@ -467,6 +484,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         onFieldSelect=this.onFieldSelect
         closeFieldChooser=this.closeFieldChooser
         chooseField=this.chooseField
+        moduleId=this.moduleId
       )
       (if
         this.isLoading
