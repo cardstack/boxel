@@ -892,18 +892,8 @@ module('Integration | operator-mode', function (hooks) {
           .querySelector('[data-test-auto-save-indicator]')
           ?.textContent?.trim() == 'Saving…',
     );
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-auto-save-indicator]')
-          ?.textContent?.trim() == 'Failed to save: Boom!',
-    );
-    setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
-
-    await waitFor('[data-test-pet]');
-    // Card still runs (our error was designed to only fire during save)
-    // despite save error
-    assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
+    await waitFor(`.error-header[data-test-card-header]`);
+    assert.dom('[data-test-card-header]').containsText('Card Error: Boom!');
   });
 
   test('a 403 from Web Application Firewall is handled gracefully when auto-saving', async function (assert) {
