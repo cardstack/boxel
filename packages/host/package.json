@@ -176,7 +176,7 @@
     "typescript": "~5.1.6",
     "uuid": "^9.0.1",
     "wait-for-localhost-cli": "^3.2.0",
-    "webpack": "^5.99.6"
+    "webpack": "catalog:"
   },
   "engines": {
     "node": ">= 20"

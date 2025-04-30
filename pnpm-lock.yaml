@@ -135,6 +135,9 @@ catalogs:
     svgo:
       specifier: ^3.0.2
       version: 3.0.2
+    webpack:
+      specifier: ^5.99.6
+      version: 5.99.6
 
 overrides:
   '@types/eslint': 8.56.5
@@ -907,7 +910,7 @@ importers:
         specifier: ~5.1.6
         version: 5.1.6
       webpack:
-        specifier: ^5.99.6
+        specifier: 'catalog:'
         version: 5.99.6
 
   packages/boxel-ui/addon:
@@ -1335,7 +1338,7 @@ importers:
         specifier: ~5.1.6
         version: 5.1.6
       webpack:
-        specifier: ^5.99.6
+        specifier: 'catalog:'
         version: 5.99.6
 
   packages/catalog-realm:
@@ -1950,7 +1953,7 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0
       webpack:
-        specifier: ^5.99.6
+        specifier: 'catalog:'
         version: 5.99.6
 
   packages/matrix:
@@ -2707,7 +2710,7 @@ importers:
         specifier: ^5.1.6
         version: 5.1.6
       webpack:
-        specifier: ^5.99.6
+        specifier: 'catalog:'
         version: 5.99.6
 
   vendor/transform-modules-amd-plugin:

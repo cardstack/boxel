@@ -96,7 +96,7 @@
     "qunit-dom": "catalog:",
     "tracked-built-ins": "^3.3.0",
     "typescript": "~5.1.6",
-    "webpack": "^5.99.6"
+    "webpack": "catalog:"
   },
   "peerDependencies": {
     "@glint/environment-ember-loose": "1.3.0",
