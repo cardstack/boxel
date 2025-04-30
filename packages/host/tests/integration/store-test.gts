@@ -407,11 +407,6 @@ module('Integration | Store', function (hooks) {
         instance[localId],
         'the error doc id is the local id of the instance',
       );
-      assert.strictEqual(
-        peek.id,
-        instance[localId],
-        'the error doc id is the local id of the instance',
-      );
       assert.ok(
         peek.message.includes('intentionallyNotDefined is not defined'),
       );
