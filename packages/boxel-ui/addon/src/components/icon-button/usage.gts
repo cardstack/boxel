@@ -30,7 +30,6 @@ export default class IconButtonUsage extends Component {
   @cssVariable declare boxelIconButtonBackground: CSSVariableInfo;
 
   @action log(message: string): void {
-    // eslint-disable-next-line no-console
     console.log(message);
   }
 
