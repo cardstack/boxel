@@ -97,7 +97,7 @@
     "glimmer-scoped-css": "catalog:",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "rollup": "^4.18.1",
+    "rollup": "catalog:",
     "rollup-plugin-copy": "^3.5.0",
     "svgo": "3.0.2"
   },
