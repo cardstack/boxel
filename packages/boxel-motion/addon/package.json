@@ -85,7 +85,7 @@
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "rollup": "catalog:",
-    "rollup-plugin-copy": "^3.5.0"
+    "rollup-plugin-copy": "catalog:"
   },
   "peerDependencies": {
     "@glint/environment-ember-loose": "1.3.0",

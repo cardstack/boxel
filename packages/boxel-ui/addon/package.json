@@ -98,7 +98,7 @@
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
     "rollup": "catalog:",
-    "rollup-plugin-copy": "^3.5.0",
+    "rollup-plugin-copy": "catalog:",
     "svgo": "3.0.2"
   },
   "peerDependencies": {
