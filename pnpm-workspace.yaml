@@ -4,11 +4,14 @@ packages:
   - packages/boxel-ui/*
   - vendor/*
 catalog:
+  "@typescript-eslint/eslint-plugin": ^7.18.0
+  "@typescript-eslint/parser": ^7.18.0
   "@types/qunit": 2.11.3
   ember-concurrency: ^4.0.3
   ember-concurrency-ts: ^0.3.1
   ember-qunit: ^8.0.1
   eslint: ^8.57.1
+  eslint-config-prettier: ^9.0.0
   eslint-doc-generator: ^1.7.1
   eslint-plugin-ember: ^12.5.0
   eslint-plugin-eslint-comments: ^3.2.0
@@ -25,5 +28,7 @@ catalog:
   eslint-plugin-typescript-sort-keys: ^3.2.0
   eslint-plugin-unicorn: ^51.0.1
   glimmer-scoped-css: ^0.8.1
+  prettier: ^3.5.3
+  prettier-plugin-ember-template-tag: ^1.1.0
   qunit: ^2.24.1
   qunit-dom: ^2.0.0
