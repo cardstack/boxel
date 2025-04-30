@@ -65,6 +65,12 @@ class IDResolver {
     this.#localIds.delete(remoteId);
   }
 
+  findRemoteId(searchString: string) {
+    return [...this.#localIds.keys()].find((remoteId) =>
+      remoteId.includes(searchString),
+    );
+  }
+
   reset() {
     this.#localIds = new Map();
     this.#remoteIds = new Map();
@@ -148,9 +154,7 @@ export default class IdentityContextWithGarbageCollection
 
   reset() {
     this.#cards.clear();
-    this.#cardErrors.clear();
     this.#nonTrackedCards.clear();
-    this.#nonTrackedCardErrors.clear();
     this.#gcCandidates.clear();
     this.#idResolver.reset();
   }
@@ -225,18 +229,33 @@ export default class IdentityContextWithGarbageCollection
     type: 'instance' | 'error',
     id: string,
   ): CardDef | CardError | undefined {
-    let item: CardDef | CardError | undefined;
+    let { item, localId } = this.tryFindingItem(type, id);
+
+    if (!item && isLocalId(id)) {
+      let maybeRemoteId = this.#idResolver.findRemoteId(id);
+      if (maybeRemoteId) {
+        ({ item, localId } = this.tryFindingItem(type, maybeRemoteId));
+      }
+    }
+
+    if (localId) {
+      this.#gcCandidates.delete(localId);
+    }
+    return item;
+  }
+
+  private tryFindingItem(type: 'instance' | 'error', localOrRemoteId: string) {
     let bucket = type === 'instance' ? this.#cards : this.#cardErrors;
     let silentBucket =
       type === 'instance' ? this.#nonTrackedCards : this.#nonTrackedCardErrors;
-    let localId = isLocalId(id) ? id : undefined;
-    let remoteId = !isLocalId(id) ? id : undefined;
-
-    if (localId) {
-      remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
-    }
-
+    let localId = isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
+    let remoteId = !isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
+    let item: CardDef | CardError | undefined;
     if (remoteId) {
+      if (localId) {
+        remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
+      }
+
       localId = this.#idResolver.getLocalId(remoteId);
       // try correlating the last part of the URL with a local ID to handle
       // the scenario where the instance has a newly assigned remote id
@@ -264,10 +283,7 @@ export default class IdentityContextWithGarbageCollection
       (remoteId
         ? (bucket.get(remoteId) ?? silentBucket.get(remoteId))
         : undefined);
-    if (localId) {
-      this.#gcCandidates.delete(localId);
-    }
-    return item;
+    return { item, localId };
   }
 
   private setItem(id: string, item: CardDef | CardError, notTracked?: true) {
@@ -285,6 +301,10 @@ export default class IdentityContextWithGarbageCollection
       localId =
         (instance ? instance[localIdSymbol] : undefined) ??
         this.#idResolver.getLocalId(remoteIds[0]);
+
+      let maybeOldLocalId = remoteIds[0].split('/').pop()!;
+      this.#cardErrors.delete(maybeOldLocalId);
+      this.#nonTrackedCardErrors.delete(maybeOldLocalId);
     }
 
     if (localId) {

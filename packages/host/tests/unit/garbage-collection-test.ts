@@ -592,7 +592,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
-  test('resetting the identity map clears all instances and card errors', async function (assert) {
+  test('resetting the identity map clears all instances but not card errors', async function (assert) {
     let {
       identityContext,
       instances: { hassan, jade },
@@ -603,7 +603,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     assert.deepEqual(
       identityContext.getInstanceOrError(hassan.id),
-      undefined,
+      makeError(hassan.id),
       'no error is returned from identity map',
     );
 

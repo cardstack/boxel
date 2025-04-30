@@ -262,7 +262,7 @@ export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
   lastSaved: number | undefined;
-  lastSaveError: Error | undefined;
+  lastSaveError: CardErrorJSONAPI | Error | undefined;
   lastSavedErrorMsg: string | undefined;
 };
 export type getCard<T extends CardDef = CardDef> = (
@@ -315,14 +315,14 @@ export interface Store {
       relativeTo?: URL | undefined;
       doNotPersist?: true;
     },
-  ): Promise<T>;
+  ): Promise<T | CardErrorJSONAPI>;
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
   get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
     patchData: PatchData,
-  ): Promise<T | undefined>;
+  ): Promise<T | CardErrorJSONAPI | undefined>;
   search(query: Query, realmURL: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
