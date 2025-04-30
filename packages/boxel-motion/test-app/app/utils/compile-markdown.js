@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-module-boundary-types */
-
 import hljs from 'highlight.js/lib/core';
 
 // Installed languages

@@ -9,6 +9,12 @@ catalogs:
     '@types/qunit':
       specifier: 2.11.3
       version: 2.11.3
+    '@typescript-eslint/eslint-plugin':
+      specifier: ^7.18.0
+      version: 7.18.0
+    '@typescript-eslint/parser':
+      specifier: ^7.18.0
+      version: 7.18.0
     ember-concurrency:
       specifier: ^4.0.3
       version: 4.0.3
@@ -21,6 +27,9 @@ catalogs:
     eslint:
       specifier: ^8.57.1
       version: 8.57.1
+    eslint-config-prettier:
+      specifier: ^9.0.0
+      version: 9.1.0
     eslint-doc-generator:
       specifier: ^1.7.1
       version: 1.7.1
@@ -69,6 +78,12 @@ catalogs:
     glimmer-scoped-css:
       specifier: ^0.8.1
       version: 0.8.1
+    prettier:
+      specifier: ^3.5.3
+      version: 3.5.3
+    prettier-plugin-ember-template-tag:
+      specifier: ^1.1.0
+      version: 1.1.0
     qunit:
       specifier: ^2.24.1
       version: 2.24.1
@@ -149,10 +164,10 @@ importers:
         specifier: ^1.48.0
         version: 1.48.0
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       ember-cli-htmlbars:
         specifier: ^6.3.0
@@ -170,8 +185,8 @@ importers:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-config-prettier:
-        specifier: ^8.4.0
-        version: 8.8.0(eslint@8.57.1)
+        specifier: 'catalog:'
+        version: 9.1.0(eslint@8.57.1)
       eslint-plugin-import:
         specifier: 'catalog:'
         version: 2.31.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)
@@ -180,13 +195,13 @@ importers:
         version: 3.0.1
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        specifier: 'catalog:'
+        version: 1.1.0(prettier@3.5.3)
       typescript:
         specifier: ~5.1.6
         version: 5.1.6
@@ -408,10 +423,10 @@ importers:
         specifier: 3.0.1
         version: 3.0.1
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       babel-plugin-ember-template-compilation:
         specifier: ^2.3.0
@@ -430,13 +445,13 @@ importers:
         version: 5.11.2
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.1)
+        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-config-prettier:
-        specifier: ^8.6.0
-        version: 8.8.0(eslint@8.57.1)
+        specifier: 'catalog:'
+        version: 9.1.0(eslint@8.57.1)
       eslint-plugin-ember:
         specifier: 'catalog:'
         version: 12.5.0(@babel/core@7.26.10)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)
@@ -445,7 +460,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       http-server:
         specifier: ^14.1.1
         version: 14.1.1
@@ -453,11 +468,11 @@ importers:
         specifier: ^0.447.0
         version: 0.447.0
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        specifier: 'catalog:'
+        version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
         version: 4.18.1
@@ -565,10 +580,10 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       babel-plugin-ember-template-compilation:
         specifier: ^2.2.1
@@ -587,13 +602,13 @@ importers:
         version: 5.11.2
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.1)
+        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-config-prettier:
-        specifier: ^8.6.0
-        version: 8.8.0(eslint@8.57.1)
+        specifier: 'catalog:'
+        version: 9.1.0(eslint@8.57.1)
       eslint-plugin-ember:
         specifier: 'catalog:'
         version: 12.5.0(@babel/core@7.26.10)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)
@@ -602,7 +617,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-simple-import-sort:
         specifier: 'catalog:'
         version: 8.0.0(eslint@8.57.1)
@@ -613,11 +628,11 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        specifier: 'catalog:'
+        version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
         version: 4.18.1
@@ -694,10 +709,10 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       broccoli-asset-rev:
         specifier: ^3.0.0
@@ -802,7 +817,7 @@ importers:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-config-prettier:
-        specifier: ^9.0.0
+        specifier: 'catalog:'
         version: 9.1.0(eslint@8.57.1)
       eslint-plugin-ember:
         specifier: 'catalog:'
@@ -812,7 +827,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.1.1(eslint@8.57.1)
@@ -826,11 +841,11 @@ importers:
         specifier: 8.0.1
         version: 8.0.1
       prettier:
-        specifier: ^3.0.3
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        specifier: 'catalog:'
+        version: 1.1.0(prettier@3.5.3)
       qunit:
         specifier: 'catalog:'
         version: 2.24.1
@@ -995,10 +1010,10 @@ importers:
         specifier: ^0.0.30
         version: 0.0.30
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       babel-plugin-ember-template-compilation:
         specifier: ^2.2.1
@@ -1014,13 +1029,13 @@ importers:
         version: 5.11.2
       ember-template-lint-plugin-prettier:
         specifier: ^5.0.0
-        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.1)
+        version: 5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3)
       eslint:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-config-prettier:
-        specifier: ^8.6.0
-        version: 8.8.0(eslint@8.57.1)
+        specifier: 'catalog:'
+        version: 9.1.0(eslint@8.57.1)
       eslint-plugin-ember:
         specifier: 'catalog:'
         version: 12.5.0(@babel/core@7.26.10)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)
@@ -1029,16 +1044,16 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       glimmer-scoped-css:
         specifier: 'catalog:'
         version: 0.8.1
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        specifier: 'catalog:'
+        version: 1.1.0(prettier@3.5.3)
       rollup:
         specifier: ^4.18.1
         version: 4.18.1
@@ -1122,10 +1137,10 @@ importers:
         specifier: ^4.0.9
         version: 4.0.9
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       broccoli-asset-rev:
         specifier: ^3.0.0
@@ -1236,7 +1251,7 @@ importers:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-config-prettier:
-        specifier: ^9.0.0
+        specifier: 'catalog:'
         version: 9.1.0(eslint@8.57.1)
       eslint-plugin-ember:
         specifier: 'catalog:'
@@ -1246,7 +1261,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.1.1(eslint@8.57.1)
@@ -1254,11 +1269,11 @@ importers:
         specifier: ^4.7.0
         version: 4.7.0
       prettier:
-        specifier: ^3.0.3
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        specifier: 'catalog:'
+        version: 1.1.0(prettier@3.5.3)
       qunit:
         specifier: 'catalog:'
         version: 2.24.1
@@ -1366,10 +1381,10 @@ importers:
         specifier: ^8.57.1
         version: 8.57.1
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       eslint:
         specifier: 'catalog:'
@@ -1402,7 +1417,7 @@ importers:
         specifier: 'catalog:'
         version: 51.0.1(eslint@8.57.1)
       prettier:
-        specifier: ^3.5.3
+        specifier: 'catalog:'
         version: 3.5.3
       typescript:
         specifier: ~5.1.6
@@ -1584,10 +1599,10 @@ importers:
         specifier: ^9.0.8
         version: 9.0.8
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       broccoli-asset-rev:
         specifier: ^3.0.0
@@ -1761,7 +1776,7 @@ importers:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-config-prettier:
-        specifier: ^9.0.0
+        specifier: 'catalog:'
         version: 9.1.0(eslint@8.57.1)
       eslint-plugin-ember:
         specifier: 'catalog:'
@@ -1774,7 +1789,7 @@ importers:
         version: 17.17.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: 'catalog:'
-        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1)
+        version: 5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       eslint-plugin-qunit:
         specifier: 'catalog:'
         version: 8.1.1(eslint@8.57.1)
@@ -1839,11 +1854,11 @@ importers:
         specifier: ^8.0.0
         version: 8.0.0
       prettier:
-        specifier: ^3.0.3
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        specifier: 'catalog:'
+        version: 1.1.0(prettier@3.5.3)
       qs:
         specifier: ^6.13.0
         version: 6.13.0
@@ -2125,11 +2140,11 @@ importers:
         specifier: ^8.0.0
         version: 8.0.0
       prettier:
-        specifier: ^3.5.1
-        version: 3.5.1
+        specifier: 'catalog:'
+        version: 3.5.3
       prettier-plugin-ember-template-tag:
-        specifier: ^1.1.0
-        version: 1.1.0(prettier@3.5.1)
+        specifier: 'catalog:'
+        version: 1.1.0(prettier@3.5.3)
       qs:
         specifier: ^6.13.0
         version: 6.13.0
@@ -2451,10 +2466,10 @@ importers:
         specifier: ^1.73.0
         version: 1.93.0
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       '@vscode/vsce':
         specifier: ^3.1.0
@@ -2539,10 +2554,10 @@ importers:
         specifier: ^4.0.1
         version: 4.0.1
       '@typescript-eslint/eslint-plugin':
-        specifier: ^7.16.1
-        version: 7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
+        specifier: 'catalog:'
+        version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)
       '@typescript-eslint/parser':
-        specifier: ^7.18.0
+        specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       babel-eslint:
         specifier: ^10.1.0
@@ -2611,8 +2626,8 @@ importers:
         specifier: 'catalog:'
         version: 8.57.1
       eslint-config-prettier:
-        specifier: ^7.2.0
-        version: 7.2.0(eslint@8.57.1)
+        specifier: 'catalog:'
+        version: 9.1.0(eslint@8.57.1)
       eslint-plugin-ember:
         specifier: 'catalog:'
         version: 12.5.0(@babel/core@7.26.10)(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)
@@ -2621,7 +2636,7 @@ importers:
         version: 11.1.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: ^3.3.1
-        version: 3.3.1(eslint-config-prettier@7.2.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8)
+        version: 3.3.1(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       loader.js:
         specifier: ^4.7.0
         version: 4.7.0
@@ -2629,8 +2644,8 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5
       prettier:
-        specifier: ^2.2.1
-        version: 2.8.8
+        specifier: 'catalog:'
+        version: 3.5.3
       qunit:
         specifier: ^2.14.0
         version: 2.24.1
@@ -6059,17 +6074,6 @@ packages:
   '@types/yauzl@2.10.3':
     resolution: {integrity: sha512-oJoftv0LSuaDZE3Le4DbKX+KS9G36NzOeSap90UIK0yMA/NhKJhqlSGtNDORNRaIbQfzjXDrQa0ytJ6mNRGz/Q==}
 
-  '@typescript-eslint/eslint-plugin@7.16.1':
-    resolution: {integrity: sha512-SxdPak/5bO0EnGktV05+Hq8oatjAYVY3Zh2bye9pGZy6+jwyR3LG3YKkV4YatlsgqXP28BTeVm9pqwJM96vf2A==}
-    engines: {node: ^18.18.0 || >=20.0.0}
-    peerDependencies:
-      '@typescript-eslint/parser': ^7.0.0
-      eslint: ^8.56.0
-      typescript: '*'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
   '@typescript-eslint/eslint-plugin@7.18.0':
     resolution: {integrity: sha512-94EQTWZ40mzBc42ATNIBimBEDltSJ9RQHCC8vc/PDbxi4k8dVwUAv4o98dk50M1zB+JGFxp43FP7f8+FP8R6Sw==}
     engines: {node: ^18.18.0 || >=20.0.0}
@@ -6101,23 +6105,9 @@ packages:
     resolution: {integrity: sha512-VXuvVvZeQCQb5Zgf4HAxc04q5j+WrNAtNh9OwCsCgpKqESMTu3tF/jhZ3xG6T4NZwWl65Bg8KuS2uEvhSfLl0w==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@typescript-eslint/scope-manager@7.16.1':
-    resolution: {integrity: sha512-nYpyv6ALte18gbMz323RM+vpFpTjfNdyakbf3nsLvF43uF9KeNC289SUEW3QLZ1xPtyINJ1dIsZOuWuSRIWygw==}
-    engines: {node: ^18.18.0 || >=20.0.0}
-
   '@typescript-eslint/scope-manager@7.18.0':
     resolution: {integrity: sha512-jjhdIE/FPF2B7Z1uzc6i3oWKbGcHb87Qw7AWj6jmEqNOfDFbJWtjt/XfwCpvNkpGWlcJaog5vTR+VV8+w9JflA==}
     engines: {node: ^18.18.0 || >=20.0.0}
-
-  '@typescript-eslint/type-utils@7.16.1':
-    resolution: {integrity: sha512-rbu/H2MWXN4SkjIIyWcmYBjlp55VT+1G3duFOIukTNFxr9PI35pLc2ydwAfejCEitCv4uztA07q0QWanOHC7dA==}
-    engines: {node: ^18.18.0 || >=20.0.0}
-    peerDependencies:
-      eslint: ^8.56.0
-      typescript: '*'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
 
   '@typescript-eslint/type-utils@7.18.0':
     resolution: {integrity: sha512-XL0FJXuCLaDuX2sYqZUUSOJ2sG5/i1AAze+axqmLnSkNEVMVYLF+cbwlB2w8D1tinFuSikHmFta+P+HOofrLeA==}
@@ -6133,10 +6123,6 @@ packages:
     resolution: {integrity: sha512-87NVngcbVXUahrRTqIK27gD2t5Cu1yuCXxbLcFtCzZGlfyVWWh8mLHkoxzjsB6DDNnvdL+fW8MiwPEJyGJQDgQ==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
 
-  '@typescript-eslint/types@7.16.1':
-    resolution: {integrity: sha512-AQn9XqCzUXd4bAVEsAXM/Izk11Wx2u4H3BAfQVhSfzfDOm/wAON9nP7J5rpkCxts7E5TELmN845xTUCQrD1xIQ==}
-    engines: {node: ^18.18.0 || >=20.0.0}
-
   '@typescript-eslint/types@7.18.0':
     resolution: {integrity: sha512-iZqi+Ds1y4EDYUtlOOC+aUmxnE9xS/yCigkjA7XpTKV6nCBd3Hp/PRGGmdwnfkV2ThMyYldP1wRpm/id99spTQ==}
     engines: {node: ^18.18.0 || >=20.0.0}
@@ -6144,15 +6130,6 @@ packages:
   '@typescript-eslint/typescript-estree@5.62.0':
     resolution: {integrity: sha512-CmcQ6uY7b9y694lKdRB8FEel7JbU/40iSAPomu++SjLMntB+2Leay2LO6i8VnJk58MtE9/nQSFIH6jpyRWyYzA==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
-    peerDependencies:
-      typescript: '*'
-    peerDependenciesMeta:
-      typescript:
-        optional: true
-
-  '@typescript-eslint/typescript-estree@7.16.1':
-    resolution: {integrity: sha512-0vFPk8tMjj6apaAZ1HlwM8w7jbghC8jc1aRNJG5vN8Ym5miyhTQGMqU++kuBFDNKe9NcPeZ6x0zfSzV8xC1UlQ==}
-    engines: {node: ^18.18.0 || >=20.0.0}
     peerDependencies:
       typescript: '*'
     peerDependenciesMeta:
@@ -6174,12 +6151,6 @@ packages:
     peerDependencies:
       eslint: ^6.0.0 || ^7.0.0 || ^8.0.0
 
-  '@typescript-eslint/utils@7.16.1':
-    resolution: {integrity: sha512-WrFM8nzCowV0he0RlkotGDujx78xudsxnGMBHI88l5J8wEhED6yBwaSLP99ygfrzAjsQvcYQ94quDwI0d7E1fA==}
-    engines: {node: ^18.18.0 || >=20.0.0}
-    peerDependencies:
-      eslint: ^8.56.0
-
   '@typescript-eslint/utils@7.18.0':
     resolution: {integrity: sha512-kK0/rNa2j74XuHVcoCZxdFBMF+aq/vH83CXAOHieC+2Gis4mF8jJXT5eAfyD3K0sAxtPuwxaIOIOvhwzVDt/kw==}
     engines: {node: ^18.18.0 || >=20.0.0}
@@ -6189,10 +6160,6 @@ packages:
   '@typescript-eslint/visitor-keys@5.62.0':
     resolution: {integrity: sha512-07ny+LHRzQXepkGg6w0mFY41fVUNBrL2Roj/++7V1txKugfjm/Ci/qSND03r2RhlJhJYMcTn9AhhSSqQp0Ysyw==}
     engines: {node: ^12.22.0 || ^14.17.0 || >=16.0.0}
-
-  '@typescript-eslint/visitor-keys@7.16.1':
-    resolution: {integrity: sha512-Qlzzx4sE4u3FsHTPQAAQFJFNOuqtuY0LFrZHwQ8IHK705XxBiWOFkfKRWu6niB7hwfgnwIpO4jTC75ozW1PHWg==}
-    engines: {node: ^18.18.0 || >=20.0.0}
 
   '@typescript-eslint/visitor-keys@7.18.0':
     resolution: {integrity: sha512-cDF0/Gf81QpY3xYyJKDV14Zwdmid5+uuENhjH2EqFaF0ni+yAyq/LzMaIJdhNJXZI7uLzwIlA+V7oWoyn6Curg==}
@@ -9485,18 +9452,6 @@ packages:
     engines: {node: '>=12'}
     peerDependencies:
       eslint: '>=6.0.0'
-
-  eslint-config-prettier@7.2.0:
-    resolution: {integrity: sha512-rV4Qu0C3nfJKPOAhFujFxB7RMP+URFyQqqOZW9DMRD7ZDTFyjaIlETU3xzHELt++4ugC0+Jm084HQYkkJe+Ivg==}
-    hasBin: true
-    peerDependencies:
-      eslint: '>=7.0.0'
-
-  eslint-config-prettier@8.8.0:
-    resolution: {integrity: sha512-wLbQiFre3tdGgpDv67NQKnJuTlcUVYHas3k+DZCc2U2BadthoEY4B7hLPvAxaqdyOGCzuLfii2fqGph10va7oA==}
-    hasBin: true
-    peerDependencies:
-      eslint: '>=7.0.0'
 
   eslint-config-prettier@9.1.0:
     resolution: {integrity: sha512-NSWl5BFQWEPi1j4TjVNItzYV7dZXZ+wP6I6ZhrBGpChQhZRUaElihE9uRRkcbRnNb76UMKDF3r+WTmNcGPKsqw==}
@@ -13089,11 +13044,6 @@ packages:
     engines: {node: '>=10.13.0'}
     hasBin: true
 
-  prettier@3.5.1:
-    resolution: {integrity: sha512-hPpFQvHwL3Qv5AdRvBFMhnKo4tYxp0ReXiPn2bxkiohEX6mBeBwEpBSQTkD458RaaDKQMYSp4hX4UtfUTA5wDw==}
-    engines: {node: '>=14'}
-    hasBin: true
-
   prettier@3.5.3:
     resolution: {integrity: sha512-QQtaxnoDJeAkDvDKWCLiwIXkTgRhwYDEQCghU9Z6q03iyek/rxRh/2lC3HB7P8sWT2xC/y5JDctPLBIGzHKbhw==}
     engines: {node: '>=14'}
@@ -14649,12 +14599,6 @@ packages:
   trim-right@1.0.1:
     resolution: {integrity: sha512-WZGXGstmCWgeevgTL54hrCuw1dyMQIzWy7ZfqRJfSmJZBwklI15egmQytFP6bPidmw3M8d5yEowl1niq4vmqZw==}
     engines: {node: '>=0.10.0'}
-
-  ts-api-utils@1.3.0:
-    resolution: {integrity: sha512-UQMIo7pb8WRomKR1/+MFVLTroIvDVtMX3K6OUir8ynLyzB8Jeriont2bTAtmNPa1ekAgN7YPDyf6V+ygrdU+eQ==}
-    engines: {node: '>=16'}
-    peerDependencies:
-      typescript: '>=4.2.0'
 
   ts-api-utils@1.4.3:
     resolution: {integrity: sha512-i3eMG77UTMD0hZhgRS562pv83RC6ukSAC2GMNWc+9dieh/+jDM5u5YG+NHX6VNDRHQcHwmsTHctP9LhbC3WxVw==}
@@ -19143,9 +19087,9 @@ snapshots:
       '@pnpm/error': 5.0.3
       find-up: 5.0.0
 
-  '@prettier/sync@0.2.1(prettier@3.5.1)':
+  '@prettier/sync@0.2.1(prettier@3.5.3)':
     dependencies:
-      prettier: 3.5.1
+      prettier: 3.5.3
 
   '@prisma/instrumentation@5.19.1':
     dependencies:
@@ -19822,24 +19766,6 @@ snapshots:
       '@types/node': 18.19.54
     optional: true
 
-  '@typescript-eslint/eslint-plugin@7.16.1(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)':
-    dependencies:
-      '@eslint-community/regexpp': 4.12.1
-      '@typescript-eslint/parser': 7.18.0(eslint@8.57.1)(typescript@5.1.6)
-      '@typescript-eslint/scope-manager': 7.16.1
-      '@typescript-eslint/type-utils': 7.16.1(eslint@8.57.1)(typescript@5.1.6)
-      '@typescript-eslint/utils': 7.16.1(eslint@8.57.1)(typescript@5.1.6)
-      '@typescript-eslint/visitor-keys': 7.16.1
-      eslint: 8.57.1
-      graphemer: 1.4.0
-      ignore: 5.3.2
-      natural-compare: 1.4.0
-      ts-api-utils: 1.3.0(typescript@5.1.6)
-    optionalDependencies:
-      typescript: 5.1.6
-    transitivePeerDependencies:
-      - supports-color
-
   '@typescript-eslint/eslint-plugin@7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.1.6))(eslint@8.57.1)(typescript@5.1.6)':
     dependencies:
       '@eslint-community/regexpp': 4.12.1
@@ -19884,27 +19810,10 @@ snapshots:
       '@typescript-eslint/types': 5.62.0
       '@typescript-eslint/visitor-keys': 5.62.0
 
-  '@typescript-eslint/scope-manager@7.16.1':
-    dependencies:
-      '@typescript-eslint/types': 7.16.1
-      '@typescript-eslint/visitor-keys': 7.16.1
-
   '@typescript-eslint/scope-manager@7.18.0':
     dependencies:
       '@typescript-eslint/types': 7.18.0
       '@typescript-eslint/visitor-keys': 7.18.0
-
-  '@typescript-eslint/type-utils@7.16.1(eslint@8.57.1)(typescript@5.1.6)':
-    dependencies:
-      '@typescript-eslint/typescript-estree': 7.16.1(typescript@5.1.6)
-      '@typescript-eslint/utils': 7.16.1(eslint@8.57.1)(typescript@5.1.6)
-      debug: 4.4.0(supports-color@8.1.1)
-      eslint: 8.57.1
-      ts-api-utils: 1.3.0(typescript@5.1.6)
-    optionalDependencies:
-      typescript: 5.1.6
-    transitivePeerDependencies:
-      - supports-color
 
   '@typescript-eslint/type-utils@7.18.0(eslint@8.57.1)(typescript@5.1.6)':
     dependencies:
@@ -19920,8 +19829,6 @@ snapshots:
 
   '@typescript-eslint/types@5.62.0': {}
 
-  '@typescript-eslint/types@7.16.1': {}
-
   '@typescript-eslint/types@7.18.0': {}
 
   '@typescript-eslint/typescript-estree@5.62.0(typescript@5.1.6)':
@@ -19933,21 +19840,6 @@ snapshots:
       is-glob: 4.0.3
       semver: 7.7.1
       tsutils: 3.21.0(typescript@5.1.6)
-    optionalDependencies:
-      typescript: 5.1.6
-    transitivePeerDependencies:
-      - supports-color
-
-  '@typescript-eslint/typescript-estree@7.16.1(typescript@5.1.6)':
-    dependencies:
-      '@typescript-eslint/types': 7.16.1
-      '@typescript-eslint/visitor-keys': 7.16.1
-      debug: 4.4.0(supports-color@8.1.1)
-      globby: 11.1.0
-      is-glob: 4.0.3
-      minimatch: 9.0.5
-      semver: 7.7.1
-      ts-api-utils: 1.4.3(typescript@5.1.6)
     optionalDependencies:
       typescript: 5.1.6
     transitivePeerDependencies:
@@ -19983,17 +19875,6 @@ snapshots:
       - supports-color
       - typescript
 
-  '@typescript-eslint/utils@7.16.1(eslint@8.57.1)(typescript@5.1.6)':
-    dependencies:
-      '@eslint-community/eslint-utils': 4.6.1(eslint@8.57.1)
-      '@typescript-eslint/scope-manager': 7.16.1
-      '@typescript-eslint/types': 7.16.1
-      '@typescript-eslint/typescript-estree': 7.16.1(typescript@5.1.6)
-      eslint: 8.57.1
-    transitivePeerDependencies:
-      - supports-color
-      - typescript
-
   '@typescript-eslint/utils@7.18.0(eslint@8.57.1)(typescript@5.1.6)':
     dependencies:
       '@eslint-community/eslint-utils': 4.6.1(eslint@8.57.1)
@@ -20008,11 +19889,6 @@ snapshots:
   '@typescript-eslint/visitor-keys@5.62.0':
     dependencies:
       '@typescript-eslint/types': 5.62.0
-      eslint-visitor-keys: 3.4.3
-
-  '@typescript-eslint/visitor-keys@7.16.1':
-    dependencies:
-      '@typescript-eslint/types': 7.16.1
       eslint-visitor-keys: 3.4.3
 
   '@typescript-eslint/visitor-keys@7.18.0':
@@ -24943,11 +24819,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-template-lint-plugin-prettier@5.0.0(ember-template-lint@5.11.2)(prettier@3.5.1):
+  ember-template-lint-plugin-prettier@5.0.0(ember-template-lint@5.11.2)(prettier@3.5.3):
     dependencies:
-      '@prettier/sync': 0.2.1(prettier@3.5.1)
+      '@prettier/sync': 0.2.1(prettier@3.5.3)
       ember-template-lint: 5.11.2
-      prettier: 3.5.1
+      prettier: 3.5.3
       prettier-linter-helpers: 1.0.0
 
   ember-template-lint@2.18.1:
@@ -25448,14 +25324,6 @@ snapshots:
       eslint: 8.57.1
       semver: 7.7.1
 
-  eslint-config-prettier@7.2.0(eslint@8.57.1):
-    dependencies:
-      eslint: 8.57.1
-
-  eslint-config-prettier@8.8.0(eslint@8.57.1):
-    dependencies:
-      eslint: 8.57.1
-
   eslint-config-prettier@9.1.0(eslint@8.57.1):
     dependencies:
       eslint: 8.57.1
@@ -25612,32 +25480,12 @@ snapshots:
     dependencies:
       requireindex: 1.2.0
 
-  eslint-plugin-prettier@3.3.1(eslint-config-prettier@7.2.0(eslint@8.57.1))(eslint@8.57.1)(prettier@2.8.8):
+  eslint-plugin-prettier@3.3.1(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3):
     dependencies:
       eslint: 8.57.1
-      prettier: 2.8.8
+      prettier: 3.5.3
       prettier-linter-helpers: 1.0.0
     optionalDependencies:
-      eslint-config-prettier: 7.2.0(eslint@8.57.1)
-
-  eslint-plugin-prettier@5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@8.8.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1):
-    dependencies:
-      eslint: 8.57.1
-      prettier: 3.5.1
-      prettier-linter-helpers: 1.0.0
-      synckit: 0.11.4
-    optionalDependencies:
-      '@types/eslint': 8.56.5
-      eslint-config-prettier: 8.8.0(eslint@8.57.1)
-
-  eslint-plugin-prettier@5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.1):
-    dependencies:
-      eslint: 8.57.1
-      prettier: 3.5.1
-      prettier-linter-helpers: 1.0.0
-      synckit: 0.11.4
-    optionalDependencies:
-      '@types/eslint': 8.56.5
       eslint-config-prettier: 9.1.0(eslint@8.57.1)
 
   eslint-plugin-prettier@5.2.6(@types/eslint@8.56.5)(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3):
@@ -29788,19 +29636,17 @@ snapshots:
     dependencies:
       fast-diff: 1.3.0
 
-  prettier-plugin-ember-template-tag@1.1.0(prettier@3.5.1):
+  prettier-plugin-ember-template-tag@1.1.0(prettier@3.5.3):
     dependencies:
       '@babel/core': 7.26.10(supports-color@8.1.1)
       '@glimmer/syntax': 0.84.3
       ember-cli-htmlbars: 6.3.0
       ember-template-imports: 3.4.2
-      prettier: 3.5.1
+      prettier: 3.5.3
     transitivePeerDependencies:
       - supports-color
 
   prettier@2.8.8: {}
-
-  prettier@3.5.1: {}
 
   prettier@3.5.3: {}
 
@@ -31780,10 +31626,6 @@ snapshots:
   trim-newlines@4.1.1: {}
 
   trim-right@1.0.1: {}
-
-  ts-api-utils@1.3.0(typescript@5.1.6):
-    dependencies:
-      typescript: 5.1.6
 
   ts-api-utils@1.4.3(typescript@5.1.6):
     dependencies:

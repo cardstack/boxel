@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-empty-function */
 // import { DOMRefNode, addToDOMRefTrees } from '@cardstack/boxel-motion/models/dom-ref';
 import { module, test } from 'qunit';
 

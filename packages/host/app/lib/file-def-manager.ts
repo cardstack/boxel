@@ -3,7 +3,6 @@ import { setOwner } from '@ember/owner';
 import { inject as service } from '@ember/service';
 
 import * as MatrixSDK from 'matrix-js-sdk';
-import { md5 } from 'super-fast-md5';
 
 import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -89,7 +88,6 @@ export interface FileDefManager {
 }
 
 export default class FileDefManagerImpl implements FileDefManager {
-  private commandDefHashes: string[] = [];
   private downloadCache: Map<string, CacheEntry> = new Map();
   private client: MatrixSDK.MatrixClient;
   private getCardAPI: () => typeof CardAPI;
@@ -343,12 +341,7 @@ export default class FileDefManagerImpl implements FileDefManager {
           },
         },
       };
-
-      let hashKey = this.generateCommandDefHashKey(schema);
-      if (!this.commandDefHashes.includes(hashKey)) {
-        commandDefinitionSchemas.push(schema);
-        this.commandDefHashes.push(hashKey);
-      }
+      commandDefinitionSchemas.push(schema);
     }
 
     // Upload each command definition schema as a file
@@ -370,17 +363,6 @@ export default class FileDefManagerImpl implements FileDefManager {
     );
 
     return fileDefs;
-  }
-
-  /**
-   * Generates a hash key for a command definition schema.
-   * @param commandDefSchema - The command definition schema to hash
-   * @returns A hash key string
-   */
-  private generateCommandDefHashKey(
-    commandDefSchema: CommandDefinitionSchema,
-  ): string {
-    return md5(JSON.stringify(commandDefSchema));
   }
 
   async uploadContent(content: string, contentType: string): Promise<string> {
