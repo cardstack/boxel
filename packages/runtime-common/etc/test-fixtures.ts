@@ -31,10 +31,10 @@ export function increment() {
 
 export function compiledCard(id = 'null', moduleName = '/dir/person.gts') {
   return `
-import { setComponentTemplate } from "@ember/component";
 import { contains, field, Component, CardDef } from 'https://cardstack.com/base/card-api';
 import StringField from 'https://cardstack.com/base/string';
 import { createTemplateFactory } from "@ember/template-factory";
+import { setComponentTemplate } from "@ember/component";
 export class Person extends CardDef {
   static displayName = 'Person';
   static {
@@ -53,19 +53,20 @@ export class Person extends CardDef {
     });
   }
   #title = (dt7948.i(this, "title"), void 0);
-  static isolated = setComponentTemplate(createTemplateFactory(
-  /*
-    
-        <h1 data-test-card><@fields.firstName /></h1>
-      
-  */
-  {
-    "id": ${id},
-    "block": "[[[1,\\"\\\\n      \\"],[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13],[1,\\"\\\\n    \\"]],[\\"@fields\\"],false,[]]",
-    "moduleName": "${moduleName}",
-    "isStrictMode": true
-  }), class Isolated extends Component {});
-}
+  static isolated = class Isolated extends Component {
+    static {
+      setComponentTemplate(createTemplateFactory(
+      /*
+
+             <h1 data-test-card><@fields.firstName /></h1>
+
+      */
+      {
+        "block": "[[[1,\\"\\\\n      \\"],[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13],[1,\\"\\\\n    \\"]],[\\"@fields\\"],false,[]]",
+        "isStrictMode": true
+      }), this);
+    }
+  };}
 export let counter = 0;
 export function increment() {
   counter++;
