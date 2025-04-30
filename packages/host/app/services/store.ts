@@ -222,7 +222,6 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: {
       realm?: string;
       relativeTo?: URL | undefined;
-      doNotPersist?: true;
     },
   ): Promise<T | CardErrorJSONAPI>;
   async add<T extends CardDef>(
