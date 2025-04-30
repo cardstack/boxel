@@ -616,7 +616,11 @@ export default class StoreService extends Service implements StoreInterface {
     }
   });
 
-  private onInstanceUpdated = (instance: BaseDef) => {
+  private onInstanceUpdated = (instance: BaseDef, fieldName: string) => {
+    if (fieldName === 'id') {
+      // id updates are internal and do not trigger autosaves
+      return;
+    }
     if (isCardInstance(instance)) {
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
@@ -645,15 +649,17 @@ export default class StoreService extends Service implements StoreInterface {
     // module updates will break the cached api. so don't hang on to this longer
     // than necessary
     this.cardApiCache = await this.cardService.getAPI();
-    if (operation === 'stop-tracking' && instance) {
+    if (instance) {
       this.cardApiCache.unsubscribeFromChanges(
         instance,
         this.onInstanceUpdated,
       );
-      this.autoSaveStates.delete(instance.id);
-      this.autoSaveStates.delete(instance[localIdSymbol]);
-    } else if (operation === 'start-tracking' && instance) {
-      this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
+      if (operation === 'stop-tracking') {
+        this.autoSaveStates.delete(instance.id);
+        this.autoSaveStates.delete(instance[localIdSymbol]);
+      } else if (operation === 'start-tracking') {
+        this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
+      }
     }
   }
 
