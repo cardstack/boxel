@@ -36,9 +36,6 @@ catalogs:
     '@typescript-eslint/parser':
       specifier: ^7.18.0
       version: 7.18.0
-    babel-plugin-ember-template-compilation:
-      specifier: 2.3.0
-      version: 2.3.0
     broccoli-asset-rev:
       specifier: ^3.0.0
       version: 3.0.0
@@ -480,7 +477,7 @@ importers:
         specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       babel-plugin-ember-template-compilation:
-        specifier: 'catalog:'
+        specifier: ~2.3.0
         version: 2.3.0
       concurrently:
         specifier: ^8.0.1
@@ -637,8 +634,8 @@ importers:
         specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       babel-plugin-ember-template-compilation:
-        specifier: 'catalog:'
-        version: 2.3.0
+        specifier: ~2.2.1
+        version: 2.2.1
       concurrently:
         specifier: ^8.0.1
         version: 8.0.1
@@ -1067,8 +1064,8 @@ importers:
         specifier: 'catalog:'
         version: 7.18.0(eslint@8.57.1)(typescript@5.1.6)
       babel-plugin-ember-template-compilation:
-        specifier: 'catalog:'
-        version: 2.3.0
+        specifier: ~2.2.1
+        version: 2.2.1
       concurrently:
         specifier: ^8.0.1
         version: 8.0.1
@@ -2326,8 +2323,8 @@ importers:
         specifier: ^1.2.2
         version: 1.2.2
       babel-plugin-ember-template-compilation:
-        specifier: 'catalog:'
-        version: 2.3.0
+        specifier: ~2.2.1
+        version: 2.2.1
       camelcase:
         specifier: ^6.3.0
         version: 6.3.0
@@ -4779,9 +4776,6 @@ packages:
   '@glimmer/interfaces@0.92.3':
     resolution: {integrity: sha512-QwQeA01N+0h+TAi/J7iUnZtRuJy+093hNyagxDQBA6b1wCBw+q+al9+O6gmbWlkWE7EifzmNE1nnrgcecJBlJQ==}
 
-  '@glimmer/interfaces@0.94.6':
-    resolution: {integrity: sha512-sp/1WePvB/8O+jrcUHwjboNPTKrdGicuHKA9T/lh0vkYK2qM5Xz4i25lQMQ38tEMiw7KixrjHiTUiaXRld+IwA==}
-
   '@glimmer/low-level@0.78.2':
     resolution: {integrity: sha512-0S6TWOOd0fzLLysw1pWZN0TgasaHmYs1Sjz9Til1mTByIXU1S+1rhdyr2veSQPO/aRjPuEQyKXZQHvx23Zax6w==}
 
@@ -4818,9 +4812,6 @@ packages:
   '@glimmer/syntax@0.92.3':
     resolution: {integrity: sha512-7wPKQmULyXCYf0KvbPmfrs/skPISH2QGR9atCnmDWnHyLv5SSZVLm1P0Ctrpta6+Ci3uGQb7hGk0IjsLEavcYQ==}
 
-  '@glimmer/syntax@0.94.9':
-    resolution: {integrity: sha512-OBw8DqMzKO4LX4kJBhwfTUqtpbd7O9amQXNTfb1aS7pufio5Vu5Qi6mRTfdFj6RyJ//aSI/l0kxWt6beYW0Apg==}
-
   '@glimmer/tracking@1.1.2':
     resolution: {integrity: sha512-cyV32zsHh+CnftuRX84ALZpd2rpbDrhLhJnTXn9W//QpqdRZ5rdMsxSY9fOsj0CKEc706tmEU299oNnDc0d7tA==}
 
@@ -4835,9 +4826,6 @@ packages:
 
   '@glimmer/util@0.92.3':
     resolution: {integrity: sha512-K1oH93gGU36slycxJ9CcFpUTsdOc4XQ6RuZFu5oRsxFYtEF5PSu7ik11h58fyeoaWOr1ebfkyAMawbeI2AJ5GA==}
-
-  '@glimmer/util@0.94.8':
-    resolution: {integrity: sha512-HfCKeZ74clF9BsPDBOqK/yRNa/ke6niXFPM6zRn9OVYw+ZAidLs7V8He/xljUHlLRL322kaZZY8XxRW7ALEwyg==}
 
   '@glimmer/validator@0.65.4':
     resolution: {integrity: sha512-0YUjAyo45DF5JkQxdv5kHn96nMNhvZiEwsAD4Jme0kk5Q9MQcPOUtN76pQAS4f+C6GdF9DeUr2yGXZLFMmb+LA==}
@@ -4856,9 +4844,6 @@ packages:
 
   '@glimmer/wire-format@0.92.3':
     resolution: {integrity: sha512-gFz81Q9+V7Xs0X8mSq6y8qacHm0dPaGJo2/Bfcsdow1hLOKNgTCLr4XeDBhRML8f6I6Gk9ugH4QDxyIOXOpC4w==}
-
-  '@glimmer/wire-format@0.94.8':
-    resolution: {integrity: sha512-A+Cp5m6vZMAEu0Kg/YwU2dJZXyYxVJs2zI57d3CP6NctmX7FsT8WjViiRUmt5abVmMmRH5b8BUovqY6GSMAdrw==}
 
   '@glint/core@1.3.0':
     resolution: {integrity: sha512-R5Y1QmkZs6lJHQ0LTRRcTKDI1EdeM32YuR2J67LG4qKT+WUNZhmetkqPiAMW9hQAOdrG/PqDZWV+J7Jf3xOlAg==}
@@ -6803,10 +6788,6 @@ packages:
 
   babel-plugin-ember-template-compilation@2.3.0:
     resolution: {integrity: sha512-4ZrKVSqdw5PxEKRbqfOpPhrrNBDG3mFPhyT6N1Oyyem81ZIkCvNo7TPKvlTHeFxqb6HtUvCACP/pzFpZ74J4pg==}
-    engines: {node: '>= 12.*'}
-
-  babel-plugin-ember-template-compilation@2.4.1:
-    resolution: {integrity: sha512-n+ktQ3JeyWrpRutSyPn2PsHeH+A94SVm+iUoogzf9VUqpP47FfWem24gpQXhn+p6+x5/BpuFJXMLXWt7ZoYAKA==}
     engines: {node: '>= 12.*'}
 
   babel-plugin-filter-imports@4.0.0:
@@ -14613,10 +14594,6 @@ packages:
     resolution: {integrity: sha512-tLq3bSNx+xSpwvAJnzrK0Ep5CLNWjvFTOp71URMaAEWBfRb9nnJiBoUe0tF8bI4ZFO3omgBR6NvnbzVUT3Ly4g==}
     engines: {node: '>=14.16'}
 
-  type-fest@4.40.0:
-    resolution: {integrity: sha512-ABHZ2/tS2JkvH1PEjxFDTUWC8dB5OsIGZP4IFLhR293GqT5Y5qB1WwL2kMPYhQW9DVgVD8Hd7I8gjwPIf5GFkw==}
-    engines: {node: '>=16'}
-
   type-is@1.6.18:
     resolution: {integrity: sha512-TkRKr9sUTxEH8MdfuCSP7VizJyzRNMjj2J2do2Jr3Kym598JVdEksuzPQCnlFPW4ky9Q+iA+ma9BGm06XQBy8g==}
     engines: {node: '>= 0.6'}
@@ -17409,7 +17386,7 @@ snapshots:
       '@types/yargs': 17.0.10
       assert-never: 1.2.1
       babel-import-util: 2.0.1
-      babel-plugin-ember-template-compilation: 2.4.1
+      babel-plugin-ember-template-compilation: 2.3.0
       babel-plugin-syntax-dynamic-import: 6.18.0
       babylon: 6.18.0
       bind-decorator: 1.0.11
@@ -17453,7 +17430,7 @@ snapshots:
       '@embroider/macros': 1.16.5(@glint/template@1.3.0)
       '@embroider/shared-internals': 2.6.2(supports-color@8.1.1)
       assert-never: 1.2.1
-      babel-plugin-ember-template-compilation: 2.4.1
+      babel-plugin-ember-template-compilation: 2.3.0
       broccoli-node-api: 1.7.0
       broccoli-persistent-filter: 3.1.3
       broccoli-plugin: 4.0.7
@@ -18031,11 +18008,6 @@ snapshots:
     dependencies:
       '@simple-dom/interface': 1.4.0
 
-  '@glimmer/interfaces@0.94.6':
-    dependencies:
-      '@simple-dom/interface': 1.4.0
-      type-fest: 4.40.0
-
   '@glimmer/low-level@0.78.2': {}
 
   '@glimmer/manager@0.84.3':
@@ -18133,14 +18105,6 @@ snapshots:
       '@handlebars/parser': 2.0.0
       simple-html-tokenizer: 0.5.11
 
-  '@glimmer/syntax@0.94.9':
-    dependencies:
-      '@glimmer/interfaces': 0.94.6
-      '@glimmer/util': 0.94.8
-      '@glimmer/wire-format': 0.94.8
-      '@handlebars/parser': 2.0.0
-      simple-html-tokenizer: 0.5.11
-
   '@glimmer/tracking@1.1.2':
     dependencies:
       '@glimmer/env': 0.1.7
@@ -18164,10 +18128,6 @@ snapshots:
     dependencies:
       '@glimmer/env': 0.1.7
       '@glimmer/interfaces': 0.92.3
-
-  '@glimmer/util@0.94.8':
-    dependencies:
-      '@glimmer/interfaces': 0.94.6
 
   '@glimmer/validator@0.65.4':
     dependencies:
@@ -18199,10 +18159,6 @@ snapshots:
     dependencies:
       '@glimmer/interfaces': 0.92.3
       '@glimmer/util': 0.92.3
-
-  '@glimmer/wire-format@0.94.8':
-    dependencies:
-      '@glimmer/interfaces': 0.94.6
 
   '@glint/core@1.3.0(typescript@5.1.6)':
     dependencies:
@@ -20622,11 +20578,6 @@ snapshots:
       '@glimmer/syntax': 0.84.3
       babel-import-util: 3.0.1
 
-  babel-plugin-ember-template-compilation@2.4.1:
-    dependencies:
-      '@glimmer/syntax': 0.94.9
-      babel-import-util: 3.0.1
-
   babel-plugin-filter-imports@4.0.0:
     dependencies:
       '@babel/types': 7.25.7
@@ -23013,7 +22964,7 @@ snapshots:
       '@embroider/shared-internals': 2.9.0
       babel-loader: 8.4.1(@babel/core@7.26.10)(webpack@5.99.6(esbuild@0.24.0))
       babel-plugin-ember-modules-api-polyfill: 3.5.0
-      babel-plugin-ember-template-compilation: 2.4.1
+      babel-plugin-ember-template-compilation: 2.3.0
       babel-plugin-htmlbars-inline-precompile: 5.3.1
       babel-plugin-syntax-dynamic-import: 6.18.0
       broccoli-debug: 0.6.5
@@ -23057,7 +23008,7 @@ snapshots:
       '@embroider/shared-internals': 2.9.0
       babel-loader: 8.4.1(@babel/core@7.26.10)(webpack@5.99.6)
       babel-plugin-ember-modules-api-polyfill: 3.5.0
-      babel-plugin-ember-template-compilation: 2.4.1
+      babel-plugin-ember-template-compilation: 2.3.0
       babel-plugin-htmlbars-inline-precompile: 5.3.1
       babel-plugin-syntax-dynamic-import: 6.18.0
       broccoli-debug: 0.6.5
@@ -31481,8 +31432,6 @@ snapshots:
   type-fest@2.19.0: {}
 
   type-fest@3.13.1: {}
-
-  type-fest@4.40.0: {}
 
   type-is@1.6.18:
     dependencies:
