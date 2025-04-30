@@ -15,6 +15,11 @@ catalog:
   "@typescript-eslint/parser": ^7.18.0
   "@types/qunit": 2.11.3
   babel-plugin-ember-template-compilation: ^2.3.0
+  broccoli-asset-rev: ^3.0.0
+  broccoli-merge-trees: ^4.2.0
+  broccoli-plugin: ^4.0.7
+  broccoli-source: ^3.0.1
+  broccoli-stew: ^3.0.0
   ember-concurrency: ^4.0.3
   ember-concurrency-ts: ^0.3.1
   ember-qunit: ^8.0.1
