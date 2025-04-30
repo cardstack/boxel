@@ -311,6 +311,87 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
+  //TODO: Update this once CS-7970 is implemented
+  test('ensures command definitions are reuploaded in the same browser session', async function (assert) {
+    // Create and set up first room
+    const roomId1 = await renderAiAssistantPanel(
+      `${testRealmURL}Skill/example`,
+    );
+
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-send-message-btn]');
+
+    const room1StateSkillsJson = getRoomState(
+      roomId1,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+
+    // Create and set up second room
+    await click('[data-test-create-room-btn]');
+    await waitFor('[data-test-room-settled]');
+    const roomId2 = document
+      .querySelector('[data-test-room]')
+      ?.getAttribute('data-test-room');
+    if (!roomId2) {
+      throw new Error('Expected a room ID');
+    }
+
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click('[data-test-card-catalog-go-button]');
+    await click('[data-test-send-message-btn]');
+
+    const room2StateSkillsJson = getRoomState(
+      roomId2,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+
+    // Verify both rooms have command definitions
+    assert.ok(
+      room1StateSkillsJson.commandDefinitions?.length > 0,
+      'first room has command definitions',
+    );
+    assert.ok(
+      room2StateSkillsJson.commandDefinitions?.length > 0,
+      'second room has command definitions',
+    );
+
+    // Verify the command definitions are different between rooms
+    assert.notDeepEqual(
+      room1StateSkillsJson.commandDefinitions,
+      room2StateSkillsJson.commandDefinitions,
+      'command definitions are different between rooms',
+    );
+
+    // Verify the command definitions have different URLs
+    const room1CommandUrls = room1StateSkillsJson.commandDefinitions.map(
+      (cmd: any) => cmd.url,
+    );
+    const room2CommandUrls = room2StateSkillsJson.commandDefinitions.map(
+      (cmd: any) => cmd.url,
+    );
+    const room1CommandSourceUrls = room1StateSkillsJson.commandDefinitions.map(
+      (cmd: any) => cmd.sourceUrl,
+    );
+    const room2CommandSourceUrls = room2StateSkillsJson.commandDefinitions.map(
+      (cmd: any) => cmd.sourceUrl,
+    );
+    assert.notDeepEqual(
+      room1CommandUrls,
+      room2CommandUrls,
+      'command definition URLs are different between rooms',
+    );
+    assert.deepEqual(
+      room1CommandSourceUrls,
+      room2CommandSourceUrls,
+      'command definition source URLs are the same between rooms',
+    );
+  });
+
   test('updated skill card instructions result in new event and updated room state', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
