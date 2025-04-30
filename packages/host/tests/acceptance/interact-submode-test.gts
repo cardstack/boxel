@@ -1106,12 +1106,70 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       await click(`[data-test-card-catalog-go-button]`);
 
-      // When edit view of new card opens, fill in a field and press the Pencil icon to finish editing
+      await fillIn('[data-test-field="title"] input', 'new skill');
+      assert.dom(`[data-test-attached-card]`).containsText('new skill');
+    });
+
+    test<TestContextWithSave>("new card's remote ID is reflected in the URL once it is saved", async function (assert) {
+      let indexCardId = `${testRealm2URL}index`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: indexCardId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await click('[data-test-create-new-card-button]');
+      await click(
+        `[data-test-select="https://cardstack.com/base/fields/skill-card"]`,
+      );
+
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
+
+      await click(`[data-test-card-catalog-go-button]`);
+
+      // new card is not serialized into the url before it is saved
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: indexCardId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      // updating a field triggers the auto save of the new card
       await fillIn(
         '[data-test-field="instructions"] textarea',
         'Do this and that and this and that',
       );
-      await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+
+      assert.ok(id, 'new card has been assigned a remote id');
+      id = id!;
+
+      // new card is serialized into the url after it is saved
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: indexCardId,
+              format: 'isolated',
+            },
+            {
+              format: 'edit',
+              id,
+            },
+          ],
+        ],
+      });
     });
 
     test<TestContextWithSave>('new card is created in the selected realm', async function (assert) {

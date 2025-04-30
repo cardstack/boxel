@@ -400,11 +400,7 @@ export default class InteractSubmode extends Component {
     this.operatorModeStateService.trimItemsFromStack(item);
     let { request, id } = item;
 
-    // only save when closing a stack item in edit mode. there should be no unsaved
-    // changes in isolated mode because they were saved when user toggled between
-    // edit and isolated formats
     if (id && item.format === 'edit') {
-      this.store.save(id);
       request?.fulfill(id);
     }
   };

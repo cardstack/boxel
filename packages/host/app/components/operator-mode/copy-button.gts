@@ -155,7 +155,7 @@ export default class CopyButton extends Component<Signature> {
       (indexCards, card, index) => {
         let realmURL = card[realmURLSymbol];
         if (!realmURL) {
-          throw new Error(`could not determine realm URL for card ${card.id}`);
+          return indexCards;
         }
         if (card.id === `${realmURL.href}index`) {
           return [...indexCards, index];
