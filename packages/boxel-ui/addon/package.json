@@ -78,7 +78,7 @@
     "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@embroider/addon-dev": "^8.0.0",
     "@embroider/macros": "~1.16.5",
-    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-babel": "catalog:",
     "@tsconfig/ember": "3.0.1",
     "@types/lodash": "^4.14.182",
     "@types/pluralize": "^0.0.30",

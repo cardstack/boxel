@@ -59,7 +59,7 @@
     "@babel/runtime": "catalog:",
     "@embroider/addon-dev": "^5.0.0",
     "@embroider/macros": "^1.16.5",
-    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-babel": "catalog:",
     "@tsconfig/ember": "3.0.1",
     "@glint/core": "1.3.0",
     "@glint/environment-ember-template-imports": "1.3.0",

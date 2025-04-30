@@ -50,7 +50,7 @@
     "@tabler/icons": "^3.19.0",
     "@embroider/addon-dev": "^5.0.0",
     "@embroider/macros": "^1.16.5",
-    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-babel": "catalog:",
     "@tsconfig/ember": "3.0.1",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
