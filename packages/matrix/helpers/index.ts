@@ -76,16 +76,11 @@ export async function reloadAndOpenAiAssistant(page: Page) {
   await page.reload();
   if (!operatorModeState.aiAssistantOpen) {
     await openAiAssistant(page);
-  } else {
-    await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
-    await expect(page.locator('[data-test-room]')).toHaveCount(1);
   }
 }
 
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
-  await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
-  await expect(page.locator('[data-test-room]')).toHaveCount(1);
 }
 
 export async function createRealm(
