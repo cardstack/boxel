@@ -51,15 +51,15 @@
     "typescript": "~5.1.6"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.10",
-    "@babel/plugin-proposal-decorators": "^7.22.10",
-    "@babel/plugin-transform-class-properties": "^7.22.5",
-    "@babel/plugin-transform-class-static-block": "^7.22.11",
-    "@babel/plugin-transform-typescript": "^7.22.15",
-    "@babel/runtime": "^7.22.11",
+    "@babel/core": "catalog:",
+    "@babel/plugin-proposal-decorators": "catalog:",
+    "@babel/plugin-transform-class-properties": "catalog:",
+    "@babel/plugin-transform-class-static-block": "catalog:",
+    "@babel/plugin-transform-typescript": "catalog:",
+    "@babel/runtime": "catalog:",
     "@embroider/addon-dev": "^5.0.0",
     "@embroider/macros": "^1.16.5",
-    "@rollup/plugin-babel": "^6.0.4",
+    "@rollup/plugin-babel": "catalog:",
     "@tsconfig/ember": "3.0.1",
     "@glint/core": "1.3.0",
     "@glint/environment-ember-template-imports": "1.3.0",
@@ -68,7 +68,7 @@
     "@types/rsvp": "^4.0.9",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
-    "babel-plugin-ember-template-compilation": "^2.2.1",
+    "babel-plugin-ember-template-compilation": "~2.2.1",
     "concurrently": "^8.0.1",
     "ember-source": "~5.4.0",
     "ember-template-imports": "^4.1.1",
@@ -84,8 +84,8 @@
     "npm-run-all": "^4.1.5",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
-    "rollup": "^4.18.1",
-    "rollup-plugin-copy": "^3.5.0"
+    "rollup": "catalog:",
+    "rollup-plugin-copy": "catalog:"
   },
   "peerDependencies": {
     "@glint/environment-ember-loose": "1.3.0",
