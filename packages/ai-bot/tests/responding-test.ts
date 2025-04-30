@@ -13,6 +13,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { OpenAIError } from 'openai';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -963,5 +964,83 @@ module('Responding', (hooks) => {
     );
   });
 
-  // TODO test when error happens after continuation in progress
+  test('onChunk returns error if matrix sending fails during continuation', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024 * 2.5; // 2.5KB max event size
+
+    let longContentPart1 = 'a'.repeat(1024); // 1KB of content
+    let longContentPart2 = 'b'.repeat(2048); // 2KB of content
+    let longContentPart3 = 'c'.repeat(2048); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+    clock.tick(250);
+    await responder.onChunk({} as any, snapshotWithContent(longContentPart1));
+    clock.tick(250);
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(longContentPart1 + longContentPart2),
+    );
+    clock.tick(250);
+
+    fakeMatrixClient.sendEvent = async () => {
+      throw new Error('MatrixError: something went wrong');
+    };
+    let result = await responder.onChunk(
+      {} as any,
+      snapshotWithContent(
+        longContentPart1 + longContentPart2 + longContentPart3,
+      ),
+    );
+    assert.equal(
+      (result[result.length - 1] as { errorMessage: string }).errorMessage,
+      'MatrixError: something went wrong',
+    );
+  });
+
+  test('onChunk returns error if matrix sending fails during continuation', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024 * 1.5; // 2.5KB max event size
+
+    let longContentPart1 = 'a'.repeat(1024); // 1KB of content
+    let longContentPart2 = 'b'.repeat(2048); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+    clock.tick(250);
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(longContentPart1 + longContentPart2),
+    );
+    clock.tick(250);
+    await responder.onError(new OpenAIError('All your base are belong to us'));
+    clock.tick(250);
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    // console.log(JSON.stringify(sentEvents, null, 2));
+    assert.equal(sentEvents.length, 4, 'Four events should be sent');
+    assert.equal(
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      thinkingMessage,
+      'First event is the initial thinking message',
+    );
+    assert.true(sentEvents[1].content.body.startsWith('a'));
+    assert.true(sentEvents[1].content.body.endsWith('b'));
+    assert.true(sentEvents[1].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.deepEqual(sentEvents[1].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[0].eventId,
+    });
+    assert.true(sentEvents[2].content.body.startsWith('b'));
+    assert.true(sentEvents[2].content.body.endsWith('b'));
+    assert.strictEqual(
+      sentEvents[2].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.deepEqual(sentEvents[3].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[0].eventId,
+    });
+    assert.strictEqual(
+      sentEvents[3].content.errorMessage,
+      'OpenAI error: Error - All your base are belong to us',
+      'Error message should be sent, replacing the original message',
+    );
+  });
 });
