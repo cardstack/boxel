@@ -2127,6 +2127,9 @@ importers:
       concurrently:
         specifier: ^8.0.1
         version: 8.0.1
+      content-tag:
+        specifier: ^3.1.2
+        version: 3.1.2
       date-fns:
         specifier: ^2.28.0
         version: 2.28.0
