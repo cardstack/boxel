@@ -387,13 +387,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private doneEditing = () => {
     let item = this.args.item;
     let { request } = item;
-    // if the card is actually different do the save and dismiss, otherwise
-    // just change the stack item's format to isolated
-    if (this.card && this.cardResource?.autoSaveState?.hasUnsavedChanges) {
-      // we dont want to have the user wait for the save to complete before
-      // dismissing edit mode so intentionally not awaiting here
+    if (this.card) {
       request?.fulfill(this.card.id);
-      this.store.save(this.card.id);
     }
     this.operatorModeStateService.replaceItemInStack(
       item,

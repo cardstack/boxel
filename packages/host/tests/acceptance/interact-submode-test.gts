@@ -828,7 +828,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(7);
+      assert.expect(5);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
@@ -1197,10 +1197,14 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
       await click(`[data-test-card-catalog-go-button]`);
+      await fillIn(
+        `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
+        'Paper',
+      );
     });
 
     test<TestContextWithSave>('new linked card is created in a different realm than its consuming reference', async function (assert) {
-      assert.expect(6);
+      assert.expect(5);
       await visitOperatorMode({
         stacks: [
           [
@@ -1670,7 +1674,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {
-      assert.expect(3);
+      assert.expect(2);
       await visitOperatorMode({
         stacks: [
           [
@@ -1682,24 +1686,18 @@ module('Acceptance | interact submode tests', function (hooks) {
           [{ id: `${testRealmURL}index`, format: 'isolated' }],
         ],
       });
-      let deferred = new Deferred<void>();
-      let saveCount = 0;
       let petId: string | undefined;
       this.onSave((id, json) => {
         if (id.href.includes('Pet/')) {
           petId = id.href;
-          saveCount++;
           if (typeof json === 'string') {
             throw new Error('expected JSON save data');
           }
-          if (saveCount === 1) {
-            // first save is an empty card
-            assert.strictEqual(json.data.attributes?.name, null);
-          } else if (saveCount === 2) {
-            // second save is after a field has been filled in
-            assert.strictEqual(json.data.attributes?.name, 'Paper');
-            deferred.fulfill();
-          }
+          assert.strictEqual(
+            json.data.attributes?.name,
+            'Paper',
+            'saved card data is correct',
+          );
         }
       });
       await click(
@@ -1722,8 +1720,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
       );
-
-      await deferred.promise;
       assert
         .dom(`[data-test-card="${petId}"]`)
         .includesText('Paper', 'the card is rendered correctly');

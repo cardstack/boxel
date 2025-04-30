@@ -865,7 +865,7 @@ module('Integration | Store', function (hooks) {
 
     (instance as any).friends = [newInstance];
 
-    await waitUntil(() => store.getSaveState(newInstance[localId])?.lastSaved, {
+    await waitUntil(() => newInstance.id, {
       timeout: 5_000,
     });
 
@@ -887,7 +887,7 @@ module('Integration | Store', function (hooks) {
 
     (instance as any).friends = [newInstance];
 
-    await waitUntil(() => store.getSaveState(newInstance[localId])?.lastSaved, {
+    await waitUntil(() => newInstance.id, {
       timeout: 5_000,
     });
 
