@@ -290,6 +290,10 @@ export default class IdentityContextWithGarbageCollection
     if (!isLocalId(id) && isCardInstance(item)) {
       this.#idResolver.addIdPair(item[localIdSymbol], id);
     }
+    let cardBucket = notTracked ? this.#nonTrackedCards : this.#cards;
+    let errorBucket = notTracked
+      ? this.#nonTrackedCardErrors
+      : this.#cardErrors;
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
     let localId = isLocalId(id) ? id : undefined;
@@ -303,18 +307,13 @@ export default class IdentityContextWithGarbageCollection
         this.#idResolver.getLocalId(remoteIds[0]);
 
       let maybeOldLocalId = remoteIds[0].split('/').pop()!;
-      this.#cardErrors.delete(maybeOldLocalId);
-      this.#nonTrackedCardErrors.delete(maybeOldLocalId);
+      errorBucket.delete(maybeOldLocalId);
     }
 
     if (localId) {
       this.#gcCandidates.delete(localId);
     }
 
-    let cardBucket = notTracked ? this.#nonTrackedCards : this.#cards;
-    let errorBucket = notTracked
-      ? this.#nonTrackedCardErrors
-      : this.#cardErrors;
     // make entries for both the local ID and the remote ID in the identity map
     if (instance) {
       // instances always have a local ID
