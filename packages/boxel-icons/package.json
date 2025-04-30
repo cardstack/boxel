@@ -71,7 +71,7 @@
     "prettier-plugin-ember-template-tag": "catalog:",
     "rollup": "catalog:",
     "rollup-plugin-copy": "catalog:",
-    "svgo": "3.0.2"
+    "svgo": "catalog:"
   },
   "peerDependencies": {
     "@ember/string": "^3.1.1",

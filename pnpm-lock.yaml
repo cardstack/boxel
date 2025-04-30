@@ -120,6 +120,9 @@ catalogs:
     rollup-plugin-copy:
       specifier: ^3.5.0
       version: 3.5.0
+    svgo:
+      specifier: ^3.0.2
+      version: 3.0.2
 
 overrides:
   '@types/eslint': 8.56.5
@@ -510,7 +513,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.0
       svgo:
-        specifier: 3.0.2
+        specifier: 'catalog:'
         version: 3.0.2
 
   packages/boxel-motion/addon:
@@ -1091,7 +1094,7 @@ importers:
         specifier: 'catalog:'
         version: 3.5.0
       svgo:
-        specifier: 3.0.2
+        specifier: 'catalog:'
         version: 3.0.2
 
   packages/boxel-ui/test-app:
@@ -29307,7 +29310,7 @@ snapshots:
   postcss@8.4.31:
     dependencies:
       nanoid: 3.3.6
-      picocolors: 1.0.0
+      picocolors: 1.1.1
       source-map-js: 1.2.1
 
   postcss@8.5.3:
@@ -30889,7 +30892,7 @@ snapshots:
       css-select: 5.1.0
       css-tree: 2.3.1
       csso: 5.0.5
-      picocolors: 1.0.0
+      picocolors: 1.1.1
 
   symbol-tree@3.2.4: {}
 
