@@ -31,7 +31,7 @@
     "wait": "sleep 10000000"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.10",
+    "@babel/core": "catalog:",
     "@babel/plugin-proposal-decorators": "^7.23.2",
     "@babel/plugin-syntax-class-properties": "^7.12.13",
     "@babel/plugin-syntax-decorators": "^7.17.12",
@@ -77,10 +77,10 @@
     "@types/uuid": "^9.0.8",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
-    "broccoli-asset-rev": "^3.0.0",
-    "broccoli-merge-trees": "^4.2.0",
-    "broccoli-plugin": "^4.0.7",
-    "broccoli-source": "^3.0.1",
+    "broccoli-asset-rev": "catalog:",
+    "broccoli-merge-trees": "catalog:",
+    "broccoli-plugin": "catalog:",
+    "broccoli-source": "catalog:",
     "buffer": "^6.0.3",
     "camelcase": "^6.3.0",
     "concurrently": "^8.2.2",
@@ -176,7 +176,7 @@
     "typescript": "~5.1.6",
     "uuid": "^9.0.1",
     "wait-for-localhost-cli": "^3.2.0",
-    "webpack": "^5.99.6"
+    "webpack": "catalog:"
   },
   "engines": {
     "node": ">= 20"

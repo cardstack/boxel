@@ -24,7 +24,7 @@
     "test:ember": "ember test"
   },
   "devDependencies": {
-    "@babel/core": "^7.26.10",
+    "@babel/core": "catalog:",
     "@babel/eslint-parser": "^7.23.10",
     "@babel/plugin-proposal-decorators": "^7.23.2",
     "@cardstack/boxel-motion": "workspace:*",
@@ -48,7 +48,7 @@
     "@types/rsvp": "^4.0.9",
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
-    "broccoli-asset-rev": "^3.0.0",
+    "broccoli-asset-rev": "catalog:",
     "concurrently": "^8.2.2",
     "ember-a11y-testing": "^6.1.1",
     "ember-auto-import": "^2.7.2",
@@ -96,7 +96,7 @@
     "qunit-dom": "catalog:",
     "tracked-built-ins": "^3.3.0",
     "typescript": "~5.1.6",
-    "webpack": "^5.99.6"
+    "webpack": "catalog:"
   },
   "engines": {
     "node": ">= 20"
