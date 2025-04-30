@@ -1253,7 +1253,6 @@ export class Realm {
     for (let [i, resource] of resources.entries()) {
       if (
         (i > 0 && typeof resource.lid !== 'string') ||
-        // TODO test this
         (resource.meta.realmURL && resource.meta.realmURL !== this.url)
       ) {
         continue;
@@ -1444,7 +1443,6 @@ export class Realm {
     for (let [i, resource] of resources.entries()) {
       if (
         (i > 0 && typeof resource.lid !== 'string') ||
-        // TODO test this
         (resource.meta.realmURL && resource.meta.realmURL !== this.url)
       ) {
         continue;
