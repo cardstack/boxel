@@ -56,7 +56,7 @@
     "@babel/plugin-transform-class-properties": "catalog:",
     "@babel/plugin-transform-class-static-block": "catalog:",
     "@babel/plugin-transform-typescript": "catalog:",
-    "@babel/runtime": "^7.22.11",
+    "@babel/runtime": "catalog:",
     "@embroider/addon-dev": "^5.0.0",
     "@embroider/macros": "^1.16.5",
     "@rollup/plugin-babel": "^6.0.4",

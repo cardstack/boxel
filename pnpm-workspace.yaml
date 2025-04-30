@@ -9,6 +9,7 @@ catalog:
   "@babel/plugin-transform-class-properties": ^7.22.5
   "@babel/plugin-transform-class-static-block": ^7.22.11
   "@babel/plugin-transform-typescript": ^7.22.15
+  "@babel/runtime": ^7.22.11
   "@typescript-eslint/eslint-plugin": ^7.18.0
   "@typescript-eslint/parser": ^7.18.0
   "@types/qunit": 2.11.3

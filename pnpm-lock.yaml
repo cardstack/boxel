@@ -21,6 +21,9 @@ catalogs:
     '@babel/plugin-transform-typescript':
       specifier: ^7.22.15
       version: 7.25.7
+    '@babel/runtime':
+      specifier: ^7.22.11
+      version: 7.22.11
     '@types/qunit':
       specifier: 2.11.3
       version: 2.11.3
@@ -414,7 +417,7 @@ importers:
         specifier: 'catalog:'
         version: 7.25.7(@babel/core@7.26.10)
       '@babel/runtime':
-        specifier: ^7.22.11
+        specifier: 'catalog:'
         version: 7.22.11
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
@@ -565,7 +568,7 @@ importers:
         specifier: 'catalog:'
         version: 7.25.7(@babel/core@7.26.10)
       '@babel/runtime':
-        specifier: ^7.22.11
+        specifier: 'catalog:'
         version: 7.22.11
       '@embroider/addon-dev':
         specifier: ^5.0.0
@@ -1001,7 +1004,7 @@ importers:
         specifier: 'catalog:'
         version: 7.25.7(@babel/core@7.26.10)
       '@babel/runtime':
-        specifier: ^7.22.11
+        specifier: 'catalog:'
         version: 7.22.11
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*

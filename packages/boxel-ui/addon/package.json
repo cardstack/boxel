@@ -74,7 +74,7 @@
     "@babel/plugin-transform-class-properties": "catalog:",
     "@babel/plugin-transform-class-static-block": "catalog:",
     "@babel/plugin-transform-typescript": "catalog:",
-    "@babel/runtime": "^7.22.11",
+    "@babel/runtime": "catalog:",
     "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@embroider/addon-dev": "^8.0.0",
     "@embroider/macros": "~1.16.5",
