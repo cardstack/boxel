@@ -937,16 +937,8 @@ module('Integration | operator-mode', function (hooks) {
           ?.textContent?.trim() == 'Saving…',
       { timeoutMessage: 'Waiting for Saving... to appear' },
     );
-    await waitUntil(
-      () =>
-        document
-          .querySelector('[data-test-auto-save-indicator]')
-          ?.textContent?.trim() == 'Failed to save: Rejected by firewall',
-      { timeoutMessage: 'Waiting for "Failed to save" to appear' },
-    );
-    assert
-      .dom('[data-test-auto-save-indicator]')
-      .containsText('Failed to save: Rejected by firewall');
+    await waitFor(`.error-header[data-test-card-header]`);
+    assert.dom('[data-test-card-header]').containsText('Card Error: Forbidden');
   });
 
   test('opens workspace chooser after closing the only remaining card on the stack', async function (assert) {
