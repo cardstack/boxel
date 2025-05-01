@@ -86,7 +86,8 @@ export async function createRealm(
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
-  if (!copyFromSeed) {
+  // FIXME if this is no longer the default, should the argument also not be?
+  if (copyFromSeed) {
     await page.locator('[data-test-copy-from-seed-field]').click();
   }
   await page.locator('[data-test-create-workspace-submit]').click();
