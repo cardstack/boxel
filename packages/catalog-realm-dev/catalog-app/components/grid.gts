@@ -171,5 +171,5 @@ function getComponent(cardOrField: BaseDef) {
 }
 
 function removeFileExtension(cardUrl: string) {
-  return cardUrl.replace(/\.[^/.]+$/, '');
+  return cardUrl?.replace(/\.[^/.]+$/, '');
 }

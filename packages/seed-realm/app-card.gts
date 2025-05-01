@@ -466,7 +466,7 @@ export class AppCardIsolated extends Component<typeof AppCard> {
 }
 
 function removeFileExtension(cardUrl: string) {
-  return cardUrl.replace(/\.[^/.]+$/, '');
+  return cardUrl?.replace(/\.[^/.]+$/, '');
 }
 
 export class AppCard extends CardDef {

@@ -34,6 +34,7 @@ export default class PillMenuUsage extends Component {
     (cardId) =>
       new TrackedObject({
         cardId,
+        realmURL: undefined,
         isActive: true,
       }),
   );
@@ -51,7 +52,10 @@ export default class PillMenuUsage extends Component {
   }
 
   @action private onChooseCard(cardId: string) {
-    this.items = [...this.items, new TrackedObject({ cardId, isActive: true })];
+    this.items = [
+      ...this.items,
+      new TrackedObject({ cardId, realmURL: undefined, isActive: true }),
+    ];
   }
 
   @action private onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {

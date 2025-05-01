@@ -51,10 +51,10 @@ export class StackBackgroundsResource extends Resource<Args> {
           return;
         }
         let bottomMostStackItem = stack[0];
-        if (!bottomMostStackItem.url) {
+        if (!bottomMostStackItem.id) {
           return;
         }
-        let bottomMostCard = await this.store.get(bottomMostStackItem.url);
+        let bottomMostCard = await this.store.get(bottomMostStackItem.id);
         if (!isCardInstance(bottomMostCard)) {
           let realm = bottomMostCard.realm;
           if (!realm) {
