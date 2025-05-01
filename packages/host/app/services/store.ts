@@ -900,7 +900,13 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private getErrorMessage(error: CardErrorJSONAPI | Error) {
-    if ((error as any).responseHeaders?.get('x-blocked-by-waf-rule')) {
+    if (
+      'meta' in error &&
+      typeof error.meta === 'object' &&
+      'responseHeaders' in error.meta &&
+      typeof error.meta.responseHeaders === 'object' &&
+      error.meta.responseHeaders['x-blocked-by-waf-rule']
+    ) {
       return 'Rejected by firewall';
     }
     if (error.message) {

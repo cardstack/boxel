@@ -38,6 +38,7 @@ export interface CardErrorJSONAPI {
     scopedCssUrls: string[];
     stack: string | null;
     isCreationError?: true;
+    responseHeaders?: { [header: string]: string };
   };
   additionalErrors?: (CardError | SearchResultError['error'] | Error)[] | null;
 }
@@ -99,6 +100,10 @@ export function formattedError(
     };
   }
 
+  let responseHeaders = error.responseHeaders
+    ? Object.fromEntries<string>(error.responseHeaders.entries())
+    : undefined;
+
   let errorStatus = err?.status ?? error.status;
   let errorMessage =
     err?.message ??
@@ -122,6 +127,7 @@ export function formattedError(
           stack: error.stack ?? null,
           cardTitle: null,
           ...(isCreationError ? { isCreationError } : {}),
+          ...(responseHeaders ? { responseHeaders } : {}),
         },
       },
     ],
