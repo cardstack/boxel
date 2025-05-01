@@ -694,12 +694,13 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           }
         }`;
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
-      await waitFor('[data-test-selected-item]', { timeout: 3000 });
+      await waitFor('[data-test-selected-item]');
       assert.dom('[data-test-selected-item]').hasText('Jane Doe');
       assert.dom('[data-test-author-title]').containsText('Jane Doe');
 
       await realm.write('author.gts', authorCard);
       await settled();
+      await waitFor('[data-test-selected-item]');
       assert.dom('[data-test-selected-item]').hasText('Jane Doe');
       assert.dom('[data-test-author-title]').containsText('Hello Jane Doe');
     });
@@ -761,7 +762,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           }
       }`;
       await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
-      await waitFor('[data-test-selected-item]', { timeout: 3000 });
+      await waitFor('[data-test-selected-item]');
+      assert
+        .dom('[data-test-selected-item]')
+        .exists('title exists on first render');
       assert
         .dom('[data-test-selected-item]')
         .hasText('Mad As a Hatter', 'selected item title is correct');
@@ -770,6 +774,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await realm.write('blog-post.gts', blogPostCard);
       await settled();
+      await waitFor('[data-test-selected-item]');
+      assert.dom('[data-test-selected-item]').exists('title exists on update');
       assert.dom('[data-test-selected-item]').hasText('Mad As a Hatter');
       assert
         .dom('[data-test-post-title]')
