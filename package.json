@@ -47,7 +47,10 @@
       "monaco-editor-webpack-plugin@7.1.0": "patches/monaco-editor-webpack-plugin@7.1.0.patch",
       "@embroider/compat": "patches/@embroider__compat.patch",
       "ember-eslint-parser": "patches/ember-eslint-parser.patch"
-    }
+    },
+    "onlyBuiltDependencies": [
+      "fsevents"
+    ]
   },
   "devDependencies": {
     "@actions/core": "^1.2.6",

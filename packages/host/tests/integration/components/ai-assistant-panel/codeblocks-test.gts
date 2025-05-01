@@ -4,7 +4,10 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  baseRealm,
+} from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import CardPrerender from '@cardstack/host/components/card-prerender';
@@ -203,7 +206,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -223,7 +226,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'this is another message',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -251,7 +254,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'This is a code snippet that I made for you\n```javascript\nconsole.log("hello world");\n```\nWhat do you think about it?',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -275,7 +278,7 @@ export default class MyComponent extends Component {
       '@aibot:localhost',
       {
         body: 'this is another message',
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -361,7 +364,7 @@ You can use these in your HTML documents to display formatted text, code snippet
       '@aibot:localhost',
       {
         body: messageWithNestedPreTags,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -468,7 +471,7 @@ And another code block without language specified:
       '@aibot:localhost',
       {
         body: messageWithHtmlOutsideBackticks,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -529,7 +532,7 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
       '@aibot:localhost',
       {
         body: messageWithHtmlInBackticksNoLang,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
@@ -615,7 +618,7 @@ Above code blocks are now complete`;
       '@aibot:localhost',
       {
         body: messageWithSearchAndReplaceBlock,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
