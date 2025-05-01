@@ -77,7 +77,7 @@
     "eslint-config-prettier": "catalog:",
     "eslint-plugin-ember": "catalog:",
     "eslint-plugin-node": "catalog:",
-    "eslint-plugin-prettier": "catalog:",
+    "eslint-plugin-prettier": "^3.3.1",
     "loader.js": "catalog:",
     "npm-run-all": "catalog:",
     "prettier": "catalog:",
