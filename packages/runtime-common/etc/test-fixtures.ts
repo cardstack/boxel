@@ -1,4 +1,6 @@
 /* eslint-disable no-useless-escape */
+// TIP: this file should be saved with "Save without formatting" in VSCode
+// to avoid messing with the whitespace in the compiled card source
 export const cardSrc = `
 import {
   contains,
@@ -57,12 +59,14 @@ export class Person extends CardDef {
     static {
       setComponentTemplate(createTemplateFactory(
       /*
-
-             <h1 data-test-card><@fields.firstName /></h1>
-
+        
+            <h1 data-test-card><@fields.firstName /></h1>
+          
       */
       {
+        "id": ${id},
         "block": "[[[1,\\"\\\\n      \\"],[10,\\"h1\\"],[14,\\"data-test-card\\",\\"\\"],[12],[8,[30,1,[\\"firstName\\"]],null,null,null],[13],[1,\\"\\\\n    \\"]],[\\"@fields\\"],false,[]]",
+        "moduleName": "${moduleName}",
         "isStrictMode": true
       }), this);
     }
