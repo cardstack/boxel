@@ -222,6 +222,22 @@ export default class IdentityContextWithGarbageCollection
     this.#nonTrackedCardErrors.delete(remoteId);
   }
 
+  consumersOf(api: typeof CardAPI, instance: CardDef) {
+    let consumptionGraph = this.makeConsumptionGraph(api);
+    let consumers = consumptionGraph.get(instance[localIdSymbol]);
+    return [...(consumers ?? [])]
+      .map((id) => this.get(id))
+      .filter(Boolean) as CardDef[];
+  }
+
+  dependenciesOf(api: typeof CardAPI, instance: CardDef) {
+    let dependencyGraph = this.makeDependencyGraph(api);
+    let deps = dependencyGraph.get(instance[localIdSymbol]);
+    return [...(deps ?? [])]
+      .map((id) => this.get(id))
+      .filter(Boolean) as CardDef[];
+  }
+
   private deleteFromAll(id: string) {
     this.#cards.delete(id);
     this.#cardErrors.delete(id);
@@ -396,6 +412,21 @@ export default class IdentityContextWithGarbageCollection
       }
     }
     return consumptionGraph;
+  }
+
+  private makeDependencyGraph(api: typeof CardAPI): InstanceGraph {
+    let dependencyGraph: InstanceGraph = new Map();
+    for (let instance of this.#cards.values()) {
+      if (!instance) {
+        continue;
+      }
+      let deps = getDeps(api, instance);
+      dependencyGraph.set(
+        instance[localIdSymbol],
+        new Set(deps.map((d) => d[localIdSymbol])),
+      );
+    }
+    return dependencyGraph;
   }
 }
 

@@ -62,6 +62,7 @@ import EnvironmentService from './environment-service';
 import type CardService from './card-service';
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
+import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
@@ -79,6 +80,7 @@ export default class StoreService extends Service implements StoreInterface {
   @service declare private cardService: CardService;
   @service declare private environmentService: EnvironmentService;
   @service declare private reset: ResetService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   private subscriptions: Map<string, { unsubscribe: () => void }> = new Map();
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
@@ -229,6 +231,9 @@ export default class StoreService extends Service implements StoreInterface {
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: {
+      // TODO: apparently this is getting abused by the catalog actions and we
+      // are using this to tell the store the folder _within_ the realm to
+      // upload an instance to, this is not always the actual realm...
       realm?: string;
       relativeTo?: URL | undefined;
       doNotPersist?: true;
@@ -646,7 +651,11 @@ export default class StoreService extends Service implements StoreInterface {
     }
   });
 
-  private onInstanceUpdated = (instance: BaseDef) => {
+  private onInstanceUpdated = (instance: BaseDef, fieldName: string) => {
+    if (fieldName === 'id') {
+      // id updates are internal and do not trigger autosaves
+      return;
+    }
     if (isCardInstance(instance)) {
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
@@ -675,15 +684,17 @@ export default class StoreService extends Service implements StoreInterface {
     // module updates will break the cached api. so don't hang on to this longer
     // than necessary
     this.cardApiCache = await this.cardService.getAPI();
-    if (operation === 'stop-tracking' && instance) {
+    if (instance) {
       this.cardApiCache.unsubscribeFromChanges(
         instance,
         this.onInstanceUpdated,
       );
-      this.autoSaveStates.delete(instance.id);
-      this.autoSaveStates.delete(instance[localIdSymbol]);
-    } else if (operation === 'start-tracking' && instance) {
-      this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
+      if (operation === 'stop-tracking') {
+        this.autoSaveStates.delete(instance.id);
+        this.autoSaveStates.delete(instance[localIdSymbol]);
+      } else if (operation === 'start-tracking') {
+        this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
+      }
     }
   }
 
@@ -730,6 +741,11 @@ export default class StoreService extends Service implements StoreInterface {
       if (!opts?.noCache && existingInstance) {
         deferred?.fulfill(existingInstance);
         return existingInstance as T;
+      }
+      if (isLocalId(url)) {
+        throw new Error(
+          `instance with local id ${url} does not exist in the store`,
+        );
       }
 
       let doc = (typeof urlOrDoc !== 'string' ? urlOrDoc : undefined) as
@@ -930,14 +946,12 @@ export default class StoreService extends Service implements StoreInterface {
         }
         let json = await this.saveCardDocument(doc, realmURL);
 
-        // if the card changed while the save was in flight then don't load the
-        // server's version of the card--the next auto save will include these
-        // unsaved changes.
-        if (!cardChanged) {
-          // in order to preserve object equality with the unsaved card instance we
-          // should always use updateFromSerialized()--this way a newly created
-          // instance that does not yet have an id is still the same instance after an
-          // ID has been assigned by the server.
+        // if the card changed while the save was in flight then don't merge the
+        // server state--the next auto save will include these
+        // unsaved changes. also if there are new foreign links we'll hold off
+        // on merging the server state until we have received the new foreign
+        // link ID's from the other realm(s) (handled in this.updateForeignConsumersOf())
+        if (!cardChanged && !this.hasNewForeignLinks(instance)) {
           await api.updateFromSerialized(instance, json, this.identityContext);
         } else if (isNew) {
           // in this case a new card was created, but there is an immediate change
@@ -950,8 +964,11 @@ export default class StoreService extends Service implements StoreInterface {
         }
 
         if (isNew) {
-          // now that we have a remote ID make a realm subscription
           this.subscribeToRealm(new URL(instance.id));
+          this.operatorModeStateService.handleCardIdAssignment(
+            instance[localIdSymbol],
+          );
+          await this.updateForeignConsumersOf(instance);
           await this.updateInstanceChangeSubscription(
             'start-tracking',
             instance,
@@ -975,6 +992,48 @@ export default class StoreService extends Service implements StoreInterface {
         api?.unsubscribeFromChanges(instance, onCardChange);
       }
     });
+  }
+
+  private async hasNewForeignLinks(instance: CardDef) {
+    let instanceRealm = instance[realmURLSymbol]?.href;
+    if (!instanceRealm) {
+      return;
+    }
+    let deps = this.identityContext.dependenciesOf(
+      await this.cardService.getAPI(),
+      instance,
+    );
+    return Boolean(
+      deps.find(
+        (c) =>
+          !c.id &&
+          c[realmURLSymbol]?.href &&
+          c[realmURLSymbol].href !== instanceRealm,
+      ),
+    );
+  }
+
+  // in the case we are making a cross realm relationship with a link that
+  // hasn't been saved yet, as soon as the link does actually get saved we need
+  // to inform the consuming instances that live in different realms of the new
+  // link's remote id and have those consumers update in their respective
+  // realms.
+  private async updateForeignConsumersOf(instance: CardDef) {
+    let consumers = this.identityContext.consumersOf(
+      await this.cardService.getAPI(),
+      instance,
+    );
+    let instanceRealm = instance[realmURLSymbol]?.href;
+    if (!instanceRealm) {
+      return;
+    }
+
+    for (let consumer of consumers) {
+      let consumerRealm = consumer[realmURLSymbol]?.href;
+      if (consumerRealm !== instanceRealm && consumer.id) {
+        this.save(consumer.id);
+      }
+    }
   }
 
   private async reloadInstance(instance: CardDef): Promise<void> {

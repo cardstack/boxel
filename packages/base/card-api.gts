@@ -38,8 +38,8 @@ import {
   uuidv4,
   realmURL,
   localId,
-  meta,
   formats,
+  meta,
   type Format,
   type Meta,
   type CardFields,
@@ -919,7 +919,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       let resource: JSONAPIResource = {
         relationships: {
           [this.name]: {
-            ...(value[isSavedInstance]
+            ...(value.id
               ? {
                   links: {
                     self: makeRelativeURL(value.id, opts),
@@ -1317,7 +1317,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       }
 
       relationships[`${this.name}\.${i}`] = {
-        ...(value[isSavedInstance]
+        ...(value.id
           ? {
               links: {
                 self: makeRelativeURL(value.id, opts),
@@ -2408,6 +2408,7 @@ function serializeCardResource(
       opts?.omitFields ? !opts.omitFields.includes(field.card) : true,
     )
     .map(([fieldName]) => serializedGet(model, fieldName, doc, visited, opts));
+  let realmURL = getCardMeta(model, 'realmURL');
   return merge(
     {
       attributes: {},
@@ -2415,7 +2416,7 @@ function serializeCardResource(
     ...fieldResources,
     {
       type: 'card',
-      meta: { adoptsFrom },
+      meta: { adoptsFrom, ...(realmURL ? { realmURL } : {}) },
     },
     model.id ? { id: model.id } : { lid: model[localId] },
   );
@@ -2614,7 +2615,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
-      let relativeToVal = instance[relativeTo];
+      let relativeToVal =
+        'id' in instance && typeof instance.id === 'string'
+          ? new URL(instance.id)
+          : instance[relativeTo];
       return [
         field,
         await getDeserializedValue({

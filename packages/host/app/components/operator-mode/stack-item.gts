@@ -52,6 +52,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import { type StackItem } from '@cardstack/host/lib/stack-item';
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type { CardContext, CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -138,6 +139,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   get permissions(): Permissions | undefined {
     if (this.url) {
       return this.realm.permissions(this.url);
+    } else if (this.card?.[realmURL]) {
+      return this.realm.permissions(this.card[realmURL]?.href);
     }
     return undefined;
   }
@@ -160,7 +163,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
   }
 
   private makeCardResource = () => {
-    this.cardResource = this.getCard(this, () => this.args.item.url);
+    this.cardResource = this.getCard(this, () => this.args.item.id);
   };
 
   private get url() {
@@ -341,6 +344,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.cardResource?.card;
   }
 
+  private get urlForRealmLookup() {
+    if (!this.card) {
+      throw new Error(
+        `bug: cannot determine url for card realm lookup when there is no card. this is likely a template error, card must be present before this is invoked in template`,
+      );
+    }
+    return urlForRealmLookup(this.card);
+  }
+
   @cached
   private get cardError() {
     return this.cardResource?.cardError;
@@ -375,13 +387,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
   private doneEditing = () => {
     let item = this.args.item;
     let { request } = item;
-    // if the card is actually different do the save and dismiss, otherwise
-    // just change the stack item's format to isolated
-    if (this.card && this.cardResource?.autoSaveState?.hasUnsavedChanges) {
-      // we dont want to have the user wait for the save to complete before
-      // dismissing edit mode so intentionally not awaiting here
+    if (this.card) {
       request?.fulfill(this.card.id);
-      this.store.save(this.card.id);
     }
     this.operatorModeStateService.replaceItemInStack(
       item,
@@ -567,7 +574,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
           </div>
         {{else if this.card}}
           {{this.setWindowTitle}}
-          {{#let (this.realm.info this.card.id) as |realmInfo|}}
+          {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
             <CardHeader
               @cardTypeDisplayName={{this.headerTitle}}
               @cardTypeIcon={{cardTypeIcon this.card}}

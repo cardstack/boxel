@@ -31,7 +31,7 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
       return null;
     }
 
-    return this.allStackItems[this.allStackItems.length - 1].url;
+    return this.allStackItems[this.allStackItems.length - 1].id;
   }
 
   protected async run(

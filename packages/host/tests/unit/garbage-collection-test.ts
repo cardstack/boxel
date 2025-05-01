@@ -785,4 +785,32 @@ module('Unit | identity-context garbage collection', function (hooks) {
       'a card error does not exist for the id',
     );
   });
+
+  test('can get the consumers of an instance', async function (assert) {
+    let {
+      identityContext,
+      instances: { germaine, queenzy },
+    } = await setupTest();
+
+    let consumers = identityContext.consumersOf(api, queenzy);
+    assert.deepEqual(
+      consumers,
+      [germaine],
+      'the consumers for queenzy are correct',
+    );
+  });
+
+  test('can get the dependencies of an instance', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan, jade, germaine },
+    } = await setupTest();
+
+    let dependencies = identityContext.dependenciesOf(api, hassan);
+    assert.deepEqual(
+      dependencies,
+      [jade, germaine],
+      'the dependencies for hassan are correct',
+    );
+  });
 });
