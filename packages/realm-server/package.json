@@ -40,7 +40,7 @@
     "ember-eslint-parser": "0.5.9",
     "eslint-plugin-qunit": "catalog:",
     "ethers": "catalog:",
-    "fastboot": "^4.1.0",
+    "fastboot": "4.1.0",
     "flat": "catalog:",
     "fs-extra": "^10.1.0",
     "glob": "catalog:",
