@@ -1,5 +1,5 @@
 import { module, test, assert } from 'qunit';
-import { constructHistory, HistoryConstructionError } from '../helpers';
+import { constructHistory, HistoryConstructionError } from '../lib/history';
 import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -8,7 +8,10 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { EventStatus, type IRoomEvent } from 'matrix-js-sdk';
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  CardMessageEvent,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/matrix-event';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
 
 module('constructHistory', (hooks) => {
@@ -365,10 +368,6 @@ module('constructHistory', (hooks) => {
         event_id: '3',
         type: 'm.room.message',
         content: {
-          'm.relates_to': {
-            rel_type: 'm.replace',
-            event_id: '3',
-          },
           msgtype: 'm.text',
           format: 'org.matrix.custom.html',
           body: 'hola',
@@ -654,5 +653,120 @@ module('constructHistory', (hooks) => {
     } catch (e) {
       assert.ok(e instanceof HistoryConstructionError);
     }
+  });
+
+  test('should return an array with a single message event when the input array contains an event and continuation events', async () => {
+    const history: IRoomEvent[] = [
+      {
+        event_id: '0',
+        room_id: 'room-id',
+        type: 'm.room.message',
+        sender: 'aibot',
+        origin_server_ts: 1234567890,
+        content: {
+          body: '',
+          msgtype: 'app.boxel.message',
+          format: 'org.matrix.custom.html',
+          'app.boxel.reasoning': 'Thinking...',
+          'app.boxel.commandRequests': [],
+          isStreamingFinished: false,
+        },
+      },
+      {
+        event_id: '1',
+        room_id: 'room-id',
+        type: 'm.room.message',
+        sender: 'aibot',
+        origin_server_ts: 1234567891,
+        content: {
+          body: '',
+          msgtype: 'app.boxel.message',
+          format: 'org.matrix.custom.html',
+          'app.boxel.reasoning': 'a'.repeat(1024),
+          'app.boxel.commandRequests': [],
+          isStreamingFinished: false,
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: '0',
+          },
+        },
+      },
+      {
+        event_id: '2',
+        room_id: 'room-id',
+        type: 'm.room.message',
+        sender: 'aibot',
+        origin_server_ts: 1234567892,
+        content: {
+          body: 'b'.repeat(512),
+          msgtype: 'app.boxel.message',
+          format: 'org.matrix.custom.html',
+          'app.boxel.reasoning': 'a'.repeat(1024),
+          'app.boxel.commandRequests': [],
+          isStreamingFinished: true,
+          'app.boxel.has-continuation': true,
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: '0',
+          },
+        },
+      },
+      {
+        event_id: '3',
+        room_id: 'room-id',
+        type: 'm.room.message',
+        sender: 'aibot',
+        origin_server_ts: 1234567893,
+        content: {
+          body: 'b'.repeat(1024),
+          msgtype: 'app.boxel.message',
+          format: 'org.matrix.custom.html',
+          'app.boxel.reasoning': '',
+          'app.boxel.commandRequests': [],
+          isStreamingFinished: false,
+          'app.boxel.continuation-of': '0',
+        },
+      },
+      {
+        event_id: '4',
+        room_id: 'room-id',
+        type: 'm.room.message',
+        sender: 'aibot',
+        origin_server_ts: 1234567894,
+        content: {
+          body: 'b'.repeat(1024),
+          msgtype: 'app.boxel.message',
+          format: 'org.matrix.custom.html',
+          'app.boxel.reasoning': '',
+          'app.boxel.commandRequests': [],
+          isStreamingFinished: true,
+          'app.boxel.continuation-of': '0',
+          'm.relates_to': {
+            rel_type: 'm.replace',
+            event_id: '3',
+          },
+        },
+      },
+    ];
+
+    const result = await constructHistory(history, fakeMatrixClient);
+
+    assert.deepEqual(result, [
+      {
+        event_id: '0',
+        room_id: 'room-id',
+        type: 'm.room.message',
+        sender: 'aibot',
+        origin_server_ts: 1234567894,
+        content: {
+          body: 'b'.repeat(1536),
+          msgtype: 'app.boxel.message',
+          format: 'org.matrix.custom.html',
+          'app.boxel.reasoning': 'a'.repeat(1024),
+          'app.boxel.commandRequests': [],
+          isStreamingFinished: true,
+        },
+      } as unknown as CardMessageEvent,
+    ]);
   });
 });

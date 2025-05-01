@@ -1262,7 +1262,9 @@ Attached files:
     );
 
     // Now add a tool
-    (eventList[0].content as CardMessageContent).data.context.tools = [
+    let cardMessageContent = eventList[0].content as CardMessageContent;
+    cardMessageContent.data.context ||= {};
+    cardMessageContent.data.context.tools = [
       getPatchTool('http://localhost:4201/drafts/Author/1', {
         attributes: { firstName: { type: 'string' } },
       }),
@@ -1280,9 +1282,9 @@ Attached files:
     );
 
     // Now remove cards, tools, and add an attached file
-    (eventList[0].content as CardMessageContent).data.context.openCardIds = [];
-    (eventList[0].content as CardMessageContent).data.context.tools = [];
-    (eventList[0].content as CardMessageContent).data.attachedFiles = [
+    cardMessageContent.data.context.openCardIds = [];
+    cardMessageContent.data.context.tools = [];
+    cardMessageContent.data.attachedFiles = [
       {
         url: 'https://example.com/file.txt',
         sourceUrl: 'https://example.com/file.txt',

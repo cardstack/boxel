@@ -374,7 +374,7 @@ export async function getTools(
       continue;
     }
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let eventTools = event.content.data.context.tools;
+      let eventTools = event.content.data?.context?.tools;
       if (eventTools?.length) {
         for (let tool of eventTools) {
           toolMap.set(tool.function.name, tool);

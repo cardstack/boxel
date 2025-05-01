@@ -1,4 +1,7 @@
-import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type {
+  CardMessageEvent,
+  MatrixEvent as DiscreteMatrixEvent,
+} from 'https://cardstack.com/base/matrix-event';
 import { type IRoomEvent } from 'matrix-js-sdk';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
@@ -6,6 +9,9 @@ import {
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
+  APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFileDef, downloadFile, MatrixClient } from './matrix';
@@ -66,16 +72,51 @@ export async function constructHistory(
       existingEvent.origin_server_ts < event.origin_server_ts
     ) {
       latestEventsMap.set(eventId, event as DiscreteMatrixEvent);
+      if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+        delete event.content['m.relates_to'];
+      }
     }
   }
 
-  let latestEvents = Array.from(latestEventsMap.values());
-  latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
+  let reverseChronologicalEvents = Array.from(latestEventsMap.values());
+  reverseChronologicalEvents.sort(
+    (a, b) => b.origin_server_ts - a.origin_server_ts,
+  );
 
+  const continuationEventsMap = new Map<string, CardMessageEvent>();
   const eventsWithoutContinuationsMap = new Map<string, DiscreteMatrixEvent>();
 
-  for (let event of latestEvents) {
+  for (let event of reverseChronologicalEvents) {
     await downloadAttachments(event, client);
+
+    if (
+      event.type === 'm.room.message' &&
+      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+    ) {
+      let hasContinuation =
+        event.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
+      if (hasContinuation) {
+        let continuationEvent = continuationEventsMap.get(event.event_id!);
+        if (continuationEvent) {
+          event.content.body += continuationEvent.content.body;
+          event.content[APP_BOXEL_REASONING_CONTENT_KEY] =
+            event.content[APP_BOXEL_REASONING_CONTENT_KEY] ??
+            '' + continuationEvent.content[APP_BOXEL_REASONING_CONTENT_KEY] ??
+            '';
+          event.origin_server_ts = continuationEvent.origin_server_ts;
+          delete event.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
+        }
+      }
+      let continuationOfEventId =
+        event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY];
+      if (continuationOfEventId) {
+        continuationEventsMap.set(
+          continuationOfEventId,
+          event as CardMessageEvent,
+        );
+        continue;
+      }
+    }
     eventsWithoutContinuationsMap.set(
       event.event_id!,
       event as DiscreteMatrixEvent,
