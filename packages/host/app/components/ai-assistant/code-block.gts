@@ -68,6 +68,7 @@ interface CodeBlockDiffEditorSignature {
     originalCode?: string | null;
     modifiedCode?: string | null;
     language?: string | null;
+    onDidUpdateDiff?: (lineChanges: _MonacoSDK.editor.ILineChange[]) => void;
   };
 }
 
@@ -145,6 +146,7 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       originalCode,
       modifiedCode,
       language,
+      onDidUpdateDiff,
     }: MonacoDiffEditorSignature['Args']['Named'],
   ) {
     if (!originalCode || !modifiedCode) {
@@ -181,6 +183,16 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       );
 
       editor.setModel({ original: originalModel, modified: modifiedModel });
+
+      if (onDidUpdateDiff) {
+        editor.onDidUpdateDiff(() => {
+          let lineChanges = editor.getLineChanges();
+
+          if (lineChanges) {
+            onDidUpdateDiff(lineChanges);
+          }
+        });
+      }
 
       const contentHeight = editor.getModifiedEditor().getContentHeight();
       if (contentHeight > 0) {
@@ -417,6 +429,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
         language=@language
         originalCode=@originalCode
         modifiedCode=@modifiedCode
+        onDidUpdateDiff=@onDidUpdateDiff
       }}
       class='code-block code-block-diff'
       data-test-editor

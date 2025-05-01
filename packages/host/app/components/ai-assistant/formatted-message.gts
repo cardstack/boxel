@@ -6,6 +6,7 @@ import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
 
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -333,11 +334,46 @@ interface HtmlGroupCodeBlockSignature {
 }
 
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
+  @tracked diffLineChanges: _MonacoSDK.editor.ILineChange[] | undefined;
+
   private codeDiffResource = getCodeDiffResultResource(
     this,
     this.args.codeData.fileUrl,
     this.args.codeData.searchReplaceBlock,
   );
+
+  @action onDidUpdateDiff(lineChanges: _MonacoSDK.editor.ILineChange[]) {
+    console.log('onDidUpdateDiff', lineChanges);
+    this.diffLineChanges = lineChanges;
+  }
+
+  get codeToCopy() {
+    console.log(
+      `in ctc dlc ${!!this.diffLineChanges}, cdr.mc: ${!!this.codeDiffResource
+        .modifiedCode}`,
+    );
+    if (!this.diffLineChanges && !this.codeDiffResource.modifiedCode) {
+      return this.args.codeData.code;
+    }
+
+    let lineChange = this.diffLineChanges![0];
+    let startLineNumber = lineChange.modifiedStartLineNumber;
+    let endLineNumber = lineChange.modifiedEndLineNumber;
+
+    console.log(
+      'in codetocopy, is modifiedCode present?',
+      this.codeDiffResource.modifiedCode,
+    );
+
+    let codeToCopy = this.codeDiffResource.modifiedCode
+      ?.split('\n')
+      .slice(startLineNumber - 1, endLineNumber)
+      .join('\n');
+
+    console.log('codeToCopy', codeToCopy);
+
+    return codeToCopy;
+  }
 
   <template>
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
@@ -352,12 +388,13 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
               @language={{@codeData.language}}
+              @onDidUpdateDiff={{this.onDidUpdateDiff}}
             />
           {{/if}}
         {{/if}}
       {{else}}
         <codeBlock.actions as |actions|>
-          <actions.copyCode @code={{@codeData.code}} />
+          <actions.copyCode @code={{this.codeToCopy}} />
         </codeBlock.actions>
         <codeBlock.editor />
       {{/if}}
