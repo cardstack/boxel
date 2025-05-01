@@ -180,9 +180,10 @@ export default class InstanceSelectDropdown extends Component<Signature> {
             @dropdownClass='instances-dropdown-content'
             @options={{cards}}
             @selected={{this.findSelectedCard cards}}
-            @selectedItemComponent={{component
-              SelectedItem
-              title=(getItemTitle @selection)
+            @selectedItemComponent={{if
+              this.isCardLoading
+              LoadingIndicator
+              (component SelectedItem title=(getItemTitle @selection))
             }}
             @renderInPlace={{true}}
             @onChange={{@onSelect}}
@@ -238,6 +239,9 @@ export default class InstanceSelectDropdown extends Component<Signature> {
       .loading-icon {
         height: var(--boxel-form-control-height);
       }
+      .title-loading {
+        --boxel-loading-indicator-size: var(--boxel-icon-xs);
+      }
       .instance-chooser {
         height: 26px;
         border: 1px solid var(--boxel-dark);
@@ -271,10 +275,20 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .instance-chooser :deep(.boxel-loading-indicator) {
+        --boxel-loading-indicator-size: var(--boxel-icon-xs);
+      }
     </style>
   </template>
 
   @service private declare playgroundPanelService: PlaygroundPanelService;
+
+  private get isCardLoading() {
+    let selection = this.playgroundPanelService.peekSelection(
+      this.args.moduleId,
+    );
+    return Boolean(selection) && !this.args.selection?.card;
+  }
 
   private findSelectedCard = (prerenderedCards?: PrerenderedCard[]) => {
     if (!prerenderedCards?.length) {

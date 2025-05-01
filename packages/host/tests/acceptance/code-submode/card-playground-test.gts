@@ -694,7 +694,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           }
         }`;
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
-      await waitFor('[data-test-selected-item]');
+      await waitFor('[data-test-selected-item]', { timeout: 3000 });
       assert.dom('[data-test-selected-item]').hasText('Jane Doe');
       assert.dom('[data-test-author-title]').containsText('Jane Doe');
 
@@ -761,8 +761,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           }
       }`;
       await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
-      await waitFor('[data-test-selected-item]');
-      assert.dom('[data-test-selected-item]').hasText('Mad As a Hatter');
+      await waitFor('[data-test-selected-item]', { timeout: 3000 });
+      assert
+        .dom('[data-test-selected-item]')
+        .hasText('Mad As a Hatter', 'selected item title is correct');
       assert.dom('[data-test-post-title]').hasText('Mad As a Hatter');
       assert.dom('[data-test-byline]').containsText('Jane Doe');
 

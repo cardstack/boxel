@@ -16,6 +16,7 @@ import {
   chooseCard,
   loadCardDef,
   specRef,
+  trimJsonExtension,
   type Query,
   type LooseSingleCardDocument,
   type CardErrorJSONAPI,
@@ -256,9 +257,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         (item as FieldOption).index,
       );
     } else {
-      this.persistSelections(
-        (item as PrerenderedCard).url.replace(/\.json$/, ''),
-      );
+      this.persistSelections(trimJsonExtension((item as PrerenderedCard).url));
     }
   }
 
