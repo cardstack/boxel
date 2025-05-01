@@ -8,7 +8,7 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
