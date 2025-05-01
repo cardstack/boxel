@@ -1258,7 +1258,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         );
     });
 
-    test('it can render the last known good state for card with error', async function (assert) {
+    test('it can render stale card in edit format when the server is in an error state for the card', async function (assert) {
       const cardId = `${testRealmURL}Person/delilah`;
       setRecentFiles([[testRealmURL, 'Person/delilah.json']]);
       setPlaygroundSelections({
@@ -1269,9 +1269,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       });
 
       await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      await click('[data-test-edit-button]');
+
       assert
-        .dom('[data-test-playground-panel] [data-test-field="title"]')
-        .containsText('Delilah');
+        .dom('[data-test-playground-panel] [data-test-field="title"] input')
+        .hasValue('Delilah');
       assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
       assert.dom('[data-test-format-chooser]').exists();
       assert.dom('[data-test-error-container]').doesNotExist();
@@ -1299,6 +1301,49 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         }),
       );
       await settled();
+
+      assert
+        .dom('[data-test-playground-panel] [data-test-field="title"] input')
+        .hasValue('Delilah');
+      assert.dom('[data-test-boxel-card-header-title]').containsText('Person');
+      assert.dom('[data-test-format-chooser]').exists();
+      assert.dom('[data-test-error-container]').doesNotExist();
+    });
+
+    test('it can render the last known good state for card with error when the not in the edit format', async function (assert) {
+      // cause error (non-existent link)
+      await realm.write(
+        'Person/delilah.json',
+        JSON.stringify({
+          data: {
+            attributes: { title: 'Lila' },
+            relationships: {
+              pet: {
+                links: {
+                  self: './missing-link',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}person`,
+                name: 'Person',
+              },
+            },
+          },
+        }),
+      );
+
+      const cardId = `${testRealmURL}Person/delilah`;
+      setRecentFiles([[testRealmURL, 'Person/delilah.json']]);
+      setPlaygroundSelections({
+        [`${testRealmURL}person/Person`]: {
+          cardId,
+          format: 'isolated',
+        },
+      });
+
+      await openFileInPlayground('person.gts', testRealmURL, 'Person');
       assert
         .dom('[data-test-boxel-card-header-title]')
         .containsText('Card Error: Link Not Found');

@@ -70,17 +70,20 @@ export default class PlaygroundContent extends Component<Signature> {
     <section class='playground-panel' data-test-playground-panel>
       <div class='playground-panel-content'>
         {{#let (if @isFieldDef @field @card) as |card|}}
-          {{#if @cardError}}
-            <CardContainer
-              class='error-container'
-              @displayBoundaries={{true}}
-              data-test-error-container
-            >
-              <CardError
-                @error={{@cardError}}
-                @cardCreationError={{@cardError.meta.isCreationError}}
-              />
-            </CardContainer>
+          {{#if this.showError}}
+            {{! this is for types--@cardError is always true in this case !}}
+            {{#if @cardError}}
+              <CardContainer
+                class='error-container'
+                @displayBoundaries={{true}}
+                data-test-error-container
+              >
+                <CardError
+                  @error={{@cardError}}
+                  @cardCreationError={{@cardError.meta.isCreationError}}
+                />
+              </CardContainer>
+            {{/if}}
           {{else if card}}
             <div
               class='preview-area'
@@ -207,6 +210,15 @@ export default class PlaygroundContent extends Component<Signature> {
       this.playgroundPanelService.getSelection(this.args.moduleId)?.format ??
       this.defaultFormat
     );
+  }
+
+  private get showError() {
+    // in edit format, prefer showing the stale card if possible so user can
+    // attempt to fix the card error
+    if (this.args.cardError && this.format === 'edit' && this.args.card) {
+      return false;
+    }
+    return Boolean(this.args.cardError);
   }
 
   private get fieldIndex(): number | undefined {

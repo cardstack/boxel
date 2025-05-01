@@ -317,6 +317,8 @@ export interface Store {
     },
   ): Promise<T | CardErrorJSONAPI>;
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  peekError(id: string): CardErrorJSONAPI | undefined;
   get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(

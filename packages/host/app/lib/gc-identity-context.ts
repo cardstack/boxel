@@ -116,7 +116,13 @@ export default class IdentityContextWithGarbageCollection
   }
 
   getInstanceOrError(id: string) {
+    // favor instances over errors so that we can get stale values when the
+    // server goes into an error state
     return this.getItem('instance', id) ?? this.getItem('error', id);
+  }
+
+  getError(id: string) {
+    return this.getItem('error', id);
   }
 
   delete(id: string): void {
@@ -330,12 +336,10 @@ export default class IdentityContextWithGarbageCollection
     if (error) {
       if (localId) {
         setIfDifferent(errorBucket, localId, error);
-        cardBucket.delete(localId);
       }
       if (remoteIds.length > 0) {
         for (let remoteId of remoteIds) {
           setIfDifferent(errorBucket, remoteId, error);
-          cardBucket.delete(remoteId);
         }
       }
     }

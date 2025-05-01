@@ -179,7 +179,7 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('can peek a card error', async function (assert) {
+  test('can peek a card error when no stale instance exists', async function (assert) {
     await testRealm.write(
       'Person/hassan.json',
       JSON.stringify({
@@ -207,9 +207,72 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('peek returns a stale instance when the server state reflects an error', async function (assert) {
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Hassan',
+            hasError: true,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitUntil(() => store.peekError(`${testRealmURL}Person/hassan`));
+
+    let staleInstance = store.peek(`${testRealmURL}Person/hassan`);
+    assert.true(
+      isCardInstance(staleInstance),
+      'the peek-ed instance is not an error',
+    );
+  });
+
   test('peek for an uncached returns undefined', async function (assert) {
     let instance = store.peek(`${testRealmURL}Person/does-not-exist`);
     assert.strictEqual(instance, undefined, 'instance is undefined');
+  });
+
+  test('peekError returns the server state error when a stale instance exists', async function (assert) {
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Hassan',
+            hasError: true,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitUntil(() => store.peekError(`${testRealmURL}Person/hassan`));
+
+    let error = store.peekError(`${testRealmURL}Person/hassan`);
+    assert.false(isCardInstance(error), 'error is not a card instance');
+    assert.ok(
+      (error as CardErrorJSONAPI).message.includes('intentional error thrown'),
+      'error message is correct',
+    );
   });
 
   test('can add reference to a card url', async function (assert) {
@@ -391,24 +454,38 @@ module('Integration | Store', function (hooks) {
     );
 
     let instance = new BoomPersonDef({ name: 'Andrea' });
-    let error = await store.add(instance);
+    let error = await store.add(instance, { realm: testRealmURL });
     store.addReference(instance[localId]);
     await store.flush();
 
-    let peek = store.peek(instance[localId])!;
+    let stale = store.peek(instance[localId])!;
+    if (isCardInstance(stale)) {
+      assert.strictEqual(
+        (stale as any).name,
+        'Andrea',
+        'the stale card state is correct',
+      );
+    } else {
+      assert.ok(
+        false,
+        `expected an instance but got a card error: "${stale.message}"`,
+      );
+    }
+
+    let peekedError = store.peekError(instance[localId])!;
     assert.strictEqual(
+      peekedError,
       error,
-      peek,
       'the output of store.add is the peek-ed error',
     );
-    if (!isCardInstance(peek)) {
+    if (!isCardInstance(error)) {
       assert.strictEqual(
-        peek.id,
+        error.id,
         instance[localId],
         'the error doc id is the local id of the instance',
       );
       assert.ok(
-        peek.message.includes('intentionallyNotDefined is not defined'),
+        error.message.includes('intentionallyNotDefined is not defined'),
       );
 
       // we do this because the loader in our test realm is shared with the loader of the
@@ -434,11 +511,11 @@ module('Integration | Store', function (hooks) {
       `.trim(),
       );
 
-      await waitUntil(() => isCardInstance(store.peek(instance[localId])), {
+      await waitUntil(() => !store.peekError(instance[localId]), {
         timeout: 5_000,
       });
 
-      peek = store.peek(instance[localId])!;
+      let peek = store.peek(instance[localId])!;
       assert.strictEqual(
         (peek as any).name,
         'Andrea',

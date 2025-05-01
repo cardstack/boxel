@@ -24,6 +24,7 @@ import {
   mergeRelationships,
   realmURL as realmURLSymbol,
   localId as localIdSymbol,
+  meta,
   logger,
   formattedError,
   type Store as StoreInterface,
@@ -33,6 +34,7 @@ import {
   type AutoSaveState,
   type CardDocument,
   type SingleCardDocument,
+  type CardResourceMeta,
   type LooseSingleCardDocument,
   type LooseCardResource,
   type CardErrorJSONAPI,
@@ -232,6 +234,10 @@ export default class StoreService extends Service implements StoreInterface {
       doNotPersist?: true;
     },
   ): Promise<T | CardErrorJSONAPI> {
+    // need to figure out the actual realm because opts.realm is being abused
+    let realmURL = opts?.realm
+      ? this.realm.realmOfURL(new URL(opts.realm))?.href
+      : undefined;
     let instance: T;
     if (!isCardInstance(instanceOrDoc)) {
       instance = await this.createFromSerialized(
@@ -248,6 +254,12 @@ export default class StoreService extends Service implements StoreInterface {
           this.identityContext.set(dep.id ?? dep[localIdSymbol], dep);
         }
       }
+    }
+    if (realmURL) {
+      instance[meta] = {
+        ...instance[meta],
+        ...{ realmURL },
+      } as CardResourceMeta;
     }
 
     let maybeOldInstance = instance.id
@@ -275,8 +287,20 @@ export default class StoreService extends Service implements StoreInterface {
     return instance;
   }
 
+  // peek will return a stale instance in the case the server has an error for
+  // this id
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
     return this.identityContext.getInstanceOrError(id) as T | undefined;
+  }
+
+  // peekError will always return the current server state regarding errors for this id
+  peekError(id: string): CardErrorJSONAPI | undefined {
+    return this.identityContext.getError(id);
+  }
+
+  // peekLive will always return the current server state for both instances and errors
+  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
+    return this.peekError(id) ?? this.peek(id);
   }
 
   async get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI> {
@@ -524,8 +548,8 @@ export default class StoreService extends Service implements StoreInterface {
         // we already dealt with this
         continue;
       }
-      let instance = this.identityContext.get(invalidation);
-      if (instance) {
+      let instance = this.peekLive(invalidation);
+      if (instance && isCardInstance(instance)) {
         // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
         // overwriting the inputs with past values. This can happen if the user makes edits in the time between
         // the auto save request and the arrival realm event.
@@ -560,7 +584,7 @@ export default class StoreService extends Service implements StoreInterface {
         if (reloadFile) {
           this.reloadTask.perform(instance);
         }
-      } else if (!this.identityContext.get(invalidation)) {
+      } else {
         // load the card using just the ID because we don't have a running card on hand
         realmEventsLogger.debug(
           `reloading file resource ${invalidation} because it is not found in the identity context`,

@@ -620,6 +620,9 @@ module('Unit | identity-context garbage collection', function (hooks) {
       instances: { hassan },
     } = await setupTest(saveAll);
 
+    // remove the current hassan instance so the stale card doesn't bleed thru
+    identityContext.delete(hassan.id);
+
     let error = makeError(hassan.id);
     identityContext.addInstanceOrError(hassan.id, error);
 
@@ -721,5 +724,65 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     // success is not throwing
     identityContext.sweep(api);
+  });
+
+  test('return a stale instance when the server state reflects an error for an id', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest(saveAll);
+
+    let error = makeError(hassan.id);
+    identityContext.addInstanceOrError(hassan.id, error);
+
+    assert.strictEqual(
+      identityContext.get(hassan.id),
+      hassan,
+      'stale hassan instance is returned',
+    );
+
+    assert.strictEqual(
+      identityContext.getInstanceOrError(hassan.id),
+      hassan,
+      'stale hassan instance is returned',
+    );
+  });
+
+  test('can get an error for an id when a stale instance exists', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest(saveAll);
+
+    let error = makeError(hassan.id);
+    identityContext.addInstanceOrError(hassan.id, error);
+
+    assert.strictEqual(
+      identityContext.getError(hassan.id),
+      error,
+      'a card error exists for the id',
+    );
+  });
+
+  test('setting an instance clears a card error', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest(saveAll);
+
+    let error = makeError(hassan.id);
+    identityContext.addInstanceOrError(hassan.id, error);
+    assert.strictEqual(
+      identityContext.getError(hassan.id),
+      error,
+      'a card error exists for the id',
+    );
+
+    identityContext.addInstanceOrError(hassan.id, hassan);
+    assert.strictEqual(
+      identityContext.getError(hassan.id),
+      undefined,
+      'a card error does not exist for the id',
+    );
   });
 });
