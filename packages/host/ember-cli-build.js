@@ -8,6 +8,7 @@ const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 const MomentLocalesPlugin = require('moment-locales-webpack-plugin');
 const { GlimmerScopedCSSWebpackPlugin } = require('glimmer-scoped-css/webpack');
 const withSideWatch = require('./lib/with-side-watch');
+const Funnel = require('broccoli-funnel');
 
 module.exports = function (defaults) {
   const app = new EmberApp(defaults, {
@@ -36,7 +37,12 @@ module.exports = function (defaults) {
 
     staticModifiers: true,
     staticAppPaths: ['lib'],
-
+    extraPublicTrees: [
+      new Funnel('node_modules/content-tag/pkg', {
+        include: ['standalone.js', 'standalone/*'],
+        destDir: 'assets/content-tag',
+      }),
+    ],
     packagerOptions: {
       ...{
         webpackConfig: {
@@ -79,6 +85,9 @@ module.exports = function (defaults) {
               localesToKeep: [],
             }),
           ],
+          externals: {
+            'content-tag': 'ContentTagGlobal',
+          },
           resolve: {
             fallback: {
               fs: false,
