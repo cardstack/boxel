@@ -20,7 +20,7 @@ import {
 import { ImportUtil } from 'babel-import-util';
 import camelCase from 'camelcase';
 import isEqual from 'lodash/isEqual';
-import { parseTemplates } from '@cardstack/ember-template-imports/lib/parse-templates';
+
 import {
   baseRealm,
   maybeRelativeURL,
@@ -345,19 +345,15 @@ export class ModuleSyntax {
 function preprocessTemplateTags(src: string): string {
   let output = [];
   let offset = 0;
-  let matches = parseTemplates(src, 'no-filename', 'template');
+  let matches = new ContentTagGlobal.Preprocessor().parse(src);
   for (let match of matches) {
-    output.push(src.slice(offset, match.start.index));
+    output.push(src.slice(offset, match.range.start));
     // we are using this name as well as padded spaces at the end so that source
     // maps are unaffected
     output.push('[templte(`');
-    output.push(
-      src
-        .slice(match.start.index! + match.start[0].length, match.end.index)
-        .replace(/`/g, '\\`'),
-    );
+    output.push(match.contents.replace(/`/g, '\\`'));
     output.push('`)]        ');
-    offset = match.end.index! + match.end[0].length;
+    offset = match.range.end;
   }
   output.push(src.slice(offset));
   return output.join('');
