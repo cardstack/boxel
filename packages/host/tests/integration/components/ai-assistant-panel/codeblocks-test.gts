@@ -637,4 +637,73 @@ Above code blocks are now complete`;
 
     await percySnapshot(assert);
   });
+
+  test('diff editor copies only changed lines', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
+
+\`\`\`gts
+// File url: https://example.com/component.gts
+  <<<<<<< SEARCH
+import Component from '@glimmer/component';
+
+export default class MyComponent extends Component {
+  a = 1;
+  b = 2;
+
+  <template>
+    <div>
+      <p>Value of a: {{this.a}}</p>
+      <p>Value of b: {{this.b}}</p>
+    </div>
+  </template>
+}
+=======
+import Component from '@glimmer/component';
+
+export default class MyComponent extends Component {
+  a = 3;
+  b = 4;
+
+  <template>
+    <div>
+      <p>Value of a: {{this.a}}</p>
+      <p>Value of b: {{this.b}}</p>
+    </div>
+  </template>
+}
+>>>>>>> REPLACE
+\`\`\`
+
+Above code blocks are now complete`;
+
+    let onlyChangedLines = `  a = 3;
+  b = 4;
+`;
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: messageWithSearchAndReplaceBlock,
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelectorAll('.code-block-diff .cdr.line-delete').length >
+        1,
+    );
+    await waitFor('.code-block-diff .cdr.line-insert');
+
+    assert
+      .dom('[data-test-copy-code]')
+      .hasAttribute('data-test-text-to-copy', onlyChangedLines);
+  });
 });
