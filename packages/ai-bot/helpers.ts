@@ -14,7 +14,7 @@ import type {
   CardMessageContent,
   EncodedCommandRequest,
 } from 'https://cardstack.com/base/matrix-event';
-import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
+import { MatrixEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
@@ -30,6 +30,7 @@ import {
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
+import { constructHistory } from './lib/history';
 
 let log = logger('ai-bot');
 
@@ -80,13 +81,6 @@ export type PromptParts =
 
 export type Message = CommandMessage | TextMessage;
 
-export class HistoryConstructionError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'HistoryConstructionError';
-  }
-}
-
 export async function getPromptParts(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -126,106 +120,6 @@ export async function getPromptParts(
     history,
     toolChoice: toolChoice,
   };
-}
-
-export async function constructHistory(
-  eventlist: IRoomEvent[],
-  client: MatrixClient,
-) {
-  /**
-   * We send a lot of events to create messages,
-   * as we stream updates to the UI. This works by
-   * sending a new event with the full content and
-   * information about which event it should replace
-   *
-   * This function is to construct the chat as a user
-   * would see it - with only the latest event for each
-   * message.
-   */
-  const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of eventlist) {
-    if (rawEvent.content.data) {
-      try {
-        rawEvent.content.data = JSON.parse(rawEvent.content.data);
-      } catch (e) {
-        Sentry.captureException(e, {
-          attachments: [
-            {
-              data: rawEvent.content.data,
-              filename: 'rawEventContentData.txt',
-            },
-          ],
-        });
-        log.error('Error parsing JSON', e);
-        throw new HistoryConstructionError((e as Error).message);
-      }
-    }
-    let event = { ...rawEvent } as DiscreteMatrixEvent;
-    if (
-      event.type !== 'm.room.message' &&
-      event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
-    ) {
-      continue;
-    }
-    let eventId = event.event_id!;
-    if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
-      let { attachedCards } = event.content.data ?? {};
-      if (attachedCards && attachedCards.length > 0) {
-        event.content.data.attachedCards = await Promise.all(
-          attachedCards.map(async (attachedCard: SerializedFileDef) => {
-            try {
-              return {
-                ...attachedCard,
-                content: await downloadFile(client, attachedCard),
-              };
-            } catch (e) {
-              return {
-                ...attachedCard,
-                error: `Error loading attached card: ${e}`,
-              };
-            }
-          }),
-        );
-      }
-    } else if (
-      event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE &&
-      event.content.data.card
-    ) {
-      try {
-        event.content.data.card = {
-          ...event.content.data.card,
-          content: await downloadFile(client, event.content.data.card),
-        };
-      } catch (e) {
-        event.content.data.card = {
-          ...event.content.data.card,
-          error: `Error loading attached card: ${e}`,
-        };
-      }
-    }
-
-    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-      eventId = event.content['m.relates_to']!.event_id!;
-      event.event_id = eventId;
-    }
-    const existingEvent = latestEventsMap.get(eventId);
-    if (
-      !existingEvent ||
-      // we check the timestamps of the events because the existing event may
-      // itself be an already replaced event. The idea is that you can perform
-      // multiple replacements on an event. In order to prevent backing out a
-      // subsequent replacement we also assert that the replacement timestamp is
-      // after the event that it is replacing
-      existingEvent.origin_server_ts < event.origin_server_ts
-    ) {
-      latestEventsMap.set(eventId, event);
-    }
-  }
-  let latestEvents = Array.from(latestEventsMap.values());
-  latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
-  return latestEvents;
 }
 
 function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {

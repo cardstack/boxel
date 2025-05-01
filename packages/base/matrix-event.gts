@@ -18,7 +18,6 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { type SerializedFile } from './file-api';
 
@@ -173,13 +172,13 @@ export interface CardMessageContent {
     // we retrieve the content on the server side by downloading the file
     attachedFiles?: (SerializedFile & { content?: string; error?: string })[];
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
-    context: {
+    context?: {
       openCardIds?: string[];
       tools?: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
       requireToolCall?: boolean;
-      functions: Tool['function'][];
+      functions?: Tool['function'][];
     };
   };
 }
