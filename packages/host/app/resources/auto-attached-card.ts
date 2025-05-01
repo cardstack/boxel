@@ -57,23 +57,23 @@ export class AutoAttachment extends Resource<Args> {
     ) => {
       this.cardIds.clear();
       for (let item of topMostStackItems) {
-        if (!item.url) {
+        if (!item.id) {
           continue;
         }
-        if (removedCardIds?.includes(item.url)) {
+        if (removedCardIds?.includes(item.id)) {
           continue;
         }
-        if (attachedCardIds?.includes(item.url)) {
+        if (attachedCardIds?.includes(item.id)) {
           continue;
         }
-        let card = await this.store.get(item.url);
+        let card = await this.store.get(item.id);
         if (card && isCardInstance(card)) {
           let realmURL = card[realmURLSymbol];
-          if (realmURL && item.url === `${realmURL.href}index`) {
+          if (realmURL && item.id === `${realmURL.href}index`) {
             continue;
           }
         }
-        this.cardIds.add(item.url);
+        this.cardIds.add(item.id);
       }
     },
   );

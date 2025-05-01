@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';

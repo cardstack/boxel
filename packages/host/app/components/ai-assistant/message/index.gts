@@ -21,6 +21,7 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -271,7 +272,10 @@ export default class AiAssistantMessage extends Component<Signature> {
               {{#each this.items as |item|}}
                 {{#if (isCardCollectionResource item)}}
                   {{#each item.cards as |card|}}
-                    <CardPill @cardId={{card.id}} />
+                    <CardPill
+                      @cardId={{card.id}}
+                      @urlForRealmLookup={{urlForRealmLookup card}}
+                    />
                   {{/each}}
                 {{else}}
                   <FilePill @file={{item}} />
