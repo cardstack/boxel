@@ -17,7 +17,7 @@ import FieldPickerModal from './field-chooser-modal';
 
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 
-import type { FieldOption, SelectedInstance } from './playground-content';
+import type { FieldOption, SelectedInstance } from './playground-panel';
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 interface Signature {

@@ -35,14 +35,23 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
-import { FieldOption, SelectedInstance } from './playground-content';
-
 import PlaygroundContent from './playground-content';
 import PlaygroundTitle from './playground-title';
 
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 import type { WithBoundArgs } from '@glint/template';
+
+export type SelectedInstance = {
+  card: CardDef;
+  fieldIndex: number | undefined;
+};
+
+export type FieldOption = {
+  index: number;
+  displayIndex: number;
+  field: FieldDef;
+};
 
 interface Signature {
   Args: {
@@ -70,6 +79,7 @@ interface Signature {
         | 'closeFieldChooser'
         | 'fieldChooserIsOpen'
         | 'chooseField'
+        | 'moduleId'
       >,
       (
         | WithBoundArgs<
@@ -454,6 +464,10 @@ export default class PlaygroundPanel extends Component<Signature> {
           createNewIsRunning=this.createNewIsRunning
           isFieldDef=@isFieldDef
           cardError=this.cardError
+          persistSelections=this.persistSelections
+          canWriteRealm=this.canWriteRealm
+          format=this.format
+          defaultFormat=this.defaultFormat
         )
       )
     }}

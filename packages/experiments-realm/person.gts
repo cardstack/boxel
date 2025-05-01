@@ -128,7 +128,7 @@ export class Person extends CardDef {
   @field isHuman = contains(BooleanField);
   @field address = contains(AddressField);
   @field pet = linksTo(Pet);
-  // @field trips = contains(Trips);
+  @field trips = contains(Trips);
   @field title = contains(StringField, {
     computeVia: function (this: Person) {
       return [this.firstName, this.lastName].filter(Boolean).join(' ');
@@ -153,7 +153,7 @@ export class Person extends CardDef {
           <div>Is Human: <@fields.isHuman /></div>
         </div>
         {{#if @model.pet}}<@fields.pet />{{/if}}
-        {{!-- <@fields.trips /> --}}
+        <@fields.trips />
       </GridContainer>
       <style scoped>
         .container {

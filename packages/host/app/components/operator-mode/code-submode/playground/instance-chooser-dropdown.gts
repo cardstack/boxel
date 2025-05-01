@@ -1,5 +1,6 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -12,7 +13,11 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { IconPlusThin } from '@cardstack/boxel-ui/icons';
 
-import { cardTypeDisplayName, type Query } from '@cardstack/runtime-common';
+import {
+  cardTypeDisplayName,
+  trimJsonExtension,
+  type Query,
+} from '@cardstack/runtime-common';
 
 import Preview from '@cardstack/host/components/preview';
 
@@ -22,7 +27,7 @@ import PrerenderedCardSearch, {
   type PrerenderedCard,
 } from '../../../prerendered-card-search';
 
-import type { FieldOption, SelectedInstance } from './playground-content';
+import type { FieldOption, SelectedInstance } from './playground-panel';
 
 const getItemTitle = (selection: SelectedInstance | undefined) => {
   if (!selection) {
@@ -155,6 +160,7 @@ interface Signature {
     chooseCard: () => void;
     createNew?: () => void;
     createNewIsRunning?: boolean;
+    moduleId: string;
   };
 }
 
@@ -174,7 +180,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
             class='instance-chooser'
             @dropdownClass='instances-dropdown-content'
             @options={{cards}}
-            @selected={{this.findSelected @selection cards}}
+            @selected={{this.findSelectedCard cards}}
             @selectedItemComponent={{component
               SelectedItem
               title=(getItemTitle @selection)
@@ -204,7 +210,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         class='instance-chooser'
         @dropdownClass='instances-dropdown-content'
         @options={{@fieldOptions}}
-        @selected={{this.findSelected @selection undefined @fieldOptions}}
+        @selected={{this.findSelectedField @fieldOptions}}
         @selectedItemComponent={{component
           SelectedItem
           title=(getItemTitle @selection)
@@ -239,6 +245,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         outline: none;
       }
       .instance-chooser :deep(.boxel-trigger-content) {
+        font: var(--boxel-font-xs);
         overflow: hidden;
       }
       :deep(
@@ -250,12 +257,6 @@ export default class InstanceSelectDropdown extends Component<Signature> {
       }
       :deep(.ember-power-select-option:hover .card) {
         background-color: var(--boxel-100);
-      }
-      :deep(.boxel-trigger-content) {
-        font: var(--boxel-font-xs);
-      }
-      .instance-chooser :deep(.boxel-trigger-content) {
-        overflow: hidden;
       }
       .card,
       .field {
@@ -276,38 +277,37 @@ export default class InstanceSelectDropdown extends Component<Signature> {
 
   @service private declare playgroundPanelService: PlaygroundPanelService;
 
-  findSelected = (
-    selection: SelectedInstance | undefined,
-    cards: PrerenderedCard[] | undefined,
-    fields?: FieldOption[],
-  ) => {
-    if (!selection || !selection.card) {
-      let card = cards?.[0];
-      if (card) {
-        let s = this.playgroundPanelService.peekSelection(this.args.moduleId);
-        if (!s) {
-          this.playgroundPanelService.persistSelections(
-            this.args.moduleId,
-            card.url.replace(/\.json$/, ''),
-            'isolated',
-            undefined,
-          );
-          return card;
-        }
-        // this.args.onSelect(card);
-      }
-
+  private findSelectedCard = (prerenderedCards?: PrerenderedCard[]) => {
+    if (!prerenderedCards?.length) {
       return;
     }
-    if (cards) {
-      return cards.find(
-        (c) => c.url.replace(/\.json$/, '') === selection.card.id,
-      );
-    } else if (fields) {
-      return fields.find((f) => f.index === selection.fieldIndex);
-    }
-    return;
-  };
-}
 
-// export default InstanceSelectDropdown;
+    if (!this.args.selection?.card) {
+      let s = this.playgroundPanelService.peekSelection(this.args.moduleId);
+      if (!s) {
+        // if there's no selected card, choose the most recent card as selected
+        this.playgroundPanelService.persistSelections(
+          this.args.moduleId,
+          trimJsonExtension(prerenderedCards[0].url),
+          'isolated',
+          undefined,
+        );
+      }
+      return prerenderedCards[0];
+    }
+
+    let selectedCardId = this.args.selection.card.id;
+    let card = prerenderedCards.find(
+      (c) => trimJsonExtension(c.url) === selectedCardId,
+    );
+    return card;
+  };
+
+  @action private findSelectedField(fields?: FieldOption[]) {
+    if (!fields?.length || !this.args.selection) {
+      return;
+    }
+    let selection = this.args.selection;
+    return fields.find((f) => f.index === selection.fieldIndex);
+  }
+}
