@@ -128,7 +128,7 @@ export default class CopyButton extends Component<Signature> {
       () =>
         this.operatorModeStateService
           .topMostStackItems()
-          .map((i) => i.url)
+          .map((i) => i.id)
           .filter(Boolean) as string[],
     );
   };
@@ -147,7 +147,7 @@ export default class CopyButton extends Component<Signature> {
       return undefined;
     }
     let topMostStackItems = this.operatorModeStateService.topMostStackItems();
-    if (!topMostStackItems[LEFT].url || !topMostStackItems[RIGHT].url) {
+    if (!topMostStackItems[LEFT].id || !topMostStackItems[RIGHT].id) {
       return undefined;
     }
 
@@ -155,7 +155,7 @@ export default class CopyButton extends Component<Signature> {
       (indexCards, card, index) => {
         let realmURL = card[realmURLSymbol];
         if (!realmURL) {
-          throw new Error(`could not determine realm URL for card ${card.id}`);
+          return indexCards;
         }
         if (card.id === `${realmURL.href}index`) {
           return [...indexCards, index];
@@ -179,7 +179,7 @@ export default class CopyButton extends Component<Signature> {
           // selections then don't show the copy button
           return undefined;
         }
-        // eslint-disable-next-line no-case-declarations
+
         let sourceCard =
           this.topMostCardCollection?.cards[
             indexCardIndicies[0] === LEFT ? RIGHT : LEFT
@@ -198,7 +198,7 @@ export default class CopyButton extends Component<Signature> {
       }
 
       case 2: {
-        if (topMostStackItems[LEFT].url === topMostStackItems[RIGHT].url) {
+        if (topMostStackItems[LEFT].id === topMostStackItems[RIGHT].id) {
           // the source and destination cannot be the same
           return undefined;
         }
@@ -231,7 +231,7 @@ export default class CopyButton extends Component<Signature> {
             : (topMostStackItems[LEFT] as StackItem); // the index card is never a contained card
 
         // if the source and destination are the same, don't show a copy button
-        if (sourceItem.url === destinationItem.url) {
+        if (sourceItem.id === destinationItem.id) {
           return undefined;
         }
 

@@ -14,7 +14,6 @@ export default class TooltipUsage extends Component {
   @tracked offset = 6;
 
   @action log(message: string): void {
-    // eslint-disable-next-line no-console
     console.log(message);
   }
 
