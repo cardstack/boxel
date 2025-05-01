@@ -1,6 +1,5 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
@@ -303,11 +302,11 @@ export default class InstanceSelectDropdown extends Component<Signature> {
     return card;
   };
 
-  @action private findSelectedField(fields?: FieldOption[]) {
+  private findSelectedField = (fields?: FieldOption[]) => {
     if (!fields?.length || !this.args.selection) {
       return;
     }
     let selection = this.args.selection;
     return fields.find((f) => f.index === selection.fieldIndex);
-  }
+  };
 }
