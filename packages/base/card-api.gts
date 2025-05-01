@@ -2223,6 +2223,11 @@ function assertScalar(
   }
 }
 
+export function setId(instance: CardDef, id: string) {
+  let deserialized = getDataBucket(instance);
+  deserialized.set('id', id);
+}
+
 export function isSaved(instance: CardDef): boolean {
   return instance[isSavedInstance] === true;
 }
