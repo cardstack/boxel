@@ -963,7 +963,7 @@ export default class StoreService extends Service implements StoreInterface {
           // in this case a new card was created, but there is an immediate change
           // that was made--so we save off the new ID for the card so in the next
           // save we'll correlate to the correct card ID
-          api.setId(instance, json.data.id!); // resources from the server will have ID's
+          api.setId(instance, json.data.id!); // resources from the server will always have ID's
         }
         if (this.onSaveSubscriber) {
           this.onSaveSubscriber(new URL(json.data.id!), json);

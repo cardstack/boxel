@@ -2228,7 +2228,9 @@ export function setId(instance: CardDef, id: string) {
     Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
     'id',
   );
-  setField(instance, field, id);
+  if (field) {
+    setField(instance, field, id);
+  }
 }
 
 export function isSaved(instance: CardDef): boolean {
