@@ -147,7 +147,7 @@ export class Person extends CardDef {
   static isolated = class Isolated extends Component<typeof Person> {
     <template>
       <GridContainer class='container'>
-        <h2><@fields.title />w</h2>
+        <h2><@fields.title /></h2>
         <div>
           <div>Is Cool: <@fields.isCool /></div>
           <div>Is Human: <@fields.isHuman /></div>
