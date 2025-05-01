@@ -8,7 +8,8 @@ import { ComponentLike } from '@glint/template';
 import { CardContainer, Label } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 
-import RealmService from '@cardstack/host/services/realm';
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
+import type RealmService from '@cardstack/host/services/realm';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
@@ -21,12 +22,12 @@ interface SearchResultSignature {
   Args: {
     component?: ComponentLike<{}>;
     card?: CardDef;
-    cardId: string;
+    cardId: string | undefined;
     isCompact: boolean;
   };
 }
 
-// Render CardDef default fitted template for visual consistency of cards insearch results
+// Render CardDef default fitted template for visual consistency of cards in search results
 let resultsCardRef = {
   name: 'CardDef',
   module: 'https://cardstack.com/base/card-api',
@@ -34,6 +35,12 @@ let resultsCardRef = {
 
 class SearchResult extends Component<SearchResultSignature> {
   @service declare realm: RealmService;
+
+  private get urlForRealmLookup() {
+    return this.args.card
+      ? urlForRealmLookup(this.args.card)
+      : this.args.cardId;
+  }
 
   <template>
     <div class={{cn 'container' is-compact=@isCompact}}>
@@ -57,9 +64,11 @@ class SearchResult extends Component<SearchResultSignature> {
           ...attributes
         />
       {{/if}}
-      {{#let (this.realm.info @cardId) as |realmInfo|}}
-        <div class='realm-name' data-test-realm-name>{{realmInfo.name}}</div>
-      {{/let}}
+      {{#if this.urlForRealmLookup}}
+        {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}
+          <div class='realm-name' data-test-realm-name>{{realmInfo.name}}</div>
+        {{/let}}
+      {{/if}}
     </div>
     <style scoped>
       .container {

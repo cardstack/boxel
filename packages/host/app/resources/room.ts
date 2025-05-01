@@ -46,10 +46,12 @@ import type Room from '../lib/matrix-classes/room';
 
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 export type RoomSkill = {
   cardId: string;
+  realmURL: string | undefined;
   fileDef: SerializedFile;
   isActive: boolean;
 };
@@ -80,6 +82,7 @@ export class RoomResource extends Resource<Args> {
   @service declare private matrixService: MatrixService;
   @service declare private commandService: CommandService;
   @service declare private store: StoreService;
+  @service declare private realm: RealmService;
 
   modify(_positional: never[], named: Args['named']) {
     if (!named.roomId) {
@@ -235,6 +238,7 @@ export class RoomResource extends Resource<Args> {
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
+        realmURL: this.realm.realmOfURL(new URL(skillCard.sourceUrl))?.href,
         fileDef: skillCard,
         isActive:
           this.matrixRoom?.skillsConfig.enabledSkillCards
