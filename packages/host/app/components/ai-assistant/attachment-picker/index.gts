@@ -24,6 +24,7 @@ import {
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
 import consumeContext from '@cardstack/host/helpers/consume-context';
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -63,6 +64,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
                     @cardId={{item.id}}
                     @isAutoAttachedCard={{true}}
                     @removeCard={{@removeCard}}
+                    @urlForRealmLookup={{urlForRealmLookup item}}
                   />
                 </:trigger>
 
@@ -79,6 +81,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
                 @cardId={{item.id}}
                 @isAutoAttachedCard={{false}}
                 @removeCard={{@removeCard}}
+                @urlForRealmLookup={{urlForRealmLookup item}}
               />
             {{/if}}
           {{else}}

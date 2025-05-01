@@ -14,6 +14,7 @@ import {
   baseRealm,
   localId,
   baseCardRef,
+  realmURL,
   type Loader,
   type Realm,
   type SingleCardDocument,
@@ -454,6 +455,26 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('can set realmURL when adding to the store', async function (assert) {
+    let instance = new PersonDef({ name: 'Andrea' });
+    assert.strictEqual(
+      instance[realmURL]?.href,
+      undefined,
+      'realmURL meta is not set on the instance',
+    );
+
+    await store.add(instance, {
+      doNotPersist: true,
+      realm: testRealmURL,
+    });
+
+    assert.strictEqual(
+      instance[realmURL]?.href,
+      testRealmURL,
+      'realmURL meta was set on the instance',
+    );
+  });
+
   test('can add linked cards to the store when adding a card', async function (assert) {
     let wu = new PersonDef({ name: 'Wu' });
     let michael = new PersonDef({ name: 'Michael' });
@@ -844,7 +865,7 @@ module('Integration | Store', function (hooks) {
 
     (instance as any).friends = [newInstance];
 
-    await waitUntil(() => store.getSaveState(newInstance[localId])?.lastSaved, {
+    await waitUntil(() => newInstance.id, {
       timeout: 5_000,
     });
 
@@ -866,7 +887,7 @@ module('Integration | Store', function (hooks) {
 
     (instance as any).friends = [newInstance];
 
-    await waitUntil(() => store.getSaveState(newInstance[localId])?.lastSaved, {
+    await waitUntil(() => newInstance.id, {
       timeout: 5_000,
     });
 

@@ -13,8 +13,8 @@
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
     "lint:fix": "concurrently \"pnpm:lint:*:fix\" --names \"fix:\"",
-    "lint:js": "eslint . --cache",
-    "lint:js:fix": "eslint . --fix",
+    "lint:js": "eslint . --report-unused-disable-directives --cache",
+    "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:glint": "glint"
   },
   "volta": {

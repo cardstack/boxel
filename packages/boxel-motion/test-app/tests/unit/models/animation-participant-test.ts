@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-empty-function */
 // import { AnimationParticipant } from '@cardstack/boxel-motion/models';
 import { module, skip } from 'qunit';
 

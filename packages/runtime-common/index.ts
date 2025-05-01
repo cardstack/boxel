@@ -392,8 +392,7 @@ export interface CardActions {
     ref: CodeRef,
     relativeTo: URL | undefined,
     opts?: {
-      // TODO: consider renaming isLinkedCard to be more semantic
-      isLinkedCard?: boolean;
+      closeAfterCreating?: boolean;
       realmURL?: URL; // the realm to create the card in
       doc?: LooseSingleCardDocument; // initial data for the card
       cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode

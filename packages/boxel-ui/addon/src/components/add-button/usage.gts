@@ -13,7 +13,6 @@ export default class AddButtonUsage extends Component {
   @tracked variant?: AddButtonVariant;
 
   @action log(message: string): void {
-    // eslint-disable-next-line no-console
     console.log(message);
   }
 

@@ -3,7 +3,6 @@ import { action } from '@ember/object';
 import { inject as service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-ignore
 import Ember from 'ember';
 
@@ -15,7 +14,6 @@ import registerContextOrphansEl from '../modifiers/register-context-orphans-el.t
 import AnimationsService from '../services/animations.ts';
 
 const { VOLATILE_TAG, consumeTag } =
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
   // @ts-ignore
   Ember.__loader.require('@glimmer/validator');
 

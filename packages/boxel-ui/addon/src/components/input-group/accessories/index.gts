@@ -126,7 +126,6 @@ interface SelectAccessorySignature<ItemT = any> {
   Element: HTMLElement;
 }
 
-// eslint-disable-next-line prettier/prettier
 export const Select: TemplateOnlyComponent<SelectAccessorySignature> =
   <template>
     <div
