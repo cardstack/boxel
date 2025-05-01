@@ -2283,6 +2283,9 @@ importers:
       camelcase:
         specifier: ^6.3.0
         version: 6.3.0
+      content-tag:
+        specifier: ^3.1.2
+        version: 3.1.2
       date-fns:
         specifier: ^2.28.0
         version: 2.28.0
