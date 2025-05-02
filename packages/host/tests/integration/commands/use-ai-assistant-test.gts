@@ -18,7 +18,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type Skill from 'https://cardstack.com/base/skill';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
   setupIntegrationTestRealm,

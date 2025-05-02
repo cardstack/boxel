@@ -58,7 +58,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
-import type Skill from 'https://cardstack.com/base/skill';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';

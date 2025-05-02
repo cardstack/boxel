@@ -17,7 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
-import Skill from 'https://cardstack.com/base/skill';
+import { Skill } from 'https://cardstack.com/base/skill';
 
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';

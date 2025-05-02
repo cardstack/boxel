@@ -55,7 +55,7 @@ let TextAreaField: TextAreaField;
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
 
-type Skill = (typeof SkillModule)['default'];
+type Skill = (typeof SkillModule)['Skill'];
 let Skill: Skill;
 
 let field: (typeof CardAPIModule)['field'];
@@ -138,7 +138,7 @@ async function initialize() {
   ).CardsGrid;
 
   Skill = (await loader.import<typeof SkillModule>(`${baseRealm.url}skill`))
-    .default;
+    .Skill;
 
   let cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,

@@ -7,7 +7,7 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { ProductRequirementDocument } from '../product-requirement-document';
-import Skill from 'https://cardstack.com/base/skill';
+import { Skill } from 'https://cardstack.com/base/skill';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import PatchCardCommand from '@cardstack/boxel-host/commands/patch-card';
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';

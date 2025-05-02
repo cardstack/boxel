@@ -11,7 +11,7 @@ import {
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 import NumberField from './number';
-import Skill from './skill';
+import { Skill } from './skill';
 import {
   JsonField,
   SearchCardsByQueryInput,

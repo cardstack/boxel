@@ -5,7 +5,7 @@ import {
   contains,
 } from 'https://cardstack.com/base/card-api';
 import { Command } from '@cardstack/runtime-common';
-import Skill from 'https://cardstack.com/base/skill';
+import { Skill } from 'https://cardstack.com/base/skill';
 import StringField from 'https://cardstack.com/base/string';
 import { ProductRequirementDocument } from '../product-requirement-document';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';

@@ -884,12 +884,11 @@ export default class MatrixService extends Service {
     return (
       await Promise.all(
         defaultSkills.map(async (skillCardURL) => {
-          let maybeCard =
-            await this.store.get<SkillModule.default>(skillCardURL);
+          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
           return isCardInstance(maybeCard) ? maybeCard : undefined;
         }),
       )
-    ).filter(Boolean) as SkillModule.default[];
+    ).filter(Boolean) as SkillModule.Skill[];
   }
 
   @cached

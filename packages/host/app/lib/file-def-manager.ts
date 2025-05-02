@@ -148,7 +148,7 @@ export default class FileDefManagerImpl implements FileDefManager {
         (roomSkill) => roomSkill.cardId === skillCard.id,
       );
       if (matchingRoomSkill) {
-        let commandDefinitions = (skillCard as SkillModule.default).commands;
+        let commandDefinitions = (skillCard as SkillModule.Skill).commands;
         if (commandDefinitions.length) {
           let commandDefFileDefs =
             await this.uploadCommandDefinitions(commandDefinitions);

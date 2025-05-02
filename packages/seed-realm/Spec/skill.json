@@ -6,7 +6,7 @@
       "description": "Spec for Skill card",
       "ref": {
         "module": "https://cardstack.com/base/skill",
-        "name": "default"
+        "name": "Skill"
       },
       "specType": "skill"
     },

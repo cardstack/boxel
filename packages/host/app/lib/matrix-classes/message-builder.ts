@@ -35,7 +35,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import type Skill from 'https://cardstack.com/base/skill';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import { RoomMember } from './member';
 import { Message } from './message';

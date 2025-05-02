@@ -32,7 +32,7 @@ import type {
   RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type Skill from 'https://cardstack.com/base/skill';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
   RoomMember,
