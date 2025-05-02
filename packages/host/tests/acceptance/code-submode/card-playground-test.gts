@@ -8,7 +8,7 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
-import { module, skip, test } from 'qunit';
+import { module, test } from 'qunit';
 
 import type { Realm } from '@cardstack/runtime-common';
 
@@ -877,7 +877,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
     });
 
-    skip<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
+    test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
@@ -909,6 +909,10 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-autoattached-card]').hasText('City Design');
       await fillIn('[data-test-message-field]', `Message With Card and File`);
       await click('[data-test-send-message-btn]');
+
+      await waitUntil(
+        () => document.querySelectorAll('[data-test-message-idx]').length > 0,
+      );
 
       assertMessages(assert, [
         {
