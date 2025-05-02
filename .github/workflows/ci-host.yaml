@@ -57,10 +57,8 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: host test suite (shard ${{ matrix.shardIndex }})
-        run: pnpm test-with-percy
+        run: pnpm test
         env:
-          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-          PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
@@ -68,21 +66,21 @@ jobs:
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: host-test-report-${{ matrix.shardIndex }}
+          name: host-test-report-${{ matrix.shardIndex }}-${{ matrix.extra }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: realm-server-log-${{ matrix.shardIndex }}
+          name: realm-server-log-${{ matrix.shardIndex }}-${{ matrix.extra }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: icon-server-log-${{ matrix.shardIndex }}
+          name: icon-server-log-${{ matrix.shardIndex }}-${{ matrix.extra }}
           path: /tmp/icon-server.log
           retention-days: 30
 
