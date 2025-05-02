@@ -45,9 +45,9 @@ jobs:
         uses: JarvusInnovations/background-action@v1
         with:
           run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
-        working-directory: packages/host
-        wait-for: 3m
-        wait-on: http-get://localhost:4200
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
       - name: Start realm servers
         run: pnpm start:all &> /tmp/server.log &
         working-directory: packages/realm-server
