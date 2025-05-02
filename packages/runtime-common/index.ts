@@ -414,6 +414,8 @@ export interface CardActions {
     format?: Format,
     opts?: {
       openCardInRightMostStack?: boolean;
+      fieldType?: 'linksTo' | 'contains' | 'containsMany' | 'linksToMany';
+      fieldName?: string;
     },
   ) => void;
   copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;

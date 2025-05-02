@@ -899,7 +899,9 @@ export default class StoreService extends Service implements StoreInterface {
           }
           realmURL = new URL(defaultRealmHref);
         }
-        let json = await this.saveCardDocument(doc, realmURL);
+        let json = await this.saveCardDocument(doc, {
+          realm: realmURL.href,
+        });
         let isNew = !instance.id;
 
         // if the card changed while the save was in flight then don't merge the
@@ -1124,7 +1126,7 @@ function resolveDocUrl(id?: string, realm?: string, local?: string) {
   if (!realm) {
     throw new Error('Cannot resolve target url without a realm');
   }
-  let path = new RealmPaths(realm);
+  let path = new RealmPaths(new URL(realm));
   if (local) {
     return path.directoryURL(local).href;
   }
