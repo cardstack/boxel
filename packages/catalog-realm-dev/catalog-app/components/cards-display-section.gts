@@ -1,6 +1,15 @@
 import GlimmerComponent from '@glimmer/component';
-import { CardDef } from 'https://cardstack.com/base/card-api';
-import type { CardContext } from 'https://cardstack.com/base/card-api';
+import { action } from '@ember/object';
+import { on } from '@ember/modifier';
+import { fn } from '@ember/helper';
+
+import {
+  CardDef,
+  type BaseDef,
+  type CardContext,
+} from 'https://cardstack.com/base/card-api';
+
+import { CardContainer } from '@cardstack/boxel-ui/components';
 
 type SelectedView = 'grid' | 'strip' | undefined;
 
@@ -21,20 +30,28 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
     return this.args.selectedView || 'grid';
   }
 
+  @action
+  viewCard(card: CardDef) {
+    if (!this.args.context?.actions?.viewCard) {
+      throw new Error('viewCard action is not available');
+    }
+    this.args.context?.actions?.viewCard?.(new URL(card.id), 'isolated');
+  }
+
   <template>
     <ul class='cards {{this.view}}-view' ...attributes>
       {{#each @cards key='url' as |card|}}
-        {{#let (this.getComponent card) as |CardComponent|}}
-          <li
-            class='{{this.view}}-view-container'
-            {{@context.cardComponentModifier
-              cardId=card.id
-              format='data'
-              fieldType=undefined
-              fieldName=undefined
-            }}
-          >
-            <CardComponent />
+        {{#let (getComponent card) as |CardComponent|}}
+          <li class='{{this.view}}-view-container'>
+            <CardContainer
+              class='card'
+              @displayBoundaries={{true}}
+              data-test-cards-grid-item={{removeFileExtension card.id}}
+              data-cards-grid-item={{removeFileExtension card.id}}
+              {{on 'click' (fn this.viewCard card)}}
+            >
+              <CardComponent />
+            </CardContainer>
           </li>
         {{/let}}
       {{/each}}
@@ -83,13 +100,29 @@ export class CardsIntancesGrid extends GlimmerComponent<CardsIntancesGridArgs> {
         );
       }
 
+      .card {
+        transition: ease 0.2s;
+      }
+
+      .card:hover {
+        cursor: pointer;
+        border: 1px solid var(--boxel-purple);
+        transform: translateY(-1px);
+      }
+
       .cards :deep(.field-component-card.fitted-format) {
         height: 100%;
       }
     </style>
   </template>
+}
 
-  getComponent = (card: CardDef) => card.constructor.getComponent(card);
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
+}
+
+function removeFileExtension(cardUrl: string) {
+  return cardUrl.replace(/\.[^/.]+$/, '');
 }
 
 interface CardSectionArgs {
