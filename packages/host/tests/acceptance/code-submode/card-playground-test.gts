@@ -1,4 +1,10 @@
-import { click, fillIn, settled, waitFor } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  settled,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
 
