@@ -51,7 +51,7 @@ interface CopyMeta {
   targetCodeRef: ResolvedCodeRef;
 }
 
-function getNewPackageName(listingName?: string) {
+function getFolderWithUuid(listingName?: string) {
   if (!listingName) {
     return '';
   }
@@ -108,23 +108,21 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this.writableRealms = writableRealms;
   });
 
-  _use = task(async (realmUrl: string) => {
+  _use = task(async (realm: string) => {
     const specsToCopy: Spec[] = this.args.model?.specs ?? [];
     const specsWithoutFields = specsToCopy.filter(
       (spec: Spec) => spec.specType !== 'field',
     );
 
-    const newModulePath = getNewPackageName(this.args.model?.name).concat('/');
-    const targetUrl = new URL(newModulePath, realmUrl).href;
-
+    const dirName = getFolderWithUuid(this.args.model?.name).concat('/');
     for (const spec of specsWithoutFields) {
-      await this.args.context?.actions?.create?.(spec, targetUrl);
+      await this.args.context?.actions?.createFromSpec?.(spec, realm);
     }
 
     if (this.args.model instanceof SkillListing) {
       await Promise.all(
         this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copy?.(skill, realmUrl);
+          this.args.context?.actions?.copyCard?.(skill, realm, dirName);
         }),
       );
     }
@@ -132,31 +130,33 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       const sourceCards = this.args.model.examples.map((example) => ({
         sourceCard: example,
       }));
-      await this.args.context?.actions?.copyCards?.(sourceCards, targetUrl);
+      await this.args.context?.actions?.copyCards?.(
+        sourceCards,
+        realm,
+        dirName,
+      );
     }
     this.createdInstances = true;
   });
 
-  _install = task(async (realmUrl: string) => {
+  _install = task(async (realm: string) => {
     const copyMeta: CopyMeta[] = [];
 
-    const newModulePath = getNewPackageName(this.args.model?.name).concat('/');
-    const targetUrl = new URL(newModulePath, realmUrl).href;
+    const dirName = getFolderWithUuid(this.args.model?.name).concat('/');
 
     // Copy the gts file based on the attached spec's moduleHref
     for (const spec of this.args.model?.specs ?? []) {
       const absoluteModulePath = spec.moduleHref;
       const relativeModulePath = spec.ref.module;
       const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-      const newPath = newModulePath.concat(normalizedPath);
-      const fileTargetUrl = new URL(newPath, realmUrl).href;
+      const newPath = dirName.concat(normalizedPath);
+      const fileTargetUrl = new URL(newPath, realm).href;
       const targetFilePath = fileTargetUrl.concat('.gts');
 
       await this.args.context?.actions?.copySource?.(
         absoluteModulePath,
         targetFilePath,
       );
-
       copyMeta.push({
         sourceCodeRef: {
           module: absoluteModulePath,
@@ -200,20 +200,25 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       const copyCardsWithCodeRef = results.filter(
         (result) => result !== null,
       ) as CopyCardsWithCodeRef[];
-      await this.args.context?.actions?.copyCards?.(
-        copyCardsWithCodeRef,
-        targetUrl,
-      );
-    }
-
-    if (this.args.model instanceof SkillListing) {
       await Promise.all(
-        this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copy?.(skill, realmUrl);
+        copyCardsWithCodeRef.map(async (cardWithNewCodeRef) => {
+          let newCard = this.args.context?.actions?.copyCard(
+            cardWithNewCodeRef.sourceCard,
+            realm,
+            dirName,
+            cardWithNewCodeRef.codeRef,
+          );
+          return newCard;
         }),
       );
     }
-
+    if (this.args.model instanceof SkillListing) {
+      await Promise.all(
+        this.args.model.skills.map((skill) => {
+          this.args.context?.actions?.copyCard?.(skill, realm, dirName);
+        }),
+      );
+    }
     this.installedListing = true;
   });
 
@@ -235,7 +240,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   get useButtonDisabled() {
     return (
       this.createdInstances ||
-      !this.args.context?.actions?.create ||
+      !this.args.context?.actions?.createFromSpec ||
       this.useOrInstallDisabled
     );
   }

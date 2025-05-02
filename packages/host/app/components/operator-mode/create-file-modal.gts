@@ -775,11 +775,10 @@ export class ${className} extends ${exportName} {
     };
 
     try {
-      let maybeId = await this.store.create(
-        doc,
+      let maybeId = await this.store.create(doc, {
         relativeTo,
-        this.selectedRealmURL.href,
-      );
+        realm: this.selectedRealmURL.href,
+      });
       if (typeof maybeId !== 'string') {
         let error = maybeId;
         throw error;

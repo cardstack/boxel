@@ -42,6 +42,7 @@ import {
   isResolvedCodeRef,
   type ResolvedCodeRef,
   type CopyCardsWithCodeRef,
+  type LocalPath,
 } from '@cardstack/runtime-common';
 
 import CopyCardCommand from '@cardstack/host/commands/copy-card';
@@ -194,6 +195,7 @@ export default class InteractSubmode extends Component {
         relativeTo: URL | undefined,
         opts?: {
           realmURL?: URL;
+          localDir?: LocalPath;
           closeAfterCreating?: boolean;
           doc?: LooseSingleCardDocument; // fill in card data with values
           cardModeAfterCreation?: Format;
@@ -216,6 +218,7 @@ export default class InteractSubmode extends Component {
           await here.store.add(instance, {
             doNotPersist: true,
             realm: opts?.realmURL?.href,
+            localDir: opts?.localDir,
           });
         }
         let localId = instance[localIdSymbol];
@@ -273,11 +276,6 @@ export default class InteractSubmode extends Component {
             format: 'edit',
           }),
         );
-      },
-      copyCard: async (card: CardDef): Promise<string> => {
-        let deferred = new Deferred<string>();
-        here._copyCard.perform(card, stackIndex, deferred);
-        return await deferred.promise;
       },
       saveCard: (id: string): void => {
         here.store.save(id);
@@ -343,24 +341,26 @@ export default class InteractSubmode extends Component {
       },
     };
     let catalogActions: CatalogActions = {
-      create: async (spec: Spec, targetRealm: string) => {
-        await here._createFromSpec.perform(spec, targetRealm);
-      },
-      copy: async (
-        card: CardDef,
-        targetRealm: string,
-        codeRef?: ResolvedCodeRef,
-      ) => {
-        return await here._copy.perform(card, targetRealm, codeRef);
+      createFromSpec: async (spec: Spec, realm: string) => {
+        await here._createFromSpec.perform(spec, realm);
       },
       copySource: async (fromUrl: string, toUrl: string) => {
         return await here._copySource.perform(fromUrl, toUrl);
       },
+      copyCard: async (
+        card: CardDef,
+        realm: string,
+        localDir?: LocalPath,
+        codeRef?: ResolvedCodeRef,
+      ) => {
+        return await here._copyCard.perform(card, realm, localDir, codeRef);
+      },
       copyCards: async (
         cards: CopyCardsWithCodeRef[],
-        targetUrl: string,
+        realm: string,
+        localDir?: LocalPath,
       ): Promise<CardDef[]> => {
-        return await here._copyCards.perform(cards, targetUrl);
+        return await here._copyCards.perform(cards, realm, localDir);
       },
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
@@ -452,26 +452,7 @@ export default class InteractSubmode extends Component {
     }
   }
 
-  private _copyCard = dropTask(
-    async (sourceCard: CardDef, stackIndex: number, done: Deferred<string>) => {
-      let newCardId: string | undefined;
-      try {
-        let { commandContext } = this.commandService;
-        ({ newCardId } = await new CopyCardCommand(commandContext).execute({
-          sourceCard,
-          targetStackIndex: stackIndex,
-        }));
-      } catch (e) {
-        done.reject(e);
-      } finally {
-        if (newCardId) {
-          done.fulfill(newCardId);
-        }
-      }
-    },
-  );
-
-  private _createFromSpec = task(async (spec: Spec, targetRealm: string) => {
+  private _createFromSpec = task(async (spec: Spec, realm: string) => {
     if (spec.isComponent) {
       return;
     }
@@ -486,20 +467,22 @@ export default class InteractSubmode extends Component {
     let card = new Klass({}) as CardDef;
     await new SaveCardCommand(this.commandService.commandContext).execute({
       card,
-      realm: targetRealm,
+      realm,
     });
   });
 
-  private _copy = dropTask(
+  private _copyCard = dropTask(
     async (
       sourceCard: CardDef,
-      targetRealm: string,
+      realm: string,
+      localDir?: LocalPath,
       codeRef?: ResolvedCodeRef,
     ) => {
       let { commandContext } = this.commandService;
       let newCard = await new CopyCardCommand(commandContext).execute({
         sourceCard,
-        targetUrl: targetRealm,
+        realm,
+        localDir,
         codeRef,
       });
       return newCard;
@@ -515,13 +498,19 @@ export default class InteractSubmode extends Component {
   });
 
   private _copyCards = dropTask(
-    async (cards: CopyCardsWithCodeRef[], targetUrl: string) => {
+    async (
+      cards: CopyCardsWithCodeRef[],
+      realm: string,
+      localDir?: string, //
+    ) => {
       let { commandContext } = this.commandService;
+      // let targetDir = combine realmUrl and localDir
       return await Promise.all(
         cards.map(async (cardWithNewCodeRef) => {
           let newCard = await new CopyCardCommand(commandContext).execute({
             sourceCard: cardWithNewCodeRef.sourceCard,
-            targetUrl,
+            realm,
+            localDir,
             codeRef: cardWithNewCodeRef.codeRef,
           });
           return newCard;
@@ -568,7 +557,7 @@ export default class InteractSubmode extends Component {
             this.commandService.commandContext,
           ).execute({
             sourceCard: card,
-            targetUrl: realmURL.href,
+            realm: realmURL.href,
           }));
           if (index === 0) {
             scrollToCardId = newCardId; // we scroll to the first card lexically by title

@@ -27,7 +27,10 @@ import {
   meta,
   logger,
   formattedError,
+  RealmPaths,
   type Store as StoreInterface,
+  type AddOptions,
+  type CreateOptions,
   type Query,
   type PatchData,
   type Relationship,
@@ -191,14 +194,13 @@ export default class StoreService extends Service implements StoreInterface {
   // This method creates a new instance in the store and return the new card ID
   async create(
     doc: LooseSingleCardDocument,
-    relativeTo: URL | undefined,
-    realm?: string,
+    opts?: CreateOptions,
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let cardOrError = await this.getInstance({
         urlOrDoc: doc,
-        relativeTo,
-        realm,
+        relativeTo: opts?.relativeTo,
+        realm: opts?.realm,
       });
       if (isCardInstance(cardOrError)) {
         return cardOrError.id;
@@ -213,14 +215,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: {
-      // TODO: apparently this is getting abused by the catalog actions and we
-      // are using this to tell the store the folder _within_ the realm to
-      // upload an instance to, this is not always the actual realm...
-      realm?: string;
-      relativeTo?: URL | undefined;
-      doNotPersist?: true;
-    },
+    opts?: AddOptions,
   ) {
     // need to figure out the actual realm because opts.realm is being abused
     let realmURL = opts?.realm
@@ -269,7 +264,10 @@ export default class StoreService extends Service implements StoreInterface {
       if (instance.id) {
         this.save(instance.id);
       } else {
-        await this.persistAndUpdate(instance, opts?.realm);
+        await this.persistAndUpdate(instance, {
+          realm: opts?.realm,
+          localDir: opts?.localDir,
+        });
       }
     } else {
       await this.updateInstanceChangeSubscription('start-tracking', instance);
@@ -693,7 +691,7 @@ export default class StoreService extends Service implements StoreInterface {
           doc,
           relativeTo,
         );
-        await this.persistAndUpdate(newInstance, realm);
+        await this.persistAndUpdate(newInstance, { realm });
         this.identityContext.set(newInstance.id, newInstance);
         deferred?.fulfill(newInstance);
         return newInstance as T;
@@ -824,10 +822,11 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    realmUrl: URL,
+    opts?: CreateOptions,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.cardService.fetchJSON(doc.data.id ?? realmUrl, {
+    let url = resolveDocUrl(doc.data.id, opts?.realm, opts?.localDir);
+    let json = await this.cardService.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(doc, null, 2),
     });
@@ -868,7 +867,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async persistAndUpdate(
     instance: CardDef,
-    defaultRealmHref?: string,
+    opts?: AddOptions,
   ): Promise<void> {
     await this.withTestWaiters(async () => {
       let cardChanged = false;
@@ -893,8 +892,8 @@ export default class StoreService extends Service implements StoreInterface {
         // in the case where we get no realm URL from the card, we are dealing with
         // a new card instance that does not have a realm URL yet.
         if (!realmURL) {
-          defaultRealmHref =
-            defaultRealmHref ?? this.realm.defaultWritableRealm?.path;
+          let defaultRealmHref =
+            opts?.realm ?? this.realm.defaultWritableRealm?.path;
           if (!defaultRealmHref) {
             throw new Error('Could not find a writable realm');
           }
@@ -1113,4 +1112,21 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
   return typeof urlOrDoc === 'string'
     ? urlOrDoc.replace(/\.json$/, '')
     : urlOrDoc.data.id;
+}
+
+// Resolves either to
+// - an instance
+// - a directory
+function resolveDocUrl(id?: string, realm?: string, local?: string) {
+  if (id) {
+    return id;
+  }
+  if (!realm) {
+    throw new Error('Cannot resolve target url without a realm');
+  }
+  let path = new RealmPaths(realm);
+  if (local) {
+    return path.directoryURL(local).href;
+  }
+  return path.url;
 }
