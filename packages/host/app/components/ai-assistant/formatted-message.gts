@@ -333,8 +333,6 @@ interface HtmlGroupCodeBlockSignature {
 }
 
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
-  @tracked diffLineChanges: _MonacoSDK.editor.ILineChange[] | undefined;
-
   private codeDiffResource = getCodeDiffResultResource(
     this,
     this.args.codeData.fileUrl,
