@@ -341,29 +341,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     this.args.codeData.searchReplaceBlock,
   );
 
-  get codeToCopy() {
-    console.log(
-      `in ctc dlc ${!!this.diffLineChanges}, cdr.mc: ${!!this.codeDiffResource
-        .modifiedCode}`,
-    );
-    if (!this.diffLineChanges && !this.codeDiffResource.modifiedCode) {
-      return this.args.codeData.code;
-    }
-
-    let lineChange = this.diffLineChanges![0];
-    let startLineNumber = lineChange.modifiedStartLineNumber;
-    let endLineNumber = lineChange.modifiedEndLineNumber;
-
-    let codeToCopy = this.codeDiffResource.modifiedCode
-      ?.split('\n')
-      .slice(startLineNumber - 1, endLineNumber)
-      .join('\n');
-
-    console.log('codeToCopy', codeToCopy);
-
-    return codeToCopy;
-  }
-
   <template>
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
