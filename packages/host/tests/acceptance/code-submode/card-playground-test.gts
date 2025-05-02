@@ -877,7 +877,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       );
     });
 
-    test.only<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
+    test<TestContextWithSave>('automatically attaches the selected card to the AI message', async function (assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="0"]');
