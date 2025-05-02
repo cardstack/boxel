@@ -21,9 +21,8 @@ jobs:
       matrix:
         shardIndex: [1, 2, 3, 4, 5, 6, 7, 8]
         shardTotal: [8]
-        extra: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
     concurrency:
-      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}-${{ matrix.extra }}
+      group: boxel-host-test${{ github.head_ref || github.run_id }}-shard${{ matrix.shardIndex }}
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
@@ -57,8 +56,10 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: host test suite (shard ${{ matrix.shardIndex }})
-        run: pnpm test:wait-for-servers
+        run: pnpm test-with-percy
         env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
         working-directory: packages/host
@@ -66,21 +67,21 @@ jobs:
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: host-test-report-${{ matrix.shardIndex }}-${{ matrix.extra }}
+          name: host-test-report-${{ matrix.shardIndex }}
           path: junit/host-${{ matrix.shardIndex }}.xml
           retention-days: 30
       - name: Upload realm server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: realm-server-log-${{ matrix.shardIndex }}-${{ matrix.extra }}
+          name: realm-server-log-${{ matrix.shardIndex }}
           path: /tmp/server.log
           retention-days: 30
       - name: Upload icon server log
         uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # 4.6.1
         if: always()
         with:
-          name: icon-server-log-${{ matrix.shardIndex }}-${{ matrix.extra }}
+          name: icon-server-log-${{ matrix.shardIndex }}
           path: /tmp/icon-server.log
           retention-days: 30
 
