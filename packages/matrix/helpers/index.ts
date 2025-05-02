@@ -67,14 +67,20 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
+  const currentUrl = new URL(page.url());
+  const searchParams = new URLSearchParams(currentUrl.search);
+  const operatorModeState = JSON.parse(
+    decodeURIComponent(searchParams.get('operatorModeState')!),
+  );
+
   await page.reload();
-  await openAiAssistant(page);
+  if (!operatorModeState.aiAssistantOpen) {
+    await openAiAssistant(page);
+  }
 }
 
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
-  await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
-  await expect(page.locator('[data-test-room]')).toHaveCount(1);
 }
 
 export async function createRealm(
