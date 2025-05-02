@@ -333,11 +333,13 @@ interface HtmlGroupCodeBlockSignature {
 }
 
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
-  private codeDiffResource = getCodeDiffResultResource(
-    this,
-    this.args.codeData.fileUrl,
-    this.args.codeData.searchReplaceBlock,
-  );
+  private codeDiffResource = this.args.codeData.searchReplaceBlock
+    ? getCodeDiffResultResource(
+        this,
+        this.args.codeData.fileUrl,
+        this.args.codeData.searchReplaceBlock,
+      )
+    : undefined;
 
   <template>
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
