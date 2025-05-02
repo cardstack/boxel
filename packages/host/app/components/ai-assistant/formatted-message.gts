@@ -6,6 +6,7 @@ import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
+import { action } from '@ember/object';
 
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -213,43 +214,16 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         {{#each this.htmlGroups as |htmlGroup index|}}
           {{#if (eq htmlGroup.type 'pre_tag')}}
             {{#let (extractCodeData htmlGroup.content) as |codeData|}}
-              <CodeBlock
-                @monacoSDK={{@monacoSDK}}
-                @codeData={{codeData}}
-                as |codeBlock|
-              >
-                {{#if (bool codeData.searchReplaceBlock)}}
-                  {{#let
-                    (getCodeDiffResultResource
-                      this codeData.fileUrl codeData.searchReplaceBlock
-                    )
-                    as |codeDiffResource|
-                  }}
-                    {{#if codeDiffResource.isDataLoaded}}
-                      <codeBlock.actions as |actions|>
-                        <actions.copyCode
-                          @code={{codeDiffResource.modifiedCode}}
-                        />
-                        <actions.applyCodePatch
-                          @codePatchAction={{this.createCodePatchAction
-                            codeData
-                          }}
-                        />
-                      </codeBlock.actions>
-                      <codeBlock.diffEditor
-                        @originalCode={{codeDiffResource.originalCode}}
-                        @modifiedCode={{codeDiffResource.modifiedCode}}
-                        @language={{codeData.language}}
-                      />
-                    {{/if}}
-                  {{/let}}
-                {{else}}
-                  <codeBlock.actions as |actions|>
-                    <actions.copyCode @code={{codeData.code}} />
-                  </codeBlock.actions>
-                  <codeBlock.editor />
-                {{/if}}
-              </CodeBlock>
+              {{#let
+                (this.createCodePatchAction codeData)
+                as |codePatchAction|
+              }}
+                <HtmlGroupCodeBlock
+                  @codeData={{codeData}}
+                  @codePatchAction={{codePatchAction}}
+                  @monacoSDK={{@monacoSDK}}
+                />
+              {{/let}}
             {{/let}}
           {{else}}
             {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -348,4 +322,71 @@ class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
   ) {
     onHtmlUpdate(html);
   }
+}
+
+interface HtmlGroupCodeBlockSignature {
+  Element: HTMLDivElement;
+  Args: {
+    codeData: CodeData;
+    codePatchAction: CodePatchAction;
+    monacoSDK: MonacoSDK;
+  };
+}
+
+class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
+  @tracked diffLineChanges: _MonacoSDK.editor.ILineChange[] | undefined;
+
+  private codeDiffResource = getCodeDiffResultResource(
+    this,
+    this.args.codeData.fileUrl,
+    this.args.codeData.searchReplaceBlock,
+  );
+
+  get codeToCopy() {
+    console.log(
+      `in ctc dlc ${!!this.diffLineChanges}, cdr.mc: ${!!this.codeDiffResource
+        .modifiedCode}`,
+    );
+    if (!this.diffLineChanges && !this.codeDiffResource.modifiedCode) {
+      return this.args.codeData.code;
+    }
+
+    let lineChange = this.diffLineChanges![0];
+    let startLineNumber = lineChange.modifiedStartLineNumber;
+    let endLineNumber = lineChange.modifiedEndLineNumber;
+
+    let codeToCopy = this.codeDiffResource.modifiedCode
+      ?.split('\n')
+      .slice(startLineNumber - 1, endLineNumber)
+      .join('\n');
+
+    console.log('codeToCopy', codeToCopy);
+
+    return codeToCopy;
+  }
+
+  <template>
+    <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
+      {{#if (bool @codeData.searchReplaceBlock)}}
+        {{#if this.codeDiffResource.isDataLoaded}}
+          {{#if this.codeDiffResource.modifiedCode}}
+            <codeBlock.actions as |actions|>
+              <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+              <actions.applyCodePatch @codePatchAction={{@codePatchAction}} />
+            </codeBlock.actions>
+            <codeBlock.diffEditor
+              @originalCode={{this.codeDiffResource.originalCode}}
+              @modifiedCode={{this.codeDiffResource.modifiedCode}}
+              @language={{@codeData.language}}
+            />
+          {{/if}}
+        {{/if}}
+      {{else}}
+        <codeBlock.actions as |actions|>
+          <actions.copyCode @code={{@codeData.code}} />
+        </codeBlock.actions>
+        <codeBlock.editor />
+      {{/if}}
+    </CodeBlock>
+  </template>
 }
