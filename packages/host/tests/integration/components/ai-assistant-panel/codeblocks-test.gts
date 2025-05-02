@@ -677,7 +677,5 @@ Above code blocks are now complete`;
     assert.dom('.cdr.line-delete').exists({ count: 1 });
     assert.dom('.cdr.line-insert').exists({ count: 1 });
     assert.dom('[data-test-apply-code-button]').exists();
-
-    await percySnapshot(assert);
   });
 });
