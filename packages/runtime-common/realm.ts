@@ -1251,7 +1251,10 @@ export class Realm {
     let resources = [primaryResource, ...included];
     let primaryResourceURL: URL | undefined;
     for (let [i, resource] of resources.entries()) {
-      if (i > 0 && typeof resource.lid !== 'string') {
+      if (
+        (i > 0 && typeof resource.lid !== 'string') ||
+        (resource.meta.realmURL && resource.meta.realmURL !== this.url)
+      ) {
         continue;
       }
       let name =
@@ -1438,7 +1441,10 @@ export class Realm {
     let files = new Map<LocalPath, string>();
     let resources = [primaryResource, ...included];
     for (let [i, resource] of resources.entries()) {
-      if (i > 0 && typeof resource.lid !== 'string') {
+      if (
+        (i > 0 && typeof resource.lid !== 'string') ||
+        (resource.meta.realmURL && resource.meta.realmURL !== this.url)
+      ) {
         continue;
       }
       let name =
@@ -2299,6 +2305,12 @@ function promoteLocalIdsToRemoteIds({
     let sideLoadedResource = included.find((i) => i.lid === lid);
     if (!sideLoadedResource) {
       throw new Error(`Could not find local id ${lid} in "included" resources`);
+    }
+    if (
+      sideLoadedResource.meta.realmURL &&
+      sideLoadedResource.meta.realmURL !== realmURL.href
+    ) {
+      return;
     }
     let name =
       'name' in sideLoadedResource.meta.adoptsFrom

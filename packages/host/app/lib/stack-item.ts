@@ -1,7 +1,4 @@
-import {
-  type Deferred,
-  type LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { type Deferred } from '@cardstack/runtime-common';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -9,44 +6,38 @@ interface Args {
   format: Format;
   request?: Deferred<string>;
   stackIndex: number;
-  newCard?: { doc: LooseSingleCardDocument; relativeTo: URL | undefined };
-  url?: string;
-  isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
+  id: string;
+  closeAfterSaving?: boolean;
 }
 
 export class StackItem {
   format: Format;
   request?: Deferred<string>;
   stackIndex: number;
-  isLinkedCard?: boolean; // TODO: consider renaming this so its clearer that we use this for being able to tell whether the card needs to be closed after saving
-  #url: string | undefined;
+  closeAfterSaving?: boolean;
+  #id: string;
 
   constructor(args: Args) {
-    let { format, request, stackIndex, newCard, url, isLinkedCard } = args;
-    if (!newCard && !url) {
-      throw new Error(
-        `Cannot create a StackItem without a 'newCard' or a 'url'`,
-      );
-    }
+    let { format, request, stackIndex, id, closeAfterSaving } = args;
 
-    this.#url = url?.replace(/\.json$/, '');
+    this.#id = id.replace(/\.json$/, '');
     this.format = format;
     this.request = request;
     this.stackIndex = stackIndex;
-    this.isLinkedCard = isLinkedCard;
+    this.closeAfterSaving = closeAfterSaving;
   }
 
-  get url() {
-    return this.#url;
+  get id() {
+    return this.#id;
   }
 
   clone(args: Partial<Args>) {
-    let { url, format, request, isLinkedCard, stackIndex } = this;
+    let { id, format, request, closeAfterSaving, stackIndex } = this;
     return new StackItem({
       format,
       request,
-      isLinkedCard,
-      url,
+      closeAfterSaving,
+      id,
       stackIndex,
       ...args,
     });

@@ -1,5 +1,9 @@
 import deburr from 'lodash/deburr';
 
+import { realmURL } from '@cardstack/runtime-common';
+
+import { type CardDef } from 'https://cardstack.com/base/card-api';
+
 export function stripFileExtension(path: string): string {
   return path.replace(/\.[^/.]+$/, '');
 }
@@ -126,3 +130,13 @@ const backgroundURLs: readonly string[] = Object.freeze([
   'https://boxel-images.boxel.ai/background-images/4k-wildflower-field.jpg',
   'https://boxel-images.boxel.ai/background-images/4k-wood-grain.jpg',
 ]);
+
+export function urlForRealmLookup(card: CardDef) {
+  let urlForRealmLookup = card.id ?? card[realmURL]?.href;
+  if (!urlForRealmLookup) {
+    throw new Error(
+      `bug: cannot determine a URL to use for realm lookup of a card--this should always be set even for new cards`,
+    );
+  }
+  return urlForRealmLookup;
+}
