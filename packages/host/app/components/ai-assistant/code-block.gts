@@ -410,11 +410,6 @@ class CodeBlockDiffEditor extends Component<Signature> {
         background-color: rgb(19 255 32 / 66%) !important;
       }
     </style>
-    {{log 'original code'}}
-    {{log @originalCode}}
-
-    {{log 'modified code'}}
-    {{log @modifiedCode}}
     <div
       {{MonacoDiffEditor
         monacoSDK=@monacoSDK
