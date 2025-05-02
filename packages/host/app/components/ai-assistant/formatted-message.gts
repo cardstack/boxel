@@ -345,17 +345,15 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.codeDiffResource.isDataLoaded}}
-          {{#if this.codeDiffResource.modifiedCode}}
-            <codeBlock.actions as |actions|>
-              <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
-              <actions.applyCodePatch @codePatchAction={{@codePatchAction}} />
-            </codeBlock.actions>
-            <codeBlock.diffEditor
-              @originalCode={{this.codeDiffResource.originalCode}}
-              @modifiedCode={{this.codeDiffResource.modifiedCode}}
-              @language={{@codeData.language}}
-            />
-          {{/if}}
+          <codeBlock.actions as |actions|>
+            <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+            <actions.applyCodePatch @codePatchAction={{@codePatchAction}} />
+          </codeBlock.actions>
+          <codeBlock.diffEditor
+            @originalCode={{this.codeDiffResource.originalCode}}
+            @modifiedCode={{this.codeDiffResource.modifiedCode}}
+            @language={{@codeData.language}}
+          />
         {{/if}}
       {{else}}
         <codeBlock.actions as |actions|>
