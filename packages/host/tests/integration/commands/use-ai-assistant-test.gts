@@ -18,7 +18,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type Skill from 'https://cardstack.com/base/skill';
 
 import {
   setupIntegrationTestRealm,
@@ -108,8 +108,8 @@ module('Integration | commands | ai-assistant', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
+                module: 'https://cardstack.com/base/skill',
+                name: 'default',
               },
             },
           },
@@ -126,8 +126,8 @@ module('Integration | commands | ai-assistant', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
+                module: 'https://cardstack.com/base/skill',
+                name: 'default',
               },
             },
           },
@@ -351,12 +351,8 @@ module('Integration | commands | ai-assistant', function (hooks) {
     let store = lookupService<StoreService>('store');
 
     // Load skill cards
-    const skillCard1 = (await store.get(
-      `${testRealmURL}skill1.json`,
-    )) as SkillCard;
-    const skillCard2 = (await store.get(
-      `${testRealmURL}skill2.json`,
-    )) as SkillCard;
+    const skillCard1 = (await store.get(`${testRealmURL}skill1.json`)) as Skill;
+    const skillCard2 = (await store.get(`${testRealmURL}skill2.json`)) as Skill;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
       commandService.commandContext,

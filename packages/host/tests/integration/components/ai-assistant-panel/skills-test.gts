@@ -215,8 +215,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
+                module: 'https://cardstack.com/base/skill',
+                name: 'default',
               },
             },
           },
@@ -246,8 +246,8 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
+                module: 'https://cardstack.com/base/skill',
+                name: 'default',
               },
             },
           },

@@ -1437,7 +1437,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/SkillCard/card-editing',
+          id: 'https://cardstack.com/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -1447,8 +1447,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -1460,7 +1460,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'http://localhost:4201/catalog/SkillCard/generate-product-requirements',
+          id: 'http://localhost:4201/catalog/Skill/generate-product-requirements',
           attributes: {
             instructions:
               'Given a prompt, fill in the product requirements document. Update the appTitle. Update the prompt to be grammatically accurate. Description should be 1 or 2 short sentences. In overview, provide 1 or 2 paragraph summary. In schema, make a list of the schema for the app. In Layout & Navigation, provide brief information for the layout and navigation of the app. Offer to update the attached card with this info.',
@@ -1470,8 +1470,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -1514,7 +1514,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/SkillCard/card-editing',
+          id: 'https://cardstack.com/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -1524,8 +1524,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -1537,7 +1537,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'http://localhost:4201/experiments/SkillCard/637843ff-dfd4-4cfc-9ee9-1234824f4775',
+          id: 'http://localhost:4201/experiments/Skill/637843ff-dfd4-4cfc-9ee9-1234824f4775',
           attributes: {
             instructions:
               "Use pirate colloquialism when responding. Make abundant use of pirate jargon, terms, and phrases. End every sentence with 'Arrrr!'",
@@ -1547,8 +1547,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -1732,7 +1732,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/SkillCard/card-editing',
+          id: 'https://cardstack.com/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -1742,8 +1742,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -1763,8 +1763,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -1804,8 +1804,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -2447,7 +2447,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/SkillCard/card-editing',
+          id: 'https://cardstack.com/base/Skill/card-editing',
           attributes: {
             instructions:
               '- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the "patchCard" function to make the change.\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCard, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn\'t given you access.\n- NEVER tell the user to use patchCard; you should always do it for them.\n- If the user wants to search for a card instance, AND the "searchCard" function is available, you MUST use the "searchCard" function to find the card instance.\nOnly recommend one searchCard function at a time.\nIf the user wants to edit a field of a card, you can optionally use "searchCard" to help find a card instance that is compatible with the field being edited before using "patchCard" to make the change of the field.\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.',
@@ -2458,8 +2458,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -2471,7 +2471,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'http://localhost:4201/admin/custom-embedded/SkillCard/72d005b5-1a6b-4c6d-995f-2411c5948e74',
+          id: 'http://localhost:4201/admin/custom-embedded/Skill/72d005b5-1a6b-4c6d-995f-2411c5948e74',
           attributes: {
             instructions:
               'Use the tool SwitchSubmodeCommand with "code" to go to codemode and "interact" to go to interact mode.',
@@ -2491,8 +2491,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -2617,7 +2617,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/SkillCard/skill_card_v1',
+          id: 'https://cardstack.com/base/Skill/skill_card_v1',
           attributes: {
             instructions: 'Test skill instructions',
             title: 'Test Skill',
@@ -2626,8 +2626,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },
@@ -2639,7 +2639,7 @@ Attached files:
       text: JSON.stringify({
         data: {
           type: 'card',
-          id: 'https://cardstack.com/base/SkillCard/skill_card_v2',
+          id: 'https://cardstack.com/base/Skill/skill_card_v2',
           attributes: {
             instructions: 'Test skill instructions with updated commands',
             commands: [
@@ -2658,8 +2658,8 @@ Attached files:
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/skill-card',
-              name: 'SkillCard',
+              module: 'https://cardstack.com/base/skill',
+              name: 'default',
             },
           },
         },

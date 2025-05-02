@@ -363,9 +363,9 @@ export class SkillList extends vscode.TreeItem {
     searchUrl.searchParams.set('sort[0][by]', 'title');
     searchUrl.searchParams.set(
       'filter[type][module]',
-      'https://cardstack.com/base/skill-card',
+      'https://cardstack.com/base/skill',
     );
-    searchUrl.searchParams.set('filter[type][name]', 'SkillCard');
+    searchUrl.searchParams.set('filter[type][name]', 'default');
 
     const response = await fetch(searchUrl, {
       headers,

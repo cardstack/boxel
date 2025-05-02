@@ -566,8 +566,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
 
   private async isSkill(selectedDeclaration: CardOrFieldDeclaration) {
     const skillCardCodeRef = {
-      name: 'SkillCard',
-      module: 'https://cardstack.com/base/skill-card',
+      name: 'default',
+      module: 'https://cardstack.com/base/skill',
     };
     const isInClassChain = await selectedDeclaration.cardType.isClassInChain(
       selectedDeclaration.cardOrField,

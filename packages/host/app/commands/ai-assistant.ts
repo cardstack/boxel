@@ -5,7 +5,7 @@ import { isCardInstance } from '@cardstack/runtime-common';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type Skill from 'https://cardstack.com/base/skill';
 
 import HostBaseCommand from '../lib/host-base-command';
 
@@ -103,10 +103,10 @@ export default class UseAiAssistantCommand extends HostBaseCommand<
     input: BaseCommandModule.UseAiAssistantInput,
     roomId: string,
   ): Promise<void> {
-    let skillCards = new Set<SkillCard>(input.skillCards ?? []);
+    let skillCards = new Set<Skill>(input.skillCards ?? []);
     let skillCardIds = input.skillCardIds ?? [];
     let loadSkillCardPromises = skillCardIds.map(async (skillCardId) => {
-      return this.store.get<SkillCard>(skillCardId);
+      return this.store.get<Skill>(skillCardId);
     });
 
     let loadedSkillCardOrErrors = await Promise.all(loadSkillCardPromises);

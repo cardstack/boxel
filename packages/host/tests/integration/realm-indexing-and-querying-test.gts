@@ -753,8 +753,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
+                module: 'https://cardstack.com/base/skill',
+                name: 'default',
               },
             },
           },
@@ -851,8 +851,8 @@ module(`Integration | realm indexing and querying`, function (hooks) {
         },
         meta: {
           adoptsFrom: {
-            module: 'https://cardstack.com/base/skill-card',
-            name: 'SkillCard',
+            module: 'https://cardstack.com/base/skill',
+            name: 'default',
           },
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}people-skill.json`,

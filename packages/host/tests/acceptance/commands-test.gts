@@ -524,8 +524,8 @@ module('Acceptance | Commands tests', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
+                module: 'https://cardstack.com/base/skill',
+                name: 'default',
               },
             },
           },

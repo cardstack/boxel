@@ -43,7 +43,7 @@ jobs:
             NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
 
             # Check if it's a skill card
-            IS_SKILL_CARD=$(echo "$NEW_CONTENT" | jq -r '.data.meta.adoptsFrom.module == "https://cardstack.com/base/skill-card"')
+            IS_SKILL_CARD=$(echo "$NEW_CONTENT" | jq -r '.data.meta.adoptsFrom.module == "https://cardstack.com/base/skill"')
 
             if [ "$IS_SKILL_CARD" = "true" ]; then
               # Extract instructions and commands

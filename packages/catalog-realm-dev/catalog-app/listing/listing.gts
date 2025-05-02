@@ -17,7 +17,7 @@ import {
 } from '@cardstack/runtime-common';
 import MarkdownField from 'https://cardstack.com/base/markdown';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import Skill from 'https://cardstack.com/base/skill';
 
 import { action } from '@ember/object';
 import { fn } from '@ember/helper';
@@ -677,7 +677,7 @@ export class FieldListing extends Listing {
 
 export class SkillListing extends Listing {
   static displayName = 'SkillListing';
-  @field skills = linksToMany(() => SkillCard);
+  @field skills = linksToMany(() => Skill);
 }
 
 function specBreakdown(specs: Spec[]): Record<SpecType, Spec[]> {
