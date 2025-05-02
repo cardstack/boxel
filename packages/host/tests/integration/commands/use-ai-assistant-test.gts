@@ -3,7 +3,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Loader } from '@cardstack/runtime-common';
+import { type Loader, skillCardRef } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -107,10 +107,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
               thumbnailURL: null,
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill',
-                name: 'default',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },
@@ -125,10 +122,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
               thumbnailURL: null,
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill',
-                name: 'default',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },

@@ -20,6 +20,7 @@ import {
   baseRealm,
   buildCommandFunctionName,
   Command,
+  skillCardRef,
 } from '@cardstack/runtime-common';
 
 import {
@@ -523,10 +524,7 @@ module('Acceptance | Commands tests', function (hooks) {
               thumbnailURL: null,
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill',
-                name: 'default',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },

@@ -42,6 +42,7 @@ import {
   internalKeyFor,
   loadCardDef,
   realmURL as realmURLSymbol,
+  skillCardRef,
 } from '@cardstack/runtime-common';
 import {
   codeRefWithAbsoluteURL,
@@ -565,13 +566,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   private async isSkill(selectedDeclaration: CardOrFieldDeclaration) {
-    const skillCardCodeRef = {
-      name: 'default',
-      module: 'https://cardstack.com/base/skill',
-    };
     const isInClassChain = await selectedDeclaration.cardType.isClassInChain(
       selectedDeclaration.cardOrField,
-      skillCardCodeRef,
+      skillCardRef,
     );
 
     if (isInClassChain) {

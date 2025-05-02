@@ -27,7 +27,10 @@ import { CardDef } from 'https://cardstack.com/base/card-api';
 import { readFileSync } from 'fs-extra';
 import * as path from 'path';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
-import { LooseCardResource } from '@cardstack/runtime-common';
+import {
+  type LooseCardResource,
+  skillCardRef,
+} from '@cardstack/runtime-common';
 
 function oldPatchTool(card: CardDef, properties: any): Tool {
   return {
@@ -1446,10 +1449,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -1469,10 +1469,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -1523,10 +1520,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -1546,10 +1540,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -1741,10 +1732,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -1762,10 +1750,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -1803,10 +1788,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -2457,10 +2439,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -2490,10 +2469,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -2625,10 +2601,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),
@@ -2657,10 +2630,7 @@ Attached files:
             thumbnailURL: null,
           },
           meta: {
-            adoptsFrom: {
-              module: 'https://cardstack.com/base/skill',
-              name: 'default',
-            },
+            adoptsFrom: skillCardRef,
           },
         },
       }),

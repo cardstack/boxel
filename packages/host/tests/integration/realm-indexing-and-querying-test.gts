@@ -7,6 +7,7 @@ import {
   baseRealm,
   baseCardRef,
   internalKeyFor,
+  skillCardRef,
   type CodeRef,
   type LooseSingleCardDocument,
   type IndexedInstance,
@@ -752,10 +753,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
               ],
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill',
-                name: 'default',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },
@@ -850,10 +848,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
           title: null,
         },
         meta: {
-          adoptsFrom: {
-            module: 'https://cardstack.com/base/skill',
-            name: 'default',
-          },
+          adoptsFrom: skillCardRef,
           lastModified: adapter.lastModifiedMap.get(
             `${testRealmURL}people-skill.json`,
           ),
