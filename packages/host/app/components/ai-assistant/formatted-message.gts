@@ -6,7 +6,6 @@ import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { action } from '@ember/object';
 
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
