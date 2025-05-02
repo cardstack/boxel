@@ -57,7 +57,7 @@ jobs:
         run: pnpm register-realm-users
         working-directory: packages/matrix
       - name: host test suite (shard ${{ matrix.shardIndex }})
-        run: pnpm test
+        run: pnpm test:wait-for-servers
         env:
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
