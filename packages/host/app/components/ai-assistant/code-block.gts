@@ -147,7 +147,7 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       language,
     }: MonacoDiffEditorSignature['Args']['Named'],
   ) {
-    if (!originalCode || !modifiedCode) {
+    if (originalCode === undefined || modifiedCode === undefined) {
       return;
     }
     if (this.monacoState) {
@@ -410,6 +410,11 @@ class CodeBlockDiffEditor extends Component<Signature> {
         background-color: rgb(19 255 32 / 66%) !important;
       }
     </style>
+    {{log 'original code'}}
+    {{log @originalCode}}
+
+    {{log 'modified code'}}
+    {{log @modifiedCode}}
     <div
       {{MonacoDiffEditor
         monacoSDK=@monacoSDK
