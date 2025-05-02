@@ -49,8 +49,10 @@ jobs:
           wait-for: 3m
           wait-on: http-get://localhost:4200
       - name: Start realm servers
-        run: pnpm start:all &> /tmp/server.log &
-        working-directory: packages/realm-server
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: pnpm start:all | tee -a /tmp/server.log &
+          working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
