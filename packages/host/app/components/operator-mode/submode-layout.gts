@@ -310,13 +310,20 @@ export default class SubmodeLayout extends Component<Signature> {
           />
           <AiAssistantToast
             @hide={{this.operatorModeStateService.aiAssistantOpen}}
-            @onViewInChatClick={{this.operatorModeStateService.toggleAiAssistant}}
+            @onViewInChatClick={{this.operatorModeStateService.openAiAssistant}}
           />
           <AskAiContainer @selectedCardRef={{@selectedCardRef}} />
           <AiAssistantButton
             class='chat-btn'
             @isActive={{this.operatorModeStateService.aiAssistantOpen}}
-            {{on 'click' this.operatorModeStateService.toggleAiAssistant}}
+            {{on
+              'click'
+              (if
+                this.operatorModeStateService.aiAssistantOpen
+                this.operatorModeStateService.closeAiAssistant
+                this.operatorModeStateService.openAiAssistant
+              )
+            }}
           />
         </ResizablePanel>
         {{#if this.operatorModeStateService.aiAssistantOpen}}
@@ -327,7 +334,7 @@ export default class SubmodeLayout extends Component<Signature> {
             @collapsible={{false}}
           >
             <AiAssistantPanel
-              @onClose={{this.operatorModeStateService.toggleAiAssistant}}
+              @onClose={{this.operatorModeStateService.closeAiAssistant}}
               @resizeHandle={{ResizeHandle}}
               @selectedCardRef={{@selectedCardRef}}
               class='ai-assistant-panel
