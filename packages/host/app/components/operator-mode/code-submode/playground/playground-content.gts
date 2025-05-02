@@ -129,6 +129,8 @@ export default class PlaygroundContent extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp);
         min-height: 100%;
+        max-width: 800px;
+        margin-inline: auto;
       }
       .preview-area {
         flex-grow: 1;
