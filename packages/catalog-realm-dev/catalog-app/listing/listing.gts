@@ -51,7 +51,7 @@ interface CopyMeta {
   targetCodeRef: ResolvedCodeRef;
 }
 
-function getFolderWithUuid(listingName?: string) {
+function nameWithUuid(listingName?: string) {
   if (!listingName) {
     return '';
   }
@@ -114,15 +114,20 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       (spec: Spec) => spec.specType !== 'field',
     );
 
-    const dirName = getFolderWithUuid(this.args.model?.name).concat('/');
+    const localDir = nameWithUuid(this.args.model?.name);
     for (const spec of specsWithoutFields) {
-      await this.args.context?.actions?.createFromSpec?.(spec, realm);
+      await this.args.context?.actions?.createFromSpec?.(spec, realm, localDir);
     }
 
     if (this.args.model instanceof SkillListing) {
       await Promise.all(
         this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copyCard?.(skill, realm, dirName);
+          this.args.context?.actions?.copyCard?.(
+            skill,
+            undefined,
+            realm,
+            localDir,
+          );
         }),
       );
     }
@@ -132,8 +137,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }));
       await this.args.context?.actions?.copyCards?.(
         sourceCards,
+        undefined,
         realm,
-        dirName,
+        localDir,
       );
     }
     this.createdInstances = true;
@@ -142,14 +148,14 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   _install = task(async (realm: string) => {
     const copyMeta: CopyMeta[] = [];
 
-    const dirName = getFolderWithUuid(this.args.model?.name).concat('/');
+    const localDir = nameWithUuid(this.args.model?.name);
 
     // Copy the gts file based on the attached spec's moduleHref
     for (const spec of this.args.model?.specs ?? []) {
       const absoluteModulePath = spec.moduleHref;
       const relativeModulePath = spec.ref.module;
       const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-      const newPath = dirName.concat(normalizedPath);
+      const newPath = localDir.concat('/').concat(normalizedPath);
       const fileTargetUrl = new URL(newPath, realm).href;
       const targetFilePath = fileTargetUrl.concat('.gts');
 
@@ -204,9 +210,9 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         copyCardsWithCodeRef.map(async (cardWithNewCodeRef) => {
           let newCard = this.args.context?.actions?.copyCard(
             cardWithNewCodeRef.sourceCard,
-            realm,
-            dirName,
             cardWithNewCodeRef.codeRef,
+            realm,
+            localDir,
           );
           return newCard;
         }),
@@ -215,7 +221,12 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     if (this.args.model instanceof SkillListing) {
       await Promise.all(
         this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copyCard?.(skill, realm, dirName);
+          this.args.context?.actions?.copyCard?.(
+            skill,
+            undefined,
+            realm,
+            dirName,
+          );
         }),
       );
     }

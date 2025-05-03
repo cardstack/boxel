@@ -18,6 +18,8 @@ import {
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
 
+const catalogRealmURL = 'http://localhost:4201/catalog/';
+
 let matrixRoomId: string;
 module('Acceptance | catalog app tests', function (hooks) {
   setupApplicationTest(hooks);
@@ -68,7 +70,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         stacks: [
           [
             {
-              id: `http://localhost:4201/catalog/CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
+              id: `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
               format: 'isolated',
             },
           ],
@@ -80,7 +82,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         .dom('[data-test-catalog-listing-use-button]')
         .containsText('Use', '"Use" button exist in listing');
       await click('[data-test-catalog-listing-use-button]');
-      await click('[data-test-boxel-menu-item-text="http://test-realm/test/"]');
+      await click(`[data-test-boxel-menu-item-text="${testRealmURL}"]`);
 
       await waitFor('[data-test-catalog-listing-use-button]');
 
@@ -98,8 +100,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         query: {
           filter: {
             type: {
-              module:
-                'http://localhost:4201/catalog/mortgage-calculator/mortgage-calculator',
+              module: `${catalogRealmURL}mortgage-calculator/mortgage-calculator`,
               name: 'MortgageCalculator',
             },
           },
@@ -120,7 +121,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         stacks: [
           [
             {
-              id: `http://localhost:4201/catalog/CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
+              id: `${catalogRealmURL}CardListing/4aca5509-09d5-4aec-aeba-1cd26628cca9`,
               format: 'isolated',
             },
           ],
@@ -129,7 +130,7 @@ module('Acceptance | catalog app tests', function (hooks) {
 
       await waitFor('[data-test-catalog-listing-install-button]');
       await click('[data-test-catalog-listing-install-button]');
-      await click('[data-test-boxel-menu-item-text="http://test-realm/test/"]');
+      await click(`[data-test-boxel-menu-item-text="${testRealmURL}"]`);
 
       assert
         .dom('[data-test-catalog-listing-install-button]')

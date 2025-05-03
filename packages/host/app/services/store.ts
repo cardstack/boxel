@@ -201,6 +201,9 @@ export default class StoreService extends Service implements StoreInterface {
         urlOrDoc: doc,
         relativeTo: opts?.relativeTo,
         realm: opts?.realm,
+        opts: {
+          localDir: opts?.localDir,
+        },
       });
       if (isCardInstance(cardOrError)) {
         return cardOrError.id;
@@ -217,10 +220,6 @@ export default class StoreService extends Service implements StoreInterface {
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: AddOptions,
   ) {
-    // need to figure out the actual realm because opts.realm is being abused
-    let realmURL = opts?.realm
-      ? this.realm.realmOfURL(new URL(opts.realm))?.href
-      : undefined;
     let instance: T;
     if (!isCardInstance(instanceOrDoc)) {
       instance = await this.createFromSerialized(
@@ -238,10 +237,10 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     }
-    if (realmURL) {
+    if (opts?.realm) {
       instance[meta] = {
         ...instance[meta],
-        ...{ realmURL },
+        ...{ realmURL: opts.realm },
       } as CardResourceMeta;
     }
 
@@ -670,7 +669,7 @@ export default class StoreService extends Service implements StoreInterface {
     urlOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
-    opts?: { noCache?: boolean };
+    opts?: { noCache?: boolean; localDir: string };
   }) {
     let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
     let url = asURL(urlOrDoc);
@@ -691,7 +690,10 @@ export default class StoreService extends Service implements StoreInterface {
           doc,
           relativeTo,
         );
-        await this.persistAndUpdate(newInstance, { realm });
+        await this.persistAndUpdate(newInstance, {
+          realm,
+          localDir: opts?.localDir,
+        });
         this.identityContext.set(newInstance.id, newInstance);
         deferred?.fulfill(newInstance);
         return newInstance as T;
@@ -901,6 +903,7 @@ export default class StoreService extends Service implements StoreInterface {
         }
         let json = await this.saveCardDocument(doc, {
           realm: realmURL.href,
+          localDir: opts?.localDir,
         });
         let isNew = !instance.id;
 

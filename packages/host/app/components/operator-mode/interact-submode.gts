@@ -341,19 +341,23 @@ export default class InteractSubmode extends Component {
       },
     };
     let catalogActions: CatalogActions = {
-      createFromSpec: async (spec: Spec, realm: string) => {
-        await here._createFromSpec.perform(spec, realm);
+      createFromSpec: async (
+        spec: Spec,
+        realm: string,
+        localDir?: LocalPath,
+      ) => {
+        await here._createFromSpec.perform(spec, realm, localDir);
       },
       copySource: async (fromUrl: string, toUrl: string) => {
         return await here._copySource.perform(fromUrl, toUrl);
       },
       copyCard: async (
         card: CardDef,
+        codeRef?: ResolvedCodeRef,
         realm: string,
         localDir?: LocalPath,
-        codeRef?: ResolvedCodeRef,
       ) => {
-        return await here._copyCard.perform(card, realm, localDir, codeRef);
+        return await here._copyCard.perform(card, codeRef, realm, localDir);
       },
       copyCards: async (
         cards: CopyCardsWithCodeRef[],
@@ -452,31 +456,34 @@ export default class InteractSubmode extends Component {
     }
   }
 
-  private _createFromSpec = task(async (spec: Spec, realm: string) => {
-    if (spec.isComponent) {
-      return;
-    }
-    let url = new URL(spec.id);
-    let ref = codeRefWithAbsoluteURL(spec.ref, url);
-    if (!isResolvedCodeRef(ref)) {
-      throw new Error('ref is not a resolved code ref');
-    }
-    let Klass = await loadCardDef(ref, {
-      loader: this.loaderService.loader,
-    });
-    let card = new Klass({}) as CardDef;
-    await new SaveCardCommand(this.commandService.commandContext).execute({
-      card,
-      realm,
-    });
-  });
+  private _createFromSpec = task(
+    async (spec: Spec, realm: string, localDir?: string) => {
+      if (spec.isComponent) {
+        return;
+      }
+      let url = new URL(spec.id);
+      let ref = codeRefWithAbsoluteURL(spec.ref, url);
+      if (!isResolvedCodeRef(ref)) {
+        throw new Error('ref is not a resolved code ref');
+      }
+      let Klass = await loadCardDef(ref, {
+        loader: this.loaderService.loader,
+      });
+      let card = new Klass({}) as CardDef;
+      await new SaveCardCommand(this.commandService.commandContext).execute({
+        card,
+        realm,
+        localDir,
+      });
+    },
+  );
 
   private _copyCard = dropTask(
     async (
       sourceCard: CardDef,
+      codeRef?: ResolvedCodeRef,
       realm: string,
       localDir?: LocalPath,
-      codeRef?: ResolvedCodeRef,
     ) => {
       let { commandContext } = this.commandService;
       let newCard = await new CopyCardCommand(commandContext).execute({

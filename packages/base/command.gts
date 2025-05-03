@@ -22,8 +22,9 @@ import {
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
 export class SaveCardInput extends CardDef {
-  @field realm = contains(StringField);
   @field card = linksTo(CardDef);
+  @field realm = contains(StringField);
+  @field localDir = contains(StringField);
 }
 
 export class CopyCardInput extends CardDef {

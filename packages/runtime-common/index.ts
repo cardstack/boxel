@@ -307,8 +307,8 @@ export type getCards<T extends CardDef = CardDef> = (
 };
 
 export interface CreateOptions {
-  realm?: string; //this is meant to be a directory
-  localDir?: string; //this is meant to be a LocalPath authorDir/author
+  realm?: string;
+  localDir?: LocalPath;
   relativeTo?: URL;
 }
 
@@ -442,12 +442,12 @@ export interface CatalogActions {
     localDir?: LocalPath,
     codeRef?: ResolvedCodeRef,
   ) => Promise<CardDef>;
-  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
   copyCards: (
     cards: CopyCardsWithCodeRef[],
     realm: string,
     localDir?: LocalPath,
   ) => Promise<CardDef[]>;
+  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;
