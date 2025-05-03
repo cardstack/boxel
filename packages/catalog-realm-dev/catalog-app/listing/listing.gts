@@ -124,8 +124,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         this.args.model.skills.map((skill) => {
           this.args.context?.actions?.copyCard?.(
             skill,
-            undefined,
             realm,
+            undefined,
             localDir,
           );
         }),
@@ -210,8 +210,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         copyCardsWithCodeRef.map(async (cardWithNewCodeRef) => {
           let newCard = this.args.context?.actions?.copyCard(
             cardWithNewCodeRef.sourceCard,
-            cardWithNewCodeRef.codeRef,
             realm,
+            cardWithNewCodeRef.codeRef,
             localDir,
           );
           return newCard;
@@ -223,8 +223,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
         this.args.model.skills.map((skill) => {
           this.args.context?.actions?.copyCard?.(
             skill,
-            undefined,
             realm,
+            undefined,
             dirName,
           );
         }),

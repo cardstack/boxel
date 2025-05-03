@@ -353,11 +353,11 @@ export default class InteractSubmode extends Component {
       },
       copyCard: async (
         card: CardDef,
-        codeRef?: ResolvedCodeRef,
         realm: string,
+        codeRef?: ResolvedCodeRef,
         localDir?: LocalPath,
       ) => {
-        return await here._copyCard.perform(card, codeRef, realm, localDir);
+        return await here._copyCard.perform(card, realm, codeRef, localDir);
       },
       copyCards: async (
         cards: CopyCardsWithCodeRef[],
@@ -481,8 +481,8 @@ export default class InteractSubmode extends Component {
   private _copyCard = dropTask(
     async (
       sourceCard: CardDef,
-      codeRef?: ResolvedCodeRef,
       realm: string,
+      codeRef?: ResolvedCodeRef,
       localDir?: LocalPath,
     ) => {
       let { commandContext } = this.commandService;

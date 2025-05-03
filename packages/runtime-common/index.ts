@@ -439,8 +439,8 @@ export interface CatalogActions {
   copyCard: (
     card: CardDef,
     realm: string,
-    localDir?: LocalPath,
     codeRef?: ResolvedCodeRef,
+    localDir?: LocalPath,
   ) => Promise<CardDef>;
   copyCards: (
     cards: CopyCardsWithCodeRef[],

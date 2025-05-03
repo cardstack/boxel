@@ -669,7 +669,7 @@ export default class StoreService extends Service implements StoreInterface {
     urlOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
-    opts?: { noCache?: boolean; localDir: string };
+    opts?: { noCache?: boolean; localDir?: string };
   }) {
     let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
     let url = asURL(urlOrDoc);
