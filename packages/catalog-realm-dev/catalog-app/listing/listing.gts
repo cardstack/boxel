@@ -137,7 +137,6 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }));
       await this.args.context?.actions?.copyCards?.(
         sourceCards,
-        undefined,
         realm,
         localDir,
       );

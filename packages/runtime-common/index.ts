@@ -435,7 +435,7 @@ export interface CopyCardsWithCodeRef {
 }
 
 export interface CatalogActions {
-  createFromSpec: (spec: Spec, realm: string) => void;
+  createFromSpec: (spec: Spec, realm: string, localDir?: LocalPath) => void;
   copyCard: (
     card: CardDef,
     realm: string,
