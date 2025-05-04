@@ -869,7 +869,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async persistAndUpdate(
     instance: CardDef,
-    opts?: AddOptions,
+    opts?: CreateOptions,
   ): Promise<void> {
     await this.withTestWaiters(async () => {
       let cardChanged = false;
