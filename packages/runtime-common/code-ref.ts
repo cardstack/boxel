@@ -161,10 +161,13 @@ export async function loadCardDef(
 }
 
 export function identifyCard(
-  card: typeof BaseDef,
+  card: typeof BaseDef | undefined,
   maybeRelativeURL?: ((possibleURL: string) => string) | null,
   visited = new WeakSet<typeof BaseDef>(),
 ): CodeRef | undefined {
+  if (!card) {
+    return undefined;
+  }
   if (!isBaseDef(card)) {
     return undefined;
   }
