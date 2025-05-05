@@ -2248,6 +2248,16 @@ function assertScalar(
   }
 }
 
+export function setId(instance: CardDef, id: string) {
+  let field = getField(
+    Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
+    'id',
+  );
+  if (field) {
+    setField(instance, field, id);
+  }
+}
+
 export function isSaved(instance: CardDef): boolean {
   return instance[isSavedInstance] === true;
 }
@@ -2807,23 +2817,7 @@ function makeDescriptor<
           }' because it is a read-only field`,
         );
       }
-      value = field.validate(this, value);
-      let deserialized = getDataBucket(this);
-      deserialized.set(field.name, value);
-      // invalidate all computed fields because we don't know which ones depend on this one
-      for (let computedFieldName of Object.keys(getComputedFields(this))) {
-        if (deserialized.has(computedFieldName)) {
-          let currentValue = deserialized.get(computedFieldName);
-          if (!isStaleValue(currentValue)) {
-            deserialized.set(computedFieldName, {
-              type: 'stale',
-              staleValue: currentValue,
-            } as StaleValue);
-          }
-        }
-      }
-      notifySubscribers(this, field.name, value);
-      logger.log(recompute(this));
+      setField(this, field, value);
     };
   }
   if (field.description) {
@@ -2831,6 +2825,26 @@ function makeDescriptor<
   }
   (descriptor.get as any)[isField] = field;
   return descriptor;
+}
+
+function setField(instance: BaseDef, field: Field, value: any) {
+  value = field.validate(instance, value);
+  let deserialized = getDataBucket(instance);
+  deserialized.set(field.name, value);
+  // invalidate all computed fields because we don't know which ones depend on this one
+  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
+    if (deserialized.has(computedFieldName)) {
+      let currentValue = deserialized.get(computedFieldName);
+      if (!isStaleValue(currentValue)) {
+        deserialized.set(computedFieldName, {
+          type: 'stale',
+          staleValue: currentValue,
+        } as StaleValue);
+      }
+    }
+  }
+  notifySubscribers(instance, field.name, value);
+  logger.log(recompute(instance));
 }
 
 function notifySubscribers(

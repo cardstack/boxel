@@ -11,7 +11,7 @@ import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -71,17 +71,20 @@ export default class PlaygroundContent extends Component<Signature> {
     <section class='playground-panel' data-test-playground-panel>
       <div class='playground-panel-content'>
         {{#let (if @isFieldDef @field @card) as |card|}}
-          {{#if @cardError}}
-            <CardContainer
-              class='error-container'
-              @displayBoundaries={{true}}
-              data-test-error-container
-            >
-              <CardError
-                @error={{@cardError}}
-                @cardCreationError={{not @cardError.id}}
-              />
-            </CardContainer>
+          {{#if this.showError}}
+            {{! this is for types--@cardError is always true in this case !}}
+            {{#if @cardError}}
+              <CardContainer
+                class='error-container'
+                @displayBoundaries={{true}}
+                data-test-error-container
+              >
+                <CardError
+                  @error={{@cardError}}
+                  @cardCreationError={{@cardError.meta.isCreationError}}
+                />
+              </CardContainer>
+            {{/if}}
           {{else if card}}
             <div
               class='preview-area'
@@ -197,6 +200,15 @@ export default class PlaygroundContent extends Component<Signature> {
       this.args.format === 'edit' ? 'edit' : 'isolated',
     );
   };
+
+  private get showError() {
+    // in edit format, prefer showing the stale card if possible so user can
+    // attempt to fix the card error
+    if (this.args.cardError && this.args.format === 'edit' && this.args.card) {
+      return false;
+    }
+    return Boolean(this.args.cardError);
+  }
 
   private get contextMenuItems() {
     if (!this.args.card?.id) {
