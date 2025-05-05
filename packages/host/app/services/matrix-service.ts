@@ -700,35 +700,7 @@ export default class MatrixService extends Service {
   }
 
   async uploadFiles(files: FileDef[]) {
-    let uploadedFiles = await Promise.all(
-      files.map(async (file) => {
-        if (!file.sourceUrl) {
-          throw new Error('File needs a realm server source URL to upload');
-        }
-
-        let response = await this.network.authedFetch(file.sourceUrl, {
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-        });
-
-        // We only support uploading text files (code) for now.
-        // When we start supporting other file types (pdfs, images, etc)
-        // we will need to update this to support those file types.
-        let text = await response.text();
-        let contentType = response.headers.get('content-type');
-
-        if (!contentType) {
-          throw new Error(`File has no content type: ${file.sourceUrl}`);
-        }
-        file.url = await this.client.uploadContent(text, contentType);
-        file.contentType = contentType;
-
-        return file;
-      }),
-    );
-
-    return uploadedFiles;
+    return await this.client.uploadFiles(files);
   }
 
   async sendMessage(

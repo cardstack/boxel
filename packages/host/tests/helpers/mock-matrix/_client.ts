@@ -682,6 +682,10 @@ export class MockClient implements ExtendedClient {
     );
   }
 
+  async uploadFiles(files: FileDef[]): Promise<FileDef[]> {
+    return await this.fileDefManager.uploadFiles(files);
+  }
+
   async uploadContent(
     _content: string,
     _opts?: { type?: string; name?: string },

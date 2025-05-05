@@ -281,6 +281,8 @@ function extendedClient({
           return fileDefManager.uploadCards.bind(fileDefManager);
         case 'uploadCommandDefinitions':
           return fileDefManager.uploadCommandDefinitions.bind(fileDefManager);
+        case 'uploadFiles':
+          return fileDefManager.uploadFiles.bind(fileDefManager);
         case 'uploadContent':
           return fileDefManager.uploadContent.bind(fileDefManager);
         case 'downloadCardFileDef':
