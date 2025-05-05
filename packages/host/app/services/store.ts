@@ -986,7 +986,6 @@ export default class StoreService extends Service implements StoreInterface {
         let errorResponse = processCardError(
           instance.id ?? instance[localIdSymbol],
           err,
-          isNew,
         );
         let cardError = errorResponse.errors[0];
         await this.updateInstanceChangeSubscription(
@@ -1150,32 +1149,21 @@ export default class StoreService extends Service implements StoreInterface {
 function processCardError(
   url: string | undefined,
   error: any,
-  isCreationError?: boolean,
 ): CardErrorsJSONAPI {
   try {
     let errorResponse = JSON.parse(error.responseText);
-    return formattedError(
-      url,
-      error,
-      errorResponse.errors?.[0],
-      isCreationError,
-    );
+    return formattedError(url, error, errorResponse.errors?.[0]);
   } catch (parseError) {
     switch (error.status) {
       // tailor HTTP responses as necessary for better user feedback
       case 404:
-        return formattedError(
-          url,
-          error,
-          {
-            status: 404,
-            title: 'Card Not Found',
-            message: `The card ${url} does not exist`,
-          },
-          isCreationError,
-        );
+        return formattedError(url, error, {
+          status: 404,
+          title: 'Card Not Found',
+          message: `The card ${url} does not exist`,
+        });
       default:
-        return formattedError(url, error, undefined, isCreationError);
+        return formattedError(url, error, undefined);
     }
   }
 }

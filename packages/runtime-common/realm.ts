@@ -1318,8 +1318,9 @@ export class Realm {
         : undefined;
       return systemError({
         requestContext,
-        message: `Unable to index new card, can't find new instance in index`,
+        message: `Unable to index newly created card: ${newURL}, can't find new instance in index`,
         additionalError: err,
+        id: newURL,
       });
     }
     let doc: SingleCardDocument = merge({}, entry.doc, {
@@ -1363,6 +1364,7 @@ export class Realm {
         additionalError: CardError.fromSerializableError(
           originalMaybeError.error,
         ),
+        id: request.url,
       });
     }
     let { doc: original } = originalMaybeError;
@@ -1501,7 +1503,8 @@ export class Realm {
     if (!entry || entry?.type === 'error') {
       return systemError({
         requestContext,
-        message: `Unable to index card: can't find patched instance in index`,
+        message: `Unable to index card: can't find patched instance, ${instanceURL} in index`,
+        id: instanceURL,
         additionalError: entry
           ? CardError.fromSerializableError(entry.error)
           : undefined,
@@ -1551,7 +1554,8 @@ export class Realm {
       if (maybeError.type === 'error') {
         return systemError({
           requestContext,
-          message: `cannot return card from index: ${maybeError.error.errorDetail.title} - ${maybeError.error.errorDetail.message}`,
+          message: `cannot return card, ${request.url}, from index: ${maybeError.error.errorDetail.title} - ${maybeError.error.errorDetail.message}`,
+          id: request.url,
           additionalError: CardError.fromSerializableError(maybeError.error),
           // This is based on https://jsonapi.org/format/#errors
           body: {
