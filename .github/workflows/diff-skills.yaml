@@ -34,6 +34,12 @@ jobs:
           # Get the list of changed JSON files (with a "Skill" in the file path)
           CHANGED_FILES=$(echo "${{ steps.changed-files.outputs.all_changed_files }}" | tr ' ' '\n' | grep -E 'Skill')
 
+          # Exit early if no matching files were found
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No changed skills files. Exiting."
+            exit 0
+          fi
+
           # Initialize arrays to store results
           DIFFS=()
 
