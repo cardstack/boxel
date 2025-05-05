@@ -209,7 +209,7 @@ export default class CardPreviewPanel extends Component<Signature> {
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
         padding-bottom: calc(
-          2 * var(--operator-mode-spacing) + var(--container-button-size)
+          var(--search-sheet-closed-height) + var(--operator-mode-spacing)
         );
       }
 
