@@ -865,6 +865,42 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
+    // TODO we don't yet support viewing an unsaved card in code mode since it has no URL
+    test<TestContextWithSave>('can switch to submode after newly created card is saved', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
+
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .doesNotExist('No card is pre-selected');
+      assert.dom('[data-test-card-catalog-item]').exists();
+      assert
+        .dom('[data-test-show-more-cards]')
+        .containsText('not shown', 'Entries are paginated');
+      await click(`[data-test-select="${testRealmURL}person-entry"]`);
+      await click('[data-test-card-catalog-go-button]');
+
+      await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
+
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+      assert.ok(id, 'new card has been assign an id');
+
+      assert
+        .dom(`[data-test-card-url-bar-input]`)
+        .hasValue(
+          `${id}.json`,
+          "the new card's url appears in the card URL field",
+        );
+    });
+
     test<TestContextWithSave>('card-catalog can pre-select the current filtered card type', async function (assert) {
       assert.expect(14);
       await visitOperatorMode({
