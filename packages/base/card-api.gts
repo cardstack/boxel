@@ -201,6 +201,10 @@ const subscribers = initSharedState(
   'subscribers',
   () => new WeakMap<BaseDef, Set<CardChangeSubscriber>>(),
 );
+const subscriberConsumer = initSharedState(
+  'subscriberConsumer',
+  () => new WeakMap<BaseDef, { fieldOrCard: BaseDef; fieldName: string }>(),
+);
 const fieldDescriptions = initSharedState(
   'fieldDescriptions',
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
@@ -2035,10 +2039,20 @@ export type FieldDefConstructor = typeof FieldDef;
 export function subscribeToChanges(
   fieldOrCard: BaseDef | BaseDef[],
   subscriber: CardChangeSubscriber,
+  enclosing?: { fieldOrCard: BaseDef; fieldName: string },
 ) {
   if (isArrayOfCardOrField(fieldOrCard)) {
-    fieldOrCard.forEach((item) => {
-      subscribeToChanges(item, subscriber);
+    fieldOrCard.forEach((item, i) => {
+      subscribeToChanges(
+        item,
+        subscriber,
+        enclosing
+          ? {
+              fieldOrCard: enclosing.fieldOrCard,
+              fieldName: `${enclosing.fieldName}.${i}`,
+            }
+          : undefined,
+      );
     });
     return;
   }
@@ -2054,6 +2068,9 @@ export function subscribeToChanges(
   }
 
   changeSubscribers.add(subscriber);
+  if (enclosing) {
+    subscriberConsumer.set(fieldOrCard, enclosing);
+  }
 
   let fields = getFields(fieldOrCard, {
     usedLinksToFieldsOnly: true,
@@ -2069,7 +2086,12 @@ export function subscribeToChanges(
     ) {
       let value = peekAtField(fieldOrCard, fieldName);
       if (isCardOrField(value) || isArrayOfCardOrField(value)) {
-        subscribeToChanges(value, subscriber);
+        subscribeToChanges(value, subscriber, {
+          fieldOrCard: enclosing?.fieldOrCard ?? fieldOrCard,
+          fieldName: enclosing?.fieldName
+            ? `${enclosing.fieldName}.${fieldName}`
+            : fieldName,
+        });
       }
     }
   });
@@ -2157,9 +2179,12 @@ function applySubscribersToInstanceValue(
   let addedItems = newItems.filter((item) => !oldItems.includes(item));
   let removedItems = oldItems.filter((item) => !newItems.includes(item));
 
-  addedItems.forEach((item) =>
+  addedItems.forEach((item, i) =>
     changeSubscribers!.forEach((subscriber) =>
-      subscribeToChanges(item, subscriber),
+      subscribeToChanges(item, subscriber, {
+        fieldOrCard: instance,
+        fieldName: `${field.name}.${i}`,
+      }),
     ),
   );
 
@@ -2822,12 +2847,30 @@ function setField(instance: BaseDef, field: Field, value: any) {
   logger.log(recompute(instance));
 }
 
-function notifySubscribers(instance: BaseDef, fieldName: string, value: any) {
+function notifySubscribers(
+  instance: BaseDef,
+  fieldName: string,
+  value: any,
+  visited = new WeakSet<BaseDef>(),
+) {
+  if (visited.has(instance)) {
+    return;
+  }
+  visited.add(instance);
   let changeSubscribers = subscribers.get(instance);
   if (changeSubscribers) {
     for (let subscriber of changeSubscribers) {
       subscriber(instance, fieldName, value);
     }
+  }
+  let consumer = subscriberConsumer.get(instance);
+  if (consumer) {
+    notifySubscribers(
+      consumer.fieldOrCard,
+      `${consumer.fieldName}.${fieldName}`,
+      value,
+      visited,
+    );
   }
 }
 

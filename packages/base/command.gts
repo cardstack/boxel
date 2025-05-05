@@ -96,6 +96,7 @@ export class PatchCodeInput extends CardDef {
 
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
+  @field defaultSkills = linksToMany(SkillCard);
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {

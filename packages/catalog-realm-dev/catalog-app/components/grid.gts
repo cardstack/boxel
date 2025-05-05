@@ -38,6 +38,14 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
     this.hydratedCardId = cardId;
   }
 
+  @action
+  viewCard(card: PrerenderedCard) {
+    if (!this.args.context?.actions?.viewCard) {
+      throw new Error('viewCard action is not available');
+    }
+    this.args.context?.actions?.viewCard?.(new URL(card.url), 'isolated');
+  }
+
   isHydrated = (cardUrl: string) => {
     return removeFileExtension(cardUrl) == this.hydratedCardId;
   };
@@ -65,12 +73,6 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
               <li
                 class='{{@selectedView}}-view-container'
                 data-test-card-url={{card.url}}
-                {{@context.cardComponentModifier
-                  cardId=card.url
-                  format='data'
-                  fieldType=undefined
-                  fieldName=undefined
-                }}
               >
                 {{#if
                   (and (this.isHydrated card.url) this.cardResource.isLoaded)
@@ -82,10 +84,12 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
                     }}
                       <CardContainer
                         class='card'
+                        @displayBoundaries={{true}}
                         data-test-cards-grid-item={{removeFileExtension
                           card.url
                         }}
                         data-cards-grid-item={{removeFileExtension card.url}}
+                        {{on 'click' (fn this.viewCard card)}}
                       >
                         <Component />
                       </CardContainer>
@@ -157,6 +161,13 @@ export class CardsGrid extends GlimmerComponent<CardsGridSignature> {
       .card {
         container-name: fitted-card;
         container-type: size;
+        transition: ease 0.2s;
+      }
+
+      .card:hover {
+        cursor: pointer;
+        border: 1px solid var(--boxel-purple);
+        transform: translateY(-1px);
       }
 
       .cards :deep(.field-component-card.fitted-format) {
