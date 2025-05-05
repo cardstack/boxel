@@ -17,7 +17,7 @@ import {
   registerRealmUsers,
   showAllCards,
   setupUserSubscribed,
-  patchCard,
+  patchCardInstance,
   postCardSource,
   postNewCard,
 } from '../helpers';
@@ -70,7 +70,7 @@ test.describe('Live Cards', () => {
       page.locator('[data-test-realm-indexing-indicator]'),
     ).toHaveCount(0);
 
-    await patchCard(
+    await patchCardInstance(
       page,
       realmURL,
       `${realmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
