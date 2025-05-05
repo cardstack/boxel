@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
+import { htmlSafe, type SafeString } from '@ember/template';
 
 import Component from '@glimmer/component';
 
@@ -69,7 +70,10 @@ export default class PlaygroundContent extends Component<Signature> {
   <template>
     {{consumeContext @makeCardResource}}
     <section class='playground-panel' data-test-playground-panel>
-      <div class='playground-panel-content'>
+      <div
+        class='playground-panel-content'
+        style={{this.styleForPlaygroundContent}}
+      >
         {{#let (if @isFieldDef @field @card) as |card|}}
           {{#if @cardError}}
             <CardContainer
@@ -127,7 +131,6 @@ export default class PlaygroundContent extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp);
         min-height: 100%;
-        max-width: 800px;
         margin-inline: auto;
       }
       .preview-area {
@@ -244,5 +247,23 @@ export default class PlaygroundContent extends Component<Signature> {
         this.args.card?.id &&
         this.realm.canWrite(this.args.card.id),
     );
+  }
+
+  private get isWideFormat() {
+    if (!this.args.card) {
+      return false;
+    }
+    let { constructor } = this.args.card;
+    return Boolean(
+      constructor &&
+        'prefersWideFormat' in constructor &&
+        constructor.prefersWideFormat,
+    );
+  }
+
+  private get styleForPlaygroundContent(): SafeString {
+    const maxWidth =
+      this.args.format !== 'isolated' || this.isWideFormat ? '100%' : '50rem';
+    return htmlSafe(`max-width: ${maxWidth};`);
   }
 }
