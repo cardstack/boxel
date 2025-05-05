@@ -645,7 +645,6 @@ Above code blocks are now complete`;
 \`\`\`txt
 // File url: https://example.com/blank.txt
 <<<<<<< SEARCH
-
 =======
 hello
 >>>>>>> REPLACE
