@@ -866,7 +866,7 @@ export async function postCardSource(
   );
 }
 
-export async function patchCard(
+export async function patchCardInstance(
   page: Page,
   realmURL: string,
   cardURL: string,

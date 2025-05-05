@@ -71,12 +71,12 @@ test.describe('Commands', () => {
 
     expect(boxelMessageData.context.tools.length).toEqual(1);
     let patchCardTool = boxelMessageData.context.tools.find(
-      (t: any) => t.function.name === 'patchCard',
+      (t: any) => t.function.name === 'patchCardInstance',
     );
     expect(patchCardTool).toMatchObject({
       type: 'function',
       function: {
-        name: 'patchCard',
+        name: 'patchCardInstance',
         description:
           'Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.',
         parameters: {
@@ -168,7 +168,7 @@ test.describe('Commands', () => {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '1',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: {
             description: 'Patching card',
             attributes: {
