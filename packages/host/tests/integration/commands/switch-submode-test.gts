@@ -11,6 +11,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
+import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -61,7 +63,7 @@ module('Integration | commands | switch-submode', function (hooks) {
   });
 
   test('switch to code submode by local id of a saved instance', async function (assert) {
-    let instance = await store.add(new CardDef());
+    let instance = (await store.add(new CardDef())) as CardDefType;
     let commandService = lookupService<CommandService>('command-service');
     let operatorModeStateService = lookupService<OperatorModeStateService>(
       'operator-mode-state-service',
@@ -91,7 +93,7 @@ module('Integration | commands | switch-submode', function (hooks) {
       'operator-mode-state-service',
     );
     operatorModeStateService.restore({
-      stacks: [[{ id: instance.id, format: 'isolated' }]],
+      stacks: [[{ id: instance.id!, format: 'isolated' }]],
       submode: 'interact',
     });
     let switchSubmodeCommand = new SwitchSubmodeCommand(

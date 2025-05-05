@@ -1933,7 +1933,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .hasText('FadhlanXXX');
     });
 
-    test('stack item live updates with error', async function (assert) {
+    test('stack item live updates with error in isolated mode', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -2010,6 +2010,33 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
         )
         .doesNotExist('card error state is NOT displayed');
+    });
+
+    test('stack item live shows stale card when server has an error in edit mode', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('card is displayed');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
+        )
+        .doesNotExist('card error state is NOT displayed');
+      assert.dom('[data-test-field="firstName"] input').hasValue('Fadhlan');
+
+      // TODO should we show a message that the card is currently in an error
+      // state on the server? note that this error state did not occur from an
+      // auto save, but rather an external event put the server into an error...
     });
 
     test('stack item edit results in index event that is ignored', async function (assert) {
