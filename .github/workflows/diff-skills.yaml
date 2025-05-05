@@ -27,7 +27,6 @@ jobs:
       - name: Process skill card changes
         id: process-changes
         run: |
-          set -x
           # Create a temporary directory for processing
           mkdir -p /tmp/skill-diffs
 
