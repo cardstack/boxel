@@ -314,7 +314,7 @@ export class Realm {
       .patch(
         '/.+(?<!.json)',
         SupportedMimeType.CardJson,
-        this.patchCard.bind(this),
+        this.patchCardInstance.bind(this),
       )
       .get('/_info', SupportedMimeType.RealmInfo, this.realmInfo.bind(this))
       .query('/_lint', SupportedMimeType.JSON, this.lint.bind(this))
@@ -1342,7 +1342,7 @@ export class Realm {
     });
   }
 
-  private async patchCard(
+  private async patchCardInstance(
     request: Request,
     requestContext: RequestContext,
   ): Promise<Response> {
