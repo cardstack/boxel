@@ -2116,6 +2116,10 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        TestCard,
+        SubTestField,
+      });
 
       let card = new TestCard({
         specialField: new TestField({
@@ -2191,6 +2195,7 @@ module('Integration | card-basics', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCardWithField,
         TestCard,
+        SubTestField,
       });
       let cardWithField1 = new TestCardWithField({});
       let cardWithField2 = new TestCardWithField({});
