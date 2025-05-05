@@ -599,9 +599,21 @@ export class MockClient implements ExtendedClient {
 
   async createRoom({
     name,
+    initial_state,
   }: MatrixSDK.ICreateRoomOpts): Promise<{ room_id: string }> {
     let sender = this.loggedInAs || 'unknown_user';
     let roomId = this.serverState.createRoom(sender, name);
+
+    if (initial_state) {
+      for (let event of initial_state) {
+        this.serverState.setRoomState(
+          sender,
+          roomId,
+          event.type,
+          event.content,
+        );
+      }
+    }
 
     return { room_id: roomId };
   }

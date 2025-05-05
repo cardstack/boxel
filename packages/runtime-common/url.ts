@@ -71,3 +71,7 @@ export function maybeRelativeURL(
     return url.href;
   }
 }
+
+export function trimJsonExtension(str: string) {
+  return str.replace(/\.json$/, '');
+}
