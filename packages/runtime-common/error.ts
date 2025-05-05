@@ -8,6 +8,7 @@ export interface ErrorDetails {
   status?: number;
   title?: string;
   responseText?: string;
+  id?: string | null;
   source?: {
     pointer?: string;
     header?: string;
@@ -19,6 +20,7 @@ export interface SerializedError {
   message: string;
   status: number;
   title?: string;
+  id?: string | null;
   source?: ErrorDetails['source'];
   additionalErrors: any[] | null;
   isCardError?: true;
@@ -37,6 +39,8 @@ export interface CardErrorJSONAPI {
     cardTitle: string | null;
     scopedCssUrls: string[];
     stack: string | null;
+    isCreationError?: true;
+    responseHeaders?: { [header: string]: string };
   };
   additionalErrors?: (CardError | SearchResultError['error'] | Error)[] | null;
 }
@@ -88,12 +92,17 @@ export function formattedError(
             scopedCssUrls: [],
             stack: cardError.stack ?? err.stack ?? error.stack ?? null,
             cardTitle: null,
+            ...(cardError.id ? { isCreationError: true } : {}),
           },
           additionalErrors: cardError.additionalErrors,
         },
       ],
     };
   }
+
+  let responseHeaders = error.responseHeaders
+    ? Object.fromEntries<string>(error.responseHeaders.entries())
+    : undefined;
 
   let errorStatus = err?.status ?? error.status;
   let errorMessage =
@@ -117,6 +126,8 @@ export function formattedError(
           scopedCssUrls: [],
           stack: error.stack ?? null,
           cardTitle: null,
+          ...(err?.id ? { isCreationError: true } : {}),
+          ...(responseHeaders ? { responseHeaders } : {}),
         },
       },
     ],
@@ -127,6 +138,7 @@ export class CardError extends Error implements SerializedError {
   message: string;
   status: number;
   title?: string;
+  id?: string | null;
   source?: ErrorDetails['source'];
   responseText?: string;
   isCardError: true = true;
@@ -136,9 +148,10 @@ export class CardError extends Error implements SerializedError {
 
   constructor(
     message: string,
-    { status, title, source, responseText }: ErrorDetails = {},
+    { status, title, source, responseText, id }: ErrorDetails = {},
   ) {
     super(message);
+    this.id = id || null;
     this.message = message;
     this.status = status || 500;
     this.title = title || getReasonPhrase(this.status);
@@ -147,6 +160,7 @@ export class CardError extends Error implements SerializedError {
   }
   toJSON() {
     return {
+      id: this.id,
       title: this.title,
       message: this.message,
       code: this.status,
@@ -163,6 +177,7 @@ export class CardError extends Error implements SerializedError {
       status: err.status,
       title: err.title,
       source: err.source,
+      id: err.id,
     });
     result.stack = err.stack;
     if (err.additionalErrors) {
@@ -204,6 +219,7 @@ export class CardError extends Error implements SerializedError {
       let error = new CardError(
         `unable to fetch ${url}${!maybeErrorJSON ? ': ' + text : ''}`,
         {
+          id: url,
           title: response.statusText,
           status: response.status,
           responseText: text,
@@ -321,7 +337,7 @@ export function notFound(
   message = `Could not find ${request.url}`,
 ): Response {
   return responseWithError(
-    new CardError(message, { status: 404 }),
+    new CardError(message, { status: 404, id: request.url }),
     requestContext,
   );
 }
@@ -351,13 +367,15 @@ export function systemError({
   message,
   additionalError,
   body,
+  id,
 }: {
   requestContext: RequestContext;
   message: string;
   additionalError?: CardError | Error;
   body?: Record<string, any>;
+  id?: string;
 }): Response {
-  let err = new CardError(message, { status: 500 });
+  let err = new CardError(message, { status: 500, ...(id ? { id } : {}) });
   if (additionalError) {
     err.additionalErrors = [additionalError];
   }

@@ -504,6 +504,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return !this.isBuried && this.args.item.format === 'edit';
   }
 
+  private get showError() {
+    // in edit format, prefer showing the stale card if possible so user can
+    // attempt to fix the card error
+    if (this.cardError && this.args.item.format === 'edit' && this.card) {
+      return false;
+    }
+    return Boolean(this.cardError);
+  }
+
   private setupItemEl = (el: HTMLElement) => {
     this.itemEl = el;
   };
@@ -572,37 +581,40 @@ export default class OperatorModeStackItem extends Component<Signature> {
             <LoadingIndicator @color='var(--boxel-dark)' />
             <span class='loading__message'>Loading card...</span>
           </div>
-        {{else if this.cardError}}
-          <CardError
-            @error={{this.cardError}}
-            @viewInCodeMode={{true}}
-            @headerOptions={{this.cardErrorHeaderOptions}}
-            class='stack-item-header'
-            style={{cssVar
-              boxel-card-header-icon-container-min-width=(if
-                this.isBuried '50px' '95px'
-              )
-              boxel-card-header-actions-min-width=(if
-                this.isBuried '50px' '95px'
-              )
-              boxel-card-header-background-color=this.headerColor
-              boxel-card-header-text-color=(getContrastColor this.headerColor)
-              realm-icon-background-color=(getContrastColor
-                this.headerColor 'transparent'
-              )
-              realm-icon-border-color=(getContrastColor
-                this.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
-              )
-            }}
-            role={{if this.isBuried 'button' 'banner'}}
-            {{on
-              'click'
-              (optional
-                (if this.isBuried (fn @dismissStackedCardsAbove @index))
-              )
-            }}
-            data-test-stack-card-header
-          />
+        {{else if this.showError}}
+          {{! this is for types--this.cardError is always true in this case !}}
+          {{#if this.cardError}}
+            <CardError
+              @error={{this.cardError}}
+              @viewInCodeMode={{true}}
+              @headerOptions={{this.cardErrorHeaderOptions}}
+              class='stack-item-header'
+              style={{cssVar
+                boxel-card-header-icon-container-min-width=(if
+                  this.isBuried '50px' '95px'
+                )
+                boxel-card-header-actions-min-width=(if
+                  this.isBuried '50px' '95px'
+                )
+                boxel-card-header-background-color=this.headerColor
+                boxel-card-header-text-color=(getContrastColor this.headerColor)
+                realm-icon-background-color=(getContrastColor
+                  this.headerColor 'transparent'
+                )
+                realm-icon-border-color=(getContrastColor
+                  this.headerColor 'transparent' 'rgba(0 0 0 / 15%)'
+                )
+              }}
+              role={{if this.isBuried 'button' 'banner'}}
+              {{on
+                'click'
+                (optional
+                  (if this.isBuried (fn @dismissStackedCardsAbove @index))
+                )
+              }}
+              data-test-stack-card-header
+            />
+          {{/if}}
         {{else if this.card}}
           {{this.setWindowTitle}}
           {{#let (this.realm.info this.urlForRealmLookup) as |realmInfo|}}

@@ -865,6 +865,42 @@ module('Acceptance | interact submode tests', function (hooks) {
       await deferred.promise;
     });
 
+    // TODO we don't yet support viewing an unsaved card in code mode since it has no URL
+    test<TestContextWithSave>('can switch to submode after newly created card is saved', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
+
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .doesNotExist('No card is pre-selected');
+      assert.dom('[data-test-card-catalog-item]').exists();
+      assert
+        .dom('[data-test-show-more-cards]')
+        .containsText('not shown', 'Entries are paginated');
+      await click(`[data-test-select="${testRealmURL}person-entry"]`);
+      await click('[data-test-card-catalog-go-button]');
+
+      await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
+
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+      assert.ok(id, 'new card has been assign an id');
+
+      assert
+        .dom(`[data-test-card-url-bar-input]`)
+        .hasValue(
+          `${id}.json`,
+          "the new card's url appears in the card URL field",
+        );
+    });
+
     test<TestContextWithSave>('card-catalog can pre-select the current filtered card type', async function (assert) {
       assert.expect(14);
       await visitOperatorMode({
@@ -1897,7 +1933,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .hasText('FadhlanXXX');
     });
 
-    test('stack item live updates with error', async function (assert) {
+    test('stack item live updates with error in isolated mode', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1974,6 +2010,33 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
         )
         .doesNotExist('card error state is NOT displayed');
+    });
+
+    test('stack item live shows stale card when server has an error in edit mode', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('card is displayed');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
+        )
+        .doesNotExist('card error state is NOT displayed');
+      assert.dom('[data-test-field="firstName"] input').hasValue('Fadhlan');
+
+      // TODO should we show a message that the card is currently in an error
+      // state on the server? note that this error state did not occur from an
+      // auto save, but rather an external event put the server into an error...
     });
 
     test('stack item edit results in index event that is ignored', async function (assert) {
