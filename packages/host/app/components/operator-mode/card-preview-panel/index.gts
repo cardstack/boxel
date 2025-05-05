@@ -208,7 +208,9 @@ export default class CardPreviewPanel extends Component<Signature> {
         background-color: var(--boxel-200);
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
-        padding-bottom: var(--operator-mode-spacing);
+        padding-bottom: calc(
+          2 * var(--operator-mode-spacing) + var(--container-button-size)
+        );
       }
 
       .preview-footer-title {
