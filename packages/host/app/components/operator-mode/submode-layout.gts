@@ -45,6 +45,7 @@ import WorkspaceChooser from './workspace-chooser';
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
+import type StoreService from '../../services/store';
 
 interface Signature {
   Element: HTMLDivElement;
@@ -97,6 +98,7 @@ export default class SubmodeLayout extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare matrixService: MatrixService;
   @service private declare router: RouterService;
+  @service private declare store: StoreService;
 
   private searchElement: HTMLElement | null = null;
   private suppressSearchClose = false;
@@ -133,7 +135,7 @@ export default class SubmodeLayout extends Component<Signature> {
     }
 
     let stackItem = this.allStackItems[this.allStackItems.length - 1];
-    return stackItem.id;
+    return this.store.peek(stackItem.id)?.id;
   }
 
   private get isToggleWorkspaceChooserDisabled() {

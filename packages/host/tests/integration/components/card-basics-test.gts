@@ -1111,17 +1111,13 @@ module('Integration | card-basics', function (hooks) {
         workExperiences: [],
       });
 
-      let changeEvent:
-        | { instance: BaseDef; fieldName: string; value: any }
-        | undefined;
-      let eventCount = 0;
+      let events: any[] = [];
       let subscriber = (instance: BaseDef, fieldName: string, value: any) => {
-        eventCount++;
-        changeEvent = {
+        events.push({
           instance,
           fieldName,
           value,
-        };
+        });
       };
       subscribeToChanges(mango, subscriber);
 
@@ -1129,57 +1125,51 @@ module('Integration | card-basics', function (hooks) {
         let firstWorkExperience = new WorkExperience();
         mango.workExperiences.push(firstWorkExperience);
         await flushLogs();
-        await waitUntil(() => eventCount === 1);
         assert.deepEqual(
-          changeEvent?.instance,
-          mango,
-          'the instance was correctly specified in change event',
+          events,
+          [
+            {
+              instance: mango,
+              fieldName: 'workExperiences',
+              value: [firstWorkExperience],
+            },
+          ],
+          'the change event is correct',
         );
-        assert.strictEqual(
-          changeEvent?.fieldName,
-          'workExperiences',
-          'the fieldName was correctly specified in change event',
-        );
-        assert.deepEqual(
-          changeEvent?.value[0],
-          firstWorkExperience,
-          'the field value was correctly specified in change event',
-        );
+        events = [];
 
         firstWorkExperience.company = 'First Company';
-        await waitUntil(() => eventCount === 2);
+        await flushLogs();
         assert.deepEqual(
-          changeEvent?.instance,
-          firstWorkExperience,
-          'the instance was correctly specified in change event',
+          events,
+          [
+            {
+              instance: firstWorkExperience,
+              fieldName: 'company',
+              value: 'First Company',
+            },
+            {
+              instance: mango,
+              fieldName: 'workExperiences.0.company',
+              value: 'First Company',
+            },
+          ],
+          'the change event is correct',
         );
-        assert.strictEqual(
-          changeEvent?.fieldName,
-          'company',
-          'the fieldName was correctly specified in change event',
-        );
-        assert.deepEqual(
-          changeEvent?.value,
-          'First Company',
-          'the field value was correctly specified in change event',
-        );
+        events = [];
 
         mango.workExperiences.pop();
-        await waitUntil(() => eventCount === 3);
+        await flushLogs();
         assert.deepEqual(
-          changeEvent?.instance,
-          mango,
-          'the instance was correctly specified in change event',
-        );
-        assert.strictEqual(
-          changeEvent?.fieldName,
-          'workExperiences',
-          'the fieldName was correctly specified in change event',
-        );
-        assert.deepEqual(
-          changeEvent?.value.length,
-          0,
-          'the field value was correctly specified in change event',
+          events,
+          [
+            {
+              instance: mango,
+              fieldName: 'workExperiences',
+              value: [],
+            },
+          ],
+          'the change event is correct',
         );
       } finally {
         unsubscribeFromChanges(mango, subscriber);
