@@ -25,32 +25,22 @@ import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
-import type CardService from '@cardstack/host/services/card-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
-import { CardDef, FieldDef, Format } from 'https://cardstack.com/base/card-api';
+import type {
+  CardDef,
+  FieldDef,
+  Format,
+} from 'https://cardstack.com/base/card-api';
 
 import CardError from '../../card-error';
 import FormatChooser from '../format-chooser';
 
 import PlaygroundPreview from './playground-preview';
 import SpecSearch from './spec-search';
-
-export type FieldOption = {
-  index: number;
-  displayIndex: number;
-  field: FieldDef;
-};
-
-export type SelectedInstance = {
-  card: CardDef;
-  fieldIndex: number | undefined;
-};
 
 interface Signature {
   Args: {
@@ -64,6 +54,14 @@ interface Signature {
     field?: FieldDef;
     cardError?: CardErrorJSONAPI;
     cardCreationError?: boolean;
+    persistSelections: (
+      cardId: string,
+      format?: Format,
+      fieldIndex?: number,
+    ) => void;
+    canWriteRealm: boolean;
+    format: Format;
+    defaultFormat: Format;
   };
 }
 
@@ -91,13 +89,13 @@ export default class PlaygroundContent extends Component<Signature> {
             >
               <PlaygroundPreview
                 @card={{card}}
-                @format={{this.format}}
+                @format={{@format}}
                 @realmInfo={{this.realmInfo}}
                 @contextMenuItems={{this.contextMenuItems}}
                 @onEdit={{if this.canEditCard (fn this.setFormat 'edit')}}
                 @onFinishEditing={{if
-                  (eq this.format 'edit')
-                  (fn this.setFormat this.defaultFormat)
+                  (eq @format 'edit')
+                  (fn this.setFormat @defaultFormat)
                 }}
                 @isFieldDef={{@isFieldDef}}
               />
@@ -105,7 +103,7 @@ export default class PlaygroundContent extends Component<Signature> {
             <FormatChooser
               class='format-chooser'
               @formats={{if @isFieldDef this.fieldFormats}}
-              @format={{this.format}}
+              @format={{@format}}
               @setFormat={{this.setFormat}}
               data-test-playground-format-chooser
             />
@@ -115,7 +113,7 @@ export default class PlaygroundContent extends Component<Signature> {
             <SpecSearch
               @query={{this.specQuery}}
               @realms={{this.realmServer.availableRealmURLs}}
-              @canWriteRealm={{this.canWriteRealm}}
+              @canWriteRealm={{@canWriteRealm}}
               @createNewCard={{@createNew}}
             />
           {{/if}}
@@ -168,24 +166,12 @@ export default class PlaygroundContent extends Component<Signature> {
         margin-left: calc(-1 * var(--boxel-sp));
         width: calc(100% + calc(2 * var(--boxel-sp)));
       }
-      .card-error {
-        opacity: 0.4;
-      }
-      .error-header {
-        color: var(--boxel-error-300);
-        min-height: var(--boxel-form-control-height);
-        background-color: var(--boxel-100);
-        box-shadow: 0 1px 0 0 rgba(0 0 0 / 15%);
-      }
     </style>
   </template>
 
-  @service private declare cardService: CardService;
-  @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
-  @service private declare recentFilesService: RecentFilesService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
@@ -203,27 +189,6 @@ export default class PlaygroundContent extends Component<Signature> {
     return this.args.isFieldDef && !this.args.card;
   }
 
-  private get defaultFormat() {
-    return this.args.isFieldDef ? 'embedded' : 'isolated';
-  }
-
-  private get format(): Format {
-    return (
-      this.playgroundPanelService.getSelection(this.args.moduleId)?.format ??
-      this.defaultFormat
-    );
-  }
-
-  private get fieldIndex(): number | undefined {
-    let index = this.playgroundPanelService.getSelection(
-      this.args.moduleId,
-    )?.fieldIndex;
-    if (index !== undefined && index >= 0) {
-      return index;
-    }
-    return this.args.isFieldDef ? 0 : undefined;
-  }
-
   private copyToClipboard = task(async (id: string) => {
     await navigator.clipboard.writeText(id);
   });
@@ -231,7 +196,7 @@ export default class PlaygroundContent extends Component<Signature> {
   private openInInteractMode = (id: string) => {
     this.operatorModeStateService.openCardInInteractMode(
       id,
-      this.format === 'edit' ? 'edit' : 'isolated',
+      this.args.format === 'edit' ? 'edit' : 'isolated',
     );
   };
 
@@ -258,37 +223,11 @@ export default class PlaygroundContent extends Component<Signature> {
     return menuItems;
   }
 
-  private persistSelections = (
-    selectedCardId: string,
-    selectedFormat = this.format,
-    index = this.fieldIndex,
-  ) => {
-    let selection = this.playgroundPanelService.getSelection(
-      this.args.moduleId,
-    );
-    if (selection?.cardId) {
-      let { cardId, format, fieldIndex } = selection;
-      if (
-        cardId === selectedCardId &&
-        format === selectedFormat &&
-        fieldIndex === index
-      ) {
-        return;
-      }
-    }
-    this.playgroundPanelService.persistSelections(
-      this.args.moduleId,
-      selectedCardId,
-      selectedFormat,
-      index,
-    );
-  };
-
   @action private setFormat(format: Format) {
     if (!this.args.card?.id) {
       return;
     }
-    this.persistSelections(this.args.card.id, format);
+    this.args.persistSelections(this.args.card.id, format);
   }
 
   private get realmInfo() {
@@ -301,13 +240,9 @@ export default class PlaygroundContent extends Component<Signature> {
 
   private get canEditCard() {
     return Boolean(
-      this.format !== 'edit' &&
+      this.args.format !== 'edit' &&
         this.args.card?.id &&
         this.realm.canWrite(this.args.card.id),
     );
-  }
-
-  private get canWriteRealm() {
-    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 }

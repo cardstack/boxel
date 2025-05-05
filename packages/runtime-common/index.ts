@@ -99,7 +99,12 @@ export {
   cardTypeDisplayName,
   cardTypeIcon,
 } from './helpers/card-type-display-name';
-export { maybeRelativeURL, maybeURL, relativeURL } from './url';
+export {
+  maybeRelativeURL,
+  maybeURL,
+  relativeURL,
+  trimJsonExtension,
+} from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
