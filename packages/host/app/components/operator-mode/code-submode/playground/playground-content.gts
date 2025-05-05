@@ -136,7 +136,7 @@ export default class PlaygroundContent extends Component<Signature> {
       }
       .format-chooser {
         position: sticky;
-        bottom: var(--search-sheet-closed-height);
+        bottom: 0;
         margin-top: auto;
 
         --boxel-format-chooser-button-bg-color: var(--boxel-light);
