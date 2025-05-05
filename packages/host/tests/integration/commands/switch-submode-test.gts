@@ -11,6 +11,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 
+import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
+
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -22,8 +24,6 @@ import {
 import { CardDef, setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-
-import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 
 let loader: Loader;
 let store: StoreService;

@@ -1199,7 +1199,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-error-detail]').hasText('Boom!');
     });
 
-    test('it renders error info when creating new instance causes error', async function (assert) {
+    test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
       assert.dom('[data-test-card-error]').doesNotExist();
@@ -1208,7 +1208,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert
         .dom('[data-test-playground-panel] [data-test-card]')
         .doesNotExist();
-      assert.dom('[data-test-card-error]').hasText('Failed to create card.');
+      assert
+        .dom('[data-test-card-error]')
+        .hasText('This card contains an error.');
       assert.dom('[data-test-error-title]').hasText('Internal Server Error');
 
       await click('[data-test-error-detail-toggle] button');
@@ -1234,7 +1236,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-error-container]').doesNotExist();
     });
 
-    test('it can clear card-creation error when file is edited', async function (assert) {
+    test('it can clear card-creation error (that resulted in new file in the realm) when file is edited', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
       assert.dom('[data-test-error-container]').doesNotExist();
@@ -1242,7 +1244,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await createNewInstance();
       assert
         .dom('[data-test-error-container]')
-        .containsText('Failed to create');
+        .containsText('This card contains an error');
 
       await realm.write(
         'boom-person.gts',
@@ -1263,7 +1265,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-error-container]').doesNotExist();
     });
 
-    test('it can clear card-creation error when different card-def is selected', async function (assert) {
+    test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
       assert.dom('[data-test-error-container]').doesNotExist();
@@ -1271,7 +1273,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await createNewInstance();
       assert
         .dom('[data-test-error-container]')
-        .containsText('Failed to create');
+        .containsText('This card contains an error');
 
       await selectDeclaration('WorkingCard');
       assert
