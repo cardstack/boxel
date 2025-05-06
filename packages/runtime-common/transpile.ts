@@ -30,7 +30,7 @@ export function transpileJS(content: string, debugFilename: string): string {
     return '';
   }
 
-  const processor = new globalThis.ContentTagGlobal.Preprocessor();
+  const processor = new ContentTagGlobal.Preprocessor();
   content = processor.process(content, {
     filename: debugFilename,
     inline_source_map: true,

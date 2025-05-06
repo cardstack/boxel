@@ -11,7 +11,7 @@ import { readFileSync } from 'fs-extra';
 import { join } from 'path';
 import * as ContentTagGlobal from 'content-tag';
 
-globalThis.ContentTagGlobal = ContentTagGlobal;
+(globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
