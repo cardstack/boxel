@@ -380,8 +380,11 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
-
     let message = this._messageCache.get(effectiveEventId);
+    if (message?.isStreamingOfEventFinished) {
+      return;
+    }
+
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
