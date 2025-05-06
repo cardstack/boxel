@@ -5,7 +5,7 @@ import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
@@ -333,13 +333,16 @@ interface HtmlGroupCodeBlockSignature {
 }
 
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
-  private codeDiffResource = this.args.codeData.searchReplaceBlock
-    ? getCodeDiffResultResource(
-        this,
-        this.args.codeData.fileUrl,
-        this.args.codeData.searchReplaceBlock,
-      )
-    : undefined;
+  @cached
+  get codeDiffResource() {
+    return this.args.codeData.searchReplaceBlock
+      ? getCodeDiffResultResource(
+          this,
+          this.args.codeData.fileUrl,
+          this.args.codeData.searchReplaceBlock,
+        )
+      : undefined;
+  }
 
   <template>
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
