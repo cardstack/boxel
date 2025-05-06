@@ -40,6 +40,7 @@ import {
   localId,
   formats,
   meta,
+  baseRef,
   type Format,
   type Meta,
   type CardFields,
@@ -229,6 +230,22 @@ export function getFieldDescription(
     fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
   }
   return descriptionsMap.get(fieldName);
+}
+
+export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
+  let instanceClazz: typeof BaseDef | null = instance.constructor;
+  let codeRefInstance: CodeRef | undefined;
+  let codeRefClazz = identifyCard(clazz);
+  do {
+    codeRefInstance = instanceClazz ? identifyCard(instanceClazz) : undefined;
+    if (isEqual(codeRefInstance, codeRefClazz)) {
+      return true;
+    }
+    instanceClazz = instanceClazz
+      ? (Reflect.getPrototypeOf(instanceClazz) as typeof BaseDef | null)
+      : null;
+  } while (codeRefInstance && !isEqual(codeRefInstance, baseRef));
+  return false;
 }
 
 function setFieldDescription(
@@ -640,7 +657,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       // todo: primitives could implement a validation symbol
     } else {
       for (let [index, item] of values.entries()) {
-        if (item != null && !(item instanceof this.card)) {
+        if (item != null && !instanceOf(item, this.card)) {
           throw new Error(
             `field validation error: tried set instance of ${values.constructor.name} at index ${index} of field '${this.name}' but it is not an instance of ${this.card.name}`,
           );
@@ -811,7 +828,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     if (primitive in this.card) {
       // todo: primitives could implement a validation symbol
     } else {
-      if (value != null && !(value instanceof this.card)) {
+      if (value != null && !instanceOf(value, this.card)) {
         throw new Error(
           `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
@@ -1036,7 +1053,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       if (isNotLoadedValue(value)) {
         return value;
       }
-      if (!(value instanceof this.card)) {
+      if (!instanceOf(value, this.card)) {
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
@@ -1464,7 +1481,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       if (
         !isNotLoadedValue(value) &&
         value != null &&
-        !(value instanceof this.card)
+        !instanceOf(value, this.card)
       ) {
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,

@@ -72,6 +72,7 @@ import {
   TextAreaField,
   unsubscribeFromChanges,
   ReadOnlyField,
+  instanceOf,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
@@ -146,6 +147,53 @@ module('Integration | card-basics', function (hooks) {
       provideConsumeContext(PermissionsContextName, {
         canWrite: true,
       });
+    });
+
+    test('"instanceOf()" returns true when provided instance is a direct instance of the provided card class', async function (assert) {
+      class Foo extends CardDef {}
+      loader.shimModule(`${testRealmURL}test-cards`, { Foo });
+
+      assert.true(
+        instanceOf(new Foo(), Foo),
+        'instance is direct instantiation of card class',
+      );
+    });
+
+    test('"instanceOf()" returns true when instance adopts from the provided card class', async function (assert) {
+      class Foo extends CardDef {}
+      class Bar extends Foo {}
+      class Baz extends Bar {}
+      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
+
+      assert.true(
+        instanceOf(new Baz(), Foo),
+        'instance adopts from card class',
+      );
+    });
+
+    test('"instanceOf()" returns false when instance does not adopt from the provided card class', async function (assert) {
+      class Foo extends CardDef {}
+      class Bar extends CardDef {}
+      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar });
+
+      assert.false(
+        instanceOf(new Bar(), Foo),
+        'instance does not adopt from card class',
+      );
+    });
+
+    test('"instanceOf()" returns true after loader reset when instance adopts from the provided card class', async function (assert) {
+      class Foo extends CardDef {}
+      class Bar extends Foo {}
+      class Baz extends Bar {}
+      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
+
+      lookupLoaderService().resetLoader();
+
+      assert.true(
+        instanceOf(new Baz(), Foo),
+        'instance adopts from card class',
+      );
     });
 
     test('primitive field type checking', async function (assert) {
@@ -2068,6 +2116,10 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        TestCard,
+        SubTestField,
+      });
 
       let card = new TestCard({
         specialField: new TestField({
@@ -2143,6 +2195,7 @@ module('Integration | card-basics', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCardWithField,
         TestCard,
+        SubTestField,
       });
       let cardWithField1 = new TestCardWithField({});
       let cardWithField2 = new TestCardWithField({});
