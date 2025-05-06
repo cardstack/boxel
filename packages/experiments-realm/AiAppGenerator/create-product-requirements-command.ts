@@ -7,7 +7,7 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { ProductRequirementDocument } from '../product-requirement-document';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { Skill } from 'https://cardstack.com/base/skill';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
 import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-instance';
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
@@ -34,7 +34,7 @@ export default class CreateProductRequirementsInstance extends Command<
   inputType = CreateProductRequirementsInput;
 
   get skillCard() {
-    return new SkillCard({
+    return new Skill({
       id: 'prd-helper-skill',
       name: 'PRD Helper',
       description:
