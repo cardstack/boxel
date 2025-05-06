@@ -872,7 +872,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       .containsText('I sent a message from the background.');
   });
 
-  test('ensures cards are reuploaded when only content changes', async function (assert) {
+  test('ensures cards are reuploaded only when content changes', async function (assert) {
     let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
 
     // Send first message with the card
