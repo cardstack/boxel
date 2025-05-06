@@ -11,7 +11,7 @@ import {
 
 import { handleDebugCommands } from './lib/debug';
 import { constructHistory } from './lib/history';
-import { MatrixClient } from './lib/matrix';
+import type { MatrixClient } from './lib/matrix/util';
 import { Responder } from './lib/responder';
 import {
   shouldSetRoomTitle,
