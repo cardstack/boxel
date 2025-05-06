@@ -41,6 +41,9 @@ export class CardResource extends Resource<Args> {
     }
   }
 
+  // Note that this will return a stale instance when the server state for this
+  // id becomes an error. use this.cardError to see the live server state for
+  // this instance.
   get card() {
     if (!this.#id) {
       return undefined;
@@ -53,7 +56,7 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-    let maybeError = this.store.peek(this.#id);
+    let maybeError = this.store.peekError(this.#id);
     return maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
   }
 

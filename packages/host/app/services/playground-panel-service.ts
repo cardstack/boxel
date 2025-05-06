@@ -56,4 +56,14 @@ export default class PlaygroundPanelService extends Service {
       this.setStorage();
     }
   };
+
+  // this is a way to check local storage without using `this.playgroundSelections` tracked object (which may throw revalidation bugs if `persistSelections` is called afterwards)
+  // this is only used for looking up a selection. Changes made to this will NOT be tracked!
+  peekSelection(moduleId: string): PlaygroundSelection | undefined {
+    let selections = window.localStorage.getItem(PlaygroundSelections);
+    if (!selections?.length) {
+      return;
+    }
+    return JSON.parse(selections)?.[moduleId];
+  }
 }

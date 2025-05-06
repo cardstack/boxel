@@ -593,8 +593,16 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
       assert.dom('[data-option-index="1"]').hasText('Needs better packaging');
 
       await selectDeclaration('BlogPost'); // card def selected
-      assert.dom('[data-test-selected-item]').doesNotExist();
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom('[data-test-selected-item]')
+        .containsText('Remote Work', 'most-recent card is pre-selected');
+      assertCardExists(assert, `${testRealmURL}BlogPost/remote-work`);
+
+      await selectDeclaration('ContactInfo');
+      assertFieldExists(assert, 'embedded');
+      assert
+        .dom('[data-test-selected-item]')
+        .hasText('Contact Info - Example 1');
     });
 
     test('changing the selected spec in Boxel Spec panel changes selected spec in playground', async function (assert) {

@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test, skip } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -214,10 +214,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               ],
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },
@@ -245,10 +242,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               ],
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },

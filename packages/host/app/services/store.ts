@@ -213,6 +213,23 @@ export default class StoreService extends Service implements StoreInterface {
 
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
+    opts: {
+      realm?: string;
+      relativeTo?: URL | undefined;
+      // if you don't save then there is no possibility for error, hence a
+      // simpler return type
+      doNotPersist: true;
+    },
+  ): Promise<T>;
+  async add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: {
+      realm?: string;
+      relativeTo?: URL | undefined;
+    },
+  ): Promise<T | CardErrorJSONAPI>;
+  async add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
     opts?: {
       // TODO: apparently this is getting abused by the catalog actions and we
       // are using this to tell the store the folder _within_ the realm to
@@ -221,7 +238,7 @@ export default class StoreService extends Service implements StoreInterface {
       relativeTo?: URL | undefined;
       doNotPersist?: true;
     },
-  ) {
+  ): Promise<T | CardErrorJSONAPI> {
     // need to figure out the actual realm because opts.realm is being abused
     let realmURL = opts?.realm
       ? this.realm.realmOfURL(new URL(opts.realm))?.href
@@ -260,25 +277,35 @@ export default class StoreService extends Service implements StoreInterface {
       );
     }
 
-    this.identityContext.set(instance.id ?? instance[localIdSymbol], instance);
+    await this.updateInstanceChangeSubscription('start-tracking', instance);
 
     if (!opts?.doNotPersist) {
-      // in this branch we wire up the instance change subscription after the
-      // initial save since the caller indicated they are willing to await the
-      // save and we may not actually have an instance yet
       if (instance.id) {
         this.save(instance.id);
       } else {
-        await this.persistAndUpdate(instance, opts?.realm);
+        return (await this.persistAndUpdate(instance, opts?.realm)) as
+          | T
+          | CardErrorJSONAPI;
       }
-    } else {
-      await this.updateInstanceChangeSubscription('start-tracking', instance);
     }
+
     return instance;
   }
 
+  // peek will return a stale instance in the case the server has an error for
+  // this id
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
     return this.identityContext.getInstanceOrError(id) as T | undefined;
+  }
+
+  // peekError will always return the current server state regarding errors for this id
+  peekError(id: string): CardErrorJSONAPI | undefined {
+    return this.identityContext.getError(id);
+  }
+
+  // peekLive will always return the current server state for both instances and errors
+  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined {
+    return this.peekError(id) ?? this.peek(id);
   }
 
   async get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI> {
@@ -298,7 +325,7 @@ export default class StoreService extends Service implements StoreInterface {
   async patch<T extends CardDef = CardDef>(
     id: string,
     patch: PatchData,
-  ): Promise<T | undefined> {
+  ): Promise<T | CardErrorJSONAPI | undefined> {
     // eslint-disable-next-line ember/classic-decorator-no-classic-methods
     let instance = await this.get<T>(id);
     if (!instance || !isCardInstance(instance)) {
@@ -343,8 +370,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let api = await this.cardService.getAPI();
     await api.updateFromSerialized(instance, doc, this.identityContext);
-    await this.persistAndUpdate(instance);
-    return instance;
+    return (await this.persistAndUpdate(instance)) as T | CardErrorJSONAPI;
   }
 
   async search(query: Query, realmURL: URL): Promise<CardDef[]> {
@@ -403,11 +429,20 @@ export default class StoreService extends Service implements StoreInterface {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
+        let instanceOrError = this.peek(id);
         if (isLocalId(id)) {
+          if (instanceOrError) {
+            let realmURL = isCardInstance(instanceOrError)
+              ? instanceOrError[realmURLSymbol]?.href
+              : instanceOrError.realm;
+            if (realmURL) {
+              this.subscribeToRealm(new URL(realmURL));
+            }
+          }
           deferred.fulfill();
           return;
         }
-        let instanceOrError = this.peek(id);
+
         if (!instanceOrError) {
           instanceOrError = await this.getInstance({
             urlOrDoc: id,
@@ -518,8 +553,8 @@ export default class StoreService extends Service implements StoreInterface {
         // we already dealt with this
         continue;
       }
-      let instance = this.identityContext.get(invalidation);
-      if (instance) {
+      let instance = this.peekLive(invalidation);
+      if (instance && isCardInstance(instance)) {
         // Do not reload if the event is a result of an instance-editing request that we made. Otherwise we risk
         // overwriting the inputs with past values. This can happen if the user makes edits in the time between
         // the auto save request and the arrival realm event.
@@ -554,7 +589,7 @@ export default class StoreService extends Service implements StoreInterface {
         if (reloadFile) {
           this.reloadTask.perform(instance);
         }
-      } else if (!this.identityContext.get(invalidation)) {
+      } else {
         // load the card using just the ID because we don't have a running card on hand
         realmEventsLogger.debug(
           `reloading file resource ${invalidation} because it is not found in the identity context`,
@@ -693,7 +728,10 @@ export default class StoreService extends Service implements StoreInterface {
           doc,
           relativeTo,
         );
-        await this.persistAndUpdate(newInstance, realm);
+        let maybeError = await this.persistAndUpdate(newInstance, realm);
+        if (!isCardInstance(maybeError)) {
+          return maybeError;
+        }
         this.identityContext.set(newInstance.id, newInstance);
         deferred?.fulfill(newInstance);
         return newInstance as T;
@@ -732,7 +770,7 @@ export default class StoreService extends Service implements StoreInterface {
       // "/index") we also add this
       this.identityContext.set(url, instance);
       deferred?.fulfill(instance);
-      if (!existingInstance) {
+      if (!existingInstance || !isCardInstance(existingInstance)) {
         await this.updateInstanceChangeSubscription('start-tracking', instance);
       }
       return instance as T;
@@ -774,11 +812,12 @@ export default class StoreService extends Service implements StoreInterface {
         if (!opts?.isImmediate) {
           await timeout(25);
         }
-        await this.saveInstance(instance, opts);
+        let maybeError = await this.saveInstance(instance, opts);
         autoSaveState.hasUnsavedChanges = false;
         autoSaveState.lastSaved = Date.now();
-        autoSaveState.lastSaveError = undefined;
         autoSaveState.lastSavedErrorMsg = undefined;
+        autoSaveState.lastSaveError =
+          maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
       } catch (error) {
         // error will already be logged in CardService
         autoSaveState.lastSaveError = error as Error;
@@ -814,11 +853,15 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async saveInstance(instance: CardDef, opts?: { isImmediate?: true }) {
     if (opts?.isImmediate) {
-      await this.persistAndUpdate(instance);
+      return await this.persistAndUpdate(instance);
     } else {
       // these saves can happen so fast that we'll make sure to wait at
       // least 500ms for human consumption
-      await Promise.all([this.persistAndUpdate(instance), delay(500)]);
+      let [result] = await Promise.all([
+        this.persistAndUpdate(instance),
+        delay(500),
+      ]);
+      return result;
     }
   }
 
@@ -856,8 +899,14 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private getErrorMessage(error: Error) {
-    if ((error as any).responseHeaders?.get('x-blocked-by-waf-rule')) {
+  private getErrorMessage(error: CardErrorJSONAPI | Error) {
+    if (
+      'meta' in error &&
+      typeof error.meta === 'object' &&
+      'responseHeaders' in error.meta &&
+      typeof error.meta.responseHeaders === 'object' &&
+      error.meta.responseHeaders['x-blocked-by-waf-rule']
+    ) {
       return 'Rejected by firewall';
     }
     if (error.message) {
@@ -869,13 +918,14 @@ export default class StoreService extends Service implements StoreInterface {
   private async persistAndUpdate(
     instance: CardDef,
     defaultRealmHref?: string,
-  ): Promise<void> {
-    await this.withTestWaiters(async () => {
+  ): Promise<CardDef | CardErrorJSONAPI> {
+    return await this.withTestWaiters(async () => {
       let cardChanged = false;
       function onCardChange() {
         cardChanged = true;
       }
       let api: typeof CardAPI | undefined;
+      let isNew = !instance.id;
       try {
         api = await this.cardService.getAPI();
         api.subscribeToChanges(instance, onCardChange);
@@ -901,7 +951,6 @@ export default class StoreService extends Service implements StoreInterface {
           realmURL = new URL(defaultRealmHref);
         }
         let json = await this.saveCardDocument(doc, realmURL);
-        let isNew = !instance.id;
 
         // if the card changed while the save was in flight then don't merge the
         // server state--the next auto save will include these
@@ -914,7 +963,7 @@ export default class StoreService extends Service implements StoreInterface {
           // in this case a new card was created, but there is an immediate change
           // that was made--so we save off the new ID for the card so in the next
           // save we'll correlate to the correct card ID
-          instance.id = json.data.id!; // resources from the server will have ID's
+          api.setId(instance, json.data.id!); // resources from the server will always have ID's
         }
         if (this.onSaveSubscriber) {
           this.onSaveSubscriber(new URL(json.data.id!), json);
@@ -931,9 +980,19 @@ export default class StoreService extends Service implements StoreInterface {
             instance,
           );
         }
+        return instance;
       } catch (err) {
         console.error(`Failed to save ${instance.id}: `, err);
-        throw err;
+        let errorResponse = processCardError(
+          instance.id ?? instance[localIdSymbol],
+          err,
+        );
+        let cardError = errorResponse.errors[0];
+        await this.updateInstanceChangeSubscription(
+          'start-tracking',
+          cardError,
+        );
+        return cardError;
       } finally {
         api?.unsubscribeFromChanges(instance, onCardChange);
       }
@@ -1104,7 +1163,7 @@ function processCardError(
           message: `The card ${url} does not exist`,
         });
       default:
-        return formattedError(url, error);
+        return formattedError(url, error, undefined);
     }
   }
 }

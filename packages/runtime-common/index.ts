@@ -99,7 +99,12 @@ export {
   cardTypeDisplayName,
   cardTypeIcon,
 } from './helpers/card-type-display-name';
-export { maybeRelativeURL, maybeURL, relativeURL } from './url';
+export {
+  maybeRelativeURL,
+  maybeURL,
+  relativeURL,
+  trimJsonExtension,
+} from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -262,7 +267,7 @@ export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
   lastSaved: number | undefined;
-  lastSaveError: Error | undefined;
+  lastSaveError: CardErrorJSONAPI | Error | undefined;
   lastSavedErrorMsg: string | undefined;
 };
 export type getCard<T extends CardDef = CardDef> = (
@@ -315,14 +320,16 @@ export interface Store {
       relativeTo?: URL | undefined;
       doNotPersist?: true;
     },
-  ): Promise<T>;
+  ): Promise<T | CardErrorJSONAPI>;
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  peekError(id: string): CardErrorJSONAPI | undefined;
   get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
     patchData: PatchData,
-  ): Promise<T | undefined>;
+  ): Promise<T | CardErrorJSONAPI | undefined>;
   search(query: Query, realmURL: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }

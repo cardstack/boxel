@@ -268,7 +268,7 @@ module('Responding', (hooks) => {
       {} as any,
       snapshotWithToolCall({
         id: 'some-tool-call-id',
-        name: 'patchCard',
+        name: 'patchCardInstance',
         arguments: patchArgs,
       }),
     );
@@ -294,7 +294,7 @@ module('Responding', (hooks) => {
       [
         {
           id: 'some-tool-call-id',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments:
             '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
@@ -336,7 +336,7 @@ module('Responding', (hooks) => {
     await responder.onChunk(
       {} as any,
       snapshotWithToolCall({
-        name: 'patchCard',
+        name: 'patchCardInstance',
         arguments: { description: 'A new' },
       }),
     );
@@ -347,7 +347,7 @@ module('Responding', (hooks) => {
       {} as any,
       snapshotWithToolCall({
         id: 'some-tool-call-id',
-        name: 'patchCard',
+        name: 'patchCardInstance',
         arguments: patchArgs,
       }),
     );
@@ -374,7 +374,7 @@ module('Responding', (hooks) => {
       sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
       [
         {
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: '{"description":"A new"}',
         },
       ],
@@ -385,7 +385,7 @@ module('Responding', (hooks) => {
       [
         {
           id: 'some-tool-call-id',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments:
             '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
