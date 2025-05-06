@@ -145,4 +145,8 @@ export class Message implements RoomMessageInterface {
     }
     return this._isStreamingFinished;
   }
+
+  get isStreamingOfEventFinished(): boolean {
+    return this._isStreamingFinished === true;
+  }
 }

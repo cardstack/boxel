@@ -73,4 +73,13 @@ export default class ResponseState {
     }
     return false;
   }
+
+  snapshot() {
+    return {
+      reasoning: this.latestReasoning,
+      content: this.latestContent,
+      toolCalls: this.toolCalls,
+      isStreamingFinished: this.isStreamingFinished,
+    };
+  }
 }

@@ -69,6 +69,9 @@ export class Responder {
   }
 
   sendMessageEventWithThrottling = () => {
+    if (this.needsMessageSend) {
+      return; // already scheduled
+    }
     this.needsMessageSend = true;
     this.sendMessageEventWithThrottlingInternal();
   };
@@ -105,6 +108,13 @@ export class Responder {
       snapshot.choices?.[0]?.message?.tool_calls,
       chunk.choices?.[0]?.finish_reason === 'stop',
     );
+    log.debug('onChunk', {
+      reasoning: this.responseState.latestReasoning,
+      content: this.responseState.latestContent,
+      toolCalls: this.responseState.toolCalls,
+      isStreamingFinished: this.responseState.isStreamingFinished,
+      responseStateChanged,
+    });
     if (responseStateChanged) {
       await this.sendMessageEventWithThrottling();
     }
@@ -155,10 +165,18 @@ export class Responder {
       }
     }
   }
-
+  isFinalized = false;
   async finalize() {
+    if (this.isFinalized) {
+      return;
+    }
+    this.isFinalized = true;
+
     let isStreamingFinishedChanged =
       this.responseState.updateIsStreamingFinished(true);
+    log.debug('finalize', {
+      isStreamingFinishedChanged,
+    });
     if (isStreamingFinishedChanged) {
       await this.sendMessageEventWithThrottling();
     }

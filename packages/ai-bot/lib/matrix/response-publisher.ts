@@ -9,6 +9,9 @@ import {
 } from '@cardstack/runtime-common';
 import type { CardMessageContent } from 'https://cardstack.com/base/matrix-event';
 import ResponseEventData from './response-event-data';
+import { logger } from '@cardstack/runtime-common';
+
+let log = logger('ai-bot');
 
 function toCommandRequest(
   toolCall: ChatCompletionMessageToolCall,
@@ -67,6 +70,7 @@ export default class MatrixResponsePublisher {
   ) {}
 
   async sendMessage() {
+    let responseStateSnapshot = this.responseState.snapshot();
     // Wait for previous sends to complete
     const sendOperation = this.sendingMessage.then(async () => {
       if (!this.currentResponseEvent) {
@@ -76,14 +80,18 @@ export default class MatrixResponsePublisher {
       }
       while (
         this.currentResponseEvent.wouldExceedMaxSize(
-          this.responseState.latestReasoning,
-          this.responseState.latestContent,
+          responseStateSnapshot.reasoning,
+          responseStateSnapshot.content,
         )
       ) {
+        log.debug(
+          'matrix/reponse-publisher',
+          'message would exceed max size, splitting',
+        );
         let reasoningAndContent =
           this.currentResponseEvent.reasoningAndContentForNextMessage(
-            this.responseState.latestReasoning,
-            this.responseState.latestContent,
+            responseStateSnapshot.reasoning,
+            responseStateSnapshot.content,
           );
         let extraData: Partial<CardMessageContent> = {
           isStreamingFinished: true,
@@ -93,19 +101,19 @@ export default class MatrixResponsePublisher {
           extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
             this.previousResponseEventId;
         }
+        this.currentResponseEvent.updateEndIndices(reasoningAndContent);
+        this.currentResponseEvent.needsContinuation = true;
         let messageEvent = await sendMessageEvent(
           this.client,
           this.roomId,
           reasoningAndContent.content,
           this.currentResponseEventId,
           extraData,
-          this.responseState.toolCalls.map((toolCall) =>
+          responseStateSnapshot.toolCalls.map((toolCall) =>
             toCommandRequest(toolCall as ChatCompletionMessageToolCall),
           ),
           reasoningAndContent.reasoning,
         );
-        this.currentResponseEvent.updateEndIndices(reasoningAndContent);
-        this.currentResponseEvent.needsContinuation = true;
         if (!this.currentResponseEvent.eventId) {
           this.currentResponseEvent.eventId = messageEvent.event_id;
         }
@@ -114,11 +122,13 @@ export default class MatrixResponsePublisher {
 
       let contentAndReasoning =
         this.currentResponseEvent.reasoningAndContentForNextMessage(
-          this.responseState.latestReasoning,
-          this.responseState.latestContent,
+          responseStateSnapshot.reasoning,
+          responseStateSnapshot.content,
         );
+      log.debug('matrix/reponse-publisher', contentAndReasoning);
+
       let extraData: any = {
-        isStreamingFinished: this.responseState.isStreamingFinished,
+        isStreamingFinished: responseStateSnapshot.isStreamingFinished,
       };
       if (this.currentResponseEvent.needsContinuation) {
         extraData[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] =
@@ -134,7 +144,7 @@ export default class MatrixResponsePublisher {
         contentAndReasoning.content,
         this.currentResponseEventId,
         extraData,
-        this.responseState.toolCalls.map((toolCall) =>
+        responseStateSnapshot.toolCalls.map((toolCall) =>
           toCommandRequest(toolCall as ChatCompletionMessageToolCall),
         ),
         contentAndReasoning.reasoning,
