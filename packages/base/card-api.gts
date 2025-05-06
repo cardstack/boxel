@@ -40,6 +40,7 @@ import {
   localId,
   formats,
   meta,
+  baseRef,
   type Format,
   type Meta,
   type CardFields,
@@ -201,6 +202,10 @@ const subscribers = initSharedState(
   'subscribers',
   () => new WeakMap<BaseDef, Set<CardChangeSubscriber>>(),
 );
+const subscriberConsumer = initSharedState(
+  'subscriberConsumer',
+  () => new WeakMap<BaseDef, { fieldOrCard: BaseDef; fieldName: string }>(),
+);
 const fieldDescriptions = initSharedState(
   'fieldDescriptions',
   () => new WeakMap<typeof BaseDef, Map<string, string>>(),
@@ -225,6 +230,22 @@ export function getFieldDescription(
     fieldDescriptions.set(cardOrFieldKlass, descriptionsMap);
   }
   return descriptionsMap.get(fieldName);
+}
+
+export function instanceOf(instance: BaseDef, clazz: typeof BaseDef): boolean {
+  let instanceClazz: typeof BaseDef | null = instance.constructor;
+  let codeRefInstance: CodeRef | undefined;
+  let codeRefClazz = identifyCard(clazz);
+  do {
+    codeRefInstance = instanceClazz ? identifyCard(instanceClazz) : undefined;
+    if (isEqual(codeRefInstance, codeRefClazz)) {
+      return true;
+    }
+    instanceClazz = instanceClazz
+      ? (Reflect.getPrototypeOf(instanceClazz) as typeof BaseDef | null)
+      : null;
+  } while (codeRefInstance && !isEqual(codeRefInstance, baseRef));
+  return false;
 }
 
 function setFieldDescription(
@@ -636,7 +657,7 @@ class ContainsMany<FieldT extends FieldDefConstructor>
       // todo: primitives could implement a validation symbol
     } else {
       for (let [index, item] of values.entries()) {
-        if (item != null && !(item instanceof this.card)) {
+        if (item != null && !instanceOf(item, this.card)) {
           throw new Error(
             `field validation error: tried set instance of ${values.constructor.name} at index ${index} of field '${this.name}' but it is not an instance of ${this.card.name}`,
           );
@@ -807,7 +828,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
     if (primitive in this.card) {
       // todo: primitives could implement a validation symbol
     } else {
-      if (value != null && !(value instanceof this.card)) {
+      if (value != null && !instanceOf(value, this.card)) {
         throw new Error(
           `field validation error: tried set instance of ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
@@ -1032,7 +1053,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
       if (isNotLoadedValue(value)) {
         return value;
       }
-      if (!(value instanceof this.card)) {
+      if (!instanceOf(value, this.card)) {
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
         );
@@ -1460,7 +1481,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       if (
         !isNotLoadedValue(value) &&
         value != null &&
-        !(value instanceof this.card)
+        !instanceOf(value, this.card)
       ) {
         throw new Error(
           `field validation error: tried set ${value.constructor.name} as field '${this.name}' but it is not an instance of ${this.card.name}`,
@@ -2035,10 +2056,20 @@ export type FieldDefConstructor = typeof FieldDef;
 export function subscribeToChanges(
   fieldOrCard: BaseDef | BaseDef[],
   subscriber: CardChangeSubscriber,
+  enclosing?: { fieldOrCard: BaseDef; fieldName: string },
 ) {
   if (isArrayOfCardOrField(fieldOrCard)) {
-    fieldOrCard.forEach((item) => {
-      subscribeToChanges(item, subscriber);
+    fieldOrCard.forEach((item, i) => {
+      subscribeToChanges(
+        item,
+        subscriber,
+        enclosing
+          ? {
+              fieldOrCard: enclosing.fieldOrCard,
+              fieldName: `${enclosing.fieldName}.${i}`,
+            }
+          : undefined,
+      );
     });
     return;
   }
@@ -2054,6 +2085,9 @@ export function subscribeToChanges(
   }
 
   changeSubscribers.add(subscriber);
+  if (enclosing) {
+    subscriberConsumer.set(fieldOrCard, enclosing);
+  }
 
   let fields = getFields(fieldOrCard, {
     usedLinksToFieldsOnly: true,
@@ -2069,7 +2103,12 @@ export function subscribeToChanges(
     ) {
       let value = peekAtField(fieldOrCard, fieldName);
       if (isCardOrField(value) || isArrayOfCardOrField(value)) {
-        subscribeToChanges(value, subscriber);
+        subscribeToChanges(value, subscriber, {
+          fieldOrCard: enclosing?.fieldOrCard ?? fieldOrCard,
+          fieldName: enclosing?.fieldName
+            ? `${enclosing.fieldName}.${fieldName}`
+            : fieldName,
+        });
       }
     }
   });
@@ -2157,9 +2196,12 @@ function applySubscribersToInstanceValue(
   let addedItems = newItems.filter((item) => !oldItems.includes(item));
   let removedItems = oldItems.filter((item) => !newItems.includes(item));
 
-  addedItems.forEach((item) =>
+  addedItems.forEach((item, i) =>
     changeSubscribers!.forEach((subscriber) =>
-      subscribeToChanges(item, subscriber),
+      subscribeToChanges(item, subscriber, {
+        fieldOrCard: instance,
+        fieldName: `${field.name}.${i}`,
+      }),
     ),
   );
 
@@ -2220,6 +2262,16 @@ function assertScalar(
         fieldCard.name
       } to be scalar but was ${typeof scalar}`,
     );
+  }
+}
+
+export function setId(instance: CardDef, id: string) {
+  let field = getField(
+    Reflect.getPrototypeOf(instance)!.constructor as typeof BaseDef,
+    'id',
+  );
+  if (field) {
+    setField(instance, field, id);
   }
 }
 
@@ -2782,23 +2834,7 @@ function makeDescriptor<
           }' because it is a read-only field`,
         );
       }
-      value = field.validate(this, value);
-      let deserialized = getDataBucket(this);
-      deserialized.set(field.name, value);
-      // invalidate all computed fields because we don't know which ones depend on this one
-      for (let computedFieldName of Object.keys(getComputedFields(this))) {
-        if (deserialized.has(computedFieldName)) {
-          let currentValue = deserialized.get(computedFieldName);
-          if (!isStaleValue(currentValue)) {
-            deserialized.set(computedFieldName, {
-              type: 'stale',
-              staleValue: currentValue,
-            } as StaleValue);
-          }
-        }
-      }
-      notifySubscribers(this, field.name, value);
-      logger.log(recompute(this));
+      setField(this, field, value);
     };
   }
   if (field.description) {
@@ -2808,12 +2844,50 @@ function makeDescriptor<
   return descriptor;
 }
 
-function notifySubscribers(instance: BaseDef, fieldName: string, value: any) {
+function setField(instance: BaseDef, field: Field, value: any) {
+  value = field.validate(instance, value);
+  let deserialized = getDataBucket(instance);
+  deserialized.set(field.name, value);
+  // invalidate all computed fields because we don't know which ones depend on this one
+  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
+    if (deserialized.has(computedFieldName)) {
+      let currentValue = deserialized.get(computedFieldName);
+      if (!isStaleValue(currentValue)) {
+        deserialized.set(computedFieldName, {
+          type: 'stale',
+          staleValue: currentValue,
+        } as StaleValue);
+      }
+    }
+  }
+  notifySubscribers(instance, field.name, value);
+  logger.log(recompute(instance));
+}
+
+function notifySubscribers(
+  instance: BaseDef,
+  fieldName: string,
+  value: any,
+  visited = new WeakSet<BaseDef>(),
+) {
+  if (visited.has(instance)) {
+    return;
+  }
+  visited.add(instance);
   let changeSubscribers = subscribers.get(instance);
   if (changeSubscribers) {
     for (let subscriber of changeSubscribers) {
       subscriber(instance, fieldName, value);
     }
+  }
+  let consumer = subscriberConsumer.get(instance);
+  if (consumer) {
+    notifySubscribers(
+      consumer.fieldOrCard,
+      `${consumer.fieldName}.${fieldName}`,
+      value,
+      visited,
+    );
   }
 }
 

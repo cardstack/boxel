@@ -2,6 +2,7 @@ import { fn } from '@ember/helper';
 import { action } from '@ember/object';
 
 import { service } from '@ember/service';
+import { htmlSafe, type SafeString } from '@ember/template';
 
 import Component from '@glimmer/component';
 
@@ -11,7 +12,7 @@ import {
   CardContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
-import { eq, MenuItem, not } from '@cardstack/boxel-ui/helpers';
+import { eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { Eye, IconCode, IconLink } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -69,19 +70,25 @@ export default class PlaygroundContent extends Component<Signature> {
   <template>
     {{consumeContext @makeCardResource}}
     <section class='playground-panel' data-test-playground-panel>
-      <div class='playground-panel-content'>
+      <div
+        class='playground-panel-content'
+        style={{this.styleForPlaygroundContent}}
+      >
         {{#let (if @isFieldDef @field @card) as |card|}}
-          {{#if @cardError}}
-            <CardContainer
-              class='error-container'
-              @displayBoundaries={{true}}
-              data-test-error-container
-            >
-              <CardError
-                @error={{@cardError}}
-                @cardCreationError={{not @cardError.id}}
-              />
-            </CardContainer>
+          {{#if this.showError}}
+            {{! this is for types--@cardError is always true in this case !}}
+            {{#if @cardError}}
+              <CardContainer
+                class='error-container'
+                @displayBoundaries={{true}}
+                data-test-error-container
+              >
+                <CardError
+                  @error={{@cardError}}
+                  @cardCreationError={{@cardError.meta.isCreationError}}
+                />
+              </CardContainer>
+            {{/if}}
           {{else if card}}
             <div
               class='preview-area'
@@ -127,6 +134,7 @@ export default class PlaygroundContent extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp);
         min-height: 100%;
+        margin-inline: auto;
       }
       .preview-area {
         flex-grow: 1;
@@ -198,6 +206,15 @@ export default class PlaygroundContent extends Component<Signature> {
     );
   };
 
+  private get showError() {
+    // in edit format, prefer showing the stale card if possible so user can
+    // attempt to fix the card error
+    if (this.args.cardError && this.args.format === 'edit' && this.args.card) {
+      return false;
+    }
+    return Boolean(this.args.cardError);
+  }
+
   private get contextMenuItems() {
     if (!this.args.card?.id) {
       return undefined;
@@ -242,5 +259,23 @@ export default class PlaygroundContent extends Component<Signature> {
         this.args.card?.id &&
         this.realm.canWrite(this.args.card.id),
     );
+  }
+
+  private get isWideFormat() {
+    if (!this.args.card) {
+      return false;
+    }
+    let { constructor } = this.args.card;
+    return Boolean(
+      constructor &&
+        'prefersWideFormat' in constructor &&
+        constructor.prefersWideFormat,
+    );
+  }
+
+  private get styleForPlaygroundContent(): SafeString {
+    const maxWidth =
+      this.args.format !== 'isolated' || this.isWideFormat ? '100%' : '50rem';
+    return htmlSafe(`max-width: ${maxWidth};`);
   }
 }
