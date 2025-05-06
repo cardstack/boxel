@@ -1205,5 +1205,52 @@ module('Acceptance | operator mode tests', function (hooks) {
       await click('[data-test-open-ai-assistant]');
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
     });
+
+    test(`removes local storage when logging out`, async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      window.localStorage.setItem(
+        'recent-cards',
+        JSON.stringify(`${testRealmURL}Pet/mango.json`),
+      );
+      window.localStorage.setItem(
+        'recent-files',
+        JSON.stringify([
+          [
+            testRealmURL,
+            'Pet/mango.json',
+            {
+              line: 1,
+              column: 2,
+            },
+          ],
+        ]),
+      );
+      window.localStorage.setItem(
+        'scroll-positions',
+        JSON.stringify({ 'file-tree': [`${testRealmURL}Pet/mango.json`, 2] }),
+      );
+      window.localStorage.setItem(
+        'playground-selections',
+        JSON.stringify({
+          [`${testRealmURL}Pet/mango.json`]: {
+            cardId: `${testRealmURL}Pet/mango.json`,
+            format: 'edit',
+          },
+        }),
+      );
+      await click('[data-test-profile-icon-button]');
+      await click('[data-test-signout-button]');
+      assert.strictEqual(window.localStorage.getItem('recent-cards'), null);
+      assert.strictEqual(window.localStorage.getItem('recent-files'), null);
+      assert.strictEqual(window.localStorage.getItem('scroll-positions'), null);
+      assert.strictEqual(
+        window.localStorage.getItem('playground-selections'),
+        null,
+      );
+
+      assert.dom('[data-test-login-btn]').exists();
+    });
   });
 });
