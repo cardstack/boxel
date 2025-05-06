@@ -88,23 +88,32 @@ jobs:
           DIFF_CONTENT=$(printf "%s\n" "${DIFFS[@]}")
 
           # Set output
-          echo "diff_content<<EOF" >> $GITHUB_OUTPUT
-          echo "$DIFF_CONTENT" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "DIFF_CONTENT: $DIFF_CONTENT"
+          diff_file="$RUNNER_TEMP/skill-card-diff.md"   # $RUNNER_TEMP survives the job
+          printf '%s\n' "$DIFF_CONTENT" > "$diff_file"
+
+          echo "diff_file=$diff_file" >> "$GITHUB_OUTPUT"
 
       - name: Create comment if there are changes
-        if: steps.process-changes.outputs.diff_content != ''
+        if: steps.process-changes.outputs.diff_file != ''
         continue-on-error: true
         uses: actions/github-script@v7
         with:
           script: |
-            const diffContent = ${{ toJSON(steps.process-changes.outputs.diff_content) }}; // Get output directly
-            const { data: comments } = await github.rest.issues.listComments({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-            });
+            const fs = require('fs');
+            const diffPath = '${{ steps.process-changes.outputs.diff_file }}';
+            const diffContent = fs.readFileSync(diffPath, 'utf8');
+
+            // (optionally truncate to stay within GitHub’s 65 536-char comment limit)
+            const MAX = 60000;
+            const bodyText =
+              diffContent.length > MAX
+            ? diffContent.slice(0, MAX) + '\n\n*(truncated — see artifact for full diff)*'
+            : diffContent;
+              const { data: comments } = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              });
 
             // Check if we already have a comment from this workflow
             const existingComment = comments.find(comment =>
@@ -132,3 +141,10 @@ jobs:
               });
             }
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload artifact if there are changes
+        if: steps.process-changes.outputs.diff_file != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: skill-card-full-diff
+          path: ${{ steps.process-changes.outputs.diff_file }}
