@@ -64,11 +64,9 @@ jobs:
           run: pnpm start:all | tee -a /tmp/server.log &
           working-directory: packages/realm-server
           wait-for: 5m
-          # FIXME these are taken from test-wait-for-servers, is that now redundant?
           wait-on: |
             http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson
             http-get://localhost:4202/test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson
-            http://localhost:8008
             http://localhost:5001
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: pnpm test-with-percy
