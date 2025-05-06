@@ -12,6 +12,7 @@ import {
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFileDef, downloadFile, MatrixClient } from './matrix';
@@ -103,6 +104,11 @@ export async function constructHistory(
             event.content[APP_BOXEL_REASONING_CONTENT_KEY] ??
             '' + continuationEvent.content[APP_BOXEL_REASONING_CONTENT_KEY] ??
             '';
+          event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] = (
+            event.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []
+          ).concat(
+            continuationEvent.content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? [],
+          );
           event.origin_server_ts = continuationEvent.origin_server_ts;
           delete event.content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY];
         }

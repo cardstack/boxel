@@ -738,7 +738,13 @@ module('constructHistory', (hooks) => {
           msgtype: 'app.boxel.message',
           format: 'org.matrix.custom.html',
           'app.boxel.reasoning': '',
-          'app.boxel.commandRequests': [],
+          'app.boxel.commandRequests': [
+            {
+              commandRequestId: 'tool-call-id-1',
+              commandName: 'command-name',
+              commandArgs: ['arg1', 'arg2'],
+            },
+          ],
           isStreamingFinished: true,
           'app.boxel.continuation-of': '0',
           'm.relates_to': {
@@ -763,7 +769,13 @@ module('constructHistory', (hooks) => {
           msgtype: 'app.boxel.message',
           format: 'org.matrix.custom.html',
           'app.boxel.reasoning': 'a'.repeat(1024),
-          'app.boxel.commandRequests': [],
+          'app.boxel.commandRequests': [
+            {
+              commandRequestId: 'tool-call-id-1',
+              commandName: 'command-name',
+              commandArgs: ['arg1', 'arg2'],
+            },
+          ],
           isStreamingFinished: true,
         },
       } as unknown as CardMessageEvent,
