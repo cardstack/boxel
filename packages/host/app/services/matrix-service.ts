@@ -634,6 +634,19 @@ export default class MatrixService extends Service {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
 
+  async uploadCardsAndUpdateSkillCommands(cards: CardDef[], roomId: string) {
+    let roomResource = this.roomResources.get(roomId);
+    if (!roomResource) {
+      throw new Error(`Room resource not found for room ${roomId}`);
+    }
+    return await this.client.uploadCardsAndUpdateSkillCommands(
+      cards,
+      roomResource,
+      (roomId, eventType, stateKey, transformContent) =>
+        this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+    );
+  }
+
   async uploadCards(cards: CardDef[]) {
     let cardFileDefs = await this.client.uploadCards(cards);
     return cardFileDefs;
@@ -733,21 +746,9 @@ export default class MatrixService extends Service {
       }
     }
 
-    let roomResource = this.roomResources.get(roomId);
-    if (!roomResource) {
-      throw new Error(`Room resource not found for room ${roomId}`);
-    }
-    let cardFileDefs = await this.client.uploadCardsAndUpdateSkillCommands(
+    let cardFileDefs = await this.uploadCardsAndUpdateSkillCommands(
       attachedCards,
-      roomResource,
-      (
-        roomId: string,
-        eventType: string,
-        stateKey: string,
-        transformContent: (
-          content: Record<string, any>,
-        ) => Promise<Record<string, any>>,
-      ) => this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+      roomId,
     );
 
     await this.sendEvent(roomId, 'm.room.message', {

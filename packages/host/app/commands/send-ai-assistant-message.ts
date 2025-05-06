@@ -107,8 +107,9 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       files = await this.matrixService.uploadFiles(files);
     }
 
-    let cardFileDefs = await matrixService.uploadCards(
+    let cardFileDefs = await matrixService.uploadCardsAndUpdateSkillCommands(
       input.attachedCards ?? [],
+      roomId,
     );
 
     let clientGeneratedId = input.clientGeneratedId ?? uuidv4();
