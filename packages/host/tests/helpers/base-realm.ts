@@ -80,6 +80,7 @@ let flushLogs: (typeof CardAPIModule)['flushLogs'];
 let queryableValue: (typeof CardAPIModule)['queryableValue'];
 let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
+let instanceOf: (typeof CardAPIModule)['instanceOf'];
 
 async function initialize() {
   let owner = (getContext() as TestContext).owner;
@@ -167,6 +168,7 @@ async function initialize() {
     MaybeBase64Field,
     getFieldDescription,
     ReadOnlyField,
+    instanceOf,
   } = cardAPI);
 }
 
@@ -210,4 +212,5 @@ export {
   getFieldDescription,
   ReadOnlyField,
   Skill,
+  instanceOf,
 };
