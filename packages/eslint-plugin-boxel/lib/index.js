@@ -2,7 +2,7 @@
 
 const requireIndex = require('requireindex');
 const noop = require('ember-eslint-parser/noop');
-const pkg = require('../package.json');  
+const pkg = require('../package.json'); // eslint-disable-line import/extensions
 
 module.exports = {
   meta: {
