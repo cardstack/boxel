@@ -226,10 +226,10 @@ class _FileResource extends Resource<Args> {
         let clientRequestId = event.clientRequestId;
         let reloadFile = false;
 
-        if (!clientRequestId) {
+        if (!clientRequestId || clientRequestId.startsWith('instance:')) {
           reloadFile = true;
           realmEventsLogger.debug(
-            `reloading file resource ${normalizedURL} because realm event has no clientRequestId`,
+            `reloading file resource ${normalizedURL} because realm event has ${!clientRequestId ? 'no clientRequestId' : 'clientRequestId from instance editor'}`,
           );
         } else if (clientRequestId.startsWith('editor:')) {
           if (this.cardService.clientRequestIds.has(clientRequestId)) {
