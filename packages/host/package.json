@@ -164,6 +164,7 @@
     "pluralize": "^8.0.0",
     "prettier": "catalog:",
     "prettier-plugin-ember-template-tag": "catalog:",
+    "process": "^0.11.10",
     "qs": "^6.13.0",
     "qunit": "catalog:",
     "qunit-dom": "catalog:",

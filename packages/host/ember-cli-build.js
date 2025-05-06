@@ -75,7 +75,7 @@ module.exports = function (defaults) {
             new GlimmerScopedCSSWebpackPlugin(),
             new MonacoWebpackPlugin(),
             new webpack.ProvidePlugin({
-              process: 'process',
+              process: require.resolve('process/browser'),
             }),
             new webpack.IgnorePlugin({
               resourceRegExp: /^https:\/\/cardstack\.com\/base/,
@@ -95,7 +95,6 @@ module.exports = function (defaults) {
               path: require.resolve('path-browserify'),
               crypto: require.resolve('crypto-browserify'),
               stream: require.resolve('stream-browserify'),
-              process: false,
             },
             alias: {
               'matrix-js-sdk$': 'matrix-js-sdk/src/browser-index.ts', // Consume matrix-js-sdk via Typescript ESM so that code splitting works to exlcude massive matrix-sdk-crypto-wasm from the main bundle
