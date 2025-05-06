@@ -1181,7 +1181,6 @@ module(basename(__filename), function () {
       let blogPostModule = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}blog-post`),
       );
-      // This is failing because the currently module is not being resolved
       assert.strictEqual(
         blogPostModule?.type,
         'module',
@@ -1278,7 +1277,6 @@ module(basename(__filename), function () {
       let blogPostModule = await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}blog-post`),
       );
-      // This is failing because the currently module is not being resolved
       assert.strictEqual(
         blogPostModule?.type,
         'module',
