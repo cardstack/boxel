@@ -1,5 +1,5 @@
 import { setTitle } from './set-title';
-import { sendErrorEvent, sendMessageEvent, MatrixClient } from './matrix';
+import { sendErrorEvent, sendMessageEvent, MatrixClient } from './matrix/util';
 import OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';
@@ -60,8 +60,8 @@ export async function handleDebugCommands(
         {},
         [
           {
-            id: 'patchCard-debug',
-            name: 'patchCard',
+            id: 'patchCardInstance-debug',
+            name: 'patchCardInstance',
             arguments: toolArguments,
           },
         ],

@@ -348,7 +348,7 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: {
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,

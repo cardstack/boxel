@@ -95,6 +95,7 @@ interface Signature {
             | 'closeFieldChooser'
             | 'fieldChooserIsOpen'
             | 'chooseField'
+            | 'moduleId'
           >
         | typeof DefaultTitle
       ),

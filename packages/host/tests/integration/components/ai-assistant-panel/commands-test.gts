@@ -243,7 +243,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
@@ -301,7 +301,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
-          name: 'patchCard',
+          name: 'patchCardInstance',
         },
       ],
       'm.relates_to': {
@@ -332,7 +332,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: 'fb8fef81-2142-4861-a902-d5614b0aea52',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
@@ -382,7 +382,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
-          name: 'patchCard',
+          name: 'patchCardInstance',
         },
       ],
       isStreamingFinished: false,
@@ -409,7 +409,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
@@ -421,7 +421,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
         {
           id: 'f2da5504-b92f-480a-986a-56ec606d240e',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/hassan`,
@@ -451,7 +451,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
           id: '6545dc5a-01a1-47d6-b2f7-493d2ff5a0c2',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
@@ -463,7 +463,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
         },
         {
           id: 'f2da5504-b92f-480a-986a-56ec606d240e',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/hassan`,
@@ -512,7 +512,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
@@ -585,7 +585,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,
@@ -921,7 +921,7 @@ module('Integration | ai-assistant-panel | commands', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_COMMAND_REQUESTS_KEY]: [
         {
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: JSON.stringify({
             attributes: {
               cardId: `${testRealmURL}Person/fadhlan`,

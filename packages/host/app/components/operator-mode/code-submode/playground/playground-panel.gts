@@ -16,12 +16,12 @@ import {
   chooseCard,
   loadCardDef,
   specRef,
+  trimJsonExtension,
   type Query,
   type LooseSingleCardDocument,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
-import type CardService from '@cardstack/host/services/card-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
@@ -36,14 +36,23 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type { Spec } from 'https://cardstack.com/base/spec';
 
-import { FieldOption, SelectedInstance } from './playground-content';
-
 import PlaygroundContent from './playground-content';
 import PlaygroundTitle from './playground-title';
 
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 import type { WithBoundArgs } from '@glint/template';
+
+export type SelectedInstance = {
+  card: CardDef;
+  fieldIndex: number | undefined;
+};
+
+export type FieldOption = {
+  index: number;
+  displayIndex: number;
+  field: FieldDef;
+};
 
 interface Signature {
   Args: {
@@ -71,6 +80,7 @@ interface Signature {
         | 'closeFieldChooser'
         | 'fieldChooserIsOpen'
         | 'chooseField'
+        | 'moduleId'
       >,
       (
         | WithBoundArgs<
@@ -92,7 +102,6 @@ interface Signature {
 
 export default class PlaygroundPanel extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
-  @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
@@ -248,9 +257,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         (item as FieldOption).index,
       );
     } else {
-      this.persistSelections(
-        (item as PrerenderedCard).url.replace(/\.json$/, ''),
-      );
+      this.persistSelections(trimJsonExtension((item as PrerenderedCard).url));
     }
   }
 
@@ -440,6 +447,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         onFieldSelect=this.onFieldSelect
         closeFieldChooser=this.closeFieldChooser
         chooseField=this.chooseField
+        moduleId=this.moduleId
       )
       (if
         this.isLoading
@@ -455,6 +463,10 @@ export default class PlaygroundPanel extends Component<Signature> {
           createNewIsRunning=this.createNewIsRunning
           isFieldDef=@isFieldDef
           cardError=this.cardError
+          persistSelections=this.persistSelections
+          canWriteRealm=this.canWriteRealm
+          format=this.format
+          defaultFormat=this.defaultFormat
         )
       )
     }}

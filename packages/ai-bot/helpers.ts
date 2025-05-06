@@ -585,7 +585,9 @@ ${attachedFilesToPrompt(attachedFiles)}
     systemMessage += '\n';
   }
 
-  let cardPatchTool = tools.find((tool) => tool.function.name === 'patchCard');
+  let cardPatchTool = tools.find(
+    (tool) => tool.function.name === 'patchCardInstance',
+  );
 
   if (attachedFiles.length == 0 && attachedCards.length > 0 && !cardPatchTool) {
     systemMessage +=

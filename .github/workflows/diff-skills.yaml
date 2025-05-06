@@ -30,8 +30,8 @@ jobs:
           # Create a temporary directory for processing
           mkdir -p /tmp/skill-diffs
 
-          # Get the list of changed JSON files
-          CHANGED_FILES=$(echo "${{ steps.changed-files.outputs.all_changed_files }}" | tr ' ' '\n')
+          # Get the list of changed JSON files (with a "Skill" in the file path)
+          CHANGED_FILES=$(echo "${{ steps.changed-files.outputs.all_changed_files }}" | tr ' ' '\n' | grep -E 'Skill' || true)
 
           # Initialize arrays to store results
           DIFFS=()
