@@ -863,7 +863,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-syntax-error]');
       assert
         .dom('[data-test-syntax-error]')
-        .includesText('/broken.gts: Missing semicolon. (1:4)');
+        .includesText('Syntax Error Parse Error at broken.gts:1:6: 1:10');
       assert.dom('[data-test-module-error-panel] > button').isDisabled();
     });
 
