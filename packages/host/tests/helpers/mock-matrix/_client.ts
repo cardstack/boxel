@@ -92,7 +92,7 @@ export class MockClient implements ExtendedClient {
   }
 
   get loggedInAs() {
-    return this.clientOpts.userId;
+    return this.clientOpts.userId ?? this.sdkOpts.loggedInAs;
   }
 
   async startClient(
