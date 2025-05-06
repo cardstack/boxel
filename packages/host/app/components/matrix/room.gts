@@ -58,7 +58,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import AiAssistantAttachmentPicker from '../ai-assistant/attachment-picker';
 import AiAssistantChatInput from '../ai-assistant/chat-input';
@@ -871,7 +871,7 @@ export default class Room extends Component<Signature> {
       this.commandService.commandContext,
     );
 
-    let skillCard = await this.store.get<SkillCard>(cardId);
+    let skillCard = await this.store.get<Skill>(cardId);
     if (skillCard && isCardInstance(skillCard)) {
       await addSkillsToRoomCommand.execute({
         roomId: this.args.roomId,
