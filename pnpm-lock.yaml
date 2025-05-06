@@ -1913,6 +1913,9 @@ importers:
       prettier-plugin-ember-template-tag:
         specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
+      process:
+        specifier: ^0.11.10
+        version: 0.11.10
       qs:
         specifier: ^6.13.0
         version: 6.13.0
@@ -11817,6 +11820,10 @@ packages:
 
   process-relative-require@1.0.0:
     resolution: {integrity: sha512-r8G5WJPozMJAiv8sDdVWKgJ4In/zBXqwJdMCGAXQt2Kd3HdbAuJVzWYM4JW150hWoaI9DjhtbjcsCCHIMxm8RA==}
+
+  process@0.11.10:
+    resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
+    engines: {node: '>= 0.6.0'}
 
   promise-map-series@0.2.3:
     resolution: {integrity: sha512-wx9Chrutvqu1N/NHzTayZjE1BgIwt6SJykQoCOic4IZ9yUDjKyVYrpLa/4YCNsV61eRENfs29hrEquVuB13Zlw==}
@@ -26208,6 +26215,8 @@ snapshots:
   process-relative-require@1.0.0:
     dependencies:
       node-modules-path: 1.0.2
+
+  process@0.11.10: {}
 
   promise-map-series@0.2.3:
     dependencies:
