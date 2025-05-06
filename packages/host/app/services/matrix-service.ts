@@ -51,6 +51,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  DEFAULT_CODING_LLM,
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -1439,7 +1440,7 @@ export default class MatrixService extends Service {
   }
 
   setLLMForCodeMode() {
-    this.setLLMModel('anthropic/claude-3.5-sonnet');
+    this.setLLMModel(DEFAULT_CODING_LLM);
   }
 
   private setLLMModel(model: string) {
