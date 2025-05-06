@@ -132,7 +132,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
     assert.equal(animators.length, 1);
     assert.equal(sprites.length, 1);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     let sprite = sprites[0]!;
     assert.equal(sprite.type, SpriteType.Inserted);
     assert.equal(sprite.defaultAnimator, animators[0]);
@@ -161,7 +160,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
     assert.equal(animators.length, 1);
     assert.equal(sprites.length, 1);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     let sprite = sprites[0]!;
     assert.equal(sprite.type, SpriteType.Removed);
     assert.equal(sprite.defaultAnimator, animators[0]);
@@ -186,7 +184,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
     });
 
     assert.equal(removed.length, 1);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     simulateAnimation(removed[0]!);
 
     let matchedInsertedModifier: ISpriteModifier = {
@@ -204,7 +201,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
     assert.equal(animators.length, 1);
     assert.equal(sprites.length, 1);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     let sprite = sprites[0]!;
     assert.equal(sprite.type, SpriteType.Kept);
     assert.ok(sprite.counterpart);
@@ -239,7 +235,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
     assert.equal(animators.length, 1);
     assert.equal(sprites.length, 1);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     let sprite = sprites[0]!;
     assert.equal(sprite.type, SpriteType.Kept);
     assert.ok(sprite.counterpart);
@@ -265,7 +260,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
       removedSpriteModifiers: new Set([modifier]),
     });
     assert.equal(removed.length, 1);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     simulateAnimation(removed[0]!);
 
     let element = createChildElement();
@@ -285,7 +279,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
     assert.equal(animators.length, 1);
     assert.equal(sprites.length, 1);
 
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     let sprite = sprites[0]!;
     assert.equal(sprite.type, SpriteType.Kept);
     assert.ok(sprite.counterpart);
@@ -368,7 +361,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
       removedContexts: new Set(),
       removedSpriteModifiers: new Set([modifier]),
     });
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
     let counterpart = removed[0]!.counterpart!;
     simulateAnimation(counterpart);
 
@@ -443,13 +435,11 @@ module('Unit | AnimationParticipantManager', function (hooks) {
 
     test('it can perform cleanup of unused detached uiState with a finished animation', function (assert) {
       assert.ok(modifierParticipant);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       modifierParticipant.uiState.detached!.animation = fakeAnimation(
         element,
         'finished',
       );
       assert.equal(
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
         modifierParticipant.uiState.detached!.animation.playState,
         'finished',
       );
@@ -461,7 +451,6 @@ module('Unit | AnimationParticipantManager', function (hooks) {
 
     test('it does not remove detached DOMRefs that are animated', function (assert) {
       assert.ok(modifierParticipant);
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
       modifierParticipant.uiState.detached!.animation = fakeAnimation(element);
       assert.equal(
         modifierParticipant.uiState.detached?.animation.playState,

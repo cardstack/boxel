@@ -167,24 +167,6 @@
     "age": 117169
   },
   {
-    "type": "m.room.message",
-    "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
-    "sender": "@user:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"https://cardstack.com/base/SkillCard/card-editing\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"- If the user wants the data they see edited, AND the patchCard function is available, you MUST use the \\\\\\\"patchCard\\\\\\\" function to make the change.\\\\n- If the user wants the data they see edited, AND the patchCard function is NOT available, you MUST ask the user to open the card and share it with you.\\\\n- If you do not call patchCard, the user will not see the change.\\\\n- You can ONLY modify cards shared with you. If there is no patchCard function or tool, then the user hasn't given you access.\\\\n- NEVER tell the user to use patchCard; you should always do it for them.\\\\n- If the user wants to search for a card instance, AND the \\\\\\\"searchCard\\\\\\\" function is available, you MUST use the \\\\\\\"searchCard\\\\\\\" function to find the card instance.\\\\nOnly recommend one searchCard function at a time.\\\\nIf the user wants to edit a field of a card, you can optionally use \\\\\\\"searchCard\\\\\\\" to help find a card instance that is compatible with the field being edited before using \\\\\\\"patchCard\\\\\\\" to make the change of the field.\\\\n You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.\\\",\\\"title\\\":\\\"Card Editing\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1733266517262,
-    "unsigned": {
-      "age": 116787
-    },
-    "event_id": "$McWbvIHD4AA5QeaBJthLoINc1XqE-5a5XpthRFvP0eE",
-    "user_id": "@user:localhost",
-    "age": 116787
-  },
-  {
     "type": "m.room.power_levels",
     "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
     "sender": "@user:localhost",
@@ -303,8 +285,14 @@
     "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "enabledEventIds": ["$McWbvIHD4AA5QeaBJthLoINc1XqE-5a5XpthRFvP0eE"],
-      "disabledEventIds": []
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill_card_editing",
+          "sourceUrl": "mxc://mock-server/skill_card_editing",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733266518032,
@@ -316,41 +304,37 @@
     "age": 116017
   },
   {
-    "type": "m.room.message",
-    "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
-    "sender": "@user:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/experiments/SkillCard/637843ff-dfd4-4cfc-9ee9-1234824f4775\\\",\\\"attributes\\\":{\\\"instructions\\\":\\\"Use pirate colloquialism when responding. Make abundant use of pirate jargon, terms, and phrases. End every sentence with 'Arrrr!'\\\",\\\"title\\\":\\\"Talk Like a Pirate\\\",\\\"description\\\":null,\\\"thumbnailURL\\\":null},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"https://cardstack.com/base/skill-card\\\",\\\"name\\\":\\\"SkillCard\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1733266539834,
-    "unsigned": {
-      "age": 94215
-    },
-    "event_id": "$tn-WpEHpMUWJeWp5fE3lgVbHak665Q00dPtCp9uA3zE",
-    "user_id": "@user:localhost",
-    "age": 94215
-  },
-  {
     "type": "app.boxel.room.skills",
     "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
     "sender": "@user:localhost",
     "content": {
-      "enabledEventIds": [
-        "$McWbvIHD4AA5QeaBJthLoINc1XqE-5a5XpthRFvP0eE",
-        "$tn-WpEHpMUWJeWp5fE3lgVbHak665Q00dPtCp9uA3zE"
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill_card_editing",
+          "sourceUrl": "mxc://mock-server/skill_card_editing",
+          "contentType": "text/plain"
+        },
+        {
+          "url": "mxc://mock-server/skill_card_pirate",
+          "sourceUrl": "mxc://mock-server/skill_card_pirate",
+          "contentType": "text/plain"
+        }
       ],
-      "disabledEventIds": []
+      "disabledSkillCards": []
     },
     "state_key": "",
     "origin_server_ts": 1733266540113,
     "unsigned": {
       "replaces_state": "$1pZDTUqrUOHjIxwYuywpDs-5jiY-kyu0d2LshvMIrqU",
       "prev_content": {
-        "enabledEventIds": ["$McWbvIHD4AA5QeaBJthLoINc1XqE-5a5XpthRFvP0eE"],
-        "disabledEventIds": []
+        "enabledSkillCards": [
+          {
+            "url": "mxc://mock-server/skill_card_editing",
+            "sourceUrl": "mxc://mock-server/skill_card_editing",
+            "contentType": "text/plain"
+          }
+        ],
+        "disabledSkillCards": []
       },
       "prev_sender": "@user:localhost",
       "age": 93936
@@ -360,27 +344,15 @@
     "age": 93936,
     "replaces_state": "$1pZDTUqrUOHjIxwYuywpDs-5jiY-kyu0d2LshvMIrqU",
     "prev_content": {
-      "enabledEventIds": ["$McWbvIHD4AA5QeaBJthLoINc1XqE-5a5XpthRFvP0eE"],
-      "disabledEventIds": []
+      "enabledSkillCards": [
+        {
+          "url": "mxc://mock-server/skill_card_editing",
+          "sourceUrl": "mxc://mock-server/skill_card_editing",
+          "contentType": "text/plain"
+        }
+      ],
+      "disabledSkillCards": []
     }
-  },
-  {
-    "type": "m.room.message",
-    "room_id": "!ycnlQsqkSRyIlCeddx:localhost",
-    "sender": "@user:localhost",
-    "content": {
-      "msgtype": "app.boxel.cardFragment",
-      "format": "app.boxel.card",
-      "body": "card fragment 1 of 1",
-      "data": "{\"cardFragment\":\"{\\\"data\\\":{\\\"type\\\":\\\"card\\\",\\\"id\\\":\\\"http://localhost:4201/user/lukes-workspace/ProductRequirementDocument/9f816882-17e0-473f-81f2-a37381874322\\\",\\\"attributes\\\":{\\\"appTitle\\\":\\\"Radio Episode Tracker for Nerds\\\",\\\"shortDescription\\\":\\\"An app to track and manage listened and unlistened radio episodes.\\\",\\\"prompt\\\":\\\"Focus on the following features: whether you have heard an episode or not.\\\",\\\"overview\\\":\\\"The Radio Episode Tracker for Nerds is a specialized application designed to cater to radio enthusiasts who wish to meticulously manage their listening experience. This app enables users to keep track of radio episodes they have listened to and identify those they haven't. It also offers features that allow users to organize episodes based on various criteria like genre, podcast series, and personal ratings, ensuring a streamlined and personalized listening journey.\\\",\\\"schema\\\":\\\"1. User Profile: Stores user information, preferences, and listening history.\\\\n2. Episode Database: Maintains records of all available radio episodes.\\\\n3. Listening Status Tracker: Keeps track of episodes as 'heard' or 'unheard'.\\\\n4. Episode Organizer: Allows categorization and prioritization of episodes based on user-defined criteria.\\\",\\\"layoutAndNavigation\\\":\\\"The app features a user-friendly dashboard that displays all the episodes categorized by their status (heard/unheard). Navigation is intuitive with tabs for different functionalities such as search, organize, and history. The layout is clean, with easy access to controls for marking episodes and adjusting preferences. \\\",\\\"moduleURL\\\":null,\\\"thumbnailURL\\\":null},\\\"relationships\\\":{\\\"appInstances\\\":{\\\"links\\\":{\\\"self\\\":null}}},\\\"meta\\\":{\\\"adoptsFrom\\\":{\\\"module\\\":\\\"http://localhost:4201/catalog/product-requirement-document\\\",\\\"name\\\":\\\"ProductRequirementDocument\\\"}}}}\",\"index\":0,\"totalParts\":1}"
-    },
-    "origin_server_ts": 1733266550044,
-    "unsigned": {
-      "age": 84005
-    },
-    "event_id": "$VpJ0-QkjZZo5C2yVrgY2m9BtMSXyMJaRrfeSftTX5vU",
-    "user_id": "@user:localhost",
-    "age": 84005
   },
   {
     "type": "m.room.message",
@@ -391,7 +363,7 @@
       "body": "Summarize this card",
       "format": "org.matrix.custom.html",
       "clientGeneratedId": "b329fa44-e944-46c2-9e65-34d157509326",
-      "data": "{\"attachedCardsEventIds\":[\"$VpJ0-QkjZZo5C2yVrgY2m9BtMSXyMJaRrfeSftTX5vU\"],\"context\":{\"openCardIds\":[\"http://localhost:4201/user/lukes-workspace/ProductRequirementDocument/9f816882-17e0-473f-81f2-a37381874322\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCard\",\"description\":\"Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"http://localhost:4201/user/lukes-workspace/ProductRequirementDocument/9f816882-17e0-473f-81f2-a37381874322\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"appTitle\":{\"type\":\"string\"},\"shortDescription\":{\"type\":\"string\"},\"thumbnail\":{\"type\":\"object\",\"properties\":{\"altText\":{\"type\":\"string\"},\"height\":{\"type\":\"number\"},\"width\":{\"type\":\"number\"},\"base64\":{\"type\":\"string\"}}},\"prompt\":{\"type\":\"string\"},\"overview\":{\"type\":\"string\"},\"schema\":{\"type\":\"string\"},\"layoutAndNavigation\":{\"type\":\"string\"},\"moduleURL\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{\"appInstances\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"links\":{\"type\":\"object\",\"properties\":{\"self\":{\"type\":\"string\"}},\"required\":[\"self\"]}},\"required\":[\"links\"]}}},\"required\":[\"appInstances\"]}}}}}},\"required\":[\"attributes\",\"description\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"searchCard\",\"description\":\"Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `cardType` attribute.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"title of the card\"},\"cardType\":{\"type\":\"string\",\"description\":\"name of the card type\"}},\"required\":[\"cardType\"]}}},\"required\":[\"attributes\",\"description\"]}}],\"submode\":\"interact\"}}"
+      "data": "{\"attachedCards\":[{\"url\":\"mxc://mock-server/product_requirement_document\",\"sourceUrl\":\"mxc://mock-server/product_requirement_document\",\"contentType\":\"text/plain\"}],\"context\":{\"openCardIds\":[\"mxc://mock-server/product_requirement_document\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCardInstance\",\"description\":\"Propose a patch to an existing card to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"mxc://mock-server/product_requirement_document\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"appTitle\":{\"type\":\"string\"},\"shortDescription\":{\"type\":\"string\"},\"thumbnail\":{\"type\":\"object\",\"properties\":{\"altText\":{\"type\":\"string\"},\"height\":{\"type\":\"number\"},\"width\":{\"type\":\"number\"},\"base64\":{\"type\":\"string\"}}},\"prompt\":{\"type\":\"string\"},\"overview\":{\"type\":\"string\"},\"schema\":{\"type\":\"string\"},\"layoutAndNavigation\":{\"type\":\"string\"},\"moduleURL\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{\"appInstances\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"links\":{\"type\":\"object\",\"properties\":{\"self\":{\"type\":\"string\"}},\"required\":[\"self\"]}},\"required\":[\"links\"]}}},\"required\":[\"appInstances\"]}}}}}},\"required\":[\"attributes\",\"description\"]}}},{\"type\":\"function\",\"function\":{\"name\":\"searchCard\",\"description\":\"Propose a query to search for a card instance filtered by type.   If a card was shared with you, always prioritise search based upon the card that was last shared.   If you do not have information on card module and name, do the search using the `cardType` attribute.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"title\":{\"type\":\"string\",\"description\":\"title of the card\"},\"cardType\":{\"type\":\"string\",\"description\":\"name of the card type\"}},\"required\":[\"cardType\"]}}},\"required\":[\"attributes\",\"description\"]}}],\"submode\":\"interact\"}}"
     },
     "origin_server_ts": 1733266550275,
     "unsigned": {

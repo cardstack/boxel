@@ -33,7 +33,7 @@ import {
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import PatchCardCommand from '@cardstack/host/commands/patch-card';
+import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/commands/search-cards';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
@@ -167,9 +167,12 @@ module('Acceptance | Commands tests', function (hooks) {
         });
 
         // Mutate and save again
-        let patchCardCommand = new PatchCardCommand(this.commandContext, {
-          cardType: Meeting,
-        });
+        let patchCardInstanceCommand = new PatchCardInstanceCommand(
+          this.commandContext,
+          {
+            cardType: Meeting,
+          },
+        );
 
         let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandContext,
@@ -184,10 +187,10 @@ module('Acceptance | Commands tests', function (hooks) {
           roomId,
           prompt: `Change the topic of the meeting to "${input.topic}"`,
           attachedCards: [meeting],
-          commands: [{ command: patchCardCommand, autoExecute: true }],
+          commands: [{ command: patchCardInstanceCommand, autoExecute: true }],
         });
 
-        await patchCardCommand.waitForNextCompletion();
+        await patchCardInstanceCommand.waitForNextCompletion();
 
         let showCardCommand = new ShowCardCommand(this.commandContext);
         await showCardCommand.execute({
@@ -974,14 +977,8 @@ We are one!
     assert.strictEqual(boxelMessageData.context.tools.length, 1);
     assert.strictEqual(boxelMessageData.context.tools[0].type, 'function');
     let toolName = boxelMessageData.context.tools[0].function.name;
-    let meetingCardEventId = boxelMessageData.attachedCardsEventIds[0];
-    let cardFragment = JSON.parse(
-      getRoomEvents(roomId).find(
-        (event) => event.event_id === meetingCardEventId,
-      )!.content.data,
-    ).cardFragment;
-    let parsedCard = JSON.parse(cardFragment);
-    let meetingCardId = parsedCard.data.id;
+    let meetingCardEventId = boxelMessageData.attachedCards[0];
+    let meetingCardId = meetingCardEventId.sourceUrl;
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: '',
@@ -1115,6 +1112,7 @@ We are one!
     });
     // open assistant
     await click('[data-test-open-ai-assistant]');
+    await waitFor('[data-room-settled]');
     // open skill menu
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');

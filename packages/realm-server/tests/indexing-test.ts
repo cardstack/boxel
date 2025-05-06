@@ -879,12 +879,13 @@ module(basename(__filename), function () {
           // we splat because despite having the same shape, the constructors are different
           { ...actual.error.errorDetail },
           {
+            id: `${testRealm}post`,
             isCardError: true,
             additionalErrors: null,
-            message: 'http://test-realm/post not found',
+            message: `${testRealm}post not found`,
             status: 404,
             title: 'Not Found',
-            deps: ['http://test-realm/post'],
+            deps: [`${testRealm}post`],
           },
           'card instance is an error document',
         );

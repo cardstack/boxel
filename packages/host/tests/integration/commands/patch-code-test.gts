@@ -4,6 +4,7 @@ import { LintResult } from '@cardstack/runtime-common/lint';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type CommandService from '@cardstack/host/services/command-service';
+import type RealmService from '@cardstack/host/services/realm';
 
 import {
   lookupLoaderService,
@@ -21,7 +22,7 @@ module('Integration | commands | patch-code', function (hooks) {
   setupBaseRealm(hooks);
 
   setupLocalIndexing(hooks);
-  let mockMatrixUtils = setupMockMatrix(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, { autostart: true });
 
   const testFileName = 'task.gts';
   const fileUrl = `${testRealmURL}${testFileName}`;
@@ -60,6 +61,8 @@ export class Task extends CardDef {
         messages: [],
       };
     };
+    let realmService = lookupService<RealmService>('realm');
+    await realmService.login(testRealmURL);
   });
 
   test('lint-fixes contents before returning them', async function (assert) {

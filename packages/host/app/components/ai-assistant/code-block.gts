@@ -4,6 +4,8 @@ import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { on } from '@ember/modifier';
 
+import { service } from '@ember/service';
+
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -17,6 +19,8 @@ import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patc
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
+
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
 
@@ -34,6 +38,8 @@ interface CopyCodeButtonSignature {
 interface ApplyCodePatchButtonSignature {
   Args: {
     codePatchAction: CodePatchAction;
+    originalCode?: string | null;
+    modifiedCode?: string | null;
   };
 }
 
@@ -141,7 +147,7 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       language,
     }: MonacoDiffEditorSignature['Args']['Named'],
   ) {
-    if (!originalCode || !modifiedCode) {
+    if (originalCode === undefined || modifiedCode === undefined) {
       return;
     }
     if (this.monacoState) {
@@ -511,8 +517,30 @@ class CopyCodeButton extends Component<CopyCodeButtonSignature> {
   </template>
 }
 
-let ApplyCodePatchButton: TemplateOnlyComponent<ApplyCodePatchButtonSignature> =
+class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
+  @service declare operatorModeStateService: OperatorModeStateService;
+
+  // This is for debugging purposes only
+  logCodePatchAction = () => {
+    console.log('fileUrl \n', this.args.codePatchAction.fileUrl);
+    console.log(
+      'searchReplaceBlock \n',
+      this.args.codePatchAction.searchReplaceBlock,
+    );
+    console.log('originalCode \n', this.args.originalCode);
+    console.log('modifiedCode \n', this.args.modifiedCode);
+  };
+
+  get debugButtonEnabled() {
+    return this.operatorModeStateService.operatorModeController.debug;
+  }
+
   <template>
+    {{#if this.debugButtonEnabled}}
+      <button {{on 'click' this.logCodePatchAction}} class='debug-button'>
+        👁️
+      </button>
+    {{/if}}
     <ApplyButton
       data-test-apply-code-button
       @state={{@codePatchAction.patchCodeTaskState}}
@@ -520,4 +548,13 @@ let ApplyCodePatchButton: TemplateOnlyComponent<ApplyCodePatchButtonSignature> =
     >
       Apply
     </ApplyButton>
-  </template>;
+
+    <style scoped>
+      .debug-button {
+        background: transparent;
+        border: none;
+        margin-right: 5px;
+      }
+    </style>
+  </template>
+}

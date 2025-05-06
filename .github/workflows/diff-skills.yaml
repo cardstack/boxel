@@ -1,0 +1,131 @@
+name: Diff Skills
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  diff-skills:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # 4.2.2
+        with:
+          fetch-depth: 0 # Required for git diff to work properly
+          ref: ${{ github.event.pull_request.base.ref }} # Checkout the target branch first
+
+      - name: Find changed JSON files
+        id: changed-files
+        uses: tj-actions/changed-files@2f7c5bfce28377bc069a65ba478de0a74aa0ca32 # 46.0.1
+        with:
+          files: "**/*.json"
+          base_sha: ${{ github.event.pull_request.base.sha }}
+          head_sha: ${{ github.event.pull_request.head.sha }}
+
+      - name: Process skill card changes
+        id: process-changes
+        run: |
+          # Create a temporary directory for processing
+          mkdir -p /tmp/skill-diffs
+
+          # Get the list of changed JSON files (with a "Skill" in the file path)
+          CHANGED_FILES=$(echo "${{ steps.changed-files.outputs.all_changed_files }}" | tr ' ' '\n' | grep -E 'Skill' || true)
+
+          # Initialize arrays to store results
+          DIFFS=()
+
+          # Process each changed JSON file
+          for FILE in $CHANGED_FILES; do
+            # Get the file content from target branch and PR branch
+            OLD_CONTENT=$(git show ${{ github.event.pull_request.base.sha }}:$FILE 2>/dev/null || echo "{}")
+            NEW_CONTENT=$(git show ${{ github.event.pull_request.head.sha }}:$FILE 2>/dev/null || echo "{}")
+
+            # Check if it's a skill card
+            IS_SKILL_CARD=$(echo "$NEW_CONTENT" | jq -r '.data.meta.adoptsFrom.module == "https://cardstack.com/base/skill-card"')
+
+            if [ "$IS_SKILL_CARD" = "true" ]; then
+              # Extract instructions and commands
+              OLD_INSTRUCTIONS=$(echo "$OLD_CONTENT" | jq -r '.data.attributes.instructions // ""')
+              NEW_INSTRUCTIONS=$(echo "$NEW_CONTENT" | jq -r '.data.attributes.instructions // ""')
+
+              OLD_COMMANDS=$(echo "$OLD_CONTENT" | jq -r '.data.attributes.commands // []')
+              NEW_COMMANDS=$(echo "$NEW_CONTENT" | jq -r '.data.attributes.commands // []')
+
+              # Create diffs
+              echo "$OLD_INSTRUCTIONS" > /tmp/skill-diffs/old_instructions.txt
+              echo "$NEW_INSTRUCTIONS" > /tmp/skill-diffs/new_instructions.txt
+
+              echo "$OLD_COMMANDS" > /tmp/skill-diffs/old_commands.txt
+              echo "$NEW_COMMANDS" > /tmp/skill-diffs/new_commands.txt
+              # Generate diffs
+              INSTRUCTIONS_DIFF=$(diff -u /tmp/skill-diffs/old_instructions.txt /tmp/skill-diffs/new_instructions.txt || true)
+              COMMANDS_DIFF=$(diff -u /tmp/skill-diffs/old_commands.txt /tmp/skill-diffs/new_commands.txt || true)
+
+              # Add to results if there are changes
+              if [ -n "$INSTRUCTIONS_DIFF" ] || [ -n "$COMMANDS_DIFF" ]; then
+                DIFFS+=("### Changes in $FILE")
+                if [ -n "$INSTRUCTIONS_DIFF" ]; then
+                  DIFFS+=("#### Instructions Changes")
+                  DIFFS+=("\`\`\`diff")
+                  DIFFS+=("$INSTRUCTIONS_DIFF")
+                  DIFFS+=("\`\`\`")
+                fi
+                if [ -n "$COMMANDS_DIFF" ]; then
+                  DIFFS+=("#### Commands Changes")
+                  DIFFS+=("\`\`\`diff")
+                  DIFFS+=("$COMMANDS_DIFF")
+                  DIFFS+=("\`\`\`")
+                fi
+              fi
+            fi
+          done
+
+          # Join the diffs with newlines
+          DIFF_CONTENT=$(printf "%s\n" "${DIFFS[@]}")
+
+          # Set output
+          echo "diff_content<<EOF" >> $GITHUB_OUTPUT
+          echo "$DIFF_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "DIFF_CONTENT: $DIFF_CONTENT"
+
+      - name: Create comment if there are changes
+        if: steps.process-changes.outputs.diff_content != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const diffContent = ${{ toJSON(steps.process-changes.outputs.diff_content) }}; // Get output directly
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+
+            // Check if we already have a comment from this workflow
+            const existingComment = comments.find(comment =>
+              comment.user.login === 'github-actions[bot]' &&
+              comment.body.includes('## Skill Card Changes')
+            );
+
+            const commentBody = `## Skill Card Changes\n\n${diffContent}`;
+
+            if (existingComment) {
+              // Update existing comment
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body: commentBody
+              });
+            } else {
+              // Create new comment
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: commentBody
+              });
+            }
+          github-token: ${{ secrets.GITHUB_TOKEN }}

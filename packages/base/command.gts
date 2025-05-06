@@ -96,6 +96,7 @@ export class PatchCodeInput extends CardDef {
 
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
+  @field defaultSkills = linksToMany(SkillCard);
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {
@@ -114,7 +115,7 @@ export class AddSkillsToRoomInput extends CardDef {
 
 export class UpdateSkillActivationInput extends CardDef {
   @field roomId = contains(StringField);
-  @field skillEventId = contains(StringField);
+  @field skillCardId = contains(StringField);
   @field isActive = contains(BooleanField);
 }
 

@@ -1,3 +1,5 @@
+import Owner from '@ember/owner';
+import { getOwner } from '@ember/owner';
 import Service from '@ember/service';
 
 import { service } from '@ember/service';
@@ -7,6 +9,14 @@ import { SlidingSync } from 'matrix-js-sdk/lib/sliding-sync';
 
 import { RealmAuthClient } from '@cardstack/runtime-common/realm-auth-client';
 
+import FileDefManagerImpl, {
+  FileDefManager,
+} from '@cardstack/host/lib/file-def-manager';
+
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type * as FileAPI from 'https://cardstack.com/base/file-api';
+
+import MatrixService from './matrix-service';
 import NetworkService from './network';
 
 /*
@@ -15,12 +25,19 @@ import NetworkService from './network';
 */
 export default class MatrixSDKLoader extends Service {
   @service declare private network: NetworkService;
+  @service declare private matrixService: MatrixService;
   #extended: ExtendedMatrixSDK | undefined;
 
   async load(): Promise<ExtendedMatrixSDK> {
     if (!this.#extended) {
       let sdk = await import('matrix-js-sdk');
-      this.#extended = new ExtendedMatrixSDK(sdk, this.network.authedFetch);
+      this.#extended = new ExtendedMatrixSDK(
+        sdk,
+        this.network.authedFetch,
+        getOwner(this) as Owner,
+        () => this.matrixService.cardAPI,
+        () => this.matrixService.fileAPI,
+      );
     }
     return this.#extended;
   }
@@ -35,7 +52,13 @@ export class ExtendedMatrixSDK {
   #sdk: typeof MatrixSDK;
   #fetch: typeof globalThis.fetch;
 
-  constructor(sdk: typeof MatrixSDK, fetch: typeof globalThis.fetch) {
+  constructor(
+    sdk: typeof MatrixSDK,
+    fetch: typeof globalThis.fetch,
+    private readonly owner: Owner,
+    private readonly getCardAPI: () => typeof CardAPI,
+    private readonly getFileAPI: () => typeof FileAPI,
+  ) {
     this.#sdk = sdk;
     this.#fetch = fetch;
   }
@@ -61,7 +84,13 @@ export class ExtendedMatrixSDK {
   }
 
   createClient(opts: MatrixSDK.ICreateClientOpts): ExtendedClient {
-    return extendedClient(this.#sdk.createClient(opts), this.#fetch);
+    return extendedClient({
+      client: this.#sdk.createClient(opts),
+      fetch: this.#fetch,
+      owner: this.owner,
+      getCardAPI: this.getCardAPI,
+      getFileAPI: this.getFileAPI,
+    });
   }
 }
 
@@ -108,25 +137,23 @@ export type ExtendedClient = Pick<
   | 'setAccountData'
   | 'getDeviceId'
   | 'getDevice'
-> & {
-  requestEmailToken(
-    type: 'registration' | 'threepid',
-    email: string,
-    clientSecret: string,
-    sendAttempt: number,
-  ): Promise<MatrixSDK.IRequestTokenResponse>;
-  loginWithEmail(
-    email: string,
-    password: string,
-  ): Promise<MatrixSDK.LoginResponse>;
-  createRealmSession(realmURL: URL): Promise<string>;
-  hashMessageWithSecret(message: string): Promise<string>;
-  uploadContent(
-    file: MatrixSDK.FileType,
-    opts: MatrixSDK.UploadOpts,
-  ): Promise<MatrixSDK.UploadResponse>;
-  mxcUrlToHttp(mxcUrl: string): string;
-};
+  | 'uploadContent'
+  | 'mxcUrlToHttp'
+> &
+  FileDefManager & {
+    requestEmailToken(
+      type: 'registration' | 'threepid',
+      email: string,
+      clientSecret: string,
+      sendAttempt: number,
+    ): Promise<MatrixSDK.IRequestTokenResponse>;
+    loginWithEmail(
+      email: string,
+      password: string,
+    ): Promise<MatrixSDK.LoginResponse>;
+    createRealmSession(realmURL: URL): Promise<string>;
+    hashMessageWithSecret(message: string): Promise<string>;
+  };
 
 async function hashMessageWithSecret(
   this: ExtendedClient,
@@ -214,10 +241,26 @@ async function loginWithEmail(
   }
 }
 
-function extendedClient(
-  client: MatrixSDK.MatrixClient,
-  fetch: typeof globalThis.fetch,
-): ExtendedClient {
+function extendedClient({
+  client,
+  fetch,
+  owner,
+  getCardAPI,
+  getFileAPI,
+}: {
+  client: MatrixSDK.MatrixClient;
+  fetch: typeof globalThis.fetch;
+  owner: Owner;
+  getCardAPI: () => typeof CardAPI;
+  getFileAPI: () => typeof FileAPI;
+}): ExtendedClient {
+  let fileDefManager = new FileDefManagerImpl({
+    owner,
+    client,
+    getCardAPI,
+    getFileAPI,
+  });
+
   return new Proxy(client, {
     get(target, key, receiver) {
       let extendedTarget = target as unknown as ExtendedClient;
@@ -230,6 +273,18 @@ function extendedClient(
           return loginWithEmail.bind(extendedTarget, fetch);
         case 'createRealmSession':
           return createRealmSession.bind(extendedTarget, fetch);
+        case 'uploadCardsAndUpdateSkillCommands':
+          return fileDefManager.uploadCardsAndUpdateSkillCommands.bind(
+            fileDefManager,
+          );
+        case 'uploadCards':
+          return fileDefManager.uploadCards.bind(fileDefManager);
+        case 'uploadCommandDefinitions':
+          return fileDefManager.uploadCommandDefinitions.bind(fileDefManager);
+        case 'uploadContent':
+          return fileDefManager.uploadContent.bind(fileDefManager);
+        case 'downloadCardFileDef':
+          return fileDefManager.downloadCardFileDef.bind(fileDefManager);
         default:
           return Reflect.get(target, key, receiver);
       }

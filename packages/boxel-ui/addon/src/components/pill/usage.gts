@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 import { fn } from '@ember/helper';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';

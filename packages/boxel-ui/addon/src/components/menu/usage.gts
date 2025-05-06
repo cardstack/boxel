@@ -10,11 +10,9 @@ import BoxelMenu from './index.gts';
 
 export default class MenuUsage extends Component {
   @action log(message: string): void {
-    // eslint-disable-next-line no-console
     console.log(message);
   }
   @action closeMenu(): void {
-    // eslint-disable-next-line no-console
     console.log('closeMenu called');
   }
 

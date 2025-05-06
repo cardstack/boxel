@@ -162,12 +162,17 @@ class LinksToManyStandardEditor extends GlimmerComponent<LinksToManyStandardEdit
   <template>
     <PermissionsConsumer as |permissions|>
       {{#if @arrayField.children.length}}
-        <ul class='list' {{sortableGroup onChange=this.setItems}} ...attributes>
+        <ul
+          {{sortableGroup groupName=@field.name onChange=this.setItems}}
+          class='list'
+          data-test-list={{@field.name}}
+          ...attributes
+        >
           {{#each @arrayField.children as |boxedElement i|}}
             <li
               class='editor'
               data-test-item={{i}}
-              {{sortableItem model=boxedElement.value}}
+              {{sortableItem groupName=@field.name model=boxedElement.value}}
             >
               {{#if permissions.canWrite}}
                 <IconButton
@@ -441,6 +446,7 @@ export function getLinksToManyComponent({
                 {{effectiveFormat}}-effectiveFormat
                 {{unless arrayField.children.length "empty"}}
                 display-container-{{displayContainer}}'
+              data-test-plural-view-field={{field.name}}
               data-test-plural-view={{field.fieldType}}
               data-test-plural-view-format={{effectiveFormat}}
               ...attributes

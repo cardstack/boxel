@@ -75,6 +75,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         ],
       });
 
+      await waitFor('[data-test-catalog-listing-use-button]');
       assert
         .dom('[data-test-catalog-listing-use-button]')
         .containsText('Use', '"Use" button exist in listing');
@@ -126,6 +127,9 @@ module('Acceptance | catalog app tests', function (hooks) {
         ],
       });
 
+      await waitFor('[data-test-catalog-listing-install-button]', {
+        timeout: 5_000,
+      });
       await click('[data-test-catalog-listing-install-button]');
       await click('[data-test-boxel-menu-item-text="http://test-realm/test/"]');
 
@@ -135,11 +139,14 @@ module('Acceptance | catalog app tests', function (hooks) {
 
       await waitFor('[data-test-catalog-listing-install-button]');
 
-      await waitUntil(() => {
-        return document
-          .querySelector('[data-test-catalog-listing-install-button]')
-          ?.textContent?.includes('Installed');
-      });
+      await waitUntil(
+        () => {
+          return document
+            .querySelector('[data-test-catalog-listing-install-button]')
+            ?.textContent?.includes('Installed');
+        },
+        { timeout: 5_000 },
+      );
 
       // Check gts file is installed/copied successfully
       await visitOperatorMode({

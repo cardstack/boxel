@@ -1,7 +1,5 @@
 import { module, test, assert } from 'qunit';
 import { Responder } from '../lib/responder';
-import { IContent } from 'matrix-js-sdk';
-import { MatrixClient } from '../lib/matrix';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
@@ -10,63 +8,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
-import OpenAI from 'openai';
-
-class FakeMatrixClient implements MatrixClient {
-  private eventId = 0;
-  private sentEvents: {
-    eventId: string;
-    roomId: string;
-    eventType: string;
-    content: IContent;
-  }[] = [];
-
-  async sendEvent(
-    roomId: string,
-    eventType: string,
-    content: IContent,
-  ): Promise<{ event_id: string }> {
-    const messageEventId = this.eventId.toString();
-    this.sentEvents.push({
-      eventId: messageEventId,
-      roomId,
-      eventType,
-      content,
-    });
-    this.eventId++;
-    return { event_id: messageEventId.toString() };
-  }
-
-  async setRoomName(
-    _roomId: string,
-    _title: string,
-  ): Promise<{ event_id: string }> {
-    this.eventId++;
-    return { event_id: this.eventId.toString() };
-  }
-
-  getSentEvents() {
-    return this.sentEvents;
-  }
-
-  sendStateEvent(
-    _roomId: string,
-    _eventType: string,
-    _content: IContent,
-    _stateKey: string,
-  ): Promise<{ event_id: string }> {
-    throw new Error('Method not implemented.');
-  }
-
-  resetSentEvents() {
-    this.sentEvents = [];
-    this.eventId = 0;
-  }
-
-  getAccessToken() {
-    return 'fake-access-token';
-  }
-}
+import type OpenAI from 'openai';
+import { FakeMatrixClient } from './helpers/fake-matrix-client';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -325,7 +268,7 @@ module('Responding', (hooks) => {
       {} as any,
       snapshotWithToolCall({
         id: 'some-tool-call-id',
-        name: 'patchCard',
+        name: 'patchCardInstance',
         arguments: patchArgs,
       }),
     );
@@ -351,7 +294,7 @@ module('Responding', (hooks) => {
       [
         {
           id: 'some-tool-call-id',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments:
             '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },
@@ -393,7 +336,7 @@ module('Responding', (hooks) => {
     await responder.onChunk(
       {} as any,
       snapshotWithToolCall({
-        name: 'patchCard',
+        name: 'patchCardInstance',
         arguments: { description: 'A new' },
       }),
     );
@@ -404,7 +347,7 @@ module('Responding', (hooks) => {
       {} as any,
       snapshotWithToolCall({
         id: 'some-tool-call-id',
-        name: 'patchCard',
+        name: 'patchCardInstance',
         arguments: patchArgs,
       }),
     );
@@ -431,7 +374,7 @@ module('Responding', (hooks) => {
       sentEvents[2].content[APP_BOXEL_COMMAND_REQUESTS_KEY],
       [
         {
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments: '{"description":"A new"}',
         },
       ],
@@ -442,7 +385,7 @@ module('Responding', (hooks) => {
       [
         {
           id: 'some-tool-call-id',
-          name: 'patchCard',
+          name: 'patchCardInstance',
           arguments:
             '{"description":"A new thing","attributes":{"cardId":"card/1","patch":{"attributes":{"some":"thing"}}}}',
         },

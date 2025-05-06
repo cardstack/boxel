@@ -592,7 +592,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
     );
   });
 
-  test('resetting the identity map clears all instances and card errors', async function (assert) {
+  test('resetting the identity map clears all instances but not card errors', async function (assert) {
     let {
       identityContext,
       instances: { hassan, jade },
@@ -603,7 +603,7 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     assert.deepEqual(
       identityContext.getInstanceOrError(hassan.id),
-      undefined,
+      makeError(hassan.id),
       'no error is returned from identity map',
     );
 
@@ -619,6 +619,9 @@ module('Unit | identity-context garbage collection', function (hooks) {
       identityContext,
       instances: { hassan },
     } = await setupTest(saveAll);
+
+    // remove the current hassan instance so the stale card doesn't bleed thru
+    identityContext.delete(hassan.id);
 
     let error = makeError(hassan.id);
     identityContext.addInstanceOrError(hassan.id, error);
@@ -658,6 +661,25 @@ module('Unit | identity-context garbage collection', function (hooks) {
       identityContext.getInstanceOrError(hassan[localId]),
       hassan,
       'card instance is returned',
+    );
+  });
+
+  test('can get a card from the identity map by correlating the last part of the remote id with the local id for an instance that has a newly assigned remote id', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest();
+
+    assert.strictEqual(
+      identityContext.getInstanceOrError(`${testRealmURL}${hassan[localId]}`),
+      hassan,
+      'card instance is returned',
+    );
+
+    assert.strictEqual(
+      hassan.id,
+      `${testRealmURL}${hassan[localId]}`,
+      'instance has remote id set correctly',
     );
   });
 
@@ -702,5 +724,93 @@ module('Unit | identity-context garbage collection', function (hooks) {
 
     // success is not throwing
     identityContext.sweep(api);
+  });
+
+  test('return a stale instance when the server state reflects an error for an id', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest(saveAll);
+
+    let error = makeError(hassan.id);
+    identityContext.addInstanceOrError(hassan.id, error);
+
+    assert.strictEqual(
+      identityContext.get(hassan.id),
+      hassan,
+      'stale hassan instance is returned',
+    );
+
+    assert.strictEqual(
+      identityContext.getInstanceOrError(hassan.id),
+      hassan,
+      'stale hassan instance is returned',
+    );
+  });
+
+  test('can get an error for an id when a stale instance exists', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest(saveAll);
+
+    let error = makeError(hassan.id);
+    identityContext.addInstanceOrError(hassan.id, error);
+
+    assert.strictEqual(
+      identityContext.getError(hassan.id),
+      error,
+      'a card error exists for the id',
+    );
+  });
+
+  test('setting an instance clears a card error', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan },
+    } = await setupTest(saveAll);
+
+    let error = makeError(hassan.id);
+    identityContext.addInstanceOrError(hassan.id, error);
+    assert.strictEqual(
+      identityContext.getError(hassan.id),
+      error,
+      'a card error exists for the id',
+    );
+
+    identityContext.addInstanceOrError(hassan.id, hassan);
+    assert.strictEqual(
+      identityContext.getError(hassan.id),
+      undefined,
+      'a card error does not exist for the id',
+    );
+  });
+
+  test('can get the consumers of an instance', async function (assert) {
+    let {
+      identityContext,
+      instances: { germaine, queenzy },
+    } = await setupTest();
+
+    let consumers = identityContext.consumersOf(api, queenzy);
+    assert.deepEqual(
+      consumers,
+      [germaine],
+      'the consumers for queenzy are correct',
+    );
+  });
+
+  test('can get the dependencies of an instance', async function (assert) {
+    let {
+      identityContext,
+      instances: { hassan, jade, germaine },
+    } = await setupTest();
+
+    let dependencies = identityContext.dependenciesOf(api, hassan);
+    assert.deepEqual(
+      dependencies,
+      [jade, germaine],
+      'the dependencies for hassan are correct',
+    );
   });
 });

@@ -143,7 +143,7 @@ export default class CommandService extends Service {
         if (this.executedCommandRequestIds.has(messageCommand.id!)) {
           continue;
         }
-        if (messageCommand.commandResultCardEventId) {
+        if (messageCommand.commandResultFileDef) {
           continue;
         }
         if (!messageCommand.name) {
@@ -206,7 +206,7 @@ export default class CommandService extends Service {
           await commandToRun.execute(typedInput as any),
           await timeout(DELAY_FOR_APPLYING_UI), // leave a beat for the "applying" state of the UI to be shown
         ]);
-      } else if (command.name === 'patchCard') {
+      } else if (command.name === 'patchCardInstance') {
         if (!hasPatchData(payload)) {
           throw new Error(
             "Patch command can't run because it doesn't have all the fields in arguments returned by open ai",
