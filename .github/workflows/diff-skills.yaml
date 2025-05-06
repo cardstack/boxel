@@ -88,10 +88,12 @@ jobs:
           DIFF_CONTENT=$(printf "%s\n" "${DIFFS[@]}")
 
           # Set output
-          diff_file="$RUNNER_TEMP/skill-card-diff.md"   # $RUNNER_TEMP survives the job
-          printf '%s\n' "$DIFF_CONTENT" > "$diff_file"
+          if [[ -n "$DIFF_CONTENT" ]]; then 
+            diff_file="$RUNNER_TEMP/skill-card-diff.md"   # $RUNNER_TEMP survives the job
+            printf '%s\n' "$DIFF_CONTENT" > "$diff_file"
 
-          echo "diff_file=$diff_file" >> "$GITHUB_OUTPUT"
+            echo "diff_file=$diff_file" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create comment if there are changes
         if: steps.process-changes.outputs.diff_file != ''
