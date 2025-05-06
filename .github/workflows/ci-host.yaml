@@ -48,9 +48,6 @@ jobs:
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
-      - name: create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
       - name: Start realm servers
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
@@ -63,6 +60,9 @@ jobs:
             http-get://localhost:4202/test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson
             http://localhost:8008
             http://localhost:5001
+      - name: create realm users
+        run: pnpm register-realm-users
+        working-directory: packages/matrix
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: pnpm test-with-percy
         env:
