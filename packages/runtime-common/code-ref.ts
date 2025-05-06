@@ -161,12 +161,21 @@ export async function loadCardDef(
 }
 
 export function identifyCard(
-  card: unknown,
+  card: typeof BaseDef | undefined,
   maybeRelativeURL?: ((possibleURL: string) => string) | null,
+  visited = new WeakSet<typeof BaseDef>(),
 ): CodeRef | undefined {
+  if (!card) {
+    return undefined;
+  }
   if (!isBaseDef(card)) {
     return undefined;
   }
+  if (visited.has(card)) {
+    console.warn(`encountered cycle in identifyCard() for ${card.name}`);
+    return undefined;
+  }
+  visited.add(card);
 
   let ref = Loader.identify(card);
   if (ref) {
@@ -179,7 +188,7 @@ export function identifyCard(
   if (!local) {
     return undefined;
   }
-  let innerRef = identifyCard(local.card);
+  let innerRef = identifyCard(local.card, maybeRelativeURL, visited);
   if (!innerRef) {
     return undefined;
   }
