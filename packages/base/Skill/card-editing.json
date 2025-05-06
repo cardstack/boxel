@@ -1,0 +1,40 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "- If the user wants the card instance data they see edited, AND the patchCardInstance function is available, AND there is at least one attached card instance, you MUST use the \"patchCardInstance\" function to make the change.\n- If the user wants the data they see edited, AND the patchCardInstance function is NOT available, you MUST ask the user to open the card and share it with you.\n- If you do not call patchCardInstance, the user will not see the change.\n- You can ONLY modify cards shared with you. If there is no patchCardInstance function or tool, then the user hasn't given you access.\n- NEVER tell the user to use patchCardInstance; you should always do it for them.\n- If the user wants to search for a card instance, AND the \"searchCard\" function is available, you MUST use the \"searchCard\" function to find the card instance.\nOnly recommend one searchCard function at a time.\n- If the user wants to edit a field of a card, you can optionally use \"searchCard\" to help find a card instance that is compatible with the field being edited before using \"patchCardInstance\" to make the change of the field.\n- You MUST confirm with the user the correct choice of card instance that he intends to use based upon the results of the search.\n- Do NOT use patchCardInstance function when user is asking for template changes, visual modifications, style updates, or card behavior changes. patchCardInstance should ONLY be used when the user's request is about changing card instance data values bound to the card definition in gts files",
+      "commands": [
+        {
+          "codeRef": {
+            "name": "default",
+            "module": "@cardstack/boxel-host/commands/show-card"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "SearchCardsByTypeAndTitleCommand",
+            "module": "@cardstack/boxel-host/commands/search-cards"
+          },
+          "requiresApproval": false
+        },
+        {
+          "codeRef": {
+            "name": "SearchCardsByQueryCommand",
+            "module": "@cardstack/boxel-host/commands/search-cards"
+          },
+          "requiresApproval": false
+        }
+      ],
+      "title": "Card Editing",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill",
+        "name": "Skill"
+      }
+    }
+  }
+}

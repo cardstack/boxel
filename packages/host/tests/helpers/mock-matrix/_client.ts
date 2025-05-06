@@ -34,7 +34,7 @@ import { assertNever } from '@cardstack/host/utils/assert-never';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { CommandField } from 'https://cardstack.com/base/skill-card';
+import type { CommandField } from 'https://cardstack.com/base/skill';
 
 import { MockSDK } from './_sdk';
 

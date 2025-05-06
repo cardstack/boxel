@@ -125,9 +125,9 @@ const employeeCardSource = `
 
 const newSkillCardSource = `
   import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
-  import { SkillCard } from 'https://cardstack.com/base/skill-card';
+  import { Skill } from 'https://cardstack.com/base/skill';
 
-  export class NewSkill extends SkillCard {
+  export class NewSkill extends Skill {
     static displayName = 'NewSkill';
   }
 

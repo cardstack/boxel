@@ -13,7 +13,7 @@
     "relationships": {
       "skills.0": {
         "links": {
-          "self": "../SkillCard/cursor-coding"
+          "self": "../Skill/cursor-coding"
         }
       },
       "specs": {

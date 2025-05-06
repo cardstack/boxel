@@ -21,8 +21,8 @@ import PillMenu from './index';
 import type { PillMenuItem } from './index';
 
 const sampleCardURLs = [
-  `${baseRealm.url}SkillCard/card-editing`,
-  `${baseRealm.url}SkillCard/source-code-editing`,
+  `${baseRealm.url}Skill/card-editing`,
+  `${baseRealm.url}Skill/source-code-editing`,
 ];
 
 export default class PillMenuUsage extends Component {

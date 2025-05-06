@@ -7,9 +7,9 @@ import {
   linksTo,
 } from 'https://cardstack.com/base/card-api';
 import { ProductRequirementDocument } from '../product-requirement-document';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { Skill } from 'https://cardstack.com/base/skill';
 import SaveCardCommand from '@cardstack/boxel-host/commands/save-card';
-import PatchCardCommand from '@cardstack/boxel-host/commands/patch-card';
+import PatchCardInstanceCommand from '@cardstack/boxel-host/commands/patch-card-instance';
 import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
@@ -34,7 +34,7 @@ export default class CreateProductRequirementsInstance extends Command<
   inputType = CreateProductRequirementsInput;
 
   get skillCard() {
-    return new SkillCard({
+    return new Skill({
       id: 'prd-helper-skill',
       name: 'PRD Helper',
       description:
@@ -47,7 +47,7 @@ export default class CreateProductRequirementsInstance extends Command<
 
         For the schema, consider the types required. Write out the schema as a mermaid class diagram.
 
-        NEVER offer to update the card, you MUST call patchCard in your response.`,
+        NEVER offer to update the card, you MUST call patchCardInstance in your response.`,
     });
   }
 
@@ -67,7 +67,7 @@ export default class CreateProductRequirementsInstance extends Command<
       card: prdCard,
     });
     // Get patch command, this takes the card and returns a command that can be used to patch the card
-    let patchPRDCommand = new PatchCardCommand(this.commandContext, {
+    let patchPRDCommand = new PatchCardInstanceCommand(this.commandContext, {
       cardType: ProductRequirementDocument,
     });
 

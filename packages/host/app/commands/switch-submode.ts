@@ -7,11 +7,13 @@ import { Submodes } from '../components/submode-switcher';
 import HostBaseCommand from '../lib/host-base-command';
 
 import type OperatorModeStateService from '../services/operator-mode-state-service';
+import type StoreService from '../services/store';
 
 export default class SwitchSubmodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.SwitchSubmodeInput
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
+  @service declare private store: StoreService;
 
   description =
     'Navigate the UI to another submode. Possible values for submode are "interact" and "code".';
@@ -31,7 +33,8 @@ export default class SwitchSubmodeCommand extends HostBaseCommand<
       return null;
     }
 
-    return this.allStackItems[this.allStackItems.length - 1].id;
+    return this.store.peek(this.allStackItems[this.allStackItems.length - 1].id)
+      ?.id;
   }
 
   protected async run(
