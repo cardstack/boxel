@@ -713,7 +713,7 @@ export default class StoreService extends Service implements StoreInterface {
           doc,
           relativeTo,
         );
-        await this.persistAndUpdate(newInstance, {
+        let maybeError = await this.persistAndUpdate(newInstance, {
           realm,
           localDir: opts?.localDir,
         });
