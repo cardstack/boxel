@@ -48,26 +48,9 @@ jobs:
           working-directory: packages/host
           wait-for: 3m
           wait-on: http-get://localhost:4200
-      - name: Start Synapse
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm start:synapse
-          working-directory: packages/matrix
-          wait-for: 5m
-          wait-on: http://localhost:8008
-      - name: create realm users
-        run: pnpm register-realm-users
-        working-directory: packages/matrix
       - name: Start realm servers
-        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
-        with:
-          run: pnpm start:all | tee -a /tmp/server.log &
-          working-directory: packages/realm-server
-          wait-for: 5m
-          wait-on: |
-            http-get://localhost:4201/base/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson
-            http-get://localhost:4202/test/_readiness-check?acceptHeader=application%2Fvnd.api%2Bjson
-            http://localhost:5001
+        run: pnpm start:all | tee -a /tmp/server.log &
+        working-directory: packages/realm-server
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: pnpm test-with-percy
         env:
