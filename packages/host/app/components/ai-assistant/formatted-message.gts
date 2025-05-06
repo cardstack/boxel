@@ -213,43 +213,16 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         {{#each this.htmlGroups as |htmlGroup index|}}
           {{#if (eq htmlGroup.type 'pre_tag')}}
             {{#let (extractCodeData htmlGroup.content) as |codeData|}}
-              <CodeBlock
-                @monacoSDK={{@monacoSDK}}
-                @codeData={{codeData}}
-                as |codeBlock|
-              >
-                {{#if (bool codeData.searchReplaceBlock)}}
-                  {{#let
-                    (getCodeDiffResultResource
-                      this codeData.fileUrl codeData.searchReplaceBlock
-                    )
-                    as |codeDiffResource|
-                  }}
-                    {{#if codeDiffResource.isDataLoaded}}
-                      <codeBlock.actions as |actions|>
-                        <actions.copyCode
-                          @code={{codeDiffResource.modifiedCode}}
-                        />
-                        <actions.applyCodePatch
-                          @codePatchAction={{this.createCodePatchAction
-                            codeData
-                          }}
-                        />
-                      </codeBlock.actions>
-                      <codeBlock.diffEditor
-                        @originalCode={{codeDiffResource.originalCode}}
-                        @modifiedCode={{codeDiffResource.modifiedCode}}
-                        @language={{codeData.language}}
-                      />
-                    {{/if}}
-                  {{/let}}
-                {{else}}
-                  <codeBlock.actions as |actions|>
-                    <actions.copyCode @code={{codeData.code}} />
-                  </codeBlock.actions>
-                  <codeBlock.editor />
-                {{/if}}
-              </CodeBlock>
+              {{#let
+                (this.createCodePatchAction codeData)
+                as |codePatchAction|
+              }}
+                <HtmlGroupCodeBlock
+                  @codeData={{codeData}}
+                  @codePatchAction={{codePatchAction}}
+                  @monacoSDK={{@monacoSDK}}
+                />
+              {{/let}}
             {{/let}}
           {{else}}
             {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -348,4 +321,46 @@ class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
   ) {
     onHtmlUpdate(html);
   }
+}
+
+interface HtmlGroupCodeBlockSignature {
+  Element: HTMLDivElement;
+  Args: {
+    codeData: CodeData;
+    codePatchAction: CodePatchAction;
+    monacoSDK: MonacoSDK;
+  };
+}
+
+class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
+  private codeDiffResource = this.args.codeData.searchReplaceBlock
+    ? getCodeDiffResultResource(
+        this,
+        this.args.codeData.fileUrl,
+        this.args.codeData.searchReplaceBlock,
+      )
+    : undefined;
+
+  <template>
+    <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
+      {{#if (bool @codeData.searchReplaceBlock)}}
+        {{#if this.codeDiffResource.isDataLoaded}}
+          <codeBlock.actions as |actions|>
+            <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
+            <actions.applyCodePatch @codePatchAction={{@codePatchAction}} />
+          </codeBlock.actions>
+          <codeBlock.diffEditor
+            @originalCode={{this.codeDiffResource.originalCode}}
+            @modifiedCode={{this.codeDiffResource.modifiedCode}}
+            @language={{@codeData.language}}
+          />
+        {{/if}}
+      {{else}}
+        <codeBlock.actions as |actions|>
+          <actions.copyCode @code={{@codeData.code}} />
+        </codeBlock.actions>
+        <codeBlock.editor />
+      {{/if}}
+    </CodeBlock>
+  </template>
 }

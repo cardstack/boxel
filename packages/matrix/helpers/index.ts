@@ -111,6 +111,12 @@ export async function clearLocalStorage(page: Page, appURL = testHost) {
   await page.evaluate(() => window.localStorage.clear());
 }
 
+export async function getMonacoContent(page: Page): Promise<string> {
+  return await page.evaluate(() =>
+    (window as any).monaco?.editor?.getModels()?.[0]?.getValue(),
+  );
+}
+
 export async function validateEmail(
   appPage: Page,
   email: string,
@@ -866,7 +872,7 @@ export async function postCardSource(
   );
 }
 
-export async function patchCard(
+export async function patchCardInstance(
   page: Page,
   realmURL: string,
   cardURL: string,

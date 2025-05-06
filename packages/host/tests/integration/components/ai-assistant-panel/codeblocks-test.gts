@@ -637,4 +637,44 @@ Above code blocks are now complete`;
 
     await percySnapshot(assert);
   });
+
+  test('it will render diff editor for a blank file', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+    let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
+
+\`\`\`txt
+// File url: https://example.com/blank.txt
+<<<<<<< SEARCH
+=======
+hello
+>>>>>>> REPLACE
+\`\`\`
+
+Above code blocks are now complete`;
+
+    simulateRemoteMessage(
+      roomId,
+      '@aibot:localhost',
+      {
+        body: messageWithSearchAndReplaceBlock,
+        msgtype: 'org.text',
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+      },
+      {
+        origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
+      },
+    );
+
+    await waitUntil(
+      () =>
+        document.querySelectorAll('.code-block-diff .cdr.line-delete')
+          .length === 1,
+    );
+    await waitFor('.code-block-diff .cdr.line-insert');
+
+    assert.dom('.cdr.line-delete').exists({ count: 1 });
+    assert.dom('.cdr.line-insert').exists({ count: 1 });
+    assert.dom('[data-test-apply-code-button]').exists();
+  });
 });
