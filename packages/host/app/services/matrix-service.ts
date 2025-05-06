@@ -635,6 +635,7 @@ export default class MatrixService extends Service {
   }
 
   async uploadCardsAndUpdateSkillCommands(cards: CardDef[], roomId: string) {
+    this.ensureRoomData(roomId);
     let roomResource = this.roomResources.get(roomId);
     if (!roomResource) {
       throw new Error(`Room resource not found for room ${roomId}`);
