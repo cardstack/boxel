@@ -29,7 +29,11 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
-import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
+import {
+  SerializedFileDef,
+  downloadFile,
+  MatrixClient,
+} from './lib/matrix/util';
 import { constructHistory } from './lib/history';
 
 let log = logger('ai-bot');

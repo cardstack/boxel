@@ -1,6 +1,6 @@
 import { module, test, assert } from 'qunit';
 import { Responder } from '../lib/responder';
-import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix-response-publisher';
+import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';

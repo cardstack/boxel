@@ -1,5 +1,5 @@
 import { logger } from '@cardstack/runtime-common';
-import type { MatrixClient } from './matrix';
+import type { MatrixClient } from './matrix/util';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -14,7 +14,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
-import MatrixResponsePublisher from './matrix-response-publisher';
+import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
 
 let log = logger('ai-bot');

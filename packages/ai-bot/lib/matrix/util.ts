@@ -62,9 +62,6 @@ export async function sendMatrixEvent(
   return await client.sendEvent(roomId, eventType, content);
 }
 
-// TODO we might want to think about how to handle patches that are larger than
-// 65KB (the maximum matrix event size), such that we split them into fragments
-// like we split cards into fragments
 export async function sendMessageEvent(
   client: MatrixClient,
   roomId: string,
