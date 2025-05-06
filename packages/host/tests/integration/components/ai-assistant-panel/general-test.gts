@@ -1,5 +1,6 @@
 import { waitFor, waitUntil, click, triggerEvent } from '@ember/test-helpers';
 import { settled } from '@ember/test-helpers';
+import { fillIn } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
 import { format, subMinutes } from 'date-fns';
@@ -31,6 +32,8 @@ import {
   setupLocalIndexing,
   setupOnSave,
   lookupLoaderService,
+  getMonacoContent,
+  setMonacoContent,
 } from '../../../helpers';
 import {
   CardDef,
@@ -79,8 +82,12 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     })(),
   });
 
-  let { createAndJoinRoom, simulateRemoteMessage, setReadReceipt } =
-    mockMatrixUtils;
+  let {
+    createAndJoinRoom,
+    simulateRemoteMessage,
+    setReadReceipt,
+    getRoomEvents,
+  } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -175,6 +182,9 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
           }),
           pet: petMango,
         }),
+        'example-file.gts': `
+          @field name = contains(StringField);
+        `,
         '.realm.json': `{ "name": "${realmName}" }`,
       },
     });
@@ -860,5 +870,190 @@ module('Integration | ai-assistant-panel | general', function (hooks) {
     assert
       .dom('[data-test-message-idx="1"] [data-test-ai-message-content]')
       .containsText('I sent a message from the background.');
+  });
+
+  test('ensures cards are reuploaded when only content changes', async function (assert) {
+    let roomId = await renderAiAssistantPanel(`${testRealmURL}Person/fadhlan`);
+
+    // Send first message with the card
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'First message with card',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Send second message with the same card
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'Second message with same card',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Get the first two message events
+    let messageEvents = getRoomEvents(roomId).filter(
+      (e) => e.type === 'm.room.message',
+    );
+    let firstMessageEvent = messageEvents[0];
+    let secondMessageEvent = messageEvents[1];
+    let firstMessageData = firstMessageEvent.content.data
+      ? JSON.parse(firstMessageEvent.content.data)
+      : undefined;
+    let secondMessageData = secondMessageEvent.content.data
+      ? JSON.parse(secondMessageEvent.content.data)
+      : undefined;
+
+    // Verify first two messages have the same card URL
+    assert.ok(
+      firstMessageData?.attachedCards,
+      'First message has attached cards',
+    );
+    assert.ok(
+      secondMessageData?.attachedCards,
+      'Second message has attached cards',
+    );
+    assert.strictEqual(
+      firstMessageData.attachedCards[0].url,
+      secondMessageData.attachedCards[0].url,
+      'First and second messages use the same URL',
+    );
+    assert.strictEqual(
+      firstMessageData.attachedCards[0].sourceUrl,
+      secondMessageData.attachedCards[0].sourceUrl,
+      'First and second messages have the same source URL',
+    );
+
+    // Now modify the card
+    await click('[data-test-edit-button]');
+    await fillIn('[data-test-field="firstName"] input', 'Updated Name');
+    await click('[data-test-edit-button]');
+
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'Third message with modified card',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Get the third message event
+    messageEvents = getRoomEvents(roomId).filter(
+      (e) => e.type === 'm.room.message',
+    );
+    let thirdMessageEvent = messageEvents[2];
+    let thirdMessageData = thirdMessageEvent.content.data
+      ? JSON.parse(thirdMessageEvent.content.data)
+      : undefined;
+
+    // Verify third message has a different card URL
+    assert.ok(
+      thirdMessageData?.attachedCards,
+      'Third message has attached cards',
+    );
+    assert.notEqual(
+      firstMessageData.attachedCards[0].url,
+      thirdMessageData.attachedCards[0].url,
+      'Third message uses a different URL after modification',
+    );
+    assert.strictEqual(
+      firstMessageData.attachedCards[0].sourceUrl,
+      thirdMessageData.attachedCards[0].sourceUrl,
+      'Source URLs remain the same even after modification',
+    );
+  });
+
+  test('ensures files are reuploaded only when content changes', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await click('[data-test-file="example-file.gts"]');
+    assert.dom('[data-test-attached-file]').exists({ count: 1 });
+
+    // Send first message with the file
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'First message with file',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Send second message with the same file
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'Second message with same file',
+    );
+    await click('[data-test-send-message-btn]');
+
+    // Get the first two message events
+    let messageEvents = getRoomEvents(roomId).filter(
+      (e) => e.type === 'm.room.message',
+    );
+    let firstMessageEvent = messageEvents[0];
+    let secondMessageEvent = messageEvents[1];
+    let firstMessageData = firstMessageEvent.content.data
+      ? JSON.parse(firstMessageEvent.content.data)
+      : undefined;
+    let secondMessageData = secondMessageEvent.content.data
+      ? JSON.parse(secondMessageEvent.content.data)
+      : undefined;
+
+    // Verify first two messages have the same card URL
+    assert.ok(
+      firstMessageData?.attachedFiles,
+      'First message has attached files',
+    );
+    assert.ok(
+      secondMessageData?.attachedFiles,
+      'Second message has attached files',
+    );
+    assert.strictEqual(
+      firstMessageData.attachedFiles[0].url,
+      secondMessageData.attachedFiles[0].url,
+      'First and second messages use the same URL',
+    );
+    assert.strictEqual(
+      firstMessageData.attachedFiles[0].sourceUrl,
+      secondMessageData.attachedFiles[0].sourceUrl,
+      'First and second messages have the same source URL',
+    );
+
+    // Now modify the file
+    let commandSrc = getMonacoContent();
+    setMonacoContent(
+      commandSrc.replace(
+        `@field name = contains(StringField);`,
+        `@field updatedName = contains(StringField);`,
+      ),
+    );
+    await settled();
+
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'Third message with modified file',
+    );
+    await click('[data-test-send-message-btn]');
+    await waitFor('[data-test-message-idx="2"]');
+
+    // Get the third message event
+    messageEvents = getRoomEvents(roomId).filter(
+      (e) => e.type === 'm.room.message',
+    );
+    let thirdMessageEvent = messageEvents[2];
+    let thirdMessageData = thirdMessageEvent.content.data
+      ? JSON.parse(thirdMessageEvent.content.data)
+      : undefined;
+
+    // Verify third message has a different card URL
+    assert.ok(
+      thirdMessageData?.attachedFiles,
+      'Third message has attached files',
+    );
+    assert.notEqual(
+      firstMessageData.attachedFiles[0].url,
+      thirdMessageData.attachedFiles[0].url,
+      'Third message uses a different URL after modification',
+    );
+    assert.strictEqual(
+      firstMessageData.attachedFiles[0].sourceUrl,
+      thirdMessageData.attachedFiles[0].sourceUrl,
+      'Source URLs remain the same even after modification',
+    );
   });
 });
