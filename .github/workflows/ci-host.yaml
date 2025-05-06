@@ -51,11 +51,10 @@ jobs:
       - name: Start Synapse
         uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
         with:
-          run: pnpm start:matrix
-          working-directory: packages/realm-server
+          run: pnpm start:synapse
+          working-directory: packages/matrix
           wait-for: 5m
-          wait-on: |
-            http://localhost:8008
+          wait-on: http://localhost:8008
       - name: create realm users
         run: pnpm register-realm-users
         working-directory: packages/matrix
