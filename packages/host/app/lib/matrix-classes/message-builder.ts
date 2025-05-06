@@ -166,7 +166,7 @@ export default class MessageBuilder {
         : undefined,
     );
     message.hasContinuation = hasContinuation(this.event);
-    message.updated = new Date();
+    message.setUpdated(new Date());
     message.errorMessage = this.errorMessage;
 
     let encodedCommandRequests =

@@ -60,7 +60,7 @@ export class Message implements RoomMessageInterface {
 
   author: RoomMember;
   status: EventStatus | null;
-  updated: Date;
+  _updated: Date;
   eventId: string;
   roomId: string;
 
@@ -74,7 +74,7 @@ export class Message implements RoomMessageInterface {
     this.author = init.author;
     this.eventId = init.eventId;
     this.created = init.created;
-    this.updated = init.updated;
+    this._updated = init.updated;
     this.status = init.status;
     this.roomId = init.roomId;
     this.attachedFiles = init.attachedFiles;
@@ -148,5 +148,15 @@ export class Message implements RoomMessageInterface {
 
   get isStreamingOfEventFinished(): boolean {
     return this._isStreamingFinished === true;
+  }
+
+  get updated(): Date {
+    return this.continuedInMessage?.updated ?? this._updated;
+  }
+
+  setUpdated(updated: Date) {
+    if (this._updated.getTime() !== updated.getTime()) {
+      this._updated = updated;
+    }
   }
 }
