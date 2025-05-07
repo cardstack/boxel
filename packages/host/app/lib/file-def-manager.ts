@@ -505,7 +505,7 @@ export default class FileDefManagerImpl implements FileDefManager {
     ) {
       // Handle attached files and cards
       let data = event.content.data;
-      if (data.attachedFiles) {
+      if (data?.attachedFiles) {
         for (const file of data.attachedFiles) {
           if (file.contentHash && file.url) {
             this.contentHashCache.set(file.contentHash, file.url);
