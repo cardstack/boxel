@@ -17,6 +17,7 @@ import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
+import flatMap from 'lodash/flatMap';
 
 import {
   BoxelButton,
@@ -224,6 +225,62 @@ type SpecPreviewCardContext = Omit<
   'prerenderedCardSearchComponent'
 >;
 
+interface PreviewerSignature {
+  Element: HTMLDivElement;
+  Args: {
+    id: string;
+    cardContext: CardContext;
+    viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
+    onSpecView: (spec: Spec) => void;
+    canWrite: boolean;
+  };
+}
+
+class Previewer extends GlimmerComponent<PreviewerSignature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @tracked private specResource: ReturnType<getCard> | undefined;
+  private makeSpecResource = () => {
+    this.specResource = this.getCard(this, () => this.args.id);
+  };
+
+  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
+    return this.args.cardContext.cardTracker
+      .filter([{ fieldType: 'linksToMany' }])
+      .map((entry) => ({
+        ...entry,
+        overlayZIndexStyle: htmlSafe(`z-index: 1`),
+      }));
+  }
+
+  get spec() {
+    return this.specResource?.card;
+  }
+  <template>
+    {{consumeContext this.makeSpecResource}}
+    {{#if this.spec}}
+      <Overlays
+        @overlayClassName='spec-preview-overlay'
+        @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+        @onSelectCard={{@viewCardInPlayground}}
+      />
+      {{#if this.displayIsolated}}
+        <Preview
+          @card={{this.spec}}
+          @format='isolated'
+          @cardContext={{this.cardContext}}
+        />
+      {{else}}
+        <Preview
+          @card={{this.spec}}
+          @format='edit'
+          @cardContext={{@cardContext}}
+          {{SpecPreviewModifier spec=@spec onSpecView=@onSpecView}}
+        />
+      {{/if}}
+    {{/if}}
+  </template>
+}
+
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
@@ -250,15 +307,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     };
   }
 
-  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
-    return this.cardTracker
-      .filter([{ fieldType: 'linksToMany' }])
-      .map((entry) => ({
-        ...entry,
-        overlayZIndexStyle: htmlSafe(`z-index: 1`),
-      }));
-  }
-
   private getDropdownData = (card: CardDef) => {
     let realmInfo = this.realm.info(urlForRealmLookup(card));
     let realmURL = card[realmURLSymbol];
@@ -281,7 +329,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   private get selectedId() {
-    return this.args.spec?.id;
+    return this.specPanelService.specSelection ?? this.cards[0]?.id;
   }
 
   @action private viewSpecInstance() {
@@ -352,25 +400,12 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 <span class='view-instance-btn-text'>View Instance</span>
               </BoxelButton>
             </div>
-            <Overlays
-              @overlayClassName='spec-preview-overlay'
-              @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-              @onSelectCard={{@viewCardInPlayground}}
+            <Previewer
+              @id={{this.selectedId}}
+              @context={{this.cardContext}}
+              @viewCardInPlayground={{@viewCardInPlayground}}
+              @canWrite={{@canWrite}}
             />
-            {{#if this.displayIsolated}}
-              <Preview
-                @card={{@spec}}
-                @format='isolated'
-                @cardContext={{this.cardContext}}
-              />
-            {{else}}
-              <Preview
-                @card={{@spec}}
-                @format='edit'
-                @cardContext={{this.cardContext}}
-                {{SpecPreviewModifier spec=@spec onSpecView=@onSpecView}}
-              />
-            {{/if}}
           </div>
         {{/if}}
       {{/if}}
@@ -477,7 +512,23 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
-  @tracked private search: ReturnType<getCards<Spec>> | undefined;
+  @tracked cards: CardDef[] = [];
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.search.perform();
+  }
+
+  private search = task(async () => {
+    this.cards = flatMap(
+      await Promise.all(
+        this.realms.map(
+          async (realm) =>
+            await this.store.search(this.specQuery, new URL(realm)),
+        ),
+      ),
+    );
+  });
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -519,6 +570,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             this.args.toggleAccordionItem('spec-preview');
           }
         }
+        this.search.perform();
       } catch (e: any) {
         console.log('Error saving', e);
       }
@@ -621,25 +673,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private makeSearch = () => {
-    this.search = this.getCards(
-      this,
-      () => this.specQuery,
-      () => this.realms,
-      { isLive: true },
-    ) as ReturnType<getCards<Spec>>;
-  };
-
   get _selectedCard() {
     let selectedCardId = this.specPanelService.specSelection;
     if (selectedCardId) {
       return this.cards?.find((card) => card.id === selectedCardId);
     }
     return this.cards?.[0];
-  }
-
-  get cards() {
-    return this.search?.instances ?? [];
   }
 
   private get card() {
@@ -652,14 +691,14 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   get showCreateSpec() {
     return (
       Boolean(this.args.selectedDeclaration?.exportName) &&
-      !this.search?.isLoading &&
+      !this.search?.isRunning &&
       this.cards.length === 0 &&
       this.canWrite
     );
   }
 
   get isLoading() {
-    return this.args.isLoadingNewModule;
+    return this.args.isLoadingNewModule || this.search.isRunning;
   }
 
   private updatePlaygroundSelections(id: string, fieldDefOnly = false) {
@@ -724,7 +763,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
-    {{consumeContext this.makeSearch}}
     {{#if this.isLoading}}
       {{yield
         (component
