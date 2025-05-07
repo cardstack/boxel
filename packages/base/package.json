@@ -4,7 +4,7 @@
   "main": "index.js",
   "license": "MIT",
   "devDependencies": {
-    "@babel/core": "^7.26.10",
+    "@babel/core": "catalog:",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
@@ -15,7 +15,7 @@
     "@types/lodash": "^4.14.182",
     "concurrently": "^8.0.1",
     "ember-cli-htmlbars": "^6.3.0",
-    "ember-concurrency": "^3.1.1",
+    "ember-concurrency": "catalog:",
     "ember-css-url": "^1.0.0",
     "ember-modifier": "^3.2.1",
     "ember-resources": "^6.5.1",

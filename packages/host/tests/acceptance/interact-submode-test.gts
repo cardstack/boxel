@@ -30,6 +30,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
+import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
+
 import type {
   IncrementalIndexEventContent,
   RealmEventContent,
@@ -535,6 +537,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-operator-mode-stack] [data-test-pet="Mango"]');
       let expectedURL = `/?operatorModeState=${encodeURIComponent(
         stringify({
+          aiAssistantOpen: false,
           stacks: [
             [
               {
@@ -562,6 +565,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         currentURL(),
         `/?operatorModeState=${encodeURIComponent(
           stringify({
+            aiAssistantOpen: false,
             stacks: [
               [
                 {
@@ -675,7 +679,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       let firstStack = operatorModeStateService.state.stacks[0];
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
       recentCardsService.ascendingRecentCardIds = firstStack.map(
-        (item) => item.url,
+        (item) => item.id,
       );
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
@@ -781,7 +785,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
       // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
       recentCardsService.ascendingRecentCardIds =
-        operatorModeStateService.state.stacks[0].map((item) => item.url);
+        operatorModeStateService.state.stacks[0].map((item) => item.id);
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();
@@ -828,7 +832,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(7);
+      assert.expect(5);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
@@ -861,6 +865,42 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       await deferred.promise;
+    });
+
+    // TODO we don't yet support viewing an unsaved card in code mode since it has no URL
+    test<TestContextWithSave>('can switch to submode after newly created card is saved', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
+
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-item-selected]')
+        .doesNotExist('No card is pre-selected');
+      assert.dom('[data-test-card-catalog-item]').exists();
+      assert
+        .dom('[data-test-show-more-cards]')
+        .containsText('not shown', 'Entries are paginated');
+      await click(`[data-test-select="${testRealmURL}person-entry"]`);
+      await click('[data-test-card-catalog-go-button]');
+
+      await fillIn(`[data-test-field="firstName"] input`, 'Hassan');
+
+      await click('[data-test-submode-switcher] button');
+      await click('[data-test-boxel-menu-item-text="Code"]');
+      assert.ok(id, 'new card has been assign an id');
+
+      assert
+        .dom(`[data-test-card-url-bar-input]`)
+        .hasValue(
+          `${id}.json`,
+          "the new card's url appears in the card URL field",
+        );
     });
 
     test<TestContextWithSave>('card-catalog can pre-select the current filtered card type', async function (assert) {
@@ -1101,17 +1141,75 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-create-new-card-button]');
       // Select a card from catalog entries
       await click(
-        `[data-test-select="https://cardstack.com/base/fields/skill-card"]`,
+        `[data-test-select="https://cardstack.com/base/cards/skill"]`,
       );
 
       await click(`[data-test-card-catalog-go-button]`);
 
-      // When edit view of new card opens, fill in a field and press the Pencil icon to finish editing
+      await fillIn('[data-test-field="title"] input', 'new skill');
+      assert.dom(`[data-test-attached-card]`).containsText('new skill');
+    });
+
+    test<TestContextWithSave>("new card's remote ID is reflected in the URL once it is saved", async function (assert) {
+      let indexCardId = `${testRealm2URL}index`;
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: indexCardId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await click('[data-test-create-new-card-button]');
+      await click(
+        `[data-test-select="https://cardstack.com/base/cards/skill"]`,
+      );
+
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
+
+      await click(`[data-test-card-catalog-go-button]`);
+
+      // new card is not serialized into the url before it is saved
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: indexCardId,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+
+      // updating a field triggers the auto save of the new card
       await fillIn(
         '[data-test-field="instructions"] textarea',
         'Do this and that and this and that',
       );
-      await click('[data-test-stack-card-index="1"] [data-test-edit-button]');
+
+      assert.ok(id, 'new card has been assigned a remote id');
+      id = id!;
+
+      // new card is serialized into the url after it is saved
+      assert.operatorModeParametersMatch(currentURL(), {
+        stacks: [
+          [
+            {
+              id: indexCardId,
+              format: 'isolated',
+            },
+            {
+              format: 'edit',
+              id,
+            },
+          ],
+        ],
+      });
     });
 
     test<TestContextWithSave>('new card is created in the selected realm', async function (assert) {
@@ -1139,10 +1237,14 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
       await click(`[data-test-card-catalog-go-button]`);
+      await fillIn(
+        `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
+        'Paper',
+      );
     });
 
-    test<TestContextWithSave>('new card is created in the realm that has no results from card chooser', async function (assert) {
-      assert.expect(2);
+    test<TestContextWithSave>('new linked card is created in a different realm than its consuming reference', async function (assert) {
+      assert.expect(5);
       await visitOperatorMode({
         stacks: [
           [
@@ -1153,8 +1255,40 @@ module('Acceptance | interact submode tests', function (hooks) {
           ],
         ],
       });
-      this.onSave((url) => {
+
+      let consumerSaved = new Deferred<void>();
+      let consumerSaveCount = 0;
+      let newLinkId: string | undefined;
+      this.onSave((url, doc) => {
+        doc = doc as SingleCardDocument;
+        if (url.href === `${testRealmURL}Person/fadhlan`) {
+          consumerSaveCount++;
+          if (consumerSaveCount === 1) {
+            // the first time we save the consumer we set the relationship to null
+            // as we are still waiting for the other realm to assign an ID to the new linked card
+            assert.strictEqual(doc.included!.length, 1);
+            assert.strictEqual(
+              doc.included![0].id,
+              `${testRealmURL}Pet/mango`,
+              "the side loaded resources don't include the newly created card yet",
+            );
+          }
+          if (consumerSaveCount === 2) {
+            // as soon as the other realm assigns an id to the linked card we then
+            // save the consumer with a relationship to the linked card's id
+            assert.deepEqual(
+              doc.data?.relationships?.['friends.1'],
+              {
+                links: { self: newLinkId! },
+                data: { type: 'card', id: newLinkId! },
+              },
+              'the "friends.1" relationship was populated with the linked card\'s new id',
+            );
+            consumerSaved.fulfill();
+          }
+        }
         if (url.href.includes('Pet')) {
+          newLinkId = url.href;
           assert.ok(
             url.href.startsWith(testRealm3URL),
             `The pet card is saved in the selected realm ${testRealm3URL}`,
@@ -1169,6 +1303,12 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-card-catalog-create-new-button="${testRealm3URL}"]`,
       );
       await click(`[data-test-card-catalog-go-button]`);
+      await fillIn(
+        `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
+        'Paper',
+      );
+
+      await consumerSaved.promise;
     });
   });
 
@@ -1574,7 +1714,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {
-      assert.expect(3);
+      assert.expect(2);
       await visitOperatorMode({
         stacks: [
           [
@@ -1586,24 +1726,18 @@ module('Acceptance | interact submode tests', function (hooks) {
           [{ id: `${testRealmURL}index`, format: 'isolated' }],
         ],
       });
-      let deferred = new Deferred<void>();
-      let saveCount = 0;
       let petId: string | undefined;
       this.onSave((id, json) => {
         if (id.href.includes('Pet/')) {
           petId = id.href;
-          saveCount++;
           if (typeof json === 'string') {
             throw new Error('expected JSON save data');
           }
-          if (saveCount === 1) {
-            // first save is an empty card
-            assert.strictEqual(json.data.attributes?.name, null);
-          } else if (saveCount === 2) {
-            // second save is after a field has been filled in
-            assert.strictEqual(json.data.attributes?.name, 'Paper');
-            deferred.fulfill();
-          }
+          assert.strictEqual(
+            json.data.attributes?.name,
+            'Paper',
+            'saved card data is correct',
+          );
         }
       });
       await click(
@@ -1626,8 +1760,6 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
       );
-
-      await deferred.promise;
       assert
         .dom(`[data-test-card="${petId}"]`)
         .includesText('Paper', 'the card is rendered correctly');
@@ -1660,7 +1792,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
       window.localStorage.setItem(
-        'recent-cards',
+        RecentCards,
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );
 
@@ -1803,7 +1935,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         .hasText('FadhlanXXX');
     });
 
-    test('stack item live updates with error', async function (assert) {
+    test('stack item live updates with error in isolated mode', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -1880,6 +2012,33 @@ module('Acceptance | interact submode tests', function (hooks) {
           `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
         )
         .doesNotExist('card error state is NOT displayed');
+    });
+
+    test('stack item live shows stale card when server has an error in edit mode', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}Person/fadhlan`,
+              format: 'edit',
+            },
+          ],
+        ],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .exists('card is displayed');
+      assert
+        .dom(
+          `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-card-error]`,
+        )
+        .doesNotExist('card error state is NOT displayed');
+      assert.dom('[data-test-field="firstName"] input').hasValue('Fadhlan');
+
+      // TODO should we show a message that the card is currently in an error
+      // state on the server? note that this error state did not occur from an
+      // auto save, but rather an external event put the server into an error...
     });
 
     test('stack item edit results in index event that is ignored', async function (assert) {

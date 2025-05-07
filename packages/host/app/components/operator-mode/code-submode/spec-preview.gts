@@ -41,6 +41,8 @@ import {
   isFieldDef,
   internalKeyFor,
   loadCardDef,
+  realmURL as realmURLSymbol,
+  skillCardRef,
 } from '@cardstack/runtime-common';
 import {
   codeRefWithAbsoluteURL,
@@ -50,6 +52,7 @@ import {
 import Preview from '@cardstack/host/components/preview';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
+import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import {
   CardOrFieldDeclaration,
   isCardOrFieldDeclaration,
@@ -173,6 +176,7 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 
     <style scoped>
       .has-spec {
+        display: flex;
         color: var(--boxel-450);
         font: 500 var(--boxel-font-xs);
         letter-spacing: var(--boxel-lsp-xl);
@@ -255,16 +259,16 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       }));
   }
 
-  private getDropdownData = (id: string) => {
-    let realmInfo = this.realm.info(id);
-    let realmURL = this.realm.realmOfURL(new URL(id));
+  private getDropdownData = (card: CardDef) => {
+    let realmInfo = this.realm.info(urlForRealmLookup(card));
+    let realmURL = card[realmURLSymbol];
     if (!realmURL) {
       throw new Error('bug: no realm URL');
     }
     return {
-      id: id,
+      id: card.id,
       realmInfo,
-      localPath: getRelativePath(realmURL.href, id),
+      localPath: card.id ? getRelativePath(realmURL.href, card.id) : undefined,
     };
   };
 
@@ -322,7 +326,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                   as |card|
                 >
                   {{#if card.id}}
-                    {{#let (this.getDropdownData card.id) as |data|}}
+                    {{#let (this.getDropdownData card) as |data|}}
                       {{#if data}}
                         <div class='spec-selector-item'>
                           <RealmIcon
@@ -562,13 +566,9 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   }
 
   private async isSkill(selectedDeclaration: CardOrFieldDeclaration) {
-    const skillCardCodeRef = {
-      name: 'SkillCard',
-      module: 'https://cardstack.com/base/skill-card',
-    };
     const isInClassChain = await selectedDeclaration.cardType.isClassInChain(
       selectedDeclaration.cardOrField,
-      skillCardCodeRef,
+      skillCardRef,
     );
 
     if (isInClassChain) {

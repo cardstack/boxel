@@ -81,8 +81,8 @@ export default class CopyCardCommand extends HostBaseCommand<
       // use existing card in stack to determine realm url,
       let item =
         this.operatorModeStateService.topMostStackItems()[targetStackIndex];
-      if (item.url) {
-        let topCard = await this.store.get(item.url);
+      if (item.id) {
+        let topCard = await this.store.get(item.id);
         if (isCardInstance(topCard)) {
           let url = topCard[realmURL];
           // open card might be from a realm in which we don't have write permissions

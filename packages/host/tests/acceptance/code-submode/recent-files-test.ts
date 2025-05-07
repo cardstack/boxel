@@ -16,6 +16,8 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import MonacoService from '@cardstack/host/services/monaco-service';
 
+import { RecentFiles } from '@cardstack/host/utils/local-storage-keys';
+
 import {
   percySnapshot,
   setupLocalIndexing,
@@ -299,7 +301,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
   test('recent file links are shown', async function (assert) {
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify([
         [testRealmURL, 'index.json'],
         ['http://localhost:4202/test/', 'français.json'],
@@ -386,7 +388,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       .containsText('Person/1.json');
 
     assert.deepEqual(
-      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
+      JSON.parse(window.localStorage.getItem(RecentFiles) || '[]'),
       [
         [testRealmURL, 'index.json', null],
         [testRealmURL, 'français.json', null],
@@ -404,7 +406,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     }
 
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify(recentFilesEntries),
     );
 
@@ -507,7 +509,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
   test('displays recent files in base realm', async function (assert) {
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify([
         ['https://cardstack.com/base/', 'code-ref.gts'],
         ['https://cardstack.com/base/', 'spec.gts'],
@@ -570,7 +572,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     // the cursor positions seem to be different in CI than locally
     let removedCursorPositions = (
-      JSON.parse(window.localStorage.getItem('recent-files') || '[]') as [
+      JSON.parse(window.localStorage.getItem(RecentFiles) || '[]') as [
         string,
         string,
         { column: number; line: number } | null,
@@ -587,7 +589,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
   test('set cursor based on the position in recent file', async function (assert) {
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify([
         [testRealmURL, 'index.json', null],
         [testRealmURL, 'friend.gts', { line: 14, column: 1 }],
@@ -608,7 +610,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
     monacoService.updateCursorPosition(new MonacoSDK.Position(22, 3));
     assert.deepEqual(
-      JSON.parse(window.localStorage.getItem('recent-files') || '[]'),
+      JSON.parse(window.localStorage.getItem(RecentFiles) || '[]'),
       [
         [testRealmURL, 'friend.gts', { column: 3, line: 22 }],
         [testRealmURL, 'index.json', null],

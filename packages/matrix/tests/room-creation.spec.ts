@@ -243,6 +243,7 @@ test.describe('Room creation', () => {
 
   test('it can delete a room', async ({ page }) => {
     await login(page, 'user1', 'pass', { url: appURL });
+    await page.locator(`[data-test-room-settled]`).waitFor();
     let roomsBeforeDeletion = await getRoomsFromSync();
 
     let room1 = await getRoomId(page);
@@ -281,6 +282,7 @@ test.describe('Room creation', () => {
     expect(newRoom).not.toEqual(room2);
     expect(newRoom).not.toEqual(room3);
     await assertRooms(page, [newRoom]);
+    await page.locator(`[data-test-room-settled]`).waitFor();
 
     // For asserting the result of the forget matrix API
     let roomsAfterDeletion = await getRoomsFromSync();

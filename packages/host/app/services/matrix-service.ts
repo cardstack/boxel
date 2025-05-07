@@ -78,14 +78,17 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
+import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';
+import {
+  CurrentRoomIdPersistenceKey,
+  clearLocalStorage,
+} from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
@@ -640,7 +643,7 @@ export default class MatrixService extends Service {
   }
 
   async uploadCommandDefinitions(
-    commandDefinitions: SkillCardModule.CommandField[],
+    commandDefinitions: SkillModule.CommandField[],
   ) {
     let commandFileDefs =
       await this.client.uploadCommandDefinitions(commandDefinitions);
@@ -866,11 +869,11 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
+    let interactModeDefaultSkills = [`${baseRealm.url}Skill/card-editing`];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}SkillCard/boxel-coding`,
-      `${baseRealm.url}SkillCard/source-code-editing`,
+      `${baseRealm.url}Skill/boxel-coding`,
+      `${baseRealm.url}Skill/source-code-editing`,
     ];
 
     let defaultSkills;
@@ -884,12 +887,11 @@ export default class MatrixService extends Service {
     return (
       await Promise.all(
         defaultSkills.map(async (skillCardURL) => {
-          let maybeCard =
-            await this.store.get<SkillCardModule.SkillCard>(skillCardURL);
+          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
           return isCardInstance(maybeCard) ? maybeCard : undefined;
         }),
       )
-    ).filter(Boolean) as SkillCardModule.SkillCard[];
+    ).filter(Boolean) as SkillModule.Skill[];
   }
 
   @cached
@@ -920,6 +922,11 @@ export default class MatrixService extends Service {
     this.cardsToSend = new TrackedMap();
     this.filesToSend = new TrackedMap();
     this.currentUserEventReadReceipts = new TrackedMap();
+
+    // Reset it here rather than in the reset function of each service
+    // because it is possible that
+    // there are some services that are not initialized yet
+    clearLocalStorage();
   }
 
   private bindEventListeners() {

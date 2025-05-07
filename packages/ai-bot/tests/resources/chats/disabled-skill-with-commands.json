@@ -314,7 +314,7 @@
           "url": "mxc://mock-server/command_def_editing",
           "sourceUrl": "",
           "contentType": "text/plain",
-          "name": "patchCard"
+          "name": "patchCardInstance"
         },
         {
           "url": "mxc://mock-server/command_def_switcher",
@@ -368,7 +368,7 @@
           "url": "mxc://mock-server/command_def_editing",
           "sourceUrl": "",
           "contentType": "text/plain",
-          "name": "patchCard"
+          "name": "patchCardInstance"
         },
         {
           "url": "mxc://mock-server/command_def_switcher",
@@ -396,7 +396,7 @@
             "url": "mxc://mock-server/command_def_editing",
             "sourceUrl": "",
             "contentType": "text/plain",
-            "name": "patchCard"
+            "name": "patchCardInstance"
           },
           {
             "url": "mxc://mock-server/command_def_switcher",
@@ -427,7 +427,7 @@
           "url": "mxc://mock-server/command_def_editing",
           "sourceUrl": "",
           "contentType": "text/plain",
-          "name": "patchCard"
+          "name": "patchCardInstance"
         },
         {
           "url": "mxc://mock-server/command_def_switcher",

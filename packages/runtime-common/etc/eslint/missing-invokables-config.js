@@ -3,6 +3,9 @@
 
 module.exports = {
   invokables: {
+    array: ['array', '@ember/helper'],
+    concat: ['concat', '@ember/helper'],
+    hash: ['hash', '@ember/helper'],
     fn: ['fn', '@ember/helper'],
     on: ['on', '@ember/modifier'],
     and: ['and', '@cardstack/boxel-ui/helpers'],

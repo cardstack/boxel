@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-empty-function */
 import * as runtime from '@cardstack/runtime-common';
 import * as flat from 'flat';
 import * as lodash from 'lodash';

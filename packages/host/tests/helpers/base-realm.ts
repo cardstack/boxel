@@ -15,7 +15,7 @@ import type * as DatetimeFieldModule from 'https://cardstack.com/base/datetime';
 import type * as EthereumAddressModule from 'https://cardstack.com/base/ethereum-address';
 import type * as MarkdownFieldModule from 'https://cardstack.com/base/markdown';
 import type * as NumberFieldModule from 'https://cardstack.com/base/number';
-import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
+import type * as SkillModule from 'https://cardstack.com/base/skill';
 import type * as StringFieldModule from 'https://cardstack.com/base/string';
 import type * as TextAreaFieldModule from 'https://cardstack.com/base/text-area';
 
@@ -55,8 +55,8 @@ let TextAreaField: TextAreaField;
 type CardsGrid = (typeof CardsGridModule)['CardsGrid'];
 let CardsGrid: CardsGrid;
 
-type SkillCard = (typeof SkillCardModule)['SkillCard'];
-let SkillCard: SkillCard;
+type Skill = (typeof SkillModule)['Skill'];
+let Skill: Skill;
 
 let field: (typeof CardAPIModule)['field'];
 let CardDef: (typeof CardAPIModule)['CardDef'];
@@ -80,6 +80,7 @@ let flushLogs: (typeof CardAPIModule)['flushLogs'];
 let queryableValue: (typeof CardAPIModule)['queryableValue'];
 let getFieldDescription: (typeof CardAPIModule)['getFieldDescription'];
 let ReadOnlyField: (typeof CardAPIModule)['ReadOnlyField'];
+let instanceOf: (typeof CardAPIModule)['instanceOf'];
 
 async function initialize() {
   let owner = (getContext() as TestContext).owner;
@@ -137,9 +138,8 @@ async function initialize() {
     await loader.import<typeof CardsGridModule>(`${baseRealm.url}cards-grid`)
   ).CardsGrid;
 
-  SkillCard = (
-    await loader.import<typeof SkillCardModule>(`${baseRealm.url}skill-card`)
-  ).SkillCard;
+  Skill = (await loader.import<typeof SkillModule>(`${baseRealm.url}skill`))
+    .Skill;
 
   let cardAPI = await loader.import<typeof CardAPIModule>(
     `${baseRealm.url}card-api`,
@@ -168,6 +168,7 @@ async function initialize() {
     MaybeBase64Field,
     getFieldDescription,
     ReadOnlyField,
+    instanceOf,
   } = cardAPI);
 }
 
@@ -210,5 +211,6 @@ export {
   queryableValue,
   getFieldDescription,
   ReadOnlyField,
-  SkillCard,
+  Skill,
+  instanceOf,
 };

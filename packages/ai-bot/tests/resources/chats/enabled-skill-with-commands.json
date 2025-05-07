@@ -331,7 +331,7 @@
           "url": "mxc://mock-server/command_def_editing",
           "sourceUrl": "",
           "contentType": "text/plain",
-          "name": "patchCard"
+          "name": "patchCardInstance"
         },
         {
           "url": "mxc://mock-server/command_def_switcher",
@@ -373,7 +373,7 @@
           "url": "mxc://mock-server/command_def_editing",
           "sourceUrl": "",
           "contentType": "text/plain",
-          "name": "patchCard"
+          "name": "patchCardInstance"
         },
         {
           "url": "mxc://mock-server/command_def_switcher",
@@ -400,7 +400,8 @@
           {
             "url": "mxc://mock-server/command_def_editing",
             "sourceUrl": "",
-            "contentType": "text/plain"
+            "contentType": "text/plain",
+            "name": "patchCardInstance"
           }
         ]
       },
@@ -424,7 +425,8 @@
         {
           "url": "mxc://mock-server/command_def_editing",
           "sourceUrl": "",
-          "contentType": "text/plain"
+          "contentType": "text/plain",
+          "name": "patchCardInstance"
         }
       ]
     }
@@ -446,7 +448,7 @@
           "url": "mxc://mock-server/skill_card_editing",
           "sourceUrl": "mxc://mock-server/skill_card_editing",
           "contentType": "text/plain",
-          "name": "patchCard"
+          "name": "patchCardInstance"
         }
       ],
       "commandDefinitions": [
@@ -481,7 +483,7 @@
             "url": "mxc://mock-server/command_def_editing",
             "sourceUrl": "",
             "contentType": "text/plain",
-            "name": "patchCard"
+            "name": "patchCardInstance"
           },
           {
             "url": "mxc://mock-server/command_def_switcher",
@@ -517,7 +519,7 @@
           "url": "mxc://mock-server/command_def_editing",
           "sourceUrl": "",
           "contentType": "text/plain",
-          "name": "patchCard"
+          "name": "patchCardInstance"
         },
         {
           "url": "mxc://mock-server/command_def_switcher",

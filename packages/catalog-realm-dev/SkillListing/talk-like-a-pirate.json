@@ -13,7 +13,7 @@
     "relationships": {
       "skills.0": {
         "links": {
-          "self": "../SkillCard/skill-pirate-speak"
+          "self": "../Skill/skill-pirate-speak"
         }
       },
       "specs": {
