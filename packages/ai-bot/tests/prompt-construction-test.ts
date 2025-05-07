@@ -2713,7 +2713,7 @@ Attached files:
   });
 
   test('Elides code blocks in prompt', async () => {
-    // sending older codeblocks back to the model just confuses it
+    // sending older codeblocks back to the model just confuses it and wastes tokens
     // so we need to remove them from the prompt
     const eventList: DiscreteMatrixEvent[] = JSON.parse(
       readFileSync(
