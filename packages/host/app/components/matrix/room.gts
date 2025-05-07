@@ -55,6 +55,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type StoreService from '@cardstack/host/services/store';
+import { isLocalId } from '@cardstack/host/services/store';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 import { type FileDef } from 'https://cardstack.com/base/file-api';
@@ -753,18 +754,15 @@ export default class Room extends Component<Signature> {
         this.matrixService.messagesToSend.set(this.args.roomId, undefined);
         this.matrixService.cardsToSend.set(this.args.roomId, undefined);
       }
-      let openCardIds =
-        this.operatorModeStateService.getOpenCardIds(
+      let openCardIds = new Set([
+        ...(this.operatorModeStateService.getOpenCardIds(
           this.args.selectedCardRef,
-        ) || [];
-      for (let cardId of this.autoAttachedCardIds) {
-        if (!openCardIds.includes(cardId)) {
-          openCardIds.push(cardId);
-        }
-      }
+        ) || []),
+        ...this.autoAttachedCardIds,
+      ]);
       let context = {
         submode: this.operatorModeStateService.state.submode,
-        openCardIds: openCardIds ?? [],
+        openCardIds: this.makeRemoteIdsList([...openCardIds]),
       };
       try {
         if (files?.length) {
@@ -812,6 +810,26 @@ export default class Room extends Component<Signature> {
     await Promise.resolve();
     this.removedAttachedCardIds.splice(0);
   });
+
+  private makeRemoteIdsList(ids: string[]) {
+    return ids
+      .map((id) => {
+        if (isLocalId(id)) {
+          let maybeInstance = this.store.peek(id);
+          if (
+            maybeInstance &&
+            isCardInstance(maybeInstance) &&
+            maybeInstance.id
+          ) {
+            return maybeInstance.id;
+          } else {
+            return undefined;
+          }
+        }
+        return id;
+      })
+      .filter(Boolean) as string[];
+  }
 
   private get autoAttachedCardIds() {
     if (this.operatorModeStateService.state.submode === Submodes.Code) {

@@ -66,7 +66,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
-export { CardErrorJSONAPI, CardSaveSubscriber };
+export { CardErrorJSONAPI, CardSaveSubscriber, isLocalId };
 
 let waiter = buildWaiter('store-service');
 
@@ -223,6 +223,16 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<T>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
+    opts: {
+      realm?: string;
+      relativeTo?: URL | undefined;
+      // if you don't wait for save then there is no possibility for error,
+      // hence a simpler return type
+      doNotWaitForPersist: true;
+    },
+  ): Promise<T>;
+  async add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
     opts?: {
       realm?: string;
       relativeTo?: URL | undefined;
@@ -237,6 +247,7 @@ export default class StoreService extends Service implements StoreInterface {
       realm?: string;
       relativeTo?: URL | undefined;
       doNotPersist?: true;
+      doNotWaitForPersist?: true;
     },
   ): Promise<T | CardErrorJSONAPI> {
     // need to figure out the actual realm because opts.realm is being abused
@@ -279,7 +290,10 @@ export default class StoreService extends Service implements StoreInterface {
 
     await this.updateInstanceChangeSubscription('start-tracking', instance);
 
-    if (!opts?.doNotPersist) {
+    if (opts?.doNotWaitForPersist) {
+      // intentionally not awaiting
+      this.persistAndUpdate(instance, opts?.realm);
+    } else if (!opts?.doNotPersist) {
       if (instance.id) {
         this.save(instance.id);
       } else {

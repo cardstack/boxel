@@ -624,6 +624,35 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test<TestContextWithSave>('can skip waiting for the save when adding to the store', async function (assert) {
+    assert.expect(6);
+    let didSave = false;
+    this.onSave((_, doc) => {
+      didSave = true;
+      assert.strictEqual(
+        (doc as SingleCardDocument).data.attributes?.name,
+        'Andrea',
+        'card data is correct',
+      );
+    });
+    let instance = new PersonDef({ name: 'Andrea' });
+    await store.add(instance, { doNotWaitForPersist: true });
+    assert.false(didSave, 'the instance has not saved yet');
+
+    await waitUntil(() => instance.id);
+
+    assert.ok(instance.id, 'instance has been assigned remote id');
+    let peekedInstance = store.peek(instance.id);
+    assert.strictEqual(instance, peekedInstance, 'instance is the same');
+
+    let file = await testRealmAdapter.openFile(
+      `${instance.id.substring(testRealmURL.length)}.json`,
+    );
+    assert.ok(file, 'file exists');
+    let fileJSON = JSON.parse(file!.content as string);
+    assert.strictEqual(fileJSON.data.attributes.name, 'Andrea', 'file exists');
+  });
+
   test('can set realmURL when adding to the store', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
     assert.strictEqual(

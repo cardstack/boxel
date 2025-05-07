@@ -319,6 +319,7 @@ export interface Store {
       realm?: string;
       relativeTo?: URL | undefined;
       doNotPersist?: true;
+      doNotWaitForPersist?: true;
     },
   ): Promise<T | CardErrorJSONAPI>;
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
