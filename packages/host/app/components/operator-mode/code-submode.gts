@@ -9,7 +9,6 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import Modifier from 'ember-modifier';
 import { on } from '@ember/modifier';
 import { capitalize } from '@ember/string';
 

@@ -1,10 +1,8 @@
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { inject as service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { Button } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 
 import RestoreScrollPosition from '@cardstack/host/modifiers/restore-scroll-position';
