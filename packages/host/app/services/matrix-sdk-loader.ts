@@ -287,6 +287,8 @@ function extendedClient({
           return fileDefManager.uploadContent.bind(fileDefManager);
         case 'downloadCardFileDef':
           return fileDefManager.downloadCardFileDef.bind(fileDefManager);
+        case 'cacheContentHashIfNeeded':
+          return fileDefManager.cacheContentHashIfNeeded.bind(fileDefManager);
         default:
           return Reflect.get(target, key, receiver);
       }

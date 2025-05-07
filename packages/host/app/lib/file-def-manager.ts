@@ -6,6 +6,7 @@ import * as MatrixSDK from 'matrix-js-sdk';
 import { md5 } from 'super-fast-md5';
 
 import {
+  APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   baseRealm,
   codeRefWithAbsoluteURL,
@@ -29,10 +30,7 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type {
-  CardMessageContent,
-  SkillsConfigEvent,
-} from 'https://cardstack.com/base/matrix-event';
+import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import { RoomResource } from '../resources/room';
@@ -42,8 +40,6 @@ import NetworkService from '../services/network';
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type LoaderService from '../services/loader-service';
-
-import type { MatrixEvent } from 'matrix-js-sdk';
 
 export const isSkillCard = Symbol.for('is-skill-card');
 
@@ -96,6 +92,8 @@ export interface FileDefManager {
   downloadCardFileDef(
     serializedFileDef: SerializedFile,
   ): Promise<LooseSingleCardDocument>;
+
+  cacheContentHashIfNeeded(event: MatrixEvent): Promise<void>;
 }
 
 export default class FileDefManagerImpl implements FileDefManager {
@@ -125,12 +123,6 @@ export default class FileDefManagerImpl implements FileDefManager {
     this.client = client;
     this.getCardAPI = getCardAPI;
     this.getFileAPI = getFileAPI;
-
-    // Listen to timeline events to build the cache
-    this.client.on(
-      MatrixSDK.RoomEvent.Timeline,
-      this.onTimelineEvent.bind(this),
-    );
   }
 
   get fileAPI() {
@@ -506,17 +498,13 @@ export default class FileDefManagerImpl implements FileDefManager {
     }
   }
 
-  private async onTimelineEvent(event: MatrixEvent) {
-    const content = event.getContent();
-    if (!content) {
-      return;
-    }
-
-    const eventType = event.getType();
-
-    // Handle attached files and cards
-    if (eventType === 'm.room.message' && 'data' in content) {
-      const data = JSON.parse(content.data) as CardMessageContent['data'];
+  async cacheContentHashIfNeeded(event: MatrixEvent) {
+    if (
+      event.type === 'm.room.message' &&
+      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+    ) {
+      // Handle attached files and cards
+      let data = event.content.data;
       if (data.attachedFiles) {
         for (const file of data.attachedFiles) {
           if (file.contentHash && file.url) {
@@ -532,20 +520,21 @@ export default class FileDefManagerImpl implements FileDefManager {
           }
         }
       }
-    }
-
-    // Handle skills config
-    if (eventType === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE) {
-      const skillsContent = content as SkillsConfigEvent['content'];
-      const skills = [
+    } else if (event.type === APP_BOXEL_ROOM_SKILLS_EVENT_TYPE) {
+      // Handle skills config
+      const skillsContent = event.content;
+      const skillsAndCommands = [
         ...(skillsContent.enabledSkillCards || []),
         ...(skillsContent.disabledSkillCards || []),
         ...(skillsContent.commandDefinitions || []),
       ];
 
-      for (const skill of skills) {
-        if (skill.contentHash && skill.url) {
-          this.contentHashCache.set(skill.contentHash, skill.url);
+      for (const skillOrCommand of skillsAndCommands) {
+        if (skillOrCommand.contentHash && skillOrCommand.url) {
+          this.contentHashCache.set(
+            skillOrCommand.contentHash,
+            skillOrCommand.url,
+          );
         }
       }
     }

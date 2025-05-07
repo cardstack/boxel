@@ -661,6 +661,10 @@ export default class MatrixService extends Service {
     return commandFileDefs;
   }
 
+  async cacheContentHashIfNeeded(event: DiscreteMatrixEvent) {
+    await this.client.cacheContentHashIfNeeded(event);
+  }
+
   async sendCommandResultEvent(
     roomId: string,
     invokedToolFromEventId: string,

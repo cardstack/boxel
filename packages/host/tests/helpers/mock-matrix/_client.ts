@@ -34,6 +34,7 @@ import { assertNever } from '@cardstack/host/utils/assert-never';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type { CommandField } from 'https://cardstack.com/base/skill';
 
 import { MockSDK } from './_sdk';
@@ -684,6 +685,10 @@ export class MockClient implements ExtendedClient {
 
   async uploadFiles(files: FileDef[]): Promise<FileDef[]> {
     return await this.fileDefManager.uploadFiles(files);
+  }
+
+  async cacheContentHashIfNeeded(event: DiscreteMatrixEvent): Promise<void> {
+    this.fileDefManager.cacheContentHashIfNeeded(event);
   }
 
   async uploadContent(
