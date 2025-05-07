@@ -961,7 +961,7 @@ export default class CodeSubmode extends Component<Signature> {
                           @contentClass='accordion-item-content'
                           @onClick={{fn this.toggleAccordionItem 'playground'}}
                           @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                          data-test-code-model-panel-item='playground'
+                          data-test-code-mode-panel-item='playground'
                         >
                           <:title><PlaygroundTitle /></:title>
                           <:content>

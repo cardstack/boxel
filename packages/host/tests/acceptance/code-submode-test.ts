@@ -1790,7 +1790,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-selected-code-mode-panel-item="schema-editor"]')
         .exists('defaults to schema-editor view');
-      await click('[data-test-code-model-panel-item="playground"] > button');
+      await click('[data-test-code-mode-panel-item="playground"] > button');
       assert
         .dom('[data-test-selected-code-mode-panel-item="playground"]')
         .exists();
@@ -1801,9 +1801,9 @@ module('Acceptance | code submode tests', function (_hooks) {
         .dom('[data-test-selected-code-mode-panel-item="spec-preview"]')
         .exists();
       assert
-        .dom('[data-test-code-model-panel-item="spec-preview"]')
+        .dom('[data-test-code-mode-panel-item="spec-preview"]')
         .hasClass('open');
-      await click('[data-test-code-model-panel-item="spec-preview"] > button');
+      await click('[data-test-code-mode-panel-item="spec-preview"] > button');
       assert
         .dom('[data-test-selected-code-mode-panel-item="playground"]')
         .exists('closing the final panel opens the previous panel');
@@ -1813,7 +1813,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-selected-code-mode-panel-item="schema-editor"]')
         .exists();
-      await click('[data-test-code-model-panel-item="spec-preview"] > button'); // open spec preview
+      await click('[data-test-code-mode-panel-item="spec-preview"] > button'); // open spec preview
       assert
         .dom('[data-test-selected-code-mode-panel-item="spec-preview"]')
         .exists();
@@ -1827,7 +1827,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-selected-code-mode-panel-item="playground"]')
         .exists();
-      await click('[data-test-code-model-panel-item="playground"] > button'); // toggle playground closed
+      await click('[data-test-code-mode-panel-item="playground"] > button'); // toggle playground closed
       assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
       assert
         .dom('[data-test-selected-code-mode-panel-item="spec-preview"]')
