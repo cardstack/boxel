@@ -2711,6 +2711,34 @@ Attached files:
       'Should not include old command description',
     );
   });
+
+  test('Elides code blocks in prompt', async () => {
+    // sending older codeblocks back to the model just confuses it
+    // so we need to remove them from the prompt
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/code-blocks.json'),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages!.length, 3);
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(
+      messages![2].content,
+      'Right, let us make a tic tac toe game.\n' +
+        '\n' +
+        '// File url: https://test.com/tic-tac.gts\n' +
+        '[Proposed code change]\n' +
+        '\n' +
+        'I can add some more whiz bang if you want. Let me know!',
+    );
+  });
 });
 
 module('set model in prompt', (hooks) => {
