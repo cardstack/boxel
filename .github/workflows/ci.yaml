@@ -121,15 +121,14 @@ jobs:
         run: pnpm build
         working-directory: packages/boxel-motion/addon
       - name: Start host to serve assets for fastboot
-        run: pnpm start &
-        env:
-          NODE_OPTIONS: --max_old_space_size=4096
-        working-directory: packages/host
-      - name: Wait for ember-cli to be ready
-        run: timeout 3m pnpm npx wait-for-localhost 4200
-        working-directory: packages/host
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
       - name: Start realm servers
-        run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests &> /tmp/server.log &
+        run: MATRIX_REGISTRATION_SHARED_SECRET='xxxx' pnpm start:services-for-matrix-tests | tee -a /tmp/server.log &
         working-directory: packages/realm-server
       - name: Run Playwright tests
         run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
@@ -282,15 +281,14 @@ jobs:
         run: pnpm build
         working-directory: packages/boxel-ui/addon
       - name: Start host to serve assets for fastboot
-        run: pnpm start &
-        env:
-          NODE_OPTIONS: --max_old_space_size=4096
-        working-directory: packages/host
-      - name: Wait for ember-cli to be ready
-        run: timeout 3m pnpm npx wait-for-localhost 4200
-        working-directory: packages/realm-server
+        uses: JarvusInnovations/background-action@2428e7b970a846423095c79d43f759abf979a635 # 1.0.7
+        with:
+          run: NODE_OPTIONS="--max_old_space_size=4096" pnpm start &
+          working-directory: packages/host
+          wait-for: 3m
+          wait-on: http-get://localhost:4200
       - name: Start realm servers
-        run: pnpm start:all &> /tmp/server.log &
+        run: pnpm start:all | tee -a /tmp/server.log &
         working-directory: packages/realm-server
       - name: create realm users
         run: pnpm register-realm-users

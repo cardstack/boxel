@@ -20,8 +20,8 @@ export const baseFieldRef: ResolvedCodeRef = {
   name: 'FieldDef',
 };
 export const skillCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}skill-card`,
-  name: 'SkillCard',
+  module: `${baseRealm.url}skill`,
+  name: 'Skill',
 };
 
 export const isField = Symbol('cardstack-field');

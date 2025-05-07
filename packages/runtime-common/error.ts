@@ -210,7 +210,7 @@ export class CardError extends Error implements SerializedError {
         maybeErrorJSON.errors.length > 0
       ) {
         let error = CardError.fromSerializableError(maybeErrorJSON.errors[0]);
-        if (response.status === 404) {
+        if ([404, 406].includes(response.status)) {
           error.deps = [response.url];
         }
 
@@ -225,7 +225,12 @@ export class CardError extends Error implements SerializedError {
           responseText: text,
         },
       );
-      if (response.status === 404) {
+      // 406 errors matter to us because in the scenario were you are depending on a
+      // module that is depending on another module, like a -> b -> c. if module c
+      // doesn't exist then module b is in an error state. when module a asks for
+      // module b, we return an error code, 406, meaning that we know about module b,
+      // but we can't give it to you because it is in an error state.
+      if ([404, 406].includes(response.status)) {
         error.deps = [response.url];
       }
       return error;

@@ -33,7 +33,7 @@ import type {
   CardMessageContent,
   SkillsConfigEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
+import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import { RoomResource } from '../resources/room';
 
@@ -68,7 +68,7 @@ export interface FileDefManager {
    * @returns Promise resolving to array of file definitions
    */
   uploadCommandDefinitions(
-    commandDefinitions: SkillCardModule.CommandField[],
+    commandDefinitions: SkillModule.CommandField[],
   ): Promise<FileDef[]>;
 
   uploadFiles(files: FileDef[]): Promise<FileDef[]>;
@@ -167,8 +167,7 @@ export default class FileDefManagerImpl implements FileDefManager {
         (roomSkill) => roomSkill.cardId === skillCard.id,
       );
       if (matchingRoomSkill) {
-        let commandDefinitions = (skillCard as SkillCardModule.SkillCard)
-          .commands;
+        let commandDefinitions = (skillCard as SkillModule.Skill).commands;
         if (commandDefinitions.length) {
           let commandDefFileDefs =
             await this.uploadCommandDefinitions(commandDefinitions);
@@ -349,7 +348,7 @@ export default class FileDefManagerImpl implements FileDefManager {
   }
 
   async uploadCommandDefinitions(
-    commandDefinitions: SkillCardModule.CommandField[],
+    commandDefinitions: SkillModule.CommandField[],
   ): Promise<FileDef[]> {
     if (!commandDefinitions.length) {
       return [];

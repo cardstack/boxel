@@ -3100,7 +3100,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/skill-card"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
     );
     await click('[data-test-card-catalog-go-button]');
 

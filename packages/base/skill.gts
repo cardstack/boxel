@@ -89,7 +89,7 @@ export class CommandField extends FieldDef {
   };
 }
 
-export class SkillCard extends CardDef {
+export class Skill extends CardDef {
   static displayName = 'Skill';
   static icon = RobotIcon;
   [isSkillCard] = true;
