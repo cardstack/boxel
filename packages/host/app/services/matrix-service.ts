@@ -85,7 +85,10 @@ import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';
+import {
+  CurrentRoomIdPersistenceKey,
+  clearLocalStorage,
+} from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
@@ -919,6 +922,11 @@ export default class MatrixService extends Service {
     this.cardsToSend = new TrackedMap();
     this.filesToSend = new TrackedMap();
     this.currentUserEventReadReceipts = new TrackedMap();
+
+    // Reset it here rather than in the reset function of each service
+    // because it is possible that
+    // there are some services that are not initialized yet
+    clearLocalStorage();
   }
 
   private bindEventListeners() {
