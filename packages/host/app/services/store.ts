@@ -544,25 +544,9 @@ export default class StoreService extends Service implements StoreInterface {
       // the invalidation included code changes too. in this case we
       // need to flush the loader so that we can pick up any updated
       // code before re-running the card
-
-      // capture the remote ids before the reset, as the reset clears the remote <-> local mappings
-      let remoteIds = new Set<string>();
-      for (let [id, referenceCount] of this.referenceCount) {
-        if (referenceCount === 0) {
-          continue;
-        }
-        if (isLocalId(id)) {
-          for (let remoteId of this.identityContext.getRemoteIds(id)) {
-            remoteIds.add(remoteId);
-          }
-        } else {
-          remoteIds.add(id);
-        }
-      }
-
       this.loaderService.resetLoader();
       this.identityContext.reset();
-      this.reestablishReferences.perform([...remoteIds]);
+      this.reestablishReferences.perform();
     }
 
     for (let invalidation of invalidations) {
@@ -637,8 +621,23 @@ export default class StoreService extends Service implements StoreInterface {
     },
   );
 
-  private reestablishReferences = task(async (remoteIds: string[]) => {
-    await Promise.all(remoteIds.map((id) => this.getInstance({ idOrDoc: id })));
+  private reestablishReferences = task(async () => {
+    let remoteIds = new Set<string>();
+    for (let [id, referenceCount] of this.referenceCount) {
+      if (referenceCount === 0) {
+        continue;
+      }
+      if (isLocalId(id)) {
+        for (let remoteId of this.identityContext.getRemoteIds(id)) {
+          remoteIds.add(remoteId);
+        }
+      } else {
+        remoteIds.add(id);
+      }
+    }
+    await Promise.all(
+      [...remoteIds].map((id) => this.getInstance({ idOrDoc: id })),
+    );
   });
 
   private reloadTask = task(async (instance: CardDef) => {
