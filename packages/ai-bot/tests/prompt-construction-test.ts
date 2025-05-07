@@ -2736,6 +2736,9 @@ Attached files:
         '// File url: https://test.com/tic-tac.gts\n' +
         '[Proposed code change]\n' +
         '\n' +
+        '// File url: https://test.com/tac-toe.gts\n' +
+        '[Proposed code change]\n' +
+        '\n' +
         'I can add some more whiz bang if you want. Let me know!',
     );
   });

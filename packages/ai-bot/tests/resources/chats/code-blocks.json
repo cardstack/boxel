@@ -337,7 +337,7 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Right, let us make a tic tac toe game.\n\n// File url: https://test.com/tic-tac.gts\n<<<<<<< SEARCH\nlet a = 1;\n=======\nlet a = 2;\n>>>>>>> REPLACE\n\nI can add some more whiz bang if you want. Let me know!",
+      "body": "Right, let us make a tic tac toe game.\n\n// File url: https://test.com/tic-tac.gts\n<<<<<<< SEARCH\nlet a = 1;\n=======\nlet a = 2;\n>>>>>>> REPLACE\n\n// File url: https://test.com/tac-toe.gts\n<<<<<<< SEARCH\nlet b = 2;\n=======\nlet b = 3;\n>>>>>>> REPLACE\n\nI can add some more whiz bang if you want. Let me know!",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
       "data": "{}",
