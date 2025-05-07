@@ -346,16 +346,17 @@ function preprocessTemplateTags(src: string): string {
   let output = [];
   let offset = 0;
   let matches = new ContentTagGlobal.Preprocessor().parse(src);
+  const srcArray = Array.from(src); // to be multi-byte character safe, we need to slice on a string converted to an array
   for (let match of matches) {
-    output.push(src.slice(offset, match.range.start));
+    output.push(srcArray.slice(offset, match.range.startChar).join(''));
     // we are using this name as well as padded spaces at the end so that source
     // maps are unaffected
     output.push('[templte(`');
     output.push(match.contents.replace(/`/g, '\\`'));
     output.push('`)]        ');
-    offset = match.range.end;
+    offset = match.range.endChar;
   }
-  output.push(src.slice(offset));
+  output.push(srcArray.slice(offset).join(''));
   return output.join('');
 }
 
