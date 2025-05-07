@@ -3,6 +3,10 @@ import type { ResolvedCodeRef } from './code-ref';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
+export const baseRef: ResolvedCodeRef = {
+  module: `${baseRealm.url}card-api`,
+  name: 'BaseDef',
+};
 export const specRef: ResolvedCodeRef = {
   module: `${baseRealm.url}spec`,
   name: 'Spec',
@@ -16,14 +20,15 @@ export const baseFieldRef: ResolvedCodeRef = {
   name: 'FieldDef',
 };
 export const skillCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}skill-card`,
-  name: 'SkillCard',
+  module: `${baseRealm.url}skill`,
+  name: 'Skill',
 };
 
 export const isField = Symbol('cardstack-field');
 export const primitive = Symbol('cardstack-primitive');
 export const realmURL = Symbol.for('cardstack-realm-url');
 export const localId = Symbol.for('cardstack-local-id');
+export const meta = Symbol.for('cardstack-meta');
 
 export const aiBotUsername = 'aibot';
 

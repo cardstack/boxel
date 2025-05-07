@@ -8,7 +8,7 @@ import {
 } from 'https://cardstack.com/base/card-api';
 
 function removeFileExtension(cardUrl: string) {
-  return cardUrl.replace(/\.[^/.]+$/, '');
+  return cardUrl?.replace(/\.[^/.]+$/, '');
 }
 
 export class PersonCard extends CardDef {

@@ -22,6 +22,7 @@ import { eq, menuItem } from '@cardstack/boxel-ui/helpers';
 import { IconLink, Eye, ThreeDotsHorizontal } from '@cardstack/boxel-ui/icons';
 
 import {
+  realmURL,
   cardTypeDisplayName,
   RealmURLContextName,
 } from '@cardstack/runtime-common';
@@ -72,6 +73,17 @@ export default class CardPreviewPanel extends Component<Signature> {
     return this.args.format ?? 'isolated';
   }
 
+  private get urlForRealmLookup() {
+    let urlForRealmLookup =
+      this.args.card?.id ?? this.args?.card?.[realmURL]?.href;
+    if (!urlForRealmLookup) {
+      throw new Error(
+        `bug: cannot determine a URL to use for realm lookup of a card--this should always be set even for new cards`,
+      );
+    }
+    return urlForRealmLookup;
+  }
+
   @provide(RealmURLContextName)
   get realmURL() {
     return this.args.realmURL;
@@ -87,7 +99,7 @@ export default class CardPreviewPanel extends Component<Signature> {
       data-test-code-mode-card-preview-header={{@card.id}}
       ...attributes
     >
-      <RealmIcon @realmInfo={{this.realm.info @realmURL.href}} />
+      <RealmIcon @realmInfo={{this.realm.info this.urlForRealmLookup}} />
       <div class='header-title'>
         {{cardTypeDisplayName @card}}
       </div>
@@ -196,7 +208,9 @@ export default class CardPreviewPanel extends Component<Signature> {
         background-color: var(--boxel-200);
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
-        padding-bottom: var(--boxel-sp-sm);
+        padding-bottom: calc(
+          var(--search-sheet-closed-height) + var(--operator-mode-spacing)
+        );
       }
 
       .preview-footer-title {

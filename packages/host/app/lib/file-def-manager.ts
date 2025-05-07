@@ -3,7 +3,6 @@ import { setOwner } from '@ember/owner';
 import { inject as service } from '@ember/service';
 
 import * as MatrixSDK from 'matrix-js-sdk';
-import { md5 } from 'super-fast-md5';
 
 import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -29,7 +28,7 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
+import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import { RoomResource } from '../resources/room';
 
@@ -60,7 +59,7 @@ export interface FileDefManager {
    * @returns Promise resolving to array of file definitions
    */
   uploadCommandDefinitions(
-    commandDefinitions: SkillCardModule.CommandField[],
+    commandDefinitions: SkillModule.CommandField[],
   ): Promise<FileDef[]>;
 
   uploadContent(content: string, contentType: string): Promise<string>;
@@ -89,7 +88,6 @@ export interface FileDefManager {
 }
 
 export default class FileDefManagerImpl implements FileDefManager {
-  private commandDefHashes: string[] = [];
   private downloadCache: Map<string, CacheEntry> = new Map();
   private client: MatrixSDK.MatrixClient;
   private getCardAPI: () => typeof CardAPI;
@@ -150,8 +148,7 @@ export default class FileDefManagerImpl implements FileDefManager {
         (roomSkill) => roomSkill.cardId === skillCard.id,
       );
       if (matchingRoomSkill) {
-        let commandDefinitions = (skillCard as SkillCardModule.SkillCard)
-          .commands;
+        let commandDefinitions = (skillCard as SkillModule.Skill).commands;
         if (commandDefinitions.length) {
           let commandDefFileDefs =
             await this.uploadCommandDefinitions(commandDefinitions);
@@ -299,7 +296,7 @@ export default class FileDefManagerImpl implements FileDefManager {
   }
 
   async uploadCommandDefinitions(
-    commandDefinitions: SkillCardModule.CommandField[],
+    commandDefinitions: SkillModule.CommandField[],
   ): Promise<FileDef[]> {
     if (!commandDefinitions.length) {
       return [];
@@ -343,12 +340,7 @@ export default class FileDefManagerImpl implements FileDefManager {
           },
         },
       };
-
-      let hashKey = this.generateCommandDefHashKey(schema);
-      if (!this.commandDefHashes.includes(hashKey)) {
-        commandDefinitionSchemas.push(schema);
-        this.commandDefHashes.push(hashKey);
-      }
+      commandDefinitionSchemas.push(schema);
     }
 
     // Upload each command definition schema as a file
@@ -370,17 +362,6 @@ export default class FileDefManagerImpl implements FileDefManager {
     );
 
     return fileDefs;
-  }
-
-  /**
-   * Generates a hash key for a command definition schema.
-   * @param commandDefSchema - The command definition schema to hash
-   * @returns A hash key string
-   */
-  private generateCommandDefHashKey(
-    commandDefSchema: CommandDefinitionSchema,
-  ): string {
-    return md5(JSON.stringify(commandDefSchema));
   }
 
   async uploadContent(content: string, contentType: string): Promise<string> {

@@ -41,6 +41,7 @@ import { Format } from 'https://cardstack.com/base/card-api';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
+import { isLocalId } from '../lib/gc-identity-context';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -60,6 +61,7 @@ export interface OperatorModeState {
   stacks: Stack[];
   submode: Submode;
   codePath: URL | null;
+  aiAssistantOpen: boolean;
   fileView?: FileView;
   openDirs: Map<string, string[]>;
   codeSelection?: string;
@@ -84,6 +86,7 @@ export type SerializedState = {
   openDirs?: Record<string, string[]>;
   codeSelection?: string;
   fieldSelection?: string;
+  aiAssistantOpen?: boolean;
 };
 
 interface OpenFileSubscriber {
@@ -96,8 +99,8 @@ export default class OperatorModeStateService extends Service {
     submode: Submodes.Interact,
     codePath: null,
     openDirs: new TrackedMap<string, string[]>(),
+    aiAssistantOpen: false,
   });
-  @tracked private _aiAssistantOpen = false;
   private cachedRealmURL: URL | null = null;
   private openFileSubscribers: OpenFileSubscriber[] = [];
   private cardTitles = new TrackedMap<string, string>();
@@ -121,15 +124,17 @@ export default class OperatorModeStateService extends Service {
   }
 
   get aiAssistantOpen() {
-    return this._aiAssistantOpen;
+    return this.state.aiAssistantOpen;
   }
 
-  set aiAssistantOpen(value: boolean) {
-    this._aiAssistantOpen = value;
-  }
+  openAiAssistant = () => {
+    this.state.aiAssistantOpen = true;
+    this.schedulePersist();
+  };
 
-  toggleAiAssistant = () => {
-    this.aiAssistantOpen = !this.aiAssistantOpen;
+  closeAiAssistant = () => {
+    this.state.aiAssistantOpen = false;
+    this.schedulePersist();
   };
 
   resetState() {
@@ -138,6 +143,7 @@ export default class OperatorModeStateService extends Service {
       submode: Submodes.Interact,
       codePath: null,
       openDirs: new TrackedMap<string, string[]>(),
+      aiAssistantOpen: false,
     });
     this.cachedRealmURL = null;
     this.openFileSubscribers = [];
@@ -154,16 +160,16 @@ export default class OperatorModeStateService extends Service {
       this.state.stacks[stackIndex] = new TrackedArray([]);
     }
     if (
-      item.url &&
-      this.state.stacks[stackIndex].find((i: StackItem) => i.url === item.url)
+      item.id &&
+      this.state.stacks[stackIndex].find((i: StackItem) => i.id === item.id)
     ) {
       // this card is already in the stack, do nothing (maybe we could hoist
       // this card to the top instead?)
       return;
     }
     this.state.stacks[stackIndex].push(item);
-    if (item.url) {
-      this.recentCardsService.add(item.url);
+    if (item.id) {
+      this.recentCardsService.add(item.id);
     }
     this.schedulePersist();
   }
@@ -183,7 +189,7 @@ export default class OperatorModeStateService extends Service {
     for (let stack of this.state.stacks || []) {
       items.push(
         ...(stack.filter(
-          (i: StackItem) => i.url && removeFileExtension(i.url) === cardId,
+          (i: StackItem) => i.id && removeFileExtension(i.id) === cardId,
         ) as StackItem[]),
       );
     }
@@ -307,7 +313,7 @@ export default class OperatorModeStateService extends Service {
     if (this.state.submode === Submodes.Interact) {
       return this.topMostStackItems()
         .filter((stackItem: StackItem) => stackItem)
-        .map((stackItem: StackItem) => stackItem.url)
+        .map((stackItem: StackItem) => stackItem.id)
         .filter(Boolean) as string[];
     }
     return;
@@ -462,7 +468,7 @@ export default class OperatorModeStateService extends Service {
     } else {
       let itemForTitle = this.topMostStackItems().pop(); // top-most card of right stack
       return (
-        (itemForTitle?.url ? this.cardTitles.get(itemForTitle.url) : 'Boxel') ??
+        (itemForTitle?.id ? this.cardTitles.get(itemForTitle.id) : 'Boxel') ??
         'Boxel'
       );
     }
@@ -506,6 +512,18 @@ export default class OperatorModeStateService extends Service {
     this.schedulePersist();
   }
 
+  // when a stack item's card has been saved we need to update the URL to reflect the saved card's remote ID
+  // TODO make test for reloading after card has been saved
+  handleCardIdAssignment(localId: string) {
+    if (
+      this.state.stacks.find((stack) =>
+        stack.find((item) => item.id === localId),
+      )
+    ) {
+      this.schedulePersist();
+    }
+  }
+
   private schedulePersist() {
     // When multiple stack manipulations are bunched together in a loop, for example when closing multiple cards in a loop,
     // we get into a async race condition where the change to cardController.operatorModeState will reload the route and
@@ -524,8 +542,8 @@ export default class OperatorModeStateService extends Service {
 
   // Serialized POJO version of state, with only cards that have been saved.
   // The state can have cards that have not been saved yet, for example when
-  // clicking on "Crate New" in linked card editor. Here we want to draw a boundary
-  // between navigatable states in the query parameter
+  // clicking on "Create New" in linked card editor. Here we want to draw a boundary
+  // between navigable states in the query parameter
   rawStateWithSavedCardsOnly() {
     let state: SerializedState = {
       stacks: [],
@@ -535,6 +553,7 @@ export default class OperatorModeStateService extends Service {
       openDirs: Object.fromEntries(this.state.openDirs.entries()),
       codeSelection: this.state.codeSelection,
       fieldSelection: this.state.fieldSelection,
+      aiAssistantOpen: this.state.aiAssistantOpen,
     };
 
     for (let stack of this.state.stacks) {
@@ -543,11 +562,14 @@ export default class OperatorModeStateService extends Service {
         if (item.format !== 'isolated' && item.format !== 'edit') {
           throw new Error(`Unknown format for card on stack ${item.format}`);
         }
-        if (item.url) {
-          serializedStack.push({
-            id: item.url,
-            format: item.format,
-          });
+        if (item.id) {
+          let instance = this.store.peek(item.id);
+          if (!isLocalId(item.id) || instance?.id) {
+            serializedStack.push({
+              id: instance?.id ?? item.id,
+              format: item.format,
+            });
+          }
         }
       }
       state.stacks.push(serializedStack);
@@ -562,12 +584,12 @@ export default class OperatorModeStateService extends Service {
   }
 
   createStackItem(
-    url: string,
+    id: string,
     stackIndex: number,
     format: 'isolated' | 'edit' = 'isolated',
   ) {
     let stackItem = new StackItem({
-      url,
+      id,
       stackIndex,
       format,
     });
@@ -592,6 +614,7 @@ export default class OperatorModeStateService extends Service {
       openDirs,
       codeSelection: rawState.codeSelection,
       fieldSelection: rawState.fieldSelection,
+      aiAssistantOpen: rawState.aiAssistantOpen ?? false,
     });
 
     let stackIndex = 0;
@@ -601,7 +624,7 @@ export default class OperatorModeStateService extends Service {
         let { format } = item;
         newStack.push(
           new StackItem({
-            url: item.id,
+            id: item.id,
             format,
             stackIndex,
           }),
@@ -716,10 +739,10 @@ export default class OperatorModeStateService extends Service {
     }));
   });
 
-  openCardInInteractMode(url: string, format: Format = 'isolated') {
+  openCardInInteractMode(id: string, format: Format = 'isolated') {
     this.clearStacks();
     let newItem = new StackItem({
-      url,
+      id,
       stackIndex: 0,
       format,
     });
@@ -728,9 +751,9 @@ export default class OperatorModeStateService extends Service {
   }
 
   openWorkspace = (realmUrl: string) => {
-    let url = `${realmUrl}index`;
+    let id = `${realmUrl}index`;
     let stackItem = new StackItem({
-      url,
+      id,
       format: 'isolated',
       stackIndex: 0,
     });
@@ -743,7 +766,7 @@ export default class OperatorModeStateService extends Service {
     this.updateCodePath(
       lastOpenedFile
         ? new URL(`${lastOpenedFile.realmURL}${lastOpenedFile.filePath}`)
-        : new URL(url),
+        : new URL(id),
     );
 
     this.operatorModeController.workspaceChooserOpened = false;

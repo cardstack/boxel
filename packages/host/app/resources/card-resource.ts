@@ -19,6 +19,7 @@ interface Args {
 
 export class CardResource extends Resource<Args> {
   #id: string | undefined;
+  #hasRegisteredDestructor = false;
   @service declare private store: StoreService;
 
   modify(_positional: never[], named: Args['named']) {
@@ -30,13 +31,19 @@ export class CardResource extends Resource<Args> {
       this.#id = id;
       this.store.addReference(this.#id);
     }
-    registerDestructor(this, () => {
-      if (this.#id) {
-        this.store.dropReference(this.#id);
-      }
-    });
+    if (!this.#hasRegisteredDestructor) {
+      this.#hasRegisteredDestructor = true;
+      registerDestructor(this, () => {
+        if (this.#id) {
+          this.store.dropReference(this.#id);
+        }
+      });
+    }
   }
 
+  // Note that this will return a stale instance when the server state for this
+  // id becomes an error. use this.cardError to see the live server state for
+  // this instance.
   get card() {
     if (!this.#id) {
       return undefined;
@@ -49,7 +56,7 @@ export class CardResource extends Resource<Args> {
     if (!this.#id) {
       return undefined;
     }
-    let maybeError = this.store.peek(this.#id);
+    let maybeError = this.store.peekError(this.#id);
     return maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
   }
 

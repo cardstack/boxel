@@ -325,8 +325,8 @@
     "content": {
       "enabledSkillCards": [
         {
-          "url": "https://cardstack.com/base/SkillCard/card-editing",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
+          "url": "https://cardstack.com/base/Skill/card-editing",
+          "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
           "contentType": "text/plain"
         }
       ],
@@ -348,8 +348,8 @@
     "content": {
       "enabledSkillCards": [
         {
-          "url": "https://cardstack.com/base/SkillCard/card-editing",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
+          "url": "https://cardstack.com/base/Skill/card-editing",
+          "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
           "contentType": "text/plain"
         },
         {
@@ -367,8 +367,8 @@
       "prev_content": {
         "enabledSkillCards": [
           {
-            "url": "https://cardstack.com/base/SkillCard/card-editing",
-            "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
+            "url": "https://cardstack.com/base/Skill/card-editing",
+            "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
             "contentType": "text/plain"
           }
         ],
@@ -384,8 +384,8 @@
     "prev_content": {
       "enabledSkillCards": [
         {
-          "url": "https://cardstack.com/base/SkillCard/card-editing",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
+          "url": "https://cardstack.com/base/Skill/card-editing",
+          "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
           "contentType": "text/plain"
         }
       ],
@@ -413,8 +413,8 @@
       "prev_content": {
         "enabledSkillCards": [
           {
-            "url": "https://cardstack.com/base/SkillCard/card-editing",
-            "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
+            "url": "https://cardstack.com/base/Skill/card-editing",
+            "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
             "contentType": "text/plain"
           },
           {
@@ -435,8 +435,8 @@
     "prev_content": {
       "enabledSkillCards": [
         {
-          "url": "https://cardstack.com/base/SkillCard/card-editing",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/card-editing",
+          "url": "https://cardstack.com/base/Skill/card-editing",
+          "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
           "contentType": "text/plain"
         },
         {

@@ -46,7 +46,8 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
       }
 
       pre {
-        overflow: auto;
+        overflow: hidden;
+        text-wrap: auto;
       }
     </style>
 

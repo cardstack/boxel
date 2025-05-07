@@ -20,6 +20,7 @@ import CardPill from '@cardstack/host/components/card-pill';
 
 export type PillMenuItem = {
   cardId: string;
+  realmURL: string | undefined;
   isActive: boolean;
 };
 
@@ -88,6 +89,7 @@ export default class PillMenu extends Component<Signature> {
                       @cardId={{item.cardId}}
                       @onToggle={{fn this.toggleActive item}}
                       @isEnabled={{item.isActive}}
+                      @urlForRealmLookup={{urlForRealmLookup item}}
                       data-test-pill-menu-item={{item.cardId}}
                     />
                   </li>
@@ -246,4 +248,8 @@ export default class PillMenu extends Component<Signature> {
       this.args.onChooseCard?.(cardId);
     }
   });
+}
+
+function urlForRealmLookup(item: PillMenuItem) {
+  return item.cardId ?? item.realmURL;
 }

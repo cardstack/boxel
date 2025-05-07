@@ -13,6 +13,6 @@ export function getCodeRefFromSearchKey(
   return undefined;
 }
 
-export function removeFileExtension(cardId: string) {
-  return cardId.replace(/\.[^/.]+$/, '');
+export function removeFileExtension(cardId: string | undefined) {
+  return cardId?.replace(/\.[^/.]+$/, '');
 }

@@ -17,7 +17,7 @@ import FieldPickerModal from './field-chooser-modal';
 
 import InstanceSelectDropdown from './instance-chooser-dropdown';
 
-import type { FieldOption, SelectedInstance } from './playground-content';
+import type { FieldOption, SelectedInstance } from './playground-panel';
 import type { PrerenderedCard } from '../../../prerendered-card-search';
 
 interface Signature {
@@ -37,6 +37,7 @@ interface Signature {
     onFieldSelect: (index: number) => void;
     closeFieldChooser: () => void;
     fieldChooserIsOpen: boolean;
+    moduleId: string;
   };
 }
 
@@ -64,6 +65,7 @@ export default class PlaygroundTitle extends Component<Signature> {
         @chooseCard={{@chooseCard}}
         @createNew={{if @canWriteRealm @createNew}}
         @createNewIsRunning={{@createNewIsRunning}}
+        @moduleId={{@moduleId}}
       />
     </button>
 

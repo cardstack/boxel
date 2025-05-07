@@ -21,7 +21,10 @@ module.exports = function (defaults) {
       disableDecoratorTransforms: true,
     },
     babel: {
-      plugins: [[require.resolve('decorator-transforms')]],
+      plugins: [
+        [require.resolve('decorator-transforms')],
+        require.resolve('ember-concurrency/async-arrow-task-transform'),
+      ],
     },
   });
   return compatBuild(app, Webpack, {

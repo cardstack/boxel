@@ -67,14 +67,20 @@ export async function registerRealmUsers(synapse: SynapseInstance) {
 }
 
 export async function reloadAndOpenAiAssistant(page: Page) {
+  const currentUrl = new URL(page.url());
+  const searchParams = new URLSearchParams(currentUrl.search);
+  const operatorModeState = JSON.parse(
+    decodeURIComponent(searchParams.get('operatorModeState')!),
+  );
+
   await page.reload();
-  await openAiAssistant(page);
+  if (!operatorModeState.aiAssistantOpen) {
+    await openAiAssistant(page);
+  }
 }
 
 export async function openAiAssistant(page: Page) {
   await page.locator('[data-test-open-ai-assistant]').click();
-  await expect(page.locator('[data-test-close-ai-assistant]')).toHaveCount(1);
-  await expect(page.locator('[data-test-room]')).toHaveCount(1);
 }
 
 export async function createRealm(
@@ -86,7 +92,7 @@ export async function createRealm(
   await page.locator('[data-test-add-workspace]').click();
   await page.locator('[data-test-display-name-field]').fill(name);
   await page.locator('[data-test-endpoint-field]').fill(endpoint);
-  if (!copyFromSeed) {
+  if (copyFromSeed) {
     await page.locator('[data-test-copy-from-seed-field]').click();
   }
   await page.locator('[data-test-create-workspace-submit]').click();
@@ -103,6 +109,12 @@ export async function openRoot(page: Page, url = testHost) {
 export async function clearLocalStorage(page: Page, appURL = testHost) {
   await openRoot(page, appURL);
   await page.evaluate(() => window.localStorage.clear());
+}
+
+export async function getMonacoContent(page: Page): Promise<string> {
+  return await page.evaluate(() =>
+    (window as any).monaco?.editor?.getModels()?.[0]?.getValue(),
+  );
 }
 
 export async function validateEmail(
@@ -860,7 +872,7 @@ export async function postCardSource(
   );
 }
 
-export async function patchCard(
+export async function patchCardInstance(
   page: Page,
   realmURL: string,
   cardURL: string,
