@@ -12,46 +12,7 @@ import type { FileView } from '@cardstack/host/services/operator-mode-state-serv
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import InnerContainer from './inner-container';
-
-interface ToggleButtonSignature {
-  Args: {
-    disabled?: boolean;
-    isActive: boolean;
-  };
-  Element: typeof Button.Element;
-  Blocks: typeof Button.Blocks;
-}
-
-export const ToggleButton: TemplateOnlyComponent<ToggleButtonSignature> =
-  <template>
-    <Button
-      @disabled={{@disabled}}
-      @kind={{if @isActive 'primary-dark' 'secondary'}}
-      @size='extra-small'
-      class={{cn 'toggle-button' active=@isActive}}
-      ...attributes
-    >
-      {{yield}}
-    </Button>
-    <style scoped>
-      .toggle-button {
-        --boxel-button-border: 1px solid var(--boxel-400);
-        --boxel-button-font: 600 var(--boxel-font-xs);
-        --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-        --boxel-button-min-width: 4rem;
-        --boxel-button-padding: 0;
-        border-radius: var(--boxel-border-radius);
-        flex: 1;
-      }
-      .toggle-button:hover:not(:disabled) {
-        border-color: var(--boxel-dark);
-      }
-      .toggle-button.active {
-        border-color: var(--boxel-dark);
-        --boxel-button-text-color: var(--boxel-highlight);
-      }
-    </style>
-  </template>;
+import ToggleButton from './toggle-button';
 
 interface Signature {
   Element: HTMLDivElement;

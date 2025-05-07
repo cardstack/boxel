@@ -30,8 +30,6 @@ import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
 import { cn, not, bool, eq } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
-import { ToggleButton } from '@cardstack/host/components/operator-mode/code-submode/left-panel-toggle';
-
 import {
   identifyCard,
   isCardDocumentString,
@@ -94,6 +92,7 @@ import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
 import NewFileButton from './new-file-button';
 import SubmodeLayout from './submode-layout';
+import ToggleButton from './code-submode/toggle-button';
 
 interface Signature {
   Args: {
