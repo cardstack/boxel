@@ -87,11 +87,7 @@ import { RoomResource, getRoom } from '../resources/room';
 
 import {
   CurrentRoomIdPersistenceKey,
-  NewSessionIdPersistenceKey,
-  CodeModePanelSelections,
-  CodeModePanelWidths,
-  CodeModePanelHeights,
-  PlaygroundSelections,
+  clearLocalStorage,
 } from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
@@ -928,21 +924,10 @@ export default class MatrixService extends Service {
     this.filesToSend = new TrackedMap();
     this.currentUserEventReadReceipts = new TrackedMap();
 
-    window.localStorage.removeItem(NewSessionIdPersistenceKey);
-    window.localStorage.removeItem(CodeModePanelSelections);
-    window.localStorage.removeItem(CodeModePanelWidths);
-    window.localStorage.removeItem(CodeModePanelHeights);
     // Reset it here rather than in the reset function of each service
     // because it is possible that
     // there are some services that are not initialized yet
-    window.localStorage.removeItem(PlaygroundSelections);
-    window.localStorage.removeItem('recent-cards');
-    window.localStorage.removeItem('recent-files');
-    window.localStorage.removeItem('scroll-positions');
-    // Remove all codeblock_ prefixed items
-    Object.keys(window.localStorage)
-      .filter((key) => key.startsWith('codeblock_'))
-      .forEach((key) => window.localStorage.removeItem(key));
+    clearLocalStorage();
   }
 
   private bindEventListeners() {

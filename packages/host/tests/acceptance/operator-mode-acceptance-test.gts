@@ -27,7 +27,13 @@ import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
 
-import { SessionLocalStorageKey } from '@cardstack/host/utils/local-storage-keys';
+import {
+  PlaygroundSelections,
+  RecentCards,
+  RecentFiles,
+  ScrollPositions,
+  SessionLocalStorageKey,
+} from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,
@@ -1211,11 +1217,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
       });
       window.localStorage.setItem(
-        'recent-cards',
+        RecentCards,
         JSON.stringify(`${testRealmURL}Pet/mango.json`),
       );
       window.localStorage.setItem(
-        'recent-files',
+        RecentFiles,
         JSON.stringify([
           [
             testRealmURL,
@@ -1228,11 +1234,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         ]),
       );
       window.localStorage.setItem(
-        'scroll-positions',
+        ScrollPositions,
         JSON.stringify({ 'file-tree': [`${testRealmURL}Pet/mango.json`, 2] }),
       );
       window.localStorage.setItem(
-        'playground-selections',
+        PlaygroundSelections,
         JSON.stringify({
           [`${testRealmURL}Pet/mango.json`]: {
             cardId: `${testRealmURL}Pet/mango.json`,
@@ -1242,11 +1248,11 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
       await click('[data-test-profile-icon-button]');
       await click('[data-test-signout-button]');
-      assert.strictEqual(window.localStorage.getItem('recent-cards'), null);
-      assert.strictEqual(window.localStorage.getItem('recent-files'), null);
-      assert.strictEqual(window.localStorage.getItem('scroll-positions'), null);
+      assert.strictEqual(window.localStorage.getItem(RecentCards), null);
+      assert.strictEqual(window.localStorage.getItem(RecentFiles), null);
+      assert.strictEqual(window.localStorage.getItem(ScrollPositions), null);
       assert.strictEqual(
-        window.localStorage.getItem('playground-selections'),
+        window.localStorage.getItem(PlaygroundSelections),
         null,
       );
 
