@@ -464,7 +464,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
           <h2>Includes These Boxels</h2>
           {{#if this.hasNonEmptySpecBreakdown}}
             <Accordion
-              data-test-selected-accordion-item={{this.selectedAccordionItem}}
+              data-test-selected-code-mode-panel-item={{this.selectedAccordionItem}}
               as |A|
             >
               {{#each-in this.specBreakdown as |specType specs|}}

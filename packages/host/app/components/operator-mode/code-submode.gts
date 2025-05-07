@@ -916,7 +916,7 @@ export default class CodeSubmode extends Component<Signature> {
                   {{else if this.selectedCardOrField.cardOrField}}
                     <Accordion
                       data-test-rhs-panel='card-or-field'
-                      data-test-selected-accordion-item={{this.selectedAccordionItem}}
+                      data-test-selected-code-mode-panel-item={{this.selectedAccordionItem}}
                       as |A|
                     >
                       <SchemaEditor

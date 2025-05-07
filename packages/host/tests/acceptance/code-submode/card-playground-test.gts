@@ -283,7 +283,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         codePath: `${testRealmURL}blog-post.gts`,
       });
       assert
-        .dom('[data-test-selected-accordion-item="schema-editor"]')
+        .dom('[data-test-selected-code-mode-panel-item="schema-editor"]')
         .exists('schema editor is open by default');
       assert
         .dom('[data-test-playground-panel]')
