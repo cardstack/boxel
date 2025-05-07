@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -247,7 +248,7 @@ class Previewer extends GlimmerComponent<PreviewerSignature> {
   }
 
   get spec() {
-    return this.specResource?.card;
+    return this.specResource?.card as Spec;
   }
   <template>
     {{consumeContext this.makeSpecResource}}
@@ -256,7 +257,7 @@ class Previewer extends GlimmerComponent<PreviewerSignature> {
         <Preview
           @card={{this.spec}}
           @format='isolated'
-          @cardContext={{this.cardContext}}
+          @cardContext={{@cardContext}}
         />
       {{else}}
         <Preview
@@ -323,7 +324,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   private get selectedId() {
-    return this.specPanelService.specSelection ?? this.cards[0]?.id;
+    return this.specPanelService.specSelection ?? this.args.cards[0]?.id;
   }
 
   @action private viewSpecInstance() {
@@ -511,7 +512,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
-  @tracked cards: CardDef[] = [];
+  @tracked cards: Spec[] = [];
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
@@ -526,7 +527,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             await this.store.search(this.specQuery, new URL(realm)),
         ),
       ),
-    );
+    ) as Spec[];
   });
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
