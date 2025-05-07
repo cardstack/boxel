@@ -75,7 +75,7 @@ module.exports = function (defaults) {
             new GlimmerScopedCSSWebpackPlugin(),
             new MonacoWebpackPlugin(),
             new webpack.ProvidePlugin({
-              process: require.resolve('process/browser'),
+              process: 'process',
             }),
             new webpack.IgnorePlugin({
               resourceRegExp: /^https:\/\/cardstack\.com\/base/,
