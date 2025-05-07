@@ -811,9 +811,12 @@ export default class Room extends Component<Signature> {
     this.removedAttachedCardIds.splice(0);
   });
 
-  private makeRemoteIdsList(ids: string[]) {
+  private makeRemoteIdsList(ids: (string | undefined)[]) {
     return ids
       .map((id) => {
+        if (!id) {
+          return undefined;
+        }
         if (isLocalId(id)) {
           let maybeInstance = this.store.peek(id);
           if (
