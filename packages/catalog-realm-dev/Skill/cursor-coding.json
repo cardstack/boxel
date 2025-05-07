@@ -10,8 +10,8 @@
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/skill-card",
-        "name": "SkillCard"
+        "module": "https://cardstack.com/base/skill",
+        "name": "Skill"
       }
     }
   }

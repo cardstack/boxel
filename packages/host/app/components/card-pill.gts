@@ -26,6 +26,7 @@ interface CardPillSignature {
   Element: HTMLDivElement | HTMLButtonElement;
   Args: {
     cardId: string;
+    urlForRealmLookup: string;
     isAutoAttachedCard?: boolean;
     removeCard?: (cardId: string) => void;
     onToggle?: () => void;
@@ -64,7 +65,7 @@ export default class CardPill extends Component<CardPillSignature> {
         ...attributes
       >
         <:iconLeft>
-          <RealmIcon @realmInfo={{this.realm.info @cardId}} />
+          <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
         </:iconLeft>
         <:default>
           <div class='card-content' title={{this.card.title}}>

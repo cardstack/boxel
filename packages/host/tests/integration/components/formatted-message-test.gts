@@ -350,4 +350,90 @@ let c = 2;
         'There was an error processing your request, please try again later.',
       );
   });
+
+  test('it will render either standard code editor or diff editor during streaming depending on whether the individual search/replace blocks are complete', async function (assert) {
+    let monacoSDK = await monacoService.getMonacoContext();
+    let component: any = null;
+
+    class TestComponent extends Component {
+      @tracked html = '';
+      @tracked isStreaming = false;
+
+      constructor(owner: Owner, args: any) {
+        super(owner, args);
+        component = this;
+      }
+
+      <template>
+        <FormattedMessage
+          @renderCodeBlocks={{true}}
+          @monacoSDK={{monacoSDK}}
+          @html={{htmlSafe this.html}}
+          @isStreaming={{this.isStreaming}}
+        />
+      </template>
+    }
+
+    await renderComponent(TestComponent);
+
+    if (!component) {
+      throw new Error('Component not found');
+    }
+
+    // By assigning html to the component, we are simulating streaming html updates
+
+    component.isStreaming = true;
+    component.html = `<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+=======
+let a = 2;`; // incomplete code block - the ending >>>>>> REPLACE is missing
+
+    await settled();
+    assert.dom('.code-block').exists();
+    assert.dom('.code-block-diff').doesNotExist();
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+          .innerText ==
+        '// existing code ... \nlet a = 1;\n// new code ... \nlet a = 2;',
+    );
+    component.html = `<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+=======
+let a = 2;
+>>>>>>> REPLACE
+</pre>
+`; // complete code block
+
+    component.isStreaming = false;
+
+    // Here we are testing the reactivity mechanism of when we detect that a search/replace
+    // block during streaming is complete - at that point CodeDiffResource will react to it
+    // by preparing the original and patched code, and the diff editor will be rendered,
+    // which shows which lines are deleted and which are inserted, or changed.
+
+    await settled();
+    await waitFor('.code-block-diff');
+    assert.dom('.code-block-diff').exists();
+
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+          .innerText == 'let a = 1;\nlet b = 2;',
+    );
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[1] as HTMLElement)
+          .innerText == 'let a = 1;',
+    );
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[2] as HTMLElement)
+          .innerText == 'let a = 2;\nlet b = 2;',
+    );
+  });
 });

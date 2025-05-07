@@ -1013,7 +1013,7 @@ module('Integration | operator-mode', function (hooks) {
       .exists('pet-room spec instance is displayed on cards-grid');
   });
 
-  test<TestContextWithSave>('can create a card using the cards-grid', async function (assert) {
+  test<TestContextWithSave>('can optimistically create a card using the cards-grid', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}grid`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -1050,6 +1050,11 @@ module('Integration | operator-mode', function (hooks) {
     assert
       .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
       .exists();
+    assert.strictEqual(
+      savedCards.size,
+      0,
+      'the new card has not been saved yet',
+    );
     await click(
       '[data-test-stack-card-index="1"] [data-test-more-options-button]',
     );
@@ -2700,76 +2705,7 @@ module('Integration | operator-mode', function (hooks) {
     assert.dom(`[data-test-search-sheet="closed"]`).exists();
   });
 
-  test<TestContextWithSave>('Choosing a new card automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
-    assert.expect(5);
-    setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    let savedCards = new Set<string>();
-    this.onSave((url) => {
-      savedCards.add(url.href);
-    });
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-index="0"]`).exists();
-
-    await click('[data-test-create-new-card-button]');
-    assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Spec card');
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
-    );
-    assert
-      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-      .exists({ count: 3 });
-
-    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor('[data-test-stack-card-index="1"]');
-
-    let paths = Array.from(savedCards).map(
-      (url) => url.substring(testRealmURL.length) + '.json',
-    );
-    let fileRef = await testRealmAdapter.openFile(paths[0]);
-    assert.deepEqual(
-      JSON.parse(fileRef!.content as string),
-      {
-        data: {
-          attributes: {
-            description: null,
-            socialBlurb: null,
-            thumbnailURL: null,
-            title: null,
-          },
-          meta: {
-            adoptsFrom: {
-              module: '../publishing-packet',
-              name: 'PublishingPacket',
-            },
-          },
-          relationships: {
-            blogPost: {
-              links: {
-                self: null,
-              },
-            },
-          },
-          type: 'card',
-        },
-      },
-      'file contents were saved correctly',
-    );
-    assert.dom('[data-test-last-saved]').doesNotExist();
-  });
-
-  test<TestContextWithSave>('Creating a new card from a linksTo field automatically saves the card with empty values before popping the card onto the stack in "edit" view', async function (assert) {
-    assert.expect(5);
+  test<TestContextWithSave>('New cards are optimistically created for a linksTo field', async function (assert) {
     setCardInOperatorModeState(`${testRealmURL}Person/1`, 'edit');
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -2795,13 +2731,30 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-modal]`);
     await waitFor(`[data-test-card-catalog-create-new-button]`);
     await click(`[data-test-card-catalog-create-new-button]`);
-    await click(`[data-test-card-catalog-go-button]`);
-    await waitFor('[data-test-stack-card-index="1"]');
-    assert.dom(`[data-test-stack-card-index="1"]`).exists();
+    // don't await this click so the test waiters don't get in the way
+    click(`[data-test-card-catalog-go-button]`);
+    await waitFor('[data-test-stack-card-index="1"]'); // wait for the 2nd stack item: Pet
+    assert.deepEqual(
+      [...savedCards],
+      [`${testRealmURL}Person/1`],
+      'linked card has not been saved yet',
+    );
+    await fillIn(
+      `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
+      'Mango',
+    );
+    await click(`[data-test-stack-card-index="1"] [data-test-close-button]`);
+    assert
+      .dom(
+        `[data-test-stack-card="${testRealmURL}Person/1"] [data-test-links-to-editor="pet"]`,
+      )
+      .containsText(
+        'Mango',
+        'the embedded link of new card is rendered correctly',
+      );
     let ids = Array.from(savedCards);
     let paths = ids.map((url) => url.substring(testRealmURL.length) + '.json');
     let path = paths.find((p) => p.includes('Pet/'));
-    let id = ids.find((p) => p.includes('Pet/'));
     let fileRef = await testRealmAdapter.openFile(path!);
     assert.deepEqual(
       JSON.parse(fileRef!.content as string),
@@ -2809,7 +2762,7 @@ module('Integration | operator-mode', function (hooks) {
         data: {
           attributes: {
             description: null,
-            name: null,
+            name: 'Mango',
             thumbnailURL: null,
           },
           meta: {
@@ -2823,9 +2776,6 @@ module('Integration | operator-mode', function (hooks) {
       },
       'file contents were saved correctly',
     );
-    assert
-      .dom(`[data-test-stack-card="${id}"] [data-test-last-saved]`)
-      .doesNotExist();
   });
 
   test<TestContextWithSave>('Clicking on "Finish Editing" after creating a card from linksTo field will switch the card into isolated mode', async function (assert) {
@@ -3150,7 +3100,7 @@ module('Integration | operator-mode', function (hooks) {
     await waitFor(`[data-test-card-catalog-item]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
     await click(
-      '[data-test-card-catalog-item="https://cardstack.com/base/fields/skill-card"]',
+      '[data-test-card-catalog-item="https://cardstack.com/base/cards/skill"]',
     );
     await click('[data-test-card-catalog-go-button]');
 

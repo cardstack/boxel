@@ -21,8 +21,8 @@ import PillMenu from './index';
 import type { PillMenuItem } from './index';
 
 const sampleCardURLs = [
-  `${baseRealm.url}SkillCard/card-editing`,
-  `${baseRealm.url}SkillCard/source-code-editing`,
+  `${baseRealm.url}Skill/card-editing`,
+  `${baseRealm.url}Skill/source-code-editing`,
 ];
 
 export default class PillMenuUsage extends Component {
@@ -34,6 +34,7 @@ export default class PillMenuUsage extends Component {
     (cardId) =>
       new TrackedObject({
         cardId,
+        realmURL: undefined,
         isActive: true,
       }),
   );
@@ -51,7 +52,10 @@ export default class PillMenuUsage extends Component {
   }
 
   @action private onChooseCard(cardId: string) {
-    this.items = [...this.items, new TrackedObject({ cardId, isActive: true })];
+    this.items = [
+      ...this.items,
+      new TrackedObject({ cardId, realmURL: undefined, isActive: true }),
+    ];
   }
 
   @action private onChangeItemIsActive(item: PillMenuItem, isActive: boolean) {

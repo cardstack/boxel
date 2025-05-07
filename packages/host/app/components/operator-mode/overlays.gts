@@ -119,27 +119,19 @@ export default class Overlays extends Component<OverlaySignature> {
         continue;
       }
       boundRenderedCardElement.add(renderedCard.element);
-      renderedCard.element.addEventListener(
-        'mouseenter',
-        // eslint-disable-next-line ember/no-side-effects
-        (_ev: MouseEvent) => {
-          if (this.currentlyHoveredCard === renderedCard) {
-            return;
-          }
-          this.setCurrentlyHoveredCard(renderedCard);
-        },
-      );
-      renderedCard.element.addEventListener(
-        'mouseleave',
-        // eslint-disable-next-line ember/no-side-effects
-        (ev: MouseEvent) => {
-          let relatedTarget = ev.relatedTarget as HTMLElement;
-          if (relatedTarget?.closest?.(`.${this.overlayClassName}`)) {
-            return;
-          }
-          this.setCurrentlyHoveredCard(null);
-        },
-      );
+      renderedCard.element.addEventListener('mouseenter', (_ev: MouseEvent) => {
+        if (this.currentlyHoveredCard === renderedCard) {
+          return;
+        }
+        this.setCurrentlyHoveredCard(renderedCard);
+      });
+      renderedCard.element.addEventListener('mouseleave', (ev: MouseEvent) => {
+        let relatedTarget = ev.relatedTarget as HTMLElement;
+        if (relatedTarget?.closest?.(`.${this.overlayClassName}`)) {
+          return;
+        }
+        this.setCurrentlyHoveredCard(null);
+      });
       renderedCard.element.addEventListener('click', (e: MouseEvent) => {
         // prevent outer nested contains fields from triggering when inner most
         // contained field was clicked

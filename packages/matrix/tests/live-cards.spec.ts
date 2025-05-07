@@ -17,9 +17,11 @@ import {
   registerRealmUsers,
   showAllCards,
   setupUserSubscribed,
-  patchCard,
+  patchCardInstance,
   postCardSource,
   postNewCard,
+  getMonacoContent,
+  waitUntil,
 } from '../helpers';
 
 test.describe('Live Cards', () => {
@@ -70,7 +72,7 @@ test.describe('Live Cards', () => {
       page.locator('[data-test-realm-indexing-indicator]'),
     ).toHaveCount(0);
 
-    await patchCard(
+    await patchCardInstance(
       page,
       realmURL,
       `${realmURL}HelloWorld/47c0fc54-5099-4e9c-ad0d-8a58572d05c0`,
@@ -197,7 +199,7 @@ test.describe('Live Cards', () => {
     await expect(page.locator('[data-test-file="hello.gts"]')).toHaveCount(1);
   });
 
-  test.skip('updating a card in code mode edit updates its source', async ({
+  test('updating a card in code mode edit updates its source', async ({
     page,
   }) => {
     await clearLocalStorage(page, serverIndexUrl);
@@ -219,12 +221,20 @@ test.describe('Live Cards', () => {
     );
 
     await page.locator('[data-test-format-chooser="edit"]').click();
+
+    // give monaco a moment to load
+    await new Promise((r) => setTimeout(r, 2000));
+    let content = await getMonacoContent(page);
+
     await page
       .locator('[data-test-field="fullName"] input')
       .fill('Replacement');
 
+    await waitUntil(async () => (await getMonacoContent(page)) !== content);
+
     await expect(
-      page.locator('[data-test-monaco-container-operator-mode]'),
-    ).toContainText('Replacement');
+      await getMonacoContent(page),
+      'monaco editor has been updated',
+    ).toContain('Replacement');
   });
 });

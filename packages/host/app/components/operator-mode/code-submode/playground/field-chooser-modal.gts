@@ -10,7 +10,7 @@ import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
 import ModalContainer from '@cardstack/host/components/modal-container';
 import Preview from '@cardstack/host/components/preview';
 
-import type { FieldOption } from './playground-content';
+import type { FieldOption } from './playground-panel';
 
 interface Signature {
   Args: {

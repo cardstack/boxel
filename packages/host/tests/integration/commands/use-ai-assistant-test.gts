@@ -3,7 +3,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Loader } from '@cardstack/runtime-common';
+import { type Loader, skillCardRef } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -18,7 +18,7 @@ import type StoreService from '@cardstack/host/services/store';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
   setupIntegrationTestRealm,
@@ -107,10 +107,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
               thumbnailURL: null,
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },
@@ -125,10 +122,7 @@ module('Integration | commands | ai-assistant', function (hooks) {
               thumbnailURL: null,
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },
@@ -351,12 +345,8 @@ module('Integration | commands | ai-assistant', function (hooks) {
     let store = lookupService<StoreService>('store');
 
     // Load skill cards
-    const skillCard1 = (await store.get(
-      `${testRealmURL}skill1.json`,
-    )) as SkillCard;
-    const skillCard2 = (await store.get(
-      `${testRealmURL}skill2.json`,
-    )) as SkillCard;
+    const skillCard1 = (await store.get(`${testRealmURL}skill1.json`)) as Skill;
+    const skillCard2 = (await store.get(`${testRealmURL}skill2.json`)) as Skill;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
       commandService.commandContext,

@@ -32,7 +32,7 @@ import type {
   RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
   RoomMember,
@@ -46,10 +46,12 @@ import type Room from '../lib/matrix-classes/room';
 
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
 export type RoomSkill = {
   cardId: string;
+  realmURL: string | undefined;
   fileDef: SerializedFile;
   isActive: boolean;
 };
@@ -63,7 +65,7 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
-  private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
+  private _skillCardsCache: TrackedMap<string, Skill> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
   @tracked private _createEvent: RoomCreateEvent | undefined;
@@ -80,6 +82,7 @@ export class RoomResource extends Resource<Args> {
   @service declare private matrixService: MatrixService;
   @service declare private commandService: CommandService;
   @service declare private store: StoreService;
+  @service declare private realm: RealmService;
 
   modify(_positional: never[], named: Args['named']) {
     if (!named.roomId) {
@@ -235,6 +238,7 @@ export class RoomResource extends Resource<Args> {
     for (let skillCard of this.allSkillFileDefs) {
       result.push({
         cardId: skillCard.sourceUrl,
+        realmURL: this.realm.realmOfURL(new URL(skillCard.sourceUrl))?.href,
         fileDef: skillCard,
         isActive:
           this.matrixRoom?.skillsConfig.enabledSkillCards
@@ -350,7 +354,7 @@ export class RoomResource extends Resource<Args> {
       return this._skillCardsCache.get(cardId);
     }
 
-    let skillCard = await this.store.add<SkillCard>(cardDoc, {
+    let skillCard = await this.store.add<Skill>(cardDoc, {
       doNotPersist: true,
     });
     this._skillCardsCache.set(cardId, skillCard);
