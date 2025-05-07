@@ -228,9 +228,8 @@ type SpecPreviewCardContext = Omit<
 interface PreviewerSignature {
   Element: HTMLDivElement;
   Args: {
-    id: string;
-    cardContext: CardContext;
-    viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
+    id: string | undefined;
+    cardContext: SpecPreviewCardContext;
     onSpecView: (spec: Spec) => void;
     canWrite: boolean;
   };
@@ -243,13 +242,8 @@ class Previewer extends GlimmerComponent<PreviewerSignature> {
     this.specResource = this.getCard(this, () => this.args.id);
   };
 
-  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
-    return this.args.cardContext.cardTracker
-      .filter([{ fieldType: 'linksToMany' }])
-      .map((entry) => ({
-        ...entry,
-        overlayZIndexStyle: htmlSafe(`z-index: 1`),
-      }));
+  private get displayIsolated() {
+    return !this.args.canWrite && this.args.id;
   }
 
   get spec() {
@@ -258,11 +252,6 @@ class Previewer extends GlimmerComponent<PreviewerSignature> {
   <template>
     {{consumeContext this.makeSpecResource}}
     {{#if this.spec}}
-      <Overlays
-        @overlayClassName='spec-preview-overlay'
-        @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-        @onSelectCard={{@viewCardInPlayground}}
-      />
       {{#if this.displayIsolated}}
         <Preview
           @card={{this.spec}}
@@ -274,7 +263,7 @@ class Previewer extends GlimmerComponent<PreviewerSignature> {
           @card={{this.spec}}
           @format='edit'
           @cardContext={{@cardContext}}
-          {{SpecPreviewModifier spec=@spec onSpecView=@onSpecView}}
+          {{SpecPreviewModifier spec=this.spec onSpecView=@onSpecView}}
         />
       {{/if}}
     {{/if}}
@@ -307,6 +296,15 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     };
   }
 
+  private get renderedCardsForOverlayActions(): RenderedCardForOverlayActions[] {
+    return this.cardTracker
+      .filter([{ fieldType: 'linksToMany' }])
+      .map((entry) => ({
+        ...entry,
+        overlayZIndexStyle: htmlSafe(`z-index: 1`),
+      }));
+  }
+
   private getDropdownData = (card: CardDef) => {
     let realmInfo = this.realm.info(urlForRealmLookup(card));
     let realmURL = card[realmURLSymbol];
@@ -319,10 +317,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       localPath: card.id ? getRelativePath(realmURL.href, card.id) : undefined,
     };
   };
-
-  private get displayIsolated() {
-    return !this.args.canWrite && this.args.cards.length > 0;
-  }
 
   private get displayCannotWrite() {
     return !this.args.canWrite && this.args.cards.length === 0;
@@ -400,10 +394,15 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 <span class='view-instance-btn-text'>View Instance</span>
               </BoxelButton>
             </div>
+            <Overlays
+              @overlayClassName='spec-preview-overlay'
+              @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
+              @onSelectCard={{@viewCardInPlayground}}
+            />
             <Previewer
               @id={{this.selectedId}}
-              @context={{this.cardContext}}
-              @viewCardInPlayground={{@viewCardInPlayground}}
+              @cardContext={{this.cardContext}}
+              @onSpecView={{@onSpecView}}
               @canWrite={{@canWrite}}
             />
           </div>
