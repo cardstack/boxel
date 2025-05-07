@@ -22,8 +22,4 @@ export function clearLocalStorage() {
   window.localStorage.removeItem(RecentCards);
   window.localStorage.removeItem(RecentFiles);
   window.localStorage.removeItem(ScrollPositions);
-  // Remove all codeblock_ prefixed items
-  Object.keys(window.localStorage)
-    .filter((key) => key.startsWith('codeblock_'))
-    .forEach((key) => window.localStorage.removeItem(key));
 }
