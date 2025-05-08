@@ -304,7 +304,7 @@ export default class CommandService extends Service {
       let resultSends = [];
       for (const codeBlock of codeBlocks) {
         resultSends.push(
-          this.matrixService.sendCodeBlockCommandResultEvent(
+          this.matrixService.sendCodePatchResultEvent(
             roomId,
             codeBlock.eventId,
             codeBlock.index,

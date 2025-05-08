@@ -10,13 +10,13 @@ import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   ActiveLLMEvent,
-  ApplyCodeChangeResultContent,
   CardMessageContent,
   CardMessageEvent,
   CommandResultEvent,
   EncodedCommandRequest,
   SkillsConfigEvent,
   Tool,
+  CodePatchResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -24,7 +24,8 @@ import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -168,8 +169,11 @@ export async function constructHistory(
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
     if (
-      event.type !== 'm.room.message' &&
-      event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+      ![
+        'm.room.message',
+        APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+      ].includes(event.type)
     ) {
       continue;
     }
@@ -552,6 +556,22 @@ function getCommandResults(
   return commandResultEvents;
 }
 
+function getCodePatchResults(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+) {
+  let codePatchResultEvents = history.filter((e) => {
+    if (
+      isCodePatchResultEvent(e) &&
+      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
+    ) {
+      return true;
+    }
+    return false;
+  }) as CodePatchResultEvent[];
+  return codePatchResultEvents;
+}
+
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
   return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
@@ -643,9 +663,13 @@ export async function getModifyPrompt(
         event as CardMessageEvent,
         history,
       );
+      let codePatchReults = getCodePatchResults(
+        event as CardMessageEvent,
+        history,
+      );
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
-        content: elideCodeBlocks(body, commandResults),
+        content: elideCodeBlocks(body, codePatchReults),
       };
       if (toolCalls.length) {
         historicalMessage.tool_calls = toolCalls;
@@ -786,9 +810,22 @@ export function isCommandResultEvent(
   );
 }
 
+export function isCodePatchResultEvent(
+  event?: DiscreteMatrixEvent,
+): event is CodePatchResultEvent {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+    event.content['m.relates_to']?.rel_type ===
+      APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE
+  );
+}
+
 function elideCodeBlocks(
   content: string,
-  commandResults: CommandResultEvent[],
+  codePatchResults: CodePatchResultEvent[],
 ) {
   const DEFAULT_PLACEHOLDER: string = '[Proposed code change]';
   const PLACEHOLDERS = {
@@ -798,20 +835,13 @@ function elideCodeBlocks(
   };
 
   function getPlaceholder(codeBlockIndex: number) {
-    let codeBlockResult = commandResults.find((commandResult) => {
-      return (
-        commandResult.content.msgtype ===
-          APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE &&
-        commandResult.content.codeBlockIndex === codeBlockIndex
-      );
+    let codePatchResult = codePatchResults.find((codePatchResult) => {
+      return codePatchResult.content.codeBlockIndex === codeBlockIndex;
     });
-    if (codeBlockResult) {
+    if (codePatchResult) {
       return (
-        PLACEHOLDERS[
-          (codeBlockResult.content as ApplyCodeChangeResultContent)[
-            'm.relates_to'
-          ].key
-        ] ?? DEFAULT_PLACEHOLDER
+        PLACEHOLDERS[codePatchResult.content['m.relates_to'].key] ??
+        DEFAULT_PLACEHOLDER
       );
     }
     return DEFAULT_PLACEHOLDER;

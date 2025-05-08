@@ -356,15 +356,15 @@
     "age": 63517
   },
   {
-    "type": "app.boxel.commandResult",
+    "type": "app.boxel.codePatchResult",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "app.boxel.applyCodeChangeResult",
+      "msgtype": "app.boxel.codePatchResult",
       "m.relates_to": {
         "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
         "key": "applied",
-        "rel_type": "app.boxel.commandAnnotation"
+        "rel_type": "app.boxel.codePatchAnnotation"
       },
       "codeBlockIndex": 0
     },
@@ -377,15 +377,15 @@
     "age": 63267
   },
   {
-    "type": "app.boxel.commandResult",
+    "type": "app.boxel.codePatchResult",
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "msgtype": "app.boxel.applyCodeChangeResult",
+      "msgtype": "app.boxel.codePatchResult",
       "m.relates_to": {
         "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
         "key": "rejected",
-        "rel_type": "app.boxel.commandAnnotation"
+        "rel_type": "app.boxel.codePatchAnnotation"
       },
       "codeBlockIndex": 1
     },
