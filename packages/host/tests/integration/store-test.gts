@@ -390,22 +390,19 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can create an instance', async function (assert) {
-    let url = await store.create(
-      {
-        data: {
-          attributes: {
-            name: 'Andrea',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
+    let url = await store.create({
+      data: {
+        attributes: {
+          name: 'Andrea',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
           },
         },
       },
-      undefined,
-    );
+    });
     assert.ok(typeof url === 'string', 'received a url for new instance');
     let instance = store.peek(url as string);
     assert.strictEqual((instance as CardDefType).id, url);
@@ -420,23 +417,20 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can handle card error when creating an instance', async function (assert) {
-    let error = await store.create(
-      {
-        data: {
-          attributes: {
-            name: 'Andrea',
-            hasError: true,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
+    let error = await store.create({
+      data: {
+        attributes: {
+          name: 'Andrea',
+          hasError: true,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
           },
         },
       },
-      undefined,
-    );
+    });
     assert.ok(typeof error === 'object', 'received a error for new instance');
     assert.ok(
       (error as any).message.includes(
