@@ -19,6 +19,7 @@ export type SerializedFile = {
   url: string;
   name: string;
   contentType: string;
+  contentHash?: string;
 };
 
 export class FileDef extends BaseDef {
@@ -29,6 +30,7 @@ export class FileDef extends BaseDef {
   @field url = contains(StringField);
   @field name = contains(StringField);
   @field contentType = contains(StringField);
+  @field contentHash = contains(StringField);
 
   static embedded: BaseDefComponent = View;
   static fitted: BaseDefComponent = View;
@@ -41,6 +43,7 @@ export class FileDef extends BaseDef {
       url: this.url,
       name: this.name,
       contentType: this.contentType,
+      contentHash: this.contentHash,
     };
   }
 }
@@ -50,11 +53,13 @@ export function createFileDef({
   sourceUrl,
   name,
   contentType,
+  contentHash,
 }: {
   url?: string;
   sourceUrl: string;
   name?: string;
   contentType?: string;
+  contentHash?: string;
 }) {
-  return new FileDef({ url, sourceUrl, name, contentType });
+  return new FileDef({ url, sourceUrl, name, contentType, contentHash });
 }
