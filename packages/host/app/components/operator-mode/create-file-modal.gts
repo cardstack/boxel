@@ -726,7 +726,7 @@ export class ${className} extends ${exportName} {
       this.commandService.commandContext,
     ).execute({
       sourceCard: this.currentRequest.sourceInstance,
-      targetUrl: this.selectedRealmURL.href,
+      realm: this.selectedRealmURL.href,
     });
     this.currentRequest.newFileDeferred.fulfill(new URL(`${newCardId}.json`));
   });
@@ -775,11 +775,10 @@ export class ${className} extends ${exportName} {
     };
 
     try {
-      let maybeId = await this.store.create(
-        doc,
+      let maybeId = await this.store.create(doc, {
         relativeTo,
-        this.selectedRealmURL.href,
-      );
+        realm: this.selectedRealmURL.href,
+      });
       if (typeof maybeId !== 'string') {
         let error = maybeId;
         throw error;

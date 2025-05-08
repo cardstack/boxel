@@ -51,6 +51,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  DEFAULT_CODING_LLM,
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -637,6 +638,20 @@ export default class MatrixService extends Service {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
 
+  async uploadCardsAndUpdateSkillCommands(cards: CardDef[], roomId: string) {
+    this.ensureRoomData(roomId);
+    let roomResource = this.roomResources.get(roomId);
+    if (!roomResource) {
+      throw new Error(`Room resource not found for room ${roomId}`);
+    }
+    return await this.client.uploadCardsAndUpdateSkillCommands(
+      cards,
+      roomResource,
+      (roomId, eventType, stateKey, transformContent) =>
+        this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+    );
+  }
+
   async uploadCards(cards: CardDef[]) {
     let cardFileDefs = await this.client.uploadCards(cards);
     return cardFileDefs;
@@ -648,6 +663,10 @@ export default class MatrixService extends Service {
     let commandFileDefs =
       await this.client.uploadCommandDefinitions(commandDefinitions);
     return commandFileDefs;
+  }
+
+  async cacheContentHashIfNeeded(event: DiscreteMatrixEvent) {
+    await this.client.cacheContentHashIfNeeded(event);
   }
 
   async sendCommandResultEvent(
@@ -703,35 +722,7 @@ export default class MatrixService extends Service {
   }
 
   async uploadFiles(files: FileDef[]) {
-    let uploadedFiles = await Promise.all(
-      files.map(async (file) => {
-        if (!file.sourceUrl) {
-          throw new Error('File needs a realm server source URL to upload');
-        }
-
-        let response = await this.network.authedFetch(file.sourceUrl, {
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-        });
-
-        // We only support uploading text files (code) for now.
-        // When we start supporting other file types (pdfs, images, etc)
-        // we will need to update this to support those file types.
-        let text = await response.text();
-        let contentType = response.headers.get('content-type');
-
-        if (!contentType) {
-          throw new Error(`File has no content type: ${file.sourceUrl}`);
-        }
-        file.url = await this.client.uploadContent(text, contentType);
-        file.contentType = contentType;
-
-        return file;
-      }),
-    );
-
-    return uploadedFiles;
+    return await this.client.uploadFiles(files);
   }
 
   async sendMessage(
@@ -764,21 +755,9 @@ export default class MatrixService extends Service {
       }
     }
 
-    let roomResource = this.roomResources.get(roomId);
-    if (!roomResource) {
-      throw new Error(`Room resource not found for room ${roomId}`);
-    }
-    let cardFileDefs = await this.client.uploadCardsAndUpdateSkillCommands(
+    let cardFileDefs = await this.uploadCardsAndUpdateSkillCommands(
       attachedCards,
-      roomResource,
-      (
-        roomId: string,
-        eventType: string,
-        stateKey: string,
-        transformContent: (
-          content: Record<string, any>,
-        ) => Promise<Record<string, any>>,
-      ) => this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+      roomId,
     );
 
     await this.sendEvent(roomId, 'm.room.message', {
@@ -1447,7 +1426,7 @@ export default class MatrixService extends Service {
   }
 
   setLLMForCodeMode() {
-    this.setLLMModel('anthropic/claude-3.5-sonnet');
+    this.setLLMModel(DEFAULT_CODING_LLM);
   }
 
   private setLLMModel(model: string) {

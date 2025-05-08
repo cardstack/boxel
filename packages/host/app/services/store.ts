@@ -27,7 +27,10 @@ import {
   meta,
   logger,
   formattedError,
+  RealmPaths,
   type Store as StoreInterface,
+  type AddOptions,
+  type CreateOptions,
   type Query,
   type PatchData,
   type Relationship,
@@ -191,14 +194,16 @@ export default class StoreService extends Service implements StoreInterface {
   // This method creates a new instance in the store and return the new card ID
   async create(
     doc: LooseSingleCardDocument,
-    relativeTo: URL | undefined,
-    realm?: string,
+    opts?: CreateOptions,
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let cardOrError = await this.getInstance({
         urlOrDoc: doc,
-        relativeTo,
-        realm,
+        relativeTo: opts?.relativeTo,
+        realm: opts?.realm,
+        opts: {
+          localDir: opts?.localDir,
+        },
       });
       if (isCardInstance(cardOrError)) {
         return cardOrError.id;
@@ -213,36 +218,16 @@ export default class StoreService extends Service implements StoreInterface {
 
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts: {
-      realm?: string;
-      relativeTo?: URL | undefined;
-      // if you don't save then there is no possibility for error, hence a
-      // simpler return type
-      doNotPersist: true;
-    },
+    opts?: CreateOptions & { doNotPersist: true },
   ): Promise<T>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: {
-      realm?: string;
-      relativeTo?: URL | undefined;
-    },
+    opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: {
-      // TODO: apparently this is getting abused by the catalog actions and we
-      // are using this to tell the store the folder _within_ the realm to
-      // upload an instance to, this is not always the actual realm...
-      realm?: string;
-      relativeTo?: URL | undefined;
-      doNotPersist?: true;
-    },
+    opts?: AddOptions,
   ): Promise<T | CardErrorJSONAPI> {
-    // need to figure out the actual realm because opts.realm is being abused
-    let realmURL = opts?.realm
-      ? this.realm.realmOfURL(new URL(opts.realm))?.href
-      : undefined;
     let instance: T;
     if (!isCardInstance(instanceOrDoc)) {
       instance = await this.createFromSerialized(
@@ -260,10 +245,10 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     }
-    if (realmURL) {
+    if (opts?.realm) {
       instance[meta] = {
         ...instance[meta],
-        ...{ realmURL },
+        ...{ realmURL: opts.realm },
       } as CardResourceMeta;
     }
 
@@ -283,9 +268,9 @@ export default class StoreService extends Service implements StoreInterface {
       if (instance.id) {
         this.save(instance.id);
       } else {
-        return (await this.persistAndUpdate(instance, opts?.realm)) as
-          | T
-          | CardErrorJSONAPI;
+        return (await this.persistAndUpdate(instance, {
+          realm: opts?.realm,
+        })) as T | CardErrorJSONAPI;
       }
     }
 
@@ -707,7 +692,7 @@ export default class StoreService extends Service implements StoreInterface {
     urlOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
-    opts?: { noCache?: boolean };
+    opts?: { noCache?: boolean; localDir?: string };
   }) {
     let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
     let url = asURL(urlOrDoc);
@@ -728,7 +713,10 @@ export default class StoreService extends Service implements StoreInterface {
           doc,
           relativeTo,
         );
-        let maybeError = await this.persistAndUpdate(newInstance, realm);
+        let maybeError = await this.persistAndUpdate(newInstance, {
+          realm,
+          localDir: opts?.localDir,
+        });
         if (!isCardInstance(maybeError)) {
           return maybeError;
         }
@@ -867,10 +855,11 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    realmUrl: URL,
+    opts?: CreateOptions,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.cardService.fetchJSON(doc.data.id ?? realmUrl, {
+    let url = resolveDocUrl(doc.data.id, opts?.realm, opts?.localDir);
+    let json = await this.cardService.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(doc, null, 2),
     });
@@ -917,7 +906,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async persistAndUpdate(
     instance: CardDef,
-    defaultRealmHref?: string,
+    opts?: CreateOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let cardChanged = false;
@@ -943,14 +932,17 @@ export default class StoreService extends Service implements StoreInterface {
         // in the case where we get no realm URL from the card, we are dealing with
         // a new card instance that does not have a realm URL yet.
         if (!realmURL) {
-          defaultRealmHref =
-            defaultRealmHref ?? this.realm.defaultWritableRealm?.path;
+          let defaultRealmHref =
+            opts?.realm ?? this.realm.defaultWritableRealm?.path;
           if (!defaultRealmHref) {
             throw new Error('Could not find a writable realm');
           }
           realmURL = new URL(defaultRealmHref);
         }
-        let json = await this.saveCardDocument(doc, realmURL);
+        let json = await this.saveCardDocument(doc, {
+          realm: realmURL.href,
+          localDir: opts?.localDir,
+        });
 
         // if the card changed while the save was in flight then don't merge the
         // server state--the next auto save will include these
@@ -1172,4 +1164,21 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
   return typeof urlOrDoc === 'string'
     ? urlOrDoc.replace(/\.json$/, '')
     : urlOrDoc.data.id;
+}
+
+// Resolves either to
+// - an instance
+// - a directory
+function resolveDocUrl(id?: string, realm?: string, local?: string) {
+  if (id) {
+    return id;
+  }
+  if (!realm) {
+    throw new Error('Cannot resolve target url without a realm');
+  }
+  let path = new RealmPaths(new URL(realm));
+  if (local) {
+    return path.directoryURL(local).href;
+  }
+  return path.url;
 }
