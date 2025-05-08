@@ -587,7 +587,7 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     assert.dom('[data-test-code-mode-panel-item="spec-preview"]').exists();
     assert.dom('[data-test-has-spec]').containsText('card');
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-spec-selector-item-path]').hasText('person-entry');
     await percySnapshot(assert);
@@ -607,7 +607,7 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     assert.dom('[data-test-code-mode-panel-item="spec-preview"]').exists();
     assert.dom('[data-test-has-spec]').containsText('2 instances');
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-spec-selector]').exists();
     assert.dom('[data-test-caret-down]').exists();
     assert.dom('[data-test-spec-selector-item-path]').hasText('pet-entry-2');
@@ -628,7 +628,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealm2URL}new-skill.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-code-mode-panel-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
     assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
@@ -641,7 +641,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealm2URL}person.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-code-mode-panel-item="spec-preview"]').exists();
     assert.dom('[data-test-create-spec-button]').doesNotExist();
     assert.dom('[data-test-create-spec-intent-message]').doesNotExist();
@@ -670,7 +670,7 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}new-skill.gts`,
     });
     assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     await click('[data-test-create-spec-button]');
 
     assert
@@ -688,7 +688,7 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     await click('[data-boxel-selector-item-text="ExtendedNewSkill"]');
     assert.dom('[data-test-create-spec-button]').exists();
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     await click('[data-test-create-spec-button]');
 
     assert
@@ -732,7 +732,7 @@ module('Acceptance | Spec preview', function (hooks) {
       codePath: `${testRealmURL}employee.gts`,
     });
     assert.dom('[data-test-code-mode-panel-item="spec-preview"]').exists();
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('');
     assert.dom('[data-test-exported-name]').containsText('default');
     assert.dom('[data-test-spec-tag]').hasText('card');
@@ -743,7 +743,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     let readMeInput = 'This is a spec for a person';
     this.onSave((_, json) => {
       if (typeof json === 'string') {
@@ -766,7 +766,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-view-spec-instance]').exists();
     await click('[data-test-view-spec-instance]');
     assert
@@ -791,7 +791,7 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     assert.dom('[data-test-code-mode-panel-item="spec-preview"]').exists();
 
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     await click('[data-test-spec-selector] > div');
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
@@ -823,7 +823,7 @@ module('Acceptance | Spec preview', function (hooks) {
     await click(`[data-test-boxel-selector-item-text="${elementName}"]`);
     assert.dom('[data-test-code-mode-panel-item="spec-preview"]').exists();
     assert.dom('[data-test-has-spec]').containsText('field');
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-spec-selector]').exists();
     assert
       .dom('[data-test-module-href]')
@@ -867,7 +867,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}primitive-field.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-spec-example-incompatible-primitives]').exists();
     await click(
       '[data-test-boxel-selector-item-text="SubclassPrimitiveField"]',
@@ -880,7 +880,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     // Select the pet-entry-2 spec which has linked examples
     await click('[data-test-spec-selector] > div');
     assert
@@ -923,7 +923,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     // Select the pet-entry-2 spec which has linked examples
     await click('[data-test-spec-selector] > div');
     assert
@@ -958,7 +958,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     await click('[data-test-spec-selector] > div');
     assert
       .dom('[data-option-index="0"] [data-test-spec-selector-item-path]')
@@ -997,7 +997,7 @@ module('Acceptance | Spec preview', function (hooks) {
     );
 
     // Go back to spec preview and click the second card
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     await triggerEvent(`[data-test-card="${secondPetId}"]`, 'mouseenter');
     await click(`[data-test-card="${secondPetId}"]`);
 
@@ -1026,7 +1026,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}pet.gts`,
     });
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Pet2');
     assert.dom('[data-test-number-of-instance]').hasText('2 instances');
     assert.dom('[data-test-exported-type]').hasText('card');
@@ -1061,7 +1061,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await click('[data-test-code-mode-panel-item="preview"] button');
+    await click('[data-test-code-model-panel-item="preview"]');
     await selectDeclaration('Person');
     assert.dom('[data-test-playground-panel]').exists();
     await selectDeclaration('PersonField');
@@ -1072,7 +1072,7 @@ module('Acceptance | Spec preview', function (hooks) {
       `${testRealmURL}person-entry`,
       'Person Spec is not set as the spec for PersonField',
     );
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert
       .dom('[data-test-create-spec-button]')
       .doesNotExist('PersonField spec is autogenerated by playground');
@@ -1097,7 +1097,7 @@ module('Acceptance | Spec preview', function (hooks) {
       `${testRealmURL}different-field-entry`,
     );
 
-    await click('[data-test-code-mode-panel-item="preview"] button');
+    await click('[data-test-code-model-panel-item="preview"]');
     await selectDeclaration('PersonField');
     selection =
       getPlaygroundSelections()?.[`${testRealmURL}person/PersonField`];
@@ -1106,7 +1106,7 @@ module('Acceptance | Spec preview', function (hooks) {
       `${testRealmURL}different-field-entry`,
       'DifferentField Spec is not set as the spec for PersonField',
     );
-    await click('[data-test-code-mode-panel-item="spec-preview"] button');
+    await click('[data-test-code-model-panel-item="spec-preview"]');
     assert
       .dom('[data-test-create-spec-button]')
       .doesNotExist('PersonField spec is autogenerated by playground');

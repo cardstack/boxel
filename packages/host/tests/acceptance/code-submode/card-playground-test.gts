@@ -915,7 +915,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="blog-post.gts"]');
-      await click('[data-test-code-mode-panel-item="preview"] button');
+      await click('[data-test-code-model-panel-item="preview"]');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]');
       assert
@@ -958,7 +958,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test<TestContextWithSave>('instance chooser only appears when panel is opened', async function (assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       assert.dom('[data-test-instance-chooser]').exists();
-      await click('[data-test-code-mode-panel-item="preview"] button');
+      await click('[data-test-code-model-panel-item="preview"]');
       assert.dom('[data-test-instance-chooser]').doesNotExist();
     });
   });

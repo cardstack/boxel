@@ -488,7 +488,12 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
     });
 
     test('can preview compound field instance', async function (assert) {
-      await openFileInPlayground('blog-post.gts', testRealmURL, 'Comment');
+      await openFileInPlayground(
+        'blog-post.gts',
+        testRealmURL,
+        'Comment',
+        this,
+      );
       assert
         .dom('[data-test-playground-format-chooser] button')
         .exists({ count: 4 });
