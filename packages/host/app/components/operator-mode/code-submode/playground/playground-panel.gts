@@ -213,7 +213,7 @@ export default class PlaygroundPanel extends Component<Signature> {
       filter: { type: this.args.codeRef },
       sort: [
         {
-          by: 'createdAt',
+          by: 'lastModified',
           direction: 'desc',
         },
       ],

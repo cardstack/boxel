@@ -1028,7 +1028,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('does not autogenerate card instance if one exists in the realm but is not in recent cards', async function (assert) {
       removeRecentFiles();
-      setRecentFiles([[testRealmURL, 'person.gts']]);
       const cardId = `${testRealmURL}Person/pet-mango`;
       let { data: results } = await realm.realmIndexQueryEngine.search({
         filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
@@ -1046,19 +1045,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-instance-chooser]');
       assert.dom('[data-option-index]').exists({ count: 1 });
       assert.dom('[data-option-index="0"]').containsText('Mango');
-
-      let recentFiles = getRecentFiles();
-      assert.strictEqual(
-        recentFiles?.length,
-        2,
-        'recent file count is correct',
-      );
-      assert.strictEqual(recentFiles?.[0][0], testRealmURL);
-      assert.strictEqual(
-        recentFiles?.[0][1],
-        'Person/pet-mango.json',
-        'card is added to recent cards',
-      );
 
       ({ data: results } = await realm.realmIndexQueryEngine.search({
         filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
@@ -1298,7 +1284,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-      assert.dom('[data-test-card-error]').doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
 
       await createNewInstance();
       assert
@@ -1335,7 +1323,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('it can clear card-creation error (that resulted in new file in the realm) when file is edited', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-      assert.dom('[data-test-error-container]').doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
 
       await createNewInstance();
       assert
@@ -1364,7 +1354,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-      assert.dom('[data-test-error-container]').doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
 
       await createNewInstance();
       assert
