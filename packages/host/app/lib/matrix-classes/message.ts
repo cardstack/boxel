@@ -9,6 +9,8 @@ import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import { RoomMember } from './member';
 
+import type MessageCodePatchResult from './message-code-patch-result';
+
 import type MessageCommand from './message-command';
 
 const ErrorMessage: Record<string, string> = {
@@ -41,6 +43,7 @@ interface RoomMessageOptional {
 export class Message implements RoomMessageInterface {
   @tracked body: string;
   @tracked commands: TrackedArray<MessageCommand>;
+  @tracked codePatchResults: TrackedArray<MessageCodePatchResult>;
   @tracked isStreamingFinished?: boolean;
   @tracked reasoningContent?: string | null;
 
@@ -74,6 +77,7 @@ export class Message implements RoomMessageInterface {
     this.attachedFiles = init.attachedFiles;
     this.reasoningContent = init.reasoningContent;
     this.commands = new TrackedArray<MessageCommand>();
+    this.codePatchResults = new TrackedArray<MessageCodePatchResult>();
     this.instanceId = guidFor(this);
   }
   get isRetryable() {

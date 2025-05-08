@@ -25,13 +25,15 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
 import type { CardDef } from 'https://cardstack.com/base/card-api';
+import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
 import type LoaderService from './loader-service';
 import type RealmServerService from './realm-server';
 import type StoreService from './store';
+import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
+import type MessageCommand from '../lib/matrix-classes/message-command';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -304,7 +306,7 @@ export default class CommandService extends Service {
       let resultSends = [];
       for (const codeBlock of codeBlocks) {
         resultSends.push(
-          this.matrixService.sendCodeBlockCommandResultEvent(
+          this.matrixService.sendCodePatchResultEvent(
             roomId,
             codeBlock.eventId,
             codeBlock.index,
@@ -323,16 +325,48 @@ export default class CommandService extends Service {
     }
   }
 
-  isCodeBlockApplying(codeBlock: { eventId: string; index: number }) {
+  private isCodeBlockApplying(codeBlock: { eventId: string; index: number }) {
     return this.currentlyExecutingCommandRequestIds.has(
       `${codeBlock.eventId}:${codeBlock.index}`,
     );
   }
 
-  isCodeBlockApplied(codeBlock: { eventId: string; index: number }) {
+  private isCodeBlockRecentlyApplied(codeBlock: {
+    eventId: string;
+    index: number;
+  }) {
     return this.executedCommandRequestIds.has(
       `${codeBlock.eventId}:${codeBlock.index}`,
     );
+  }
+
+  private getCodePatchResult(codeBlock: {
+    roomId: string;
+    eventId: string;
+    index: number;
+  }): MessageCodePatchResult | undefined {
+    let roomResource = this.matrixService.roomResources.get(codeBlock.roomId);
+    if (!roomResource) {
+      return undefined;
+    }
+    let message = roomResource.messages.find(
+      (m) => m.eventId === codeBlock.eventId,
+    );
+    return message?.codePatchResults?.find((c) => c.index === codeBlock.index);
+  }
+
+  getCodePatchStatus(codeBlock: {
+    roomId: string;
+    eventId: string;
+    index: number;
+  }): CodePatchStatus | 'applying' | 'ready' {
+    if (this.isCodeBlockApplying(codeBlock)) {
+      return 'applying';
+    }
+    if (this.isCodeBlockRecentlyApplied(codeBlock)) {
+      return 'applied';
+    }
+    return this.getCodePatchResult(codeBlock)?.status ?? 'ready';
   }
 }
 

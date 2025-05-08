@@ -6,7 +6,9 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
-  APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -201,10 +203,7 @@ export interface ActiveLLMEvent extends RoomStateEvent {
 
 export interface CommandResultEvent extends BaseMatrixEvent {
   type: typeof APP_BOXEL_COMMAND_RESULT_EVENT_TYPE;
-  content:
-    | CommandResultWithOutputContent
-    | CommandResultWithNoOutputContent
-    | ApplyCodeChangeResultContent;
+  content: CommandResultWithOutputContent | CommandResultWithNoOutputContent;
   unsigned: {
     age: number;
     transaction_id: string;
@@ -212,6 +211,18 @@ export interface CommandResultEvent extends BaseMatrixEvent {
     prev_sender?: string;
   };
 }
+
+export interface CodePatchResultEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE;
+  content: CodePatchResultContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 export interface CommandDefinitionSchema {
   codeRef: {
     module: string;
@@ -244,13 +255,15 @@ export interface CommandResultWithNoOutputContent {
   commandRequestId: string;
 }
 
-export interface ApplyCodeChangeResultContent {
+export type CodePatchStatus = 'rejected' | 'applied' | 'failed';
+
+export interface CodePatchResultContent {
   'm.relates_to': {
-    rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
-    key: 'rejected' | 'applied' | 'failed';
+    rel_type: typeof APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE;
+    key: CodePatchStatus;
     event_id: string;
   };
-  msgtype: typeof APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE;
+  msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
   codeBlockIndex: number;
 }
 
@@ -324,18 +337,19 @@ export interface FileRemovedEventContent {
 }
 
 export type MatrixEvent =
-  | RoomCreateEvent
-  | RoomJoinRules
-  | RoomPowerLevels
-  | MessageEvent
-  | CommandResultEvent
+  | ActiveLLMEvent
   | CardMessageEvent
-  | RealmServerEvent
-  | RealmEvent
-  | RoomNameEvent
-  | RoomTopicEvent
+  | CodePatchResultEvent
+  | CommandResultEvent
   | InviteEvent
   | JoinEvent
   | LeaveEvent
-  | SkillsConfigEvent
-  | ActiveLLMEvent;
+  | MessageEvent
+  | RealmEvent
+  | RealmServerEvent
+  | RoomCreateEvent
+  | RoomJoinRules
+  | RoomNameEvent
+  | RoomPowerLevels
+  | RoomTopicEvent
+  | SkillsConfigEvent;

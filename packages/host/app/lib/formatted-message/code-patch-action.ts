@@ -4,6 +4,7 @@ import { service } from '@ember/service';
 
 import { dropTask } from 'ember-concurrency';
 
+import { ApplyButtonState } from '@cardstack/host/components/ai-assistant/apply-button';
 import type { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
@@ -42,22 +43,15 @@ export class CodePatchAction {
   }
 
   get patchCodeState() {
-    if (
-      this.commandService.isCodeBlockApplying({
-        eventId: this.eventId,
-        index: this.index,
-      })
-    ) {
-      return 'applying';
-    } else if (
-      this.commandService.isCodeBlockApplied({
-        eventId: this.eventId,
-        index: this.index,
-      })
-    ) {
-      return 'applied';
+    return this.commandService.getCodePatchStatus(this);
+  }
+
+  get applyButtonState(): ApplyButtonState {
+    let { patchCodeState } = this;
+    if (patchCodeState === 'rejected') {
+      return 'failed';
     }
-    return 'ready';
+    return patchCodeState as ApplyButtonState;
   }
 
   patchCodeTask = dropTask(async () => {

@@ -29,7 +29,9 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-  APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
@@ -748,7 +750,7 @@ Hello, world!
 =======
 Hi, world!
 >>>>>>> REPLACE\n\`\`\``;
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
       msgtype: 'org.text',
       format: 'org.matrix.custom.html',
@@ -760,20 +762,19 @@ Hi, world!
     await click('[data-test-apply-code-button]');
     await waitUntil(() => getMonacoContent() === 'Hi, world!');
 
-    let commandResultEvents = getRoomEvents(roomId).filter(
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.event_id === eventId &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
-      commandResultEvents.length,
+      codePatchResultEvents.length,
       1,
-      'command result event is dispatched',
+      'code patch result event is dispatched',
     );
-
-    // TODO: assert that matrix events exist to reflect that the patch was applied
   });
 
   test('can patch code when there are multiple patches using "Accept All" button', async function (assert) {
@@ -851,18 +852,17 @@ We are one!
       () => getMonacoContent() === 'Greetings, world!\nWe are one!',
     );
 
-    let commandResultEvents = getRoomEvents(roomId).filter(
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
       (event) =>
-        event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-        event.content.msgtype === APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE &&
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
         event.content['m.relates_to']?.rel_type ===
-          APP_BOXEL_COMMAND_RESULT_REL_TYPE &&
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
         event.content['m.relates_to']?.key === 'applied',
     );
     assert.equal(
-      commandResultEvents.length,
+      codePatchResultEvents.length,
       3,
-      'command result events are dispatched',
+      'code patch result events are dispatched',
     );
   });
 
@@ -915,16 +915,16 @@ We are one!
       roomId,
       '@testuser:localhost',
       {
-        msgtype: APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE,
+        msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
         'm.relates_to': {
           event_id: eventId,
-          rel_type: APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+          rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
           key: 'applied',
         },
         codeBlockIndex: 1,
       },
       {
-        type: APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
       },
     );
 
