@@ -5,15 +5,15 @@
   "dependencies": {
     "@cardstack/runtime-common": "workspace:*",
     "@sentry/node": "catalog:",
-    "@types/fs-extra": "^9.0.13",
+    "@types/fs-extra": "catalog:",
     "@types/pg": "catalog:",
-    "fs-extra": "^10.1.0",
+    "fs-extra": "catalog:",
     "node-pg-migrate": "catalog:",
     "pg": "catalog:",
     "ts-node": "^10.9.1"
   },
   "devDependencies": {
-    "concurrently": "^8.0.1",
+    "concurrently": "catalog:",
     "sql-parser-cst": "catalog:"
   },
   "scripts": {

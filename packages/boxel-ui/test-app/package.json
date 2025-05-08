@@ -52,7 +52,7 @@
     "broccoli-merge-trees": "catalog:",
     "broccoli-plugin": "catalog:",
     "broccoli-source": "catalog:",
-    "concurrently": "^8.2.2",
+    "concurrently": "catalog:",
     "ember-a11y-testing": "^6.1.1",
     "ember-auto-import": "^2.7.2",
     "ember-cli": "^5.4.1",

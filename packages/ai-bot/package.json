@@ -5,11 +5,11 @@
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
     "@sentry/node": "catalog:",
-    "@types/lodash": "^4.17.15",
+    "@types/lodash": "catalog:",
     "@types/node": "^18.18.5",
     "@types/stream-chain": "catalog:",
     "@types/stream-json": "catalog:",
-    "lodash": "~4.17.21",
+    "lodash": "catalog:",
     "matrix-js-sdk": "catalog:",
     "openai": "catalog:",
     "qunit": "catalog:",
@@ -20,11 +20,11 @@
   },
   "devDependencies": {
     "@sinonjs/fake-timers": "catalog:",
-    "@types/fs-extra": "~11.0.4",
+    "@types/fs-extra": "catalog:",
     "@types/qunit": "catalog:",
     "@types/sinonjs__fake-timers": "catalog:",
-    "concurrently": "^8.0.1",
-    "fs-extra": "~11.3.0",
+    "concurrently": "catalog:",
+    "fs-extra": "catalog:",
     "qunit": "^2.24.1"
   },
   "scripts": {

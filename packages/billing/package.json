@@ -8,7 +8,7 @@
     "stripe": "catalog:"
   },
   "devDependencies": {
-    "concurrently": "^8.0.1"
+    "concurrently": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",
