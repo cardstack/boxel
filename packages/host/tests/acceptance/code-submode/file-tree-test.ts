@@ -13,6 +13,8 @@ import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
+import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
+
 import {
   elementIsVisible,
   setupLocalIndexing,
@@ -789,7 +791,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
 
   test('persisted scroll position is restored on refresh', async function (assert) {
     window.localStorage.setItem(
-      'scroll-positions',
+      ScrollPositions,
       JSON.stringify({
         'file-tree': ['http://test-realm/test/Person/1.json', 300],
       }),

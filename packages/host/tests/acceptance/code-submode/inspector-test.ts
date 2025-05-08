@@ -23,6 +23,11 @@ import type MonacoService from '@cardstack/host/services/monaco-service';
 import { SerializedState } from '@cardstack/host/services/operator-mode-state-service';
 
 import {
+  RecentCards,
+  RecentFiles,
+} from '@cardstack/host/utils/local-storage-keys';
+
+import {
   elementIsVisible,
   getMonacoContent,
   percySnapshot,
@@ -967,11 +972,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test('can delete a card instance from code submode with no recent files to fall back on', async function (assert) {
     window.localStorage.setItem(
-      'recent-cards',
+      RecentCards,
       JSON.stringify([`${testRealmURL}Pet/vangogh`, `${testRealmURL}Person/1`]),
     );
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify([[testRealmURL, 'Pet/vangogh.json', null]]),
     );
     await visitOperatorMode({
@@ -997,7 +1002,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     await waitForCodeEditor();
     assert.strictEqual(
-      window.localStorage.getItem('recent-files'),
+      window.localStorage.getItem(RecentFiles),
       JSON.stringify([[testRealmURL, 'Pet/vangogh.json', null]]),
     );
     assert.dom('[data-test-delete-modal-container]').doesNotExist();
@@ -1024,12 +1029,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
       .doesNotExist('stack item removed');
     assert.deepEqual(
-      window.localStorage.getItem('recent-cards'),
+      window.localStorage.getItem(RecentCards),
       JSON.stringify([`${testRealmURL}Person/1`]),
       'the deleted card has been removed from recent cards',
     );
     assert.deepEqual(
-      window.localStorage.getItem('recent-files'),
+      window.localStorage.getItem(RecentFiles),
       '[]',
       'the deleted card has been removed from recent files',
     );
@@ -1041,7 +1046,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test('Can delete a card instance from code submode and fall back to recent file', async function (assert) {
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify([
         [testRealmURL, 'Pet/vangogh.json'],
         [testRealmURL, 'Pet/mango.json'],
@@ -1072,7 +1077,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
     await waitForCodeEditor();
     assert.strictEqual(
-      window.localStorage.getItem('recent-files'),
+      window.localStorage.getItem(RecentFiles),
       JSON.stringify([
         [testRealmURL, 'Pet/vangogh.json', null],
         [testRealmURL, 'Pet/mango.json', null],
@@ -1111,7 +1116,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .dom(`[data-test-stack-card="${testRealmURL}Pet/vangogh"`)
       .doesNotExist('stack item removed');
     assert.deepEqual(
-      window.localStorage.getItem('recent-files'),
+      window.localStorage.getItem(RecentFiles),
       JSON.stringify([[testRealmURL, 'Pet/mango.json', null]]),
       'the deleted card has been removed from recent files',
     );
@@ -1119,7 +1124,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
 
   test('can delete a card definition and fallback to recent file', async function (assert) {
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify([
         [testRealmURL, 'pet.gts', null],
         [testRealmURL, 'Pet/mango.json', null],
@@ -1131,7 +1136,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     });
     await waitForCodeEditor();
     assert.strictEqual(
-      window.localStorage.getItem('recent-files'),
+      window.localStorage.getItem(RecentFiles),
       JSON.stringify([
         [testRealmURL, 'pet.gts', { line: 5, column: 35 }],
         [testRealmURL, 'Pet/mango.json', null],
@@ -1151,7 +1156,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       .hasValue(`${testRealmURL}Pet/mango.json`);
 
     assert.deepEqual(
-      window.localStorage.getItem('recent-files'),
+      window.localStorage.getItem(RecentFiles),
       JSON.stringify([[testRealmURL, 'Pet/mango.json', null]]),
       'the deleted card has been removed from recent files',
     );
@@ -1168,12 +1173,12 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
       codePath: `${testRealmURL}pet.gts`,
     });
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify([[testRealmURL, 'pet.gts', null]]),
     );
     await waitForCodeEditor();
     assert.strictEqual(
-      window.localStorage.getItem('recent-files'),
+      window.localStorage.getItem(RecentFiles),
       JSON.stringify([[testRealmURL, 'pet.gts', null]]),
     );
 
@@ -1185,7 +1190,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await waitFor('[data-test-empty-code-mode]');
 
     assert.deepEqual(
-      window.localStorage.getItem('recent-files'),
+      window.localStorage.getItem(RecentFiles),
       '[]',
       'the deleted card has been removed from recent files',
     );
