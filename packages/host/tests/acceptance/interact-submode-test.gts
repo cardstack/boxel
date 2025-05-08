@@ -30,6 +30,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
+import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
+
 import type {
   IncrementalIndexEventContent,
   RealmEventContent,
@@ -1139,7 +1141,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-create-new-card-button]');
       // Select a card from catalog entries
       await click(
-        `[data-test-select="https://cardstack.com/base/fields/skill-card"]`,
+        `[data-test-select="https://cardstack.com/base/cards/skill"]`,
       );
 
       await click(`[data-test-card-catalog-go-button]`);
@@ -1162,7 +1164,7 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       await click('[data-test-create-new-card-button]');
       await click(
-        `[data-test-select="https://cardstack.com/base/fields/skill-card"]`,
+        `[data-test-select="https://cardstack.com/base/cards/skill"]`,
       );
 
       let id: string | undefined;
@@ -1790,7 +1792,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
       window.localStorage.setItem(
-        'recent-cards',
+        RecentCards,
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );
 

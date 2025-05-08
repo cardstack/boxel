@@ -31,7 +31,7 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_v1",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill_card_v1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill_card_v1",
           "contentType": "text/plain"
         }
       ],
@@ -67,7 +67,7 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill_card_v2",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill_card_v2",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill_card_v2",
           "contentType": "text/plain"
         }
       ],

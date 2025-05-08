@@ -36,6 +36,8 @@ export default class RecentFiles extends Component<Args> {
         list-style-type: none;
         margin: 0;
         padding: 0;
+        overflow-y: auto;
+        max-height: calc(100% - var(--search-sheet-closed-height));
       }
     </style>
   </template>

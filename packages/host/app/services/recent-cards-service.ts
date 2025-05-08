@@ -5,6 +5,8 @@ import { tracked, cached } from '@glimmer/tracking';
 import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
+import { RecentCards } from '../utils/local-storage-keys';
+
 import type ResetService from './reset';
 
 export default class RecentCardsService extends Service {
@@ -16,7 +18,7 @@ export default class RecentCardsService extends Service {
     this.resetState();
     this.reset.register(this);
 
-    const recentCardIdsString = window.localStorage.getItem('recent-cards');
+    const recentCardIdsString = window.localStorage.getItem(RecentCards);
     if (recentCardIdsString) {
       const recentCardIds = JSON.parse(recentCardIdsString) as string[];
       this.ascendingRecentCardIds.push(...recentCardIds);
@@ -46,7 +48,7 @@ export default class RecentCardsService extends Service {
       this.ascendingRecentCardIds.splice(0, 1);
     }
     window.localStorage.setItem(
-      'recent-cards',
+      RecentCards,
       JSON.stringify(this.ascendingRecentCardIds),
     );
   }

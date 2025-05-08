@@ -35,7 +35,7 @@ import type {
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
 } from 'https://cardstack.com/base/matrix-event';
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import { RoomMember } from './member';
 import { Message } from './message';
@@ -57,7 +57,7 @@ export default class MessageBuilder {
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
       commandResultEvent?: CommandResultEvent;
-      skillCardsCache: Map<string, SkillCard>;
+      skillCardsCache: Map<string, Skill>;
     },
   ) {
     setOwner(this, owner);
