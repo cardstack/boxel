@@ -3,7 +3,7 @@ import GlimmerComponent from '@glimmer/component';
 
 import { module, test, skip } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
 import { APP_BOXEL_ROOM_SKILLS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -181,7 +181,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
                 ).getInputType();
               }
               protected async run(
-                input: SearchCardsByTypeAndTitleInput,
+                input: SearchCardsByTitleInput,
               ): Promise<undefined> {
                 let searchCommand = new SearchCardsByTypeAndTitleCommand(
                   this.commandContext,
@@ -214,10 +214,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               ],
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },
@@ -245,10 +242,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
               ],
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },
@@ -293,8 +287,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     return roomId;
   }
 
-  //TODO: Restore this once CS-7970 is implemented
-  skip('same skill card added twice with no changes results in no-op', async function (assert) {
+  test('same skill card added twice with no changes results in no-op', async function (assert) {
     const roomId = await renderAiAssistantPanel(
       `${testRealmURL}Person/fadhlan`,
     );
@@ -328,8 +321,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
   });
 
-  //TODO: Update this once CS-7970 is implemented
-  test('ensures command definitions are reuploaded in the same browser session', async function (assert) {
+  test('ensures command definitions are reuploaded only when content changes', async function (assert) {
     // Create and set up first room
     const roomId1 = await renderAiAssistantPanel(
       `${testRealmURL}Skill/example`,
@@ -339,6 +331,10 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'Upload the skill cards and command definitions',
+    );
     await click('[data-test-send-message-btn]');
 
     const room1StateSkillsJson = getRoomState(
@@ -356,10 +352,15 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       throw new Error('Expected a room ID');
     }
 
+    // Add the same skill card without changes
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
     await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
     await click('[data-test-select="http://test-realm/test/Skill/example"]');
     await click('[data-test-card-catalog-go-button]');
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'Use the previous command definition',
+    );
     await click('[data-test-send-message-btn]');
 
     const room2StateSkillsJson = getRoomState(
@@ -377,34 +378,85 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       'second room has command definitions',
     );
 
-    // Verify the command definitions are different between rooms
-    assert.notDeepEqual(
+    // Verify the command definitions are the same between rooms when content hasn't changed
+    assert.deepEqual(
       room1StateSkillsJson.commandDefinitions,
       room2StateSkillsJson.commandDefinitions,
-      'command definitions are different between rooms',
+      "command definitions are the same between rooms when content hasn't changed",
     );
 
-    // Verify the command definitions have different URLs
-    const room1CommandUrls = room1StateSkillsJson.commandDefinitions.map(
-      (cmd: any) => cmd.url,
+    // Now modify the command content
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await click('[data-test-file-browser-toggle]');
+    await click('[data-test-file="search-and-open-card-command.ts"]');
+
+    let commandSrc = getMonacoContent();
+    setMonacoContent(
+      commandSrc.replace(
+        `static displayName = 'SearchAndOpenCardCommand';`,
+        `static displayName = 'SearchAndOpenCardCommand';\ndescription = 'Search for a card, and then open it in interact mode';`,
+      ),
     );
+    await settled();
+
+    // Create a third room after modifying the command
+    await click('[data-test-submode-switcher] button');
+    await click('[data-test-boxel-menu-item-text="Interact"]');
+    await click('[data-test-create-room-btn]');
+    await waitFor('[data-test-room-settled]');
+    const roomId3 = document
+      .querySelector('[data-test-room]')
+      ?.getAttribute('data-test-room');
+    if (!roomId3) {
+      throw new Error('Expected a room ID');
+    }
+
+    // Add the skill card with modified command
+    await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
+    await click('[data-test-skill-menu] [data-test-pill-menu-add-button]');
+    await click('[data-test-select="http://test-realm/test/Skill/example"]');
+    await click('[data-test-card-catalog-go-button]');
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'Change the command',
+    );
+    await click('[data-test-send-message-btn]');
+
+    const room3StateSkillsJson = getRoomState(
+      roomId3,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+    );
+
+    // Verify the command definitions are different after content change
+    assert.notDeepEqual(
+      room2StateSkillsJson.commandDefinitions,
+      room3StateSkillsJson.commandDefinitions,
+      'command definitions are different after content change',
+    );
+
+    // Verify the command definitions have different URLs after content change
     const room2CommandUrls = room2StateSkillsJson.commandDefinitions.map(
       (cmd: any) => cmd.url,
     );
-    const room1CommandSourceUrls = room1StateSkillsJson.commandDefinitions.map(
-      (cmd: any) => cmd.sourceUrl,
+    const room3CommandUrls = room3StateSkillsJson.commandDefinitions.map(
+      (cmd: any) => cmd.url,
     );
     const room2CommandSourceUrls = room2StateSkillsJson.commandDefinitions.map(
       (cmd: any) => cmd.sourceUrl,
     );
+    const room3CommandSourceUrls = room3StateSkillsJson.commandDefinitions.map(
+      (cmd: any) => cmd.sourceUrl,
+    );
+    console.log(room2CommandUrls, room3CommandUrls);
     assert.notDeepEqual(
-      room1CommandUrls,
       room2CommandUrls,
-      'command definition URLs are different between rooms',
+      room3CommandUrls,
+      'command definition URLs are different after content change',
     );
     assert.deepEqual(
-      room1CommandSourceUrls,
       room2CommandSourceUrls,
+      room3CommandSourceUrls,
       'command definition source URLs are the same between rooms',
     );
   });

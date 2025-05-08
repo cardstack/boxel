@@ -6,6 +6,8 @@ import { tracked } from '@glimmer/tracking';
 import window from 'ember-window-mock';
 import { TrackedMap } from 'tracked-built-ins';
 
+import { ScrollPositions } from '../utils/local-storage-keys';
+
 import type ResetService from './reset';
 
 export default class ScrollPositionService extends Service {
@@ -58,13 +60,13 @@ export default class ScrollPositionService extends Service {
 
   private persist() {
     window.localStorage.setItem(
-      'scroll-positions',
+      ScrollPositions,
       JSON.stringify(Object.fromEntries(this.keyToScrollPosition)),
     );
   }
 
   private extractFromStorage() {
-    let scrollPositionsString = window.localStorage.getItem('scroll-positions');
+    let scrollPositionsString = window.localStorage.getItem(ScrollPositions);
 
     if (scrollPositionsString) {
       try {

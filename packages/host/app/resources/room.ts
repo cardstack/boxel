@@ -32,7 +32,7 @@ import type {
   RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type { SkillCard } from 'https://cardstack.com/base/skill-card';
+import type { Skill } from 'https://cardstack.com/base/skill';
 
 import {
   RoomMember,
@@ -65,7 +65,7 @@ interface Args {
 
 export class RoomResource extends Resource<Args> {
   private _messageCache: TrackedMap<string, Message> = new TrackedMap();
-  private _skillCardsCache: TrackedMap<string, SkillCard> = new TrackedMap();
+  private _skillCardsCache: TrackedMap<string, Skill> = new TrackedMap();
   private _nameEventsCache: TrackedMap<string, RoomNameEvent> =
     new TrackedMap();
   @tracked private _createEvent: RoomCreateEvent | undefined;
@@ -143,6 +143,7 @@ export class RoomResource extends Resource<Args> {
             await this.loadRoomNameEvent(event);
             break;
         }
+        this.matrixService.cacheContentHashIfNeeded(event);
       }
     } catch (e) {
       throw new Error(`Error loading room ${e}`);
@@ -355,7 +356,7 @@ export class RoomResource extends Resource<Args> {
       return this._skillCardsCache.get(cardId);
     }
 
-    let skillCard = await this.store.add<SkillCard>(cardDoc, {
+    let skillCard = await this.store.add<Skill>(cardDoc, {
       doNotPersist: true,
     });
     this._skillCardsCache.set(cardId, skillCard);

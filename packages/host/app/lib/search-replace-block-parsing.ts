@@ -1,3 +1,9 @@
+import {
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  REPLACE_MARKER,
+} from '@cardstack/runtime-common';
+
 interface SearchReplaceResult {
   searchContent: string;
   replaceContent: string | null;
@@ -19,11 +25,6 @@ interface SearchReplaceResult {
  */
 
 export function parseSearchReplace(input: string): SearchReplaceResult {
-  // Define constants for marker texts
-  const SEARCH_MARKER: string = '<<<<<<< SEARCH';
-  const SEPARATOR_MARKER: string = '=======';
-  const REPLACE_MARKER: string = '>>>>>>> REPLACE';
-
   // Initialize result object
   const result: SearchReplaceResult = {
     searchContent: '',

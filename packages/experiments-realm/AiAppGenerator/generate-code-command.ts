@@ -5,7 +5,7 @@ import {
   contains,
 } from 'https://cardstack.com/base/card-api';
 import { Command } from '@cardstack/runtime-common';
-import { SkillCard } from 'https://cardstack.com/base/skill-card';
+import { Skill } from 'https://cardstack.com/base/skill';
 import StringField from 'https://cardstack.com/base/string';
 import { ProductRequirementDocument } from '../product-requirement-document';
 import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
@@ -118,7 +118,7 @@ export default class GenerateCodeCommand extends Command<
   }
 
   get skillCard() {
-    return new SkillCard({
+    return new Skill({
       id: 'CodeGeneratorHelper',
       title: 'Code Generator',
       description:

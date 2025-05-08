@@ -288,7 +288,7 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill1",
           "contentType": "text/plain"
         }
       ],
@@ -311,12 +311,12 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill1",
           "contentType": "text/plain"
         },
         {
           "url": "mxc://mock-server/skill2",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill2",
           "contentType": "text/plain"
         }
       ],
@@ -330,7 +330,7 @@
         "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill1",
-            "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+            "sourceUrl": "https://cardstack.com/base/Skill/skill1",
             "contentType": "text/plain"
           }
         ],
@@ -347,7 +347,7 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill1",
           "contentType": "text/plain"
         }
       ],
@@ -362,14 +362,14 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill2",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill2",
           "contentType": "text/plain"
         }
       ],
       "disabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill1",
           "contentType": "text/plain"
         }
       ]
@@ -382,12 +382,12 @@
         "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill1",
-            "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+            "sourceUrl": "https://cardstack.com/base/Skill/skill1",
             "contentType": "text/plain"
           },
           {
             "url": "mxc://mock-server/skill2",
-            "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+            "sourceUrl": "https://cardstack.com/base/Skill/skill2",
             "contentType": "text/plain"
           }
         ],
@@ -404,12 +404,12 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill1",
           "contentType": "text/plain"
         },
         {
           "url": "mxc://mock-server/skill2",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill2",
           "contentType": "text/plain"
         }
       ],
@@ -425,12 +425,12 @@
       "disabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill1",
           "contentType": "text/plain"
         },
         {
           "url": "mxc://mock-server/skill2",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill2",
           "contentType": "text/plain"
         }
       ]
@@ -443,14 +443,14 @@
         "enabledSkillCards": [
           {
             "url": "mxc://mock-server/skill2",
-            "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+            "sourceUrl": "https://cardstack.com/base/Skill/skill2",
             "contentType": "text/plain"
           }
         ],
         "disabledSkillCards": [
           {
             "url": "mxc://mock-server/skill1",
-            "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+            "sourceUrl": "https://cardstack.com/base/Skill/skill1",
             "contentType": "text/plain"
           }
         ]
@@ -466,14 +466,14 @@
       "enabledSkillCards": [
         {
           "url": "mxc://mock-server/skill2",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill2",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill2",
           "contentType": "text/plain"
         }
       ],
       "disabledSkillCards": [
         {
           "url": "mxc://mock-server/skill1",
-          "sourceUrl": "https://cardstack.com/base/SkillCard/skill1",
+          "sourceUrl": "https://cardstack.com/base/Skill/skill1",
           "contentType": "text/plain"
         }
       ]

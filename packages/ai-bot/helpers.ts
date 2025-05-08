@@ -2,6 +2,9 @@ import {
   LooseCardResource,
   type LooseSingleCardDocument,
   type CardResource,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
@@ -526,7 +529,7 @@ export async function getModifyPrompt(
       let toolCalls = toToolCalls(event as CardMessageEvent);
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
-        content: body,
+        content: elideCodeBlocks(body),
       };
       if (toolCalls.length) {
         historicalMessage.tool_calls = toolCalls;
@@ -665,4 +668,31 @@ export function isCommandResultEvent(
     event.content['m.relates_to']?.rel_type ===
       APP_BOXEL_COMMAND_RESULT_REL_TYPE
   );
+}
+
+function elideCodeBlocks(content: string) {
+  const PLACEHOLDER: string = '[Proposed code change]';
+
+  while (
+    content.includes(SEARCH_MARKER) &&
+    content.includes(SEPARATOR_MARKER) &&
+    content.includes(REPLACE_MARKER)
+  ) {
+    const searchStartIndex: number = content.indexOf(SEARCH_MARKER);
+    const separatorIndex: number = content.indexOf(
+      SEPARATOR_MARKER,
+      searchStartIndex,
+    );
+    const replaceEndIndex: number = content.indexOf(
+      REPLACE_MARKER,
+      separatorIndex,
+    );
+
+    // replace the content between the markers with a placeholder
+    content =
+      content.substring(0, searchStartIndex) +
+      PLACEHOLDER +
+      content.substring(replaceEndIndex + REPLACE_MARKER.length);
+  }
+  return content;
 }
