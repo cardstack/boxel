@@ -36,6 +36,6 @@
       "include": ["../base/**", "./**", "../boxel-ui/addon/**"]
     }
   },
-  "include": ["../base/**/*", "./**/*"],
+  "include": ["../base/**/*", "./**/*", "../runtime-common/types/*"],
   "exclude": ["../base/**/__boxel/**", "./realms/**"]
 }
