@@ -951,6 +951,7 @@ export default class CodeSubmode extends Component<Signature> {
                       {{/each}}
                     </header>
                     <section
+                      class='preview-panel-content'
                       data-test-code-mode-panel-item={{this.previewPanelView}}
                     >
                       {{#if (eq this.previewPanelView 'schema')}}
@@ -1189,6 +1190,10 @@ export default class CodeSubmode extends Component<Signature> {
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-xs);
         border-bottom: var(--boxel-border);
+      }
+
+      .preview-panel-content {
+        overflow: scroll;
       }
 
       .playground-accordion-item > :deep(.title) {
