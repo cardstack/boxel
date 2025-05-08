@@ -181,7 +181,7 @@ export default class MatrixService extends Service {
   }
 
   private setLoggerLevelFromEnvironment() {
-    // This will pick up the level if it’s in LOG_LEVELS
+    // This will pick up the level if it's in LOG_LEVELS
     logger('matrix');
   }
 
@@ -644,12 +644,13 @@ export default class MatrixService extends Service {
     if (!roomResource) {
       throw new Error(`Room resource not found for room ${roomId}`);
     }
-    return await this.client.uploadCardsAndUpdateSkillCommands(
+    let cardFileDefs = await this.client.uploadCardsAndUpdateSkillCommands(
       cards,
       roomResource,
       (roomId, eventType, stateKey, transformContent) =>
         this.updateStateEvent(roomId, eventType, stateKey, transformContent),
     );
+    return cardFileDefs;
   }
 
   async uploadCards(cards: CardDef[]) {
@@ -755,8 +756,15 @@ export default class MatrixService extends Service {
       }
     }
 
+    // Upload skill cards and attached cards together to ensure:
+    // 1. Latest skill cards are deployed with the message
+    // 2. FileDefManager's cache prevents re-uploading unchanged skill cards
+    let skillCards = this.roomResources.get(roomId)?.skillCards ?? [];
+    let attachedCardsAndSkills = [...attachedCards, ...skillCards].filter(
+      (card, index, self) => index === self.findIndex((c) => c.id === card.id),
+    );
     let cardFileDefs = await this.uploadCardsAndUpdateSkillCommands(
-      attachedCards,
+      attachedCardsAndSkills,
       roomId,
     );
 
@@ -767,7 +775,13 @@ export default class MatrixService extends Service {
       clientGeneratedId,
       data: {
         attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
-        attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
+        attachedCards: cardFileDefs
+          .filter((file: FileDef) =>
+            attachedCards.find(
+              (attachedCard) => attachedCard.id === file.sourceUrl,
+            ),
+          )
+          .map((file: FileDef) => file.serialize()),
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
@@ -1029,6 +1043,12 @@ export default class MatrixService extends Service {
         stateKey,
       );
       let newContent = await transformContent(currentContent ?? {});
+
+      // Skip sending state event if content hasn't changed
+      if (stringify(currentContent ?? {}) === stringify(newContent)) {
+        return;
+      }
+
       return this.client.sendStateEvent(
         roomId,
         eventType,

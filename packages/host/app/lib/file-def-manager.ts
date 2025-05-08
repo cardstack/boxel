@@ -196,7 +196,7 @@ export default class FileDefManagerImpl implements FileDefManager {
               (fileDef) => fileDef.sourceUrl === card.sourceUrl,
             );
             if (matchingFileDef) {
-              return { ...card, url: matchingFileDef.url };
+              return matchingFileDef.serialize();
             }
             return card;
           });
@@ -221,7 +221,7 @@ export default class FileDefManagerImpl implements FileDefManager {
               (fileDef) => fileDef.sourceUrl === card.sourceUrl,
             );
             if (matchingFileDef) {
-              return { ...card, url: matchingFileDef.url };
+              return matchingFileDef.serialize();
             }
             return card;
           });
@@ -247,7 +247,7 @@ export default class FileDefManagerImpl implements FileDefManager {
               (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
             );
             if (matchingFileDef) {
-              return { ...cmd, url: matchingFileDef.url };
+              return matchingFileDef.serialize();
             }
             return cmd;
           });
