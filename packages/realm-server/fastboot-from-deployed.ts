@@ -92,6 +92,11 @@ export async function instantiateFastBoot(
     }
   }
 
+  html = html.replace(
+    '/assets/content-tag',
+    'https://boxel-host-staging.stack.cards/assets/content-tag',
+  );
+
   writeJSONSync(join(distPath, 'package.json'), pkgJSON);
   writeFileSync(join(distPath, pkgFastboot.htmlEntrypoint), html);
   for (let { local, remote } of scripts) {
