@@ -69,7 +69,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
-export { CardErrorJSONAPI, CardSaveSubscriber };
+export { CardErrorJSONAPI, CardSaveSubscriber, isLocalId };
 
 let waiter = buildWaiter('store-service');
 
@@ -235,6 +235,10 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<T>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: CreateOptions & { doNotWaitForPersist: true },
+  ): Promise<T>;
+  async add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
   async add<T extends CardDef>(
@@ -277,7 +281,10 @@ export default class StoreService extends Service implements StoreInterface {
 
     await this.updateInstanceChangeSubscription('start-tracking', instance);
 
-    if (!opts?.doNotPersist) {
+    if (opts?.doNotWaitForPersist) {
+      // intentionally not awaiting
+      this.persistAndUpdate(instance, { realm: opts?.realm });
+    } else if (!opts?.doNotPersist) {
       if (instance.id) {
         this.save(instance.id);
       } else {
