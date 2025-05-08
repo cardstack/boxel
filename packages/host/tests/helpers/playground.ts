@@ -52,7 +52,6 @@ export const openFileInPlayground = async (
   filePath: string,
   realmURL = testRealmURL,
   declaration?: string,
-  context?: any,
 ) => {
   await visitOperatorMode({
     submode: 'code',
@@ -60,9 +59,6 @@ export const openFileInPlayground = async (
   });
   if (declaration) {
     await selectDeclaration(declaration);
-  }
-  if (context) {
-    await context.pauseTest();
   }
   await togglePlaygroundPanel();
 };
@@ -76,10 +72,10 @@ export const selectFormat = async (format: Format) =>
   await click(`[data-test-format-chooser="${format}"]`);
 
 export const togglePlaygroundPanel = async () =>
-  await click('[data-test-code-model-panel-item="preview"]');
+  await click('[data-test-accordion-item="playground"] button');
 
 export const toggleSpecPanel = async () =>
-  await click('[data-test-code-model-panel-item="spec-preview"]');
+  await click('[data-test-accordion-item="spec-preview"] button');
 
 // PlaygroundSelections
 export function getPlaygroundSelections():
