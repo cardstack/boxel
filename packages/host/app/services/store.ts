@@ -186,9 +186,22 @@ export default class StoreService extends Service implements StoreInterface {
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
-    // intentionally not awaiting this. we keep track of the promise in
-    // this.newReferencePromises
-    this.wireUpNewReference(id);
+    if (isLocalId(id)) {
+      let instanceOrError = this.peek(id);
+      if (instanceOrError) {
+        let realmURL = isCardInstance(instanceOrError)
+          ? instanceOrError[realmURLSymbol]?.href
+          : instanceOrError.realm;
+        if (realmURL) {
+          this.subscribeToRealm(new URL(realmURL));
+        }
+      }
+    } else {
+      this.subscribeToRealm(new URL(id));
+      // intentionally not awaiting this. we keep track of the promise in
+      // this.newReferencePromises
+      this.wireUpNewReference(id);
+    }
   }
 
   // This method creates a new instance in the store and return the new card ID
@@ -408,32 +421,18 @@ export default class StoreService extends Service implements StoreInterface {
     return this.referenceCount.get(id) ?? 0;
   }
 
-  private async wireUpNewReference(id: string) {
+  private async wireUpNewReference(url: string) {
     let deferred = new Deferred<void>();
     await this.withTestWaiters(async () => {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
-        let instanceOrError = this.peek(id);
-        if (isLocalId(id)) {
-          if (instanceOrError) {
-            let realmURL = isCardInstance(instanceOrError)
-              ? instanceOrError[realmURLSymbol]?.href
-              : instanceOrError.realm;
-            if (realmURL) {
-              this.subscribeToRealm(new URL(realmURL));
-            }
-          }
-          deferred.fulfill();
-          return;
-        }
-
+        let instanceOrError = this.peek(url);
         if (!instanceOrError) {
           instanceOrError = await this.getInstance({
-            urlOrDoc: id,
+            urlOrDoc: url,
           });
         }
-        this.subscribeToRealm(new URL(id));
         await this.updateInstanceChangeSubscription(
           'start-tracking',
           instanceOrError,
@@ -441,12 +440,12 @@ export default class StoreService extends Service implements StoreInterface {
 
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
-          this.identityContext.addInstanceOrError(id, instanceOrError);
+          this.identityContext.addInstanceOrError(url, instanceOrError);
         }
         deferred.fulfill();
       } catch (e) {
         console.error(
-          `error encountered wiring up new reference for ${JSON.stringify(id)}`,
+          `error encountered wiring up new reference for ${JSON.stringify(url)}`,
           e,
         );
         deferred.reject(e);
