@@ -247,7 +247,7 @@ export interface CommandResultWithNoOutputContent {
 export interface ApplyCodeChangeResultContent {
   'm.relates_to': {
     rel_type: typeof APP_BOXEL_COMMAND_RESULT_REL_TYPE;
-    key: string;
+    key: 'rejected' | 'applied' | 'failed';
     event_id: string;
   };
   msgtype: typeof APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE;

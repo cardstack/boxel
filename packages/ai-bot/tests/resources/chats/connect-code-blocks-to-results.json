@@ -338,7 +338,7 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Updating the file...\n// File url: http://test.com/spaghetti-recipe.gts\n<<<<<<< SEARCH\nthis is the riveting content of the spaghetti-recipe.gts file\n=======\nthis is the engaging content of the spaghetti-recipe.gts file\n>>>>>>> REPLACE\n",
+      "body": "Updating the file...\n// File url: http://test.com/spaghetti-recipe.gts\n<<<<<<< SEARCH\nthis is the riveting content of the spaghetti-recipe.gts file\n=======\nthis is the engaging content of the spaghetti-recipe.gts file\n>>>>>>> REPLACE\n\nI will also create a file for rigatoni:\n\n// File url: http://test.com/rigatoni-recipe.gts\n<<<<<<< SEARCH\n=======\nthis is the holy content of the rigatoni-recipe.gts file\n>>>>>>> REPLACE\n",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
       "isStreamingFinished": true,
@@ -373,6 +373,27 @@
       "age": 63267
     },
     "event_id": "$92DJh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOEJTk",
+    "user_id": "@admin:localhost",
+    "age": 63267
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.applyCodeChangeResult",
+      "m.relates_to": {
+        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
+        "key": "rejected",
+        "rel_type": "app.boxel.commandAnnotation"
+      },
+      "codeBlockIndex": 1
+    },
+    "origin_server_ts": 1736864370893,
+    "unsigned": {
+      "age": 63267
+    },
+    "event_id": "$000Jh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOE111",
     "user_id": "@admin:localhost",
     "age": 63267
   }

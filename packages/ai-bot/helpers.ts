@@ -9,28 +9,30 @@ import {
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
-  Tool,
-  SkillsConfigEvent,
   ActiveLLMEvent,
+  ApplyCodeChangeResultContent,
+  CardMessageContent,
   CardMessageEvent,
   CommandResultEvent,
-  CardMessageContent,
   EncodedCommandRequest,
-  ApplyCodeChangeResultContent,
+  SkillsConfigEvent,
+  Tool,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
@@ -252,11 +254,12 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
     (commandRequest: Partial<EncodedCommandRequest>) => {
       return history.slice(lastEventIndex).some((event) => {
         return (
-          (event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          (event.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
             event.content.msgtype ===
-              APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE) ||
-          (event.content.msgtype === APP_BOXEL_COMMAND_Re &&
-            event.content.commandRequestId === commandRequest.id)
+              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
+          event.content.commandRequestId === commandRequest.id
         );
       });
     },
@@ -575,6 +578,10 @@ function toPromptMessageWithToolResults(
       let content = 'pending';
       let commandResult = commandResults.find(
         (commandResult) =>
+          (commandResult.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+            commandResult.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
           commandResult.content.commandRequestId === commandRequest.id,
       );
       if (commandResult) {
@@ -636,10 +643,9 @@ export async function getModifyPrompt(
         event as CardMessageEvent,
         history,
       );
-      body = annotateCodeBlocks(body, commandResults);
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
-        content: elideCodeBlocks(body),
+        content: elideCodeBlocks(body, commandResults),
       };
       if (toolCalls.length) {
         historicalMessage.tool_calls = toolCalls;
@@ -780,35 +786,38 @@ export function isCommandResultEvent(
   );
 }
 
-function annotateCodeBlocks(
-  body: string,
+function elideCodeBlocks(
+  content: string,
   commandResults: CommandResultEvent[],
 ) {
-  let applyCodeResults = commandResults.filter(
-    (commandResult) =>
-      commandResult.content.msgtype === 'app.boxel.applyCodeChangeResult',
-  );
-  let appliedCodeBlockIndices = applyCodeResults.map(
-    (result) => (result.content as ApplyCodeChangeResultContent).codeBlockIndex,
-  );
-  let index = 0;
-  let annoatedBody = body.replace(
-    /File url: (.+)\n<<<<<<< SEARCH\n.*=======\n.*>>>>>>> REPLACE\n/gs,
-    (match: string, fileName: string) => {
-      let replacementString = match;
-      if (appliedCodeBlockIndices.includes(index)) {
-        replacementString = replacementString + `Edit applied to ${fileName}\n`;
-      }
-      index++;
-      return replacementString;
-    },
-  );
-  return annoatedBody;
-}
+  const DEFAULT_PLACEHOLDER: string = '[Proposed code change]';
+  const PLACEHOLDERS = {
+    applied: '[Proposed code change: applied]',
+    rejected: '[Proposed code change: rejected]',
+    failed: '[Proposed code change: failed]',
+  };
 
-function elideCodeBlocks(content: string) {
-  const PLACEHOLDER: string = '[Proposed code change]';
+  function getPlaceholder(codeBlockIndex: number) {
+    let codeBlockResult = commandResults.find((commandResult) => {
+      return (
+        commandResult.content.msgtype ===
+          APP_BOXEL_APPLY_CODE_CHANGE_RESULT_MSGTYPE &&
+        commandResult.content.codeBlockIndex === codeBlockIndex
+      );
+    });
+    if (codeBlockResult) {
+      return (
+        PLACEHOLDERS[
+          (codeBlockResult.content as ApplyCodeChangeResultContent)[
+            'm.relates_to'
+          ].key
+        ] ?? DEFAULT_PLACEHOLDER
+      );
+    }
+    return DEFAULT_PLACEHOLDER;
+  }
 
+  let codeBlockIndex = 0;
   while (
     content.includes(SEARCH_MARKER) &&
     content.includes(SEPARATOR_MARKER) &&
@@ -827,8 +836,10 @@ function elideCodeBlocks(content: string) {
     // replace the content between the markers with a placeholder
     content =
       content.substring(0, searchStartIndex) +
-      PLACEHOLDER +
+      getPlaceholder(codeBlockIndex) +
       content.substring(replaceEndIndex + REPLACE_MARKER.length);
+
+    codeBlockIndex++;
   }
   return content;
 }
