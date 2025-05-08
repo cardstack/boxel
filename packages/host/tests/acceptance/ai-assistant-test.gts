@@ -1,6 +1,7 @@
-import { click, fillIn, waitFor, waitUntil } from '@ember/test-helpers';
+import { click, fillIn, waitFor, waitUntil, visit } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
+import stringify from 'safe-stable-stringify';
 
 import { GridContainer } from '@cardstack/boxel-ui/components';
 
@@ -11,6 +12,8 @@ import {
   DEFAULT_LLM,
   DEFAULT_LLM_LIST,
 } from '@cardstack/runtime-common/matrix-constants';
+
+import { OperatorModeState } from '@cardstack/host/services/operator-mode-state-service';
 
 import {
   setupLocalIndexing,
@@ -276,16 +279,16 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       count: DEFAULT_LLM_LIST.length,
     });
     assert
-      .dom('[data-test-llm-select-item="google/gemini-pro-1.5"]')
-      .hasText('google/gemini-pro-1.5');
-    await click('[data-test-llm-select-item="google/gemini-pro-1.5"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('gemini-pro-1.5');
+      .dom('[data-test-llm-select-item="anthropic/claude-3.7-sonnet"]')
+      .hasText('anthropic/claude-3.7-sonnet');
+    await click('[data-test-llm-select-item="anthropic/claude-3.7-sonnet"]');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
 
     let roomState = getRoomState(matrixRoomId, APP_BOXEL_ACTIVE_LLM, '');
-    assert.strictEqual(roomState.model, 'google/gemini-pro-1.5');
+    assert.strictEqual(roomState.model, 'anthropic/claude-3.7-sonnet');
   });
 
-  test('defaults to anthropic/claude-3.5-sonnet in code mode', async function (assert) {
+  test('defaults to anthropic/claude-3.7-sonnet in code mode', async function (assert) {
     await visitOperatorMode({
       stacks: [
         [
@@ -301,7 +304,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await waitFor(`[data-room-settled]`);
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
 
     createAndJoinRoom({
       sender: '@testuser:localhost',
@@ -311,7 +314,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-past-sessions-button]');
     await waitFor("[data-test-enter-room='mock_room_1']");
     await click('[data-test-enter-room="mock_room_1"]');
-    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.5-sonnet');
+    assert.dom('[data-test-llm-select-selected]').hasText('claude-3.7-sonnet');
   });
 
   test('auto-attached file is not displayed in interact mode', async function (assert) {
@@ -511,5 +514,69 @@ module('Acceptance | AI Assistant tests', function (hooks) {
       () => document.querySelectorAll('[data-test-joined-room]').length === 16,
     );
     assert.dom('[data-test-joined-room]').exists({ count: 16 });
+  });
+
+  test('preserves ai assistant panel open/closed status', async function (assert) {
+    // Test with AI assistant closed
+    let operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: false,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+
+    // Open AI assistant and verify state is updated
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    assert.dom('[data-test-ai-assistant-panel]').exists();
+
+    // Verify URL contains updated state with aiAssistantOpen: true
+    let operatorModeStateService = this.owner.lookup(
+      'service:operator-mode-state-service',
+    ) as OperatorModeState;
+    assert.true(
+      operatorModeStateService.aiAssistantOpen,
+      'URL state should have aiAssistantOpen: true',
+    );
+
+    // Close AI assistant and verify state is updated
+    await click('[data-test-close-ai-assistant]');
+    assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+
+    // Verify URL contains updated state with aiAssistantOpen: false
+    assert.false(
+      operatorModeStateService.aiAssistantOpen,
+      'URL state should have aiAssistantOpen: false',
+    );
+
+    // Test with AI assistant opened
+    operatorModeStateParam = stringify({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    })!;
+    await visit(
+      `/?operatorModeEnabled=true&operatorModeState=${encodeURIComponent(
+        operatorModeStateParam,
+      )}`,
+    );
+    assert.dom('[data-test-ai-assistant-panel]').exists();
   });
 });

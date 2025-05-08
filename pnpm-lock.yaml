@@ -212,7 +212,7 @@ catalogs:
       version: 1.7.3
     '@types/string.prototype.matchall':
       specifier: ^4.0.1
-      version: 4.0.1
+      version: 4.0.4
     '@types/supertest':
       specifier: ^2.0.12
       version: 2.0.12
@@ -246,6 +246,9 @@ catalogs:
     broccoli-asset-rev:
       specifier: ^3.0.0
       version: 3.0.0
+    broccoli-funnel:
+      specifier: ^3.0.8
+      version: 3.0.8
     broccoli-merge-trees:
       specifier: ^4.2.0
       version: 4.2.0
@@ -2108,6 +2111,9 @@ importers:
       broccoli-asset-rev:
         specifier: 'catalog:'
         version: 3.0.0
+      broccoli-funnel:
+        specifier: 'catalog:'
+        version: 3.0.8
       broccoli-merge-trees:
         specifier: 'catalog:'
         version: 4.2.0
@@ -2126,6 +2132,9 @@ importers:
       concurrently:
         specifier: ^8.2.2
         version: 8.2.2
+      content-tag:
+        specifier: ^4.0.0
+        version: 4.0.0
       crypto-browserify:
         specifier: 'catalog:'
         version: 3.12.0
@@ -2360,6 +2369,9 @@ importers:
       prettier-plugin-ember-template-tag:
         specifier: 'catalog:'
         version: 1.1.0(prettier@3.5.3)
+      process:
+        specifier: ^0.11.10
+        version: 0.11.10
       qs:
         specifier: 'catalog:'
         version: 6.13.0
@@ -2577,6 +2589,9 @@ importers:
       concurrently:
         specifier: ^8.0.1
         version: 8.2.2
+      content-tag:
+        specifier: ^4.0.0
+        version: 4.0.0
       date-fns:
         specifier: 'catalog:'
         version: 2.30.0
@@ -2730,9 +2745,6 @@ importers:
       '@cardstack/boxel-ui':
         specifier: workspace:*
         version: link:../boxel-ui/addon
-      '@cardstack/ember-template-imports':
-        specifier: workspace:*
-        version: link:../../vendor/ember-template-imports
       '@cardstack/eslint-plugin-boxel':
         specifier: workspace:*
         version: link:../eslint-plugin-boxel
@@ -2781,6 +2793,9 @@ importers:
       camelcase:
         specifier: 'catalog:'
         version: 6.3.0
+      content-tag:
+        specifier: ^4.0.0
+        version: 4.0.0
       date-fns:
         specifier: 'catalog:'
         version: 2.30.0
@@ -3053,7 +3068,7 @@ importers:
         version: 1.0.0
       '@types/string.prototype.matchall':
         specifier: 'catalog:'
-        version: 4.0.1
+        version: 4.0.4
       '@typescript-eslint/eslint-plugin':
         specifier: 'catalog:'
         version: 7.18.0(@typescript-eslint/parser@7.18.0(eslint@8.57.1)(typescript@5.8.3))(eslint@8.57.1)(typescript@5.8.3)
@@ -3104,7 +3119,7 @@ importers:
         version: 0.1.6(@babel/core@7.26.10)
       ember-page-title:
         specifier: ^6.2.1
-        version: 6.2.1
+        version: 6.2.2
       ember-qunit:
         specifier: ^5.1.2
         version: 5.1.5(@ember/test-helpers@3.3.1(@babel/core@7.26.10)(@glint/template@1.3.0)(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(webpack@5.99.6))(ember-source@5.4.1(patch_hash=f4d53cc0efd30368b913bdc898f342658768eaf0a8fb44678c0a07cf3aac24c1)(@babel/core@7.26.10)(@glimmer/component@1.1.2(@babel/core@7.26.10))(@glint/template@1.3.0)(rsvp@4.8.5)(webpack@5.99.6))(qunit@2.24.1)
@@ -3137,7 +3152,7 @@ importers:
         version: 11.1.0(eslint@8.57.1)
       eslint-plugin-prettier:
         specifier: ^3.3.1
-        version: 3.3.1(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
+        version: 3.4.1(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3)
       loader.js:
         specifier: 'catalog:'
         version: 4.7.0
@@ -5555,8 +5570,8 @@ packages:
   '@types/http-assert@1.5.4':
     resolution: {integrity: sha512-/6M9aaVk+avzCsrv1lt39AlFw4faCNI6aGll91Rxj38ZE5JI8AxApyQIRy+i1McjiJiuQ0sfuoMLxqq374ZIbA==}
 
-  '@types/http-cache-semantics@4.0.3':
-    resolution: {integrity: sha512-V46MYLFp08Wf2mmaBhvgjStM3tPa+2GAdy/iqoX+noX1//zje2x4XmrIU0cAwyClATsTmahbtoQ2EwP7I5WSiA==}
+  '@types/http-cache-semantics@4.0.4':
+    resolution: {integrity: sha512-1m0bIFVc7eJWyve9S0RnuRgcQqF/Xd5QsUZAZeQFr1Q3/p9JWoQQEqmVy+DPTNpGXwhgIetAoYF8JSc33q29QA==}
 
   '@types/http-errors@2.0.3':
     resolution: {integrity: sha512-pP0P/9BnCj1OVvQR2lF41EkDG/lWWnDyA203b/4Fmi2eTyORnBtcDoKDwjWQthELrBvWkMOrvSOnZ8OVlW6tXA==}
@@ -5651,8 +5666,8 @@ packages:
   '@types/normalize-package-data@2.4.4':
     resolution: {integrity: sha512-37i+OaWTh9qeK4LSHPsyRC7NahnGotNuZvjLSgcPzblpHB3rrCJxAOgI5gCdKm7coonsaX1Of0ILiTcnZjbfxA==}
 
-  '@types/parse-json@4.0.1':
-    resolution: {integrity: sha512-3YmXzzPAdOTVljVMkTMBdBEvlOLg2cDQaDhnnhT3nT9uDbnJzjWhKlzb+desT12Y7tGqaN6d+AbozcKzyL36Ng==}
+  '@types/parse-json@4.0.2':
+    resolution: {integrity: sha512-dISoDXWWQwUquiKsyZ4Ng+HX2KsPL7LyHKHQwgGFEA3IaKac4Obd+h2a/a6waisAoepJlBcx9paWqjA8/HVjCw==}
 
   '@types/pg-pool@2.0.6':
     resolution: {integrity: sha512-TaAUE5rq2VQYxab5Ts7WZhKNmuN78Q6PiFonTDdpbx8a1H0M1vhy3rhiMjl+e2iHmogyMw7jZF4FrE6eJUy5HQ==}
@@ -5717,8 +5732,8 @@ packages:
   '@types/stream-json@1.7.3':
     resolution: {integrity: sha512-Jqsyq5VPOTWorvEmzWhEWH5tJnHA+bB8vt/Zzb11vSDj8esfSHDMj2rbVjP0mfJQzl3YBJSXBBq08iiyaBK3KA==}
 
-  '@types/string.prototype.matchall@4.0.1':
-    resolution: {integrity: sha512-jVQQq9YbEcLwWejeHs4CMVZkereuGPgflaOH/BGqHOYT45f3LV0Ah2Cmc0Cby/DZ9qhIp2V3lqPTHnLXlK7VLQ==}
+  '@types/string.prototype.matchall@4.0.4':
+    resolution: {integrity: sha512-E0KMS5FrWafbfKTGsoTZgrPHxBVknPeBxUTNwJima3t5KLdOlY285sisQC0mkVPTNNBc4nxza5ldly/ct+ISrQ==}
 
   '@types/superagent@4.1.20':
     resolution: {integrity: sha512-GfpwJgYSr3yO+nArFkmyqv3i0vZavyEG5xPd/o95RwpKYpsOKJYI5XLdxLpdRbZI3YiGKKdIOFIf/jlP7A0Jxg==}
@@ -7704,6 +7719,9 @@ packages:
   content-tag@3.1.2:
     resolution: {integrity: sha512-Z+MGhZfnFFKzYC+pUTWXnoDYhfiXP9ojZe3JbwsYufmDuoeq2EvuDyeFAJ/RnKokUwz5s9bQhDOrbvSYRShcrQ==}
 
+  content-tag@4.0.0:
+    resolution: {integrity: sha512-qqJiY9nueYAI396MOmfOk+w/0KL6ERKxANQcSKcR0CrNTc38yT//b73l+WHr9brZx57bFHNaW7a/6Yll0bn95w==}
+
   content-type@1.0.5:
     resolution: {integrity: sha512-nTjqfcBFEipKdXCv4YDQWCfmcLZKm81ldF0pAopTvyrFGVbcR6P/VAAd5G7N+0tTr8QqiU0tFadD6FK4NtJwOA==}
     engines: {node: '>= 0.6'}
@@ -8646,8 +8664,8 @@ packages:
     resolution: {integrity: sha512-OVMxzkfqJrEvmiky7gFzmuTaImCGm7DOudHWTdMBPO7E+dQSunrcRsJMgO9ZZ56suqBIz/yXbEURrmGS+avHxA==}
     engines: {node: 10.* || >= 12}
 
-  ember-page-title@6.2.1:
-    resolution: {integrity: sha512-cfBDuP14KBJCdz/AeBQJFGnJbUHd2gmenG+i0ilR2kYX0G0zHAsseFZFuTNVZDNiQ8BnMdrdjRnfjx9Vdi/dag==}
+  ember-page-title@6.2.2:
+    resolution: {integrity: sha512-YTXA+cylZrh9zO0zwjlaAGReT2MVOxAMnVO1OOygFrs1JBs4D6CKV3tImoilg3AvIXFBeJfFNNUbJOdRd9IGGg==}
     engines: {node: 10.* || >= 12}
 
   ember-page-title@8.2.3:
@@ -9132,8 +9150,8 @@ packages:
     resolution: {integrity: sha512-vbznkkBSXB63d4o1o0NIm5C2ey3V5wKr/25dAvPdydQXdowAcnr69cbLgxd2YAG81IV5eddCO55Lp6gL7wSE4w==}
     engines: {node: '>=0.10.0'}
 
-  eslint-plugin-prettier@3.3.1:
-    resolution: {integrity: sha512-Rq3jkcFY8RYeQLgk2cCwuc0P7SEFwDravPhsJZOQ5N4YI4DSg50NyqJ/9gdZHzQlHf8MvafSesbNJCcP/FF6pQ==}
+  eslint-plugin-prettier@3.4.1:
+    resolution: {integrity: sha512-htg25EUYUeIhKHXjOinK4BgCcDwtLHjqaxCDsMy5nbnUMkKFvIhMVCp+5GFUXQ4Nr8lBsPqtGAqBenbpFqAA2g==}
     engines: {node: '>=6.0.0'}
     peerDependencies:
       eslint: '>=5.0.0'
@@ -10626,8 +10644,8 @@ packages:
     resolution: {integrity: sha512-ISWac8drv4ZGfwKl5slpHG9OwPNty4jOWPRIhBpxOoD+hqITiwuipOQ2bNthAzwA3B4fIjO4Nln74N0S9byq8A==}
     engines: {node: '>= 0.4'}
 
-  is-ssh@1.4.0:
-    resolution: {integrity: sha512-x7+VxdxOdlV3CYpjvRLBv5Lo9OJerlYanjwFrPR9fuGPjCiNiCzFgAWpiLAohSbsnH4ZAys3SBh+hq5rJosxUQ==}
+  is-ssh@1.4.1:
+    resolution: {integrity: sha512-JNeu1wQsHjyHgn9NcWTaXq6zWSR6hqE0++zhfZlkFBbScNkyvxCdeV8sRkSBaeLKxmbpR21brail63ACNxJ0Tg==}
 
   is-stream@1.1.0:
     resolution: {integrity: sha512-uQPm8kcs47jx38atAcWTVxyltQYoPT68y9aWYdV6yWXSyW8mzSat0TL6CiWdZeCdF3KrAvpVtnHbTv4RN+rqdQ==}
@@ -12526,8 +12544,8 @@ packages:
   protocols@1.4.8:
     resolution: {integrity: sha512-IgjKyaUSjsROSO8/D49Ab7hP8mJgTYcqApOqdPhLoPxAplXmkp+zRvsrSQjFn5by0rhm4VH0GAUELIPpx7B1yg==}
 
-  protocols@2.0.1:
-    resolution: {integrity: sha512-/XJ368cyBJ7fzLMwLKv1e4vLxOju2MNAIokcr7meSaNcVbWz/CPcW22cP04mwxOErdA5mwjA8Q6w/cdAQxVn7Q==}
+  protocols@2.0.2:
+    resolution: {integrity: sha512-hHVTzba3wboROl0/aWRRG9dMytgH6ow//STBZh43l/wQgmMhYhOFi0EHWAPtoCz9IAUymsyP0TSBHkhgMEGNnQ==}
 
   proxy-addr@2.0.7:
     resolution: {integrity: sha512-llQsMLSUDUPT44jdrU/O37qlnifitDP+ZwrmmZcoSKyLKvtZxpyV0n2/bD/N4tBAAZ/gJEdZU7KMraoK1+XYAg==}
@@ -14786,10 +14804,6 @@ packages:
 
   yaml@1.10.0:
     resolution: {integrity: sha512-yr2icI4glYaNG+KWONODapy2/jDdMSDnrONSjblABjD9B4Z5LgiircSt8m8sRZFNi08kG9Sm0uSHtEmP3zaEGg==}
-    engines: {node: '>= 6'}
-
-  yaml@1.10.2:
-    resolution: {integrity: sha512-r3vXyErRCYJ7wg28yvBY5VSoAF8ZvlcW9/BwUzEtUsjvX/DKs24dIkuwjtuprwJJHsbyUbLApepYTR1BN4uHrg==}
     engines: {node: '>= 6'}
 
   yaml@2.5.1:
@@ -17732,7 +17746,7 @@ snapshots:
 
   '@types/cacheable-request@6.0.3':
     dependencies:
-      '@types/http-cache-semantics': 4.0.3
+      '@types/http-cache-semantics': 4.0.4
       '@types/keyv': 3.1.4
       '@types/node': 18.19.54
       '@types/responselike': 1.0.2
@@ -17835,7 +17849,7 @@ snapshots:
 
   '@types/http-assert@1.5.4': {}
 
-  '@types/http-cache-semantics@4.0.3': {}
+  '@types/http-cache-semantics@4.0.4': {}
 
   '@types/http-errors@2.0.3': {}
 
@@ -17933,7 +17947,7 @@ snapshots:
 
   '@types/normalize-package-data@2.4.4': {}
 
-  '@types/parse-json@4.0.1': {}
+  '@types/parse-json@4.0.2': {}
 
   '@types/pg-pool@2.0.6':
     dependencies:
@@ -18008,7 +18022,7 @@ snapshots:
       '@types/node': 18.19.54
       '@types/stream-chain': 2.0.1
 
-  '@types/string.prototype.matchall@4.0.1': {}
+  '@types/string.prototype.matchall@4.0.4': {}
 
   '@types/superagent@4.1.20':
     dependencies:
@@ -20810,6 +20824,8 @@ snapshots:
 
   content-tag@3.1.2: {}
 
+  content-tag@4.0.0: {}
+
   content-type@1.0.5: {}
 
   continuable-cache@0.3.1: {}
@@ -20873,11 +20889,11 @@ snapshots:
 
   cosmiconfig@7.0.0:
     dependencies:
-      '@types/parse-json': 4.0.1
+      '@types/parse-json': 4.0.2
       import-fresh: 3.3.1
       parse-json: 5.2.0
       path-type: 4.0.0
-      yaml: 1.10.2
+      yaml: 1.10.0
 
   cosmiconfig@8.3.6(typescript@5.1.6):
     dependencies:
@@ -22671,7 +22687,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  ember-page-title@6.2.1:
+  ember-page-title@6.2.2:
     dependencies:
       ember-cli-babel: 7.26.11
     transitivePeerDependencies:
@@ -23688,7 +23704,7 @@ snapshots:
     dependencies:
       requireindex: 1.2.0
 
-  eslint-plugin-prettier@3.3.1(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3):
+  eslint-plugin-prettier@3.4.1(eslint-config-prettier@9.1.0(eslint@8.57.1))(eslint@8.57.1)(prettier@3.5.3):
     dependencies:
       eslint: 8.57.1
       prettier: 3.5.3
@@ -24706,7 +24722,7 @@ snapshots:
 
   git-up@4.0.5:
     dependencies:
-      is-ssh: 1.4.0
+      is-ssh: 1.4.1
       parse-url: 6.0.5
 
   git-url-parse@11.4.0:
@@ -25630,9 +25646,9 @@ snapshots:
     dependencies:
       call-bound: 1.0.4
 
-  is-ssh@1.4.0:
+  is-ssh@1.4.1:
     dependencies:
-      protocols: 2.0.1
+      protocols: 2.0.2
 
   is-stream@1.1.0: {}
 
@@ -27366,7 +27382,7 @@ snapshots:
 
   parse-path@4.0.4:
     dependencies:
-      is-ssh: 1.4.0
+      is-ssh: 1.4.1
       protocols: 1.4.8
       qs: 6.13.0
       query-string: 6.14.1
@@ -27379,7 +27395,7 @@ snapshots:
 
   parse-url@6.0.5:
     dependencies:
-      is-ssh: 1.4.0
+      is-ssh: 1.4.1
       normalize-url: 6.1.0
       parse-path: 4.0.4
       protocols: 1.4.8
@@ -27730,7 +27746,7 @@ snapshots:
 
   protocols@1.4.8: {}
 
-  protocols@2.0.1: {}
+  protocols@2.0.2: {}
 
   proxy-addr@2.0.7:
     dependencies:
@@ -30377,8 +30393,6 @@ snapshots:
       lodash.merge: 4.6.2
 
   yaml@1.10.0: {}
-
-  yaml@1.10.2: {}
 
   yaml@2.5.1: {}
 

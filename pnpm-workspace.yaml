@@ -87,6 +87,7 @@ catalog:
   babel-eslint: ^10.1.0
   babel-plugin-dynamic-import-node: ^2.3.3
   broccoli-asset-rev: ^3.0.0
+  broccoli-funnel: ^3.0.8
   broccoli-merge-trees: ^4.2.0
   broccoli-plugin: ^4.0.7
   broccoli-source: ^3.0.1

@@ -3,6 +3,10 @@ import type { ResolvedCodeRef } from './code-ref';
 
 export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));
 
+export const baseRef: ResolvedCodeRef = {
+  module: `${baseRealm.url}card-api`,
+  name: 'BaseDef',
+};
 export const specRef: ResolvedCodeRef = {
   module: `${baseRealm.url}spec`,
   name: 'Spec',
@@ -16,8 +20,8 @@ export const baseFieldRef: ResolvedCodeRef = {
   name: 'FieldDef',
 };
 export const skillCardRef: ResolvedCodeRef = {
-  module: `${baseRealm.url}skill-card`,
-  name: 'SkillCard',
+  module: `${baseRealm.url}skill`,
+  name: 'Skill',
 };
 
 export const isField = Symbol('cardstack-field');
@@ -44,3 +48,7 @@ export interface Permissions {
   readonly canRead: boolean;
   readonly canWrite: boolean;
 }
+
+export const SEARCH_MARKER: string = '<<<<<<< SEARCH';
+export const SEPARATOR_MARKER: string = '=======';
+export const REPLACE_MARKER: string = '>>>>>>> REPLACE';

@@ -23,8 +23,8 @@ import { APP_BOXEL_COMMAND_REQUESTS_KEY } from '@cardstack/runtime-common/matrix
 
 const SET_TITLE_SYSTEM_MESSAGE = `You are a chat titling system, you must read the conversation and return a suggested title of no more than six words.
 Do NOT say talk or discussion or discussing or chat or chatting, this is implied by the context.
-The user can optionally apply 'patchCard' by sending data about fields to update.
-Explain the general actions and user intent. If 'patchCard' was used, express the title in an active sentence. Do NOT use the word "patch" in the title.`;
+The user can optionally apply 'patchCardInstance' by sending data about fields to update.
+Explain the general actions and user intent. If 'patchCardInstance' was used, express the title in an active sentence. Do NOT use the word "patch" in the title.`;
 
 export async function setTitle(
   openai: OpenAI,

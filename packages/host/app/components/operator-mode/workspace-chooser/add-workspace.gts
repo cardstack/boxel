@@ -40,7 +40,7 @@ export default class AddWorkspace extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @tracked private isModalOpen = false;
   @tracked private endpoint = '';
-  @tracked private copyFromSeedRealm = true;
+  @tracked private copyFromSeedRealm = false;
   @tracked private displayName = '';
   @tracked private hasUserEditedEndpoint = false;
   @tracked private error: string | null = null;

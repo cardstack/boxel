@@ -102,11 +102,6 @@ export default class ApplySearchReplaceBlockCommand extends HostBaseCommand<
     searchPattern: string,
     replacePattern: string,
   ): string {
-    // If search pattern is empty, return original content
-    if (!searchPattern) {
-      return content;
-    }
-
     // Create a normalized search pattern for matching
     // This helps with whitespace differences
     const normalizedSearchLines = searchPattern

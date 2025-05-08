@@ -60,8 +60,8 @@ export async function handleDebugCommands(
         {},
         [
           {
-            id: 'patchCard-debug',
-            name: 'patchCard',
+            id: 'patchCardInstance-debug',
+            name: 'patchCardInstance',
             arguments: toolArguments,
           },
         ],

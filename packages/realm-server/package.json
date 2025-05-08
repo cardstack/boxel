@@ -34,6 +34,7 @@
     "@types/tmp": "catalog:",
     "@types/uuid": "catalog:",
     "@types/yargs": "catalog:",
+    "content-tag": "^4.0.0",
     "concurrently": "^8.0.1",
     "date-fns": "catalog:",
     "decorator-transforms": "catalog:",

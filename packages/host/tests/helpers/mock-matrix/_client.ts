@@ -34,7 +34,8 @@ import { assertNever } from '@cardstack/host/utils/assert-never';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import type { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type { FileDef } from 'https://cardstack.com/base/file-api';
-import type { CommandField } from 'https://cardstack.com/base/skill-card';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import type { CommandField } from 'https://cardstack.com/base/skill';
 
 import { MockSDK } from './_sdk';
 
@@ -92,7 +93,7 @@ export class MockClient implements ExtendedClient {
   }
 
   get loggedInAs() {
-    return this.clientOpts.userId;
+    return this.clientOpts.userId ?? this.sdkOpts.loggedInAs;
   }
 
   async startClient(
@@ -599,9 +600,21 @@ export class MockClient implements ExtendedClient {
 
   async createRoom({
     name,
+    initial_state,
   }: MatrixSDK.ICreateRoomOpts): Promise<{ room_id: string }> {
     let sender = this.loggedInAs || 'unknown_user';
     let roomId = this.serverState.createRoom(sender, name);
+
+    if (initial_state) {
+      for (let event of initial_state) {
+        this.serverState.setRoomState(
+          sender,
+          roomId,
+          event.type,
+          event.content,
+        );
+      }
+    }
 
     return { room_id: roomId };
   }
@@ -668,6 +681,14 @@ export class MockClient implements ExtendedClient {
       roomResource,
       updateStateEvent,
     );
+  }
+
+  async uploadFiles(files: FileDef[]): Promise<FileDef[]> {
+    return await this.fileDefManager.uploadFiles(files);
+  }
+
+  async cacheContentHashIfNeeded(event: DiscreteMatrixEvent): Promise<void> {
+    this.fileDefManager.cacheContentHashIfNeeded(event);
   }
 
   async uploadContent(

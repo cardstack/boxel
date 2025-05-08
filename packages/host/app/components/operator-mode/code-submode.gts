@@ -1093,10 +1093,6 @@ export default class CodeSubmode extends Component<Signature> {
           var(--operator-mode-top-bar-item-height) +
             (2 * (var(--operator-mode-spacing)))
         );
-        --code-mode-padding-bottom: calc(
-          var(--operator-mode-bottom-bar-item-height) +
-            (2 * (var(--operator-mode-spacing)))
-        );
       }
 
       .code-mode {
@@ -1104,8 +1100,7 @@ export default class CodeSubmode extends Component<Signature> {
         max-height: 100vh;
         left: 0;
         right: 0;
-        padding: var(--code-mode-padding-top) var(--operator-mode-spacing)
-          var(--code-mode-padding-bottom);
+        padding-top: var(--code-mode-padding-top);
         overflow: auto;
         flex: 1;
       }

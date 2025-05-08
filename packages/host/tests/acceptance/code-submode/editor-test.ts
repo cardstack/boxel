@@ -15,6 +15,8 @@ import type EnvironmentService from '@cardstack/host/services/environment-servic
 
 import type MonacoService from '@cardstack/host/services/monaco-service';
 
+import { RecentFiles } from '@cardstack/host/utils/local-storage-keys';
+
 import {
   setupLocalIndexing,
   setupOnSave,
@@ -60,7 +62,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     ) as MonacoService;
 
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify([[testRealmURL, 'Pet/mango.json']]),
     );
 
