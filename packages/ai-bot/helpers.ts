@@ -2,6 +2,9 @@ import {
   LooseCardResource,
   type LooseSingleCardDocument,
   type CardResource,
+  SEARCH_MARKER,
+  SEPARATOR_MARKER,
+  REPLACE_MARKER,
 } from '@cardstack/runtime-common';
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
@@ -770,10 +773,6 @@ export function isCommandResultEvent(
 }
 
 function elideCodeBlocks(content: string) {
-  // Define constants for marker texts
-  const SEARCH_MARKER: string = '<<<<<<< SEARCH';
-  const SEPARATOR_MARKER: string = '=======';
-  const REPLACE_MARKER: string = '>>>>>>> REPLACE';
   const PLACEHOLDER: string = '[Proposed code change]';
 
   while (
