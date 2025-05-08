@@ -93,8 +93,8 @@ export async function instantiateFastBoot(
   }
 
   html = html.replace(
-    '/assets/content-tag',
-    'https://boxel-host-staging.stack.cards/assets/content-tag',
+    '/assets/content-tag/standalone.js',
+    new URL('/assets/content-tag/standalone.js', distURL).href,
   );
 
   writeJSONSync(join(distPath, 'package.json'), pkgJSON);
