@@ -927,6 +927,7 @@ export default class CodeSubmode extends Component<Signature> {
                     <header
                       class='preview-panel-header'
                       aria-label={{this.previewPanelTitle}}
+                      {{! FIXME add this }}
                       data-test-preview-panel-header
                     >
                       {{#each this.previewPanelViews as |previewPanelView|}}
