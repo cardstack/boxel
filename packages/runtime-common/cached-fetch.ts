@@ -31,8 +31,6 @@ export async function cachedFetch(
         ? urlOrRequest.href
         : urlOrRequest.url;
   let cached = cache.get(key);
-  if (urlOrRequest instanceof Request) {
-  }
   if (cached?.etag) {
     if (urlOrRequest instanceof Request) {
       urlOrRequest.headers.set('If-None-Match', cached.etag);
