@@ -48,8 +48,9 @@ function preprocessTemplateTags(code: string): string {
   let output = [];
   let offset = 0;
   let matches = new ContentTagGlobal.Preprocessor().parse(code);
+  const codeArray = Array.from(code);
   for (let match of matches) {
-    output.push(code.slice(offset, match.range.start));
+    output.push(codeArray.slice(offset, match.range.startChar).join(''));
     // its super important that this not be the template function we use in the
     // module-syntax (templte), so that we can ensure that we are not
     // inadvertantly comparing precompiled source against an actual template.
@@ -58,9 +59,9 @@ function preprocessTemplateTags(code: string): string {
     output.push('[template(`');
     output.push(match.contents.replace(/`/g, '\\`'));
     output.push('`)]');
-    offset = match.range.end;
+    offset = match.range.endChar;
   }
-  output.push(code.slice(offset));
+  output.push(codeArray.slice(offset).join(''));
   return output.join('');
 }
 

@@ -26,12 +26,12 @@ function generate(filename, filter) {
     .readdirSync(root)
     .filter((file) => path.extname(file) === '.js')
     .map((file) => path.basename(file, '.js'))
-    .map((fileName) => [fileName, require(path.join(root, fileName))]); // eslint-disable-line import/no-dynamic-require
+    .map((fileName) => [fileName, require(path.join(root, fileName))]);  
 
   const recommendedRules = rules.reduce((obj, entry) => {
     const name = `@cardstack/boxel/${entry[0]}`;
     if (filter(entry)) {
-      obj[name] = 'error'; // eslint-disable-line no-param-reassign
+      obj[name] = 'error';  
     }
     return obj;
   }, {});
