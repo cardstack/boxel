@@ -950,59 +950,62 @@ export default class CodeSubmode extends Component<Signature> {
                         </ToggleButton>
                       {{/each}}
                     </header>
+                    <section
+                      data-test-code-mode-panel-item={{this.previewPanelView}}
+                    >
+                      {{#if (eq this.previewPanelView 'schema')}}
+                        <SchemaEditor
+                          @file={{this.readyFile}}
+                          @moduleContentsResource={{this.moduleContentsResource}}
+                          @card={{this.selectedCardOrField.cardOrField}}
+                          @cardTypeResource={{this.selectedCardOrField.cardType}}
+                          @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
+                          @isReadOnly={{this.isReadOnly}}
+                          as |SchemaEditorTitle SchemaEditorPanel|
+                        >
+                          <SchemaEditorPanel class='accordion-content' />
+                        </SchemaEditor>
 
-                    {{#if (eq this.previewPanelView 'schema')}}
-                      <SchemaEditor
-                        @file={{this.readyFile}}
-                        @moduleContentsResource={{this.moduleContentsResource}}
-                        @card={{this.selectedCardOrField.cardOrField}}
-                        @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
-                        @isReadOnly={{this.isReadOnly}}
-                        as |SchemaEditorTitle SchemaEditorPanel|
-                      >
-                        <SchemaEditorPanel class='accordion-content' />
-                      </SchemaEditor>
+                      {{else if (eq this.previewPanelView 'preview')}}
 
-                    {{else if (eq this.previewPanelView 'preview')}}
+                        <Playground
+                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                          @codeRef={{this.selectedCodeRef}}
+                          @isUpdating={{this.moduleContentsResource.isLoading}}
+                          @cardOrField={{this.selectedCardOrField.cardOrField}}
+                          as |PlaygroundTitle PlaygroundContent|
+                        >
+                          <PlaygroundTitle />
+                          <PlaygroundContent />
+                        </Playground>
 
-                      <Playground
-                        @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                        @codeRef={{this.selectedCodeRef}}
-                        @isUpdating={{this.moduleContentsResource.isLoading}}
-                        @cardOrField={{this.selectedCardOrField.cardOrField}}
-                        as |PlaygroundTitle PlaygroundContent|
-                      >
-                        <PlaygroundTitle />
-                        <PlaygroundContent />
-                      </Playground>
+                      {{else if (eq this.previewPanelView 'spec')}}
 
-                    {{else if (eq this.previewPanelView 'spec')}}
-
-                      <SpecPreview
-                        @selectedDeclaration={{this.selectedDeclaration}}
-                        @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
-                        @toggleAccordionItem={{this.toggleAccordionItem}}
-                        @isPanelOpen={{eq
-                          this.selectedAccordionItem
-                          'spec-preview'
-                        }}
-                        as |SpecPreviewTitle SpecPreviewContent|
-                      >
-                        <SpecPreviewTitle />
-                        {{#if this.showSpecPreview}}
-                          <SpecPreviewContent class='accordion-content' />
-                        {{else}}
-                          <p
-                            class='file-incompatible-message'
-                            data-test-incompatible-spec-nonexports
-                          >
-                            <span>Boxel Spec is not supported for card or field
-                              definitions that are not exported.</span>
-                          </p>
-                        {{/if}}
-                      </SpecPreview>
-                    {{/if}}
+                        <SpecPreview
+                          @selectedDeclaration={{this.selectedDeclaration}}
+                          @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
+                          @toggleAccordionItem={{this.toggleAccordionItem}}
+                          @isPanelOpen={{eq
+                            this.selectedAccordionItem
+                            'spec-preview'
+                          }}
+                          as |SpecPreviewTitle SpecPreviewContent|
+                        >
+                          <SpecPreviewTitle />
+                          {{#if this.showSpecPreview}}
+                            <SpecPreviewContent class='accordion-content' />
+                          {{else}}
+                            <p
+                              class='file-incompatible-message'
+                              data-test-incompatible-spec-nonexports
+                            >
+                              <span>Boxel Spec is not supported for card or
+                                field definitions that are not exported.</span>
+                            </p>
+                          {{/if}}
+                        </SpecPreview>
+                      {{/if}}
+                    </section>
                   {{else if this.moduleContentsResource.moduleError}}
                     <Accordion as |A|>
                       <A.Item

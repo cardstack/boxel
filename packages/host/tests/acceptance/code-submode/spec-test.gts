@@ -1061,7 +1061,7 @@ module('Acceptance | Spec preview', function (hooks) {
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
     });
-    await click('[data-test-code-mode-panel-item="playground"] button');
+    await click('[data-test-code-mode-panel-item="preview"] button');
     await selectDeclaration('Person');
     assert.dom('[data-test-playground-panel]').exists();
     await selectDeclaration('PersonField');
@@ -1097,7 +1097,7 @@ module('Acceptance | Spec preview', function (hooks) {
       `${testRealmURL}different-field-entry`,
     );
 
-    await click('[data-test-code-mode-panel-item="playground"] button');
+    await click('[data-test-code-mode-panel-item="preview"] button');
     await selectDeclaration('PersonField');
     selection =
       getPlaygroundSelections()?.[`${testRealmURL}person/PersonField`];
