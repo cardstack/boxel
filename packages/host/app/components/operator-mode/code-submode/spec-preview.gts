@@ -82,7 +82,7 @@ import ElementTracker, {
 } from '../../../resources/element-tracker';
 import Overlays from '../overlays';
 
-import type { SelectedAccordionItem } from '../code-submode';
+import type { SelectedPreviewPanelView } from '../code-submode';
 import type { CardDefOrId } from '../stack-item';
 import type { WithBoundArgs } from '@glint/template';
 
@@ -91,7 +91,7 @@ interface Signature {
   Args: {
     selectedDeclaration?: ModuleDeclaration;
     isLoadingNewModule: boolean;
-    toggleAccordionItem: (item: SelectedAccordionItem) => void;
+    toggleAccordionItem: (item: SelectedPreviewPanelView) => void;
     isPanelOpen: boolean;
   };
   Blocks: {

@@ -111,15 +111,12 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-export type SelectedAccordionItem =
-  | 'schema-editor'
-  | 'spec-preview'
-  | 'playground';
+export type SelectedPreviewPanelView = 'schema' | 'spec' | 'preview';
 
-const accordionItems: SelectedAccordionItem[] = [
-  'schema-editor',
-  'playground',
-  'spec-preview',
+const previewPanelViews: SelectedPreviewPanelView[] = [
+  'schema',
+  'preview',
+  'spec',
 ];
 
 const defaultLeftPanelWidth =
@@ -170,15 +167,12 @@ export default class CodeSubmode extends Component<Signature> {
   @tracked private itemToDelete: CardDef | URL | null | undefined;
   @tracked private cardResource: ReturnType<getCard> | undefined;
 
-  @tracked private previewPanelView: 'schema' | 'preview' | 'spec' = 'preview';
-  private previewPanelViews = ['schema', 'preview', 'spec'];
-
   private defaultPanelWidths: PanelWidths;
   private defaultPanelHeights: PanelHeights;
   private updateCursorByName:
     | ((name: string, fieldName?: string) => void)
     | undefined;
-  private panelSelections: Record<string, SelectedAccordionItem>;
+  private panelSelections: Record<string, SelectedPreviewPanelView>;
 
   private createFileModal: CreateFileModal | undefined;
   private moduleContentsResource = moduleContentsResource(
@@ -715,20 +709,20 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  private get selectedAccordionItem(): SelectedAccordionItem {
+  private get selectedPreviewPanelView(): SelectedPreviewPanelView {
     let selection = this.panelSelections[this.readyFile.url];
-    return selection ?? 'schema-editor';
+    return selection ?? 'schema';
   }
 
-  @action private toggleAccordionItem(item: SelectedAccordionItem) {
-    if (this.selectedAccordionItem === item) {
-      let index = accordionItems.indexOf(item);
-      if (index !== -1 && index === accordionItems.length - 1) {
+  @action private toggleAccordionItem(item: SelectedPreviewPanelView) {
+    if (this.selectedPreviewPanelView === item) {
+      let index = previewPanelViews.indexOf(item);
+      if (index !== -1 && index === previewPanelViews.length - 1) {
         index--;
       } else if (index !== -1) {
         index++;
       }
-      item = accordionItems[index];
+      item = previewPanelViews[index];
     }
     this.panelSelections[this.readyFile.url] = item;
     // persist in local storage
@@ -754,10 +748,6 @@ export default class CodeSubmode extends Component<Signature> {
     return this.itemToDelete instanceof URL
       ? this.itemToDelete.href
       : this.itemToDelete.id;
-  }
-
-  @action private setPreviewPanelView(view: 'schema' | 'preview' | 'spec') {
-    this.previewPanelView = view;
   }
 
   get previewPanelTitle() {
@@ -934,15 +924,15 @@ export default class CodeSubmode extends Component<Signature> {
                       aria-label={{this.previewPanelTitle}}
                       data-test-preview-panel-header
                     >
-                      {{#each this.previewPanelViews as |previewPanelView|}}
+                      {{#each previewPanelViews as |previewPanelView|}}
                         <ToggleButton
                           @isActive={{eq
-                            this.previewPanelView
+                            this.selectedPreviewPanelView
                             previewPanelView
                           }}
                           {{on
                             'click'
-                            (fn this.setPreviewPanelView previewPanelView)
+                            (fn this.toggleAccordionItem previewPanelView)
                           }}
                           data-test-code-mode-panel-item={{previewPanelView}}
                         >
@@ -952,9 +942,9 @@ export default class CodeSubmode extends Component<Signature> {
                     </header>
                     <section
                       class='preview-panel-content'
-                      data-test-code-mode-panel-item={{this.previewPanelView}}
+                      data-test-code-mode-panel-item={{this.selectedPreviewPanelView}}
                     >
-                      {{#if (eq this.previewPanelView 'schema')}}
+                      {{#if (eq this.selectedPreviewPanelView 'schema')}}
                         <SchemaEditor
                           @file={{this.readyFile}}
                           @moduleContentsResource={{this.moduleContentsResource}}
@@ -967,10 +957,13 @@ export default class CodeSubmode extends Component<Signature> {
                           <SchemaEditorPanel class='accordion-content' />
                         </SchemaEditor>
 
-                      {{else if (eq this.previewPanelView 'preview')}}
+                      {{else if (eq this.selectedPreviewPanelView 'preview')}}
 
                         <Playground
-                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+                          @isOpen={{eq
+                            this.selectedPreviewPanelView
+                            'playground'
+                          }}
                           @codeRef={{this.selectedCodeRef}}
                           @isUpdating={{this.moduleContentsResource.isLoading}}
                           @cardOrField={{this.selectedCardOrField.cardOrField}}
@@ -980,14 +973,14 @@ export default class CodeSubmode extends Component<Signature> {
                           <PlaygroundContent />
                         </Playground>
 
-                      {{else if (eq this.previewPanelView 'spec')}}
+                      {{else if (eq this.selectedPreviewPanelView 'spec')}}
 
                         <SpecPreview
                           @selectedDeclaration={{this.selectedDeclaration}}
                           @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
                           @toggleAccordionItem={{this.toggleAccordionItem}}
                           @isPanelOpen={{eq
-                            this.selectedAccordionItem
+                            this.selectedPreviewPanelView
                             'spec-preview'
                           }}
                           as |SpecPreviewTitle SpecPreviewContent|
