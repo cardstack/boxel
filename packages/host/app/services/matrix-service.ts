@@ -1042,10 +1042,12 @@ export default class MatrixService extends Service {
         eventType,
         stateKey,
       );
+
+      let currentContentString = stringify(currentContent ?? {});
       let newContent = await transformContent(currentContent ?? {});
 
       // Skip sending state event if content hasn't changed
-      if (stringify(currentContent ?? {}) === stringify(newContent)) {
+      if (currentContentString === stringify(newContent)) {
         return;
       }
 
