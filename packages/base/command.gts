@@ -69,6 +69,19 @@ export class CreateInstanceInput extends CardDef {
   @field realm = contains(StringField);
 }
 
+export class UpdateCodePathWithSelectionInput extends CardDef {
+  @field codeRef = contains(CodeRefField);
+  @field localName = contains(StringField);
+  @field fieldName = contains(StringField);
+}
+
+export class UpdatePlaygroundSelectionInput extends CardDef {
+  @field moduleId = contains(StringField);
+  @field cardId = contains(StringField);
+  @field format = contains(StringField);
+  @field fieldIndex = contains(NumberField);
+}
+
 export class ApplySearchReplaceBlockInput extends CardDef {
   @field fileContent = contains(StringField);
   @field codeBlock = contains(StringField);
