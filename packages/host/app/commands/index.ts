@@ -20,6 +20,7 @@ import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-wi
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
 import * as WriteTextFileCommandModule from './write-text-file';
+import * as RemixCommandModule from './remix';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
@@ -101,5 +102,9 @@ export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(
     '@cardstack/boxel-host/commands/write-text-file',
     WriteTextFileCommandModule,
+  );
+  virtualNetwork.shimModule(
+    '@cardstack/boxel-host/commands/remix',
+    RemixCommandModule,
   );
 }

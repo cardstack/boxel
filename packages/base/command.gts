@@ -187,6 +187,11 @@ export class OpenAiAssistantRoomInput extends CardDef {
   @field roomId = contains(StringField);
 }
 
+export class RemixInput extends CardDef {
+  @field realm = contains(StringField);
+  @field listing = linksTo(CardDef);
+}
+
 export class AddFieldToCardDefinitionInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);

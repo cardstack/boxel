@@ -342,6 +342,13 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 export class ListingFittedTemplate extends Component<typeof Listing> {
   @tracked installedListing = false;
   @tracked writableRealms: string[] = [];
+  @tracked remixSkill = this.args.context
+    ? this.args.context.getCard(
+        this,
+        () => 'http://localhost:4201/catalog/Skill/remix',
+      )
+    : undefined;
+
   roomId: string | null = null;
 
   constructor(owner: any, args: any) {
@@ -382,6 +389,10 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
 
   get firstTagName() {
     return this.args.model.tags?.[0]?.name;
+  }
+
+  get remixSkillCard() {
+    return this.remixSkill?.card;
   }
 
   _remix = task(async (realmUrl: string) => {
@@ -437,8 +448,43 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     }
   });
 
+  _remixWithAI = task(async (realmUrl: string) => {
+    if (!this.roomId) {
+      if (!this.roomId && this.args.context?.actions?.createAiAssistantRoom) {
+        const { roomId } =
+          await this.args.context?.actions?.createAiAssistantRoom(
+            this.args.model.name ? `Remix of ${this.args.model.name}` : 'Remix',
+          );
+        this.roomId = roomId;
+
+        if (
+          this.args.context?.actions?.addSkillsToRoom &&
+          this.remixSkillCard
+        ) {
+          await this.args.context?.actions?.addSkillsToRoom(this.roomId, [
+            this.remixSkill?.card as any,
+          ]);
+        }
+        this.roomId = roomId;
+      }
+    }
+
+    if (this.roomId && this.args.context?.actions?.openAiAssistantRoom) {
+      if (this.args.context?.actions?.sendAiAssistantMessage) {
+        await this.args.context?.actions?.sendAiAssistantMessage({
+          roomId: this.roomId,
+          prompt: `I would like to remix this ${this.args.model.name} under the following realm: ${realmUrl}`,
+          openCardIds: [this.args.model.id!],
+          attachedCards: [this.args.model as CardDef],
+        });
+      }
+
+      await this.args.context?.actions?.openAiAssistantRoom(this.roomId);
+    }
+  });
+
   @action remix(realmUrl: string) {
-    this._remix.perform(realmUrl);
+    this._remixWithAI.perform(realmUrl);
   }
 
   @action

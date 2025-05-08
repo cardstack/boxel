@@ -1,6 +1,7 @@
 import { CardResource } from './card-document';
 import type { ResolvedCodeRef } from './code-ref';
 
+import type { Skill } from 'https://cardstack.com/base/skill';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 // a card resource but with optional "id" and "type" props
@@ -457,6 +458,18 @@ export interface CatalogActions {
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;
   createAiAssistantRoom: (name: string) => Promise<{ roomId: string }>;
+  sendAiAssistantMessage: ({
+    roomId,
+    prompt,
+    openCardIds,
+    attachedCards,
+  }: {
+    roomId: string;
+    prompt: string;
+    openCardIds: string[];
+    attachedCards: CardDef[];
+  }) => Promise<void>;
+  addSkillsToRoom: (roomId: string, skills: Skill[]) => Promise<void>;
   openAiAssistantRoom: (roomId: string) => Promise<void>;
 }
 

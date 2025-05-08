@@ -1,0 +1,26 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "instructions": "Before running the remix operation, make sure the following rules are met:\n\n1. The 'remix' command must exist and be callable.\n2. The user must provide:\n   - A valid URL\n   - A Listing card attached\n\nIf either value is missing, prompt the user clearly to provide the missing one(s). Wait until both are available before proceeding.\n\nOnce both values are available, run the remix command using:\n- Realm URL: [user's input]\n- Listing: [user's input]\n\nRespond with a confirmation message summarizing the remix operation with both values.",
+      "commands": [
+        {
+          "codeRef": {
+            "name": "RemixCommand",
+            "module": "@cardstack/boxel-host/commands/remix"
+          },
+          "requiresApproval": false
+        }
+      ],
+      "title": "Remix",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/skill",
+        "name": "Skill"
+      }
+    }
+  }
+}

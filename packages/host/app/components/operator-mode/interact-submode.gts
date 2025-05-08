@@ -52,6 +52,8 @@ import UpdateCodePathWithSelectionCommand from '@cardstack/host/commands/update-
 import UpdatePlaygroundSelectionCommand from '@cardstack/host/commands/update-playground-selection';
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -66,6 +68,7 @@ import {
   type Format,
 } from 'https://cardstack.com/base/card-api';
 import { type Spec } from 'https://cardstack.com/base/spec';
+import { Skill } from 'https://cardstack.com/base/skill';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -397,6 +400,27 @@ export default class InteractSubmode extends Component {
       openAiAssistantRoom: async (roomId: string) => {
         await here._openAiAssistantRoom.perform(roomId);
       },
+      sendAiAssistantMessage: async ({
+        roomId,
+        prompt,
+        openCardIds,
+        attachedCards,
+      }: {
+        roomId: string;
+        prompt: string;
+        openCardIds: string[];
+        attachedCards: CardDef[];
+      }) => {
+        await here._sendAiAssistantMessage.perform({
+          roomId,
+          prompt,
+          openCardIds,
+          attachedCards,
+        });
+      },
+      addSkillsToRoom: async (roomId: string, skills: Skill[]) => {
+        await here._addSkillsToRoom.perform(roomId, skills);
+      },
     };
     return { ...actions, ...catalogActions };
   }
@@ -593,18 +617,46 @@ export default class InteractSubmode extends Component {
   );
 
   private _createAiAssistantRoom = task(async (name: string) => {
-    return await new CreateAiAssistantRoomCommand(
-      this.commandService.commandContext,
-    ).execute({
+    let { commandContext } = this.commandService;
+    return await new CreateAiAssistantRoomCommand(commandContext).execute({
       name,
     });
   });
 
   private _openAiAssistantRoom = task(async (roomId: string) => {
-    await new OpenAiAssistantRoomCommand(
-      this.commandService.commandContext,
-    ).execute({
+    let { commandContext } = this.commandService;
+    await new OpenAiAssistantRoomCommand(commandContext).execute({
       roomId,
+    });
+  });
+
+  private _sendAiAssistantMessage = task(
+    async ({
+      roomId,
+      prompt,
+      openCardIds,
+      attachedCards,
+    }: {
+      roomId: string;
+      prompt: string;
+      openCardIds: string[];
+      attachedCards: CardDef[];
+    }) => {
+      let { commandContext } = this.commandService;
+      await new SendAiAssistantMessageCommand(commandContext).execute({
+        roomId,
+        prompt,
+        openCardIds,
+        attachedCards,
+      });
+    },
+  );
+
+  private _addSkillsToRoom = task(async (roomId: string, skills: Skill[]) => {
+    let { commandContext } = this.commandService;
+    await new AddSkillsToRoomCommand(commandContext).execute({
+      roomId,
+      skills,
     });
   });
 
