@@ -10,6 +10,8 @@ import { TrackedArray } from 'tracked-built-ins';
 import { RealmPaths } from '@cardstack/runtime-common';
 import { LocalPath } from '@cardstack/runtime-common/paths';
 
+import { RecentFiles } from '../utils/local-storage-keys';
+
 import type OperatorModeStateService from './operator-mode-state-service';
 import type ResetService from './reset';
 
@@ -127,7 +129,7 @@ export default class RecentFilesService extends Service {
 
   private persistRecentFiles() {
     window.localStorage.setItem(
-      'recent-files',
+      RecentFiles,
       JSON.stringify(
         this.recentFiles.map((recentFile) => [
           recentFile.realmURL.toString(),
@@ -156,7 +158,7 @@ export default class RecentFilesService extends Service {
   }
 
   private extractRecentFilesFromStorage() {
-    let recentFilesString = window.localStorage.getItem('recent-files');
+    let recentFilesString = window.localStorage.getItem(RecentFiles);
 
     if (recentFilesString) {
       try {

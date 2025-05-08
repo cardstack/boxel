@@ -27,7 +27,9 @@ import IdentityContext from '@cardstack/host/lib/gc-identity-context';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
+import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
 import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
 
@@ -36,6 +38,7 @@ import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   lookupLoaderService,
+  lookupService,
   testRealmURL,
   setupLocalIndexing,
   setupOnSave,
@@ -52,6 +55,7 @@ import {
   linksToMany,
   StringField,
   BooleanField,
+  Component,
   setupBaseRealm,
 } from '../helpers/base-realm';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -63,12 +67,14 @@ module('Integration | Store', function (hooks) {
   setupBaseRealm(hooks);
   let api: typeof CardAPI;
   let loader: Loader;
+  let loaderService: LoaderService;
   let testRealm: Realm;
   let testRealmAdapter: TestRealmAdapter;
   let store: StoreService;
   let operatorModeStateService: OperatorModeStateService;
   let identityContext: IdentityContext;
   let PersonDef: typeof CardDefType;
+  let BoomPersonDef: typeof CardDefType;
 
   setupLocalIndexing(hooks);
   setupOnSave(hooks);
@@ -84,6 +90,7 @@ module('Integration | Store', function (hooks) {
   });
 
   function forceGC() {
+    // it takes 2 sweeps to trigger GC
     identityContext.sweep(api);
     identityContext.sweep(api);
   }
@@ -116,7 +123,22 @@ module('Integration | Store', function (hooks) {
     }
     PersonDef = Person;
 
-    loader = lookupLoaderService().loader;
+    class BoomPerson extends CardDef {
+      static displayName = 'Boom Person';
+      @field name = contains(StringField);
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          Hello
+          <@fields.name />!
+          {{this.boom}}
+        </template>
+        // @ts-ignore intentional error
+        boom = () => intentionallyNotDefined();
+      };
+    }
+    BoomPersonDef = BoomPerson;
+    loaderService = lookupLoaderService();
+    loader = loaderService.loader;
     api = await loader.import(`${baseRealm.url}card-api`);
     store = this.owner.lookup('service:store') as StoreService;
     operatorModeStateService = this.owner.lookup(
@@ -130,6 +152,7 @@ module('Integration | Store', function (hooks) {
         mockMatrixUtils,
         contents: {
           'person.gts': { Person },
+          'boom-person.gts': { BoomPerson },
           'Person/hassan.json': new Person({ name: 'Hassan' }),
           'Person/jade.json': new Person({ name: 'Jade' }),
           'Person/queenzy.json': new Person({ name: 'Queenzy' }),
@@ -137,6 +160,8 @@ module('Integration | Store', function (hooks) {
           'Person/boris.json': new Person({ name: 'Boris' }),
         },
       }));
+    let realmService = lookupService<RealmService>('realm');
+    await realmService.login(testRealmURL);
   });
 
   test('can peek a card instance', async function (assert) {
@@ -159,7 +184,7 @@ module('Integration | Store', function (hooks) {
     );
   });
 
-  test('can peek a card error', async function (assert) {
+  test('can peek a card error when no stale instance exists', async function (assert) {
     await testRealm.write(
       'Person/hassan.json',
       JSON.stringify({
@@ -187,9 +212,72 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('peek returns a stale instance when the server state reflects an error', async function (assert) {
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Hassan',
+            hasError: true,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitUntil(() => store.peekError(`${testRealmURL}Person/hassan`));
+
+    let staleInstance = store.peek(`${testRealmURL}Person/hassan`);
+    assert.true(
+      isCardInstance(staleInstance),
+      'the peek-ed instance is not an error',
+    );
+  });
+
   test('peek for an uncached returns undefined', async function (assert) {
     let instance = store.peek(`${testRealmURL}Person/does-not-exist`);
     assert.strictEqual(instance, undefined, 'instance is undefined');
+  });
+
+  test('peekError returns the server state error when a stale instance exists', async function (assert) {
+    store.addReference(`${testRealmURL}Person/hassan`);
+    await store.flush();
+
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Hassan',
+            hasError: true,
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await waitUntil(() => store.peekError(`${testRealmURL}Person/hassan`));
+
+    let error = store.peekError(`${testRealmURL}Person/hassan`);
+    assert.false(isCardInstance(error), 'error is not a card instance');
+    assert.ok(
+      (error as CardErrorJSONAPI).message.includes('intentional error thrown'),
+      'error message is correct',
+    );
   });
 
   test('can add reference to a card url', async function (assert) {
@@ -302,22 +390,19 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can create an instance', async function (assert) {
-    let url = await store.create(
-      {
-        data: {
-          attributes: {
-            name: 'Andrea',
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
+    let url = await store.create({
+      data: {
+        attributes: {
+          name: 'Andrea',
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
           },
         },
       },
-      undefined,
-    );
+    });
     assert.ok(typeof url === 'string', 'received a url for new instance');
     let instance = store.peek(url as string);
     assert.strictEqual((instance as CardDefType).id, url);
@@ -332,23 +417,20 @@ module('Integration | Store', function (hooks) {
   });
 
   test('can handle card error when creating an instance', async function (assert) {
-    let error = await store.create(
-      {
-        data: {
-          attributes: {
-            name: 'Andrea',
-            hasError: true,
-          },
-          meta: {
-            adoptsFrom: {
-              module: `${testRealmURL}person`,
-              name: 'Person',
-            },
+    let error = await store.create({
+      data: {
+        attributes: {
+          name: 'Andrea',
+          hasError: true,
+        },
+        meta: {
+          adoptsFrom: {
+            module: `${testRealmURL}person`,
+            name: 'Person',
           },
         },
       },
-      undefined,
-    );
+    });
     assert.ok(typeof error === 'object', 'received a error for new instance');
     assert.ok(
       (error as any).message.includes(
@@ -356,6 +438,91 @@ module('Integration | Store', function (hooks) {
         'the error message is correct',
       ),
     );
+  });
+
+  // note this is a unique kind of error where the error occurs after instance has
+  // been written to the realm's file system, such that an instance with this error
+  // can recover from this error and the host can be notified using the lid to correlate
+  test('can handle a rendering card error when creating an instance', async function (assert) {
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let instance = new BoomPersonDef({ name: 'Andrea' });
+    let error = await store.add(instance, { realm: testRealmURL });
+    store.addReference(instance[localId]);
+    await store.flush();
+
+    let stale = store.peek(instance[localId])!;
+    if (isCardInstance(stale)) {
+      assert.strictEqual(
+        (stale as any).name,
+        'Andrea',
+        'the stale card state is correct',
+      );
+    } else {
+      assert.ok(
+        false,
+        `expected an instance but got a card error: "${stale.message}"`,
+      );
+    }
+
+    let peekedError = store.peekError(instance[localId])!;
+    assert.strictEqual(
+      peekedError,
+      error,
+      'the output of store.add is the peek-ed error',
+    );
+    if (!isCardInstance(error)) {
+      assert.strictEqual(
+        error.id,
+        instance[localId],
+        'the error doc id is the local id of the instance',
+      );
+      assert.ok(
+        error.message.includes('intentionallyNotDefined is not defined'),
+      );
+
+      // we do this because the loader in our test realm is shared with the loader of the
+      // host app--otherwise the broken module stays cached in the loader and is not picked
+      // up during re-indexing
+      loaderService.resetLoader();
+
+      await testRealm.write(
+        `boom-person.gts`,
+        `
+        import { contains, field, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+
+        export class BoomPerson extends CardDef {
+          static displayName = 'Boom Person';
+          @field name = contains(StringField);
+          static isolated = class Isolated extends Component<typeof this> {
+            <template>
+              Hello
+              <@fields.firstName />!
+            </template>
+          };
+        }
+      `.trim(),
+      );
+
+      await waitUntil(() => !store.peekError(instance[localId]), {
+        timeout: 5_000,
+      });
+
+      let peek = store.peek(instance[localId])!;
+      assert.strictEqual(
+        (peek as any).name,
+        'Andrea',
+        'peek-ed value has been updated to be the fixed card instance',
+      );
+    } else {
+      assert.ok(false, 'expected a card error but got a running instance');
+    }
   });
 
   test<TestContextWithSave>('can add a running instance to the store', async function (assert) {
@@ -390,7 +557,7 @@ module('Integration | Store', function (hooks) {
         'card data is correct',
       );
     });
-    let instance = await store.add({
+    let instance = (await store.add({
       data: {
         attributes: {
           name: 'Andrea',
@@ -402,7 +569,7 @@ module('Integration | Store', function (hooks) {
           },
         },
       },
-    });
+    })) as CardDefType;
     assert.ok(instance.id, 'instance has been assigned remote id');
     let peekedInstance = store.peek(instance.id);
     assert.strictEqual(instance, peekedInstance, 'instance is the same');
@@ -425,7 +592,7 @@ module('Integration | Store', function (hooks) {
     this.onSave(() => {
       assert.ok(false, 'save should not happen');
     });
-    let instance = await store.add(
+    let instance = (await store.add(
       {
         data: {
           attributes: {
@@ -440,7 +607,7 @@ module('Integration | Store', function (hooks) {
         },
       },
       { doNotPersist: true },
-    );
+    )) as CardDefType;
     assert.strictEqual(
       instance.id,
       undefined,
@@ -855,6 +1022,84 @@ module('Integration | Store', function (hooks) {
       .containsText('Hassan', 'card is still rendered');
   });
 
+  test('an instance can be restored after a loader reset', async function (assert) {
+    setCardInOperatorModeState(`${testRealmURL}Person/hassan`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    assert
+      .dom(
+        `[data-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"]`,
+      )
+      .containsText('Hassan', 'the card data is correct');
+
+    // write something that will trigger a loader reset that doesn't invalidate the instance being rendered
+    await testRealm.write(
+      `foo.gts`,
+      `
+        import { contains, CardDef } from 'https://cardstack.com/base/card-api';
+        export class Foo extends CardDef {}
+      `.trim(),
+    );
+
+    await waitFor('[data-test-stack-item-loading-card]', {
+      count: 0,
+      timeout: 5_000,
+    });
+
+    assert
+      .dom('[data-test-stack-item-loading-card]')
+      .doesNotExist('loading state is not displayed');
+    assert
+      .dom(
+        `[data-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"]`,
+      )
+      .containsText('Hassan', 'the card data is correct');
+  });
+
+  test('an instance that started out with a local ID can be restored after a loader reset', async function (assert) {
+    let newInstance = new PersonDef({ name: 'Andrea' });
+    await store.add(newInstance, { realm: testRealmURL });
+    setCardInOperatorModeState(newInstance[localId]);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    assert
+      .dom(`[data-stack-card="${newInstance.id}"] [data-test-field="name"]`)
+      .containsText('Andrea', 'the card data is correct');
+
+    // write something that will trigger a loader reset that doesn't invalidate the instance being rendered
+    await testRealm.write(
+      `foo.gts`,
+      `
+        import { contains, CardDef } from 'https://cardstack.com/base/card-api';
+        export class Foo extends CardDef {}
+      `.trim(),
+    );
+
+    await waitFor('[data-test-stack-item-loading-card]', {
+      count: 0,
+      timeout: 5_000,
+    });
+
+    assert
+      .dom('[data-test-stack-item-loading-card]')
+      .doesNotExist('loading state is not displayed');
+    assert
+      .dom(`[data-stack-card="${newInstance.id}"] [data-test-field="name"]`)
+      .containsText('Andrea', 'the card data is correct');
+  });
+
   test('an unsaved instance live updates when realm event matching local ID is received', async function (assert) {
     let newInstance = new PersonDef({ name: 'Andrea' });
     await store.add(newInstance, { doNotPersist: true });
@@ -1105,7 +1350,7 @@ module('Integration | Store', function (hooks) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     driver.id = hassan;
-    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    await waitFor(`[data-test-rendered-card="${hassan}"]`, { timeout: 5_000 });
     assert.strictEqual(
       store.getReferenceCount(jade),
       0,
@@ -1118,7 +1363,7 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = jade;
-    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
     assert.strictEqual(
       store.getReferenceCount(jade),
       1,

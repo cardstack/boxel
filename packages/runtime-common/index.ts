@@ -99,7 +99,12 @@ export {
   cardTypeDisplayName,
   cardTypeIcon,
 } from './helpers/card-type-display-name';
-export { maybeRelativeURL, maybeURL, relativeURL } from './url';
+export {
+  maybeRelativeURL,
+  maybeURL,
+  relativeURL,
+  trimJsonExtension,
+} from './url';
 
 export const executableExtensions = ['.js', '.gjs', '.ts', '.gts'];
 export { createResponse } from './create-response';
@@ -262,7 +267,7 @@ export type AutoSaveState = {
   isSaving: boolean;
   hasUnsavedChanges: boolean;
   lastSaved: number | undefined;
-  lastSaveError: Error | undefined;
+  lastSaveError: CardErrorJSONAPI | Error | undefined;
   lastSavedErrorMsg: string | undefined;
 };
 export type getCard<T extends CardDef = CardDef> = (
@@ -301,28 +306,35 @@ export type getCards<T extends CardDef = CardDef> = (
   isLoading: boolean;
 };
 
+export interface CreateOptions {
+  realm?: string;
+  localDir?: LocalPath;
+  relativeTo?: URL | undefined;
+}
+
+export interface AddOptions extends CreateOptions {
+  doNotPersist?: boolean;
+}
+
 export interface Store {
   save(id: string): void;
   create(
     doc: LooseSingleCardDocument,
-    relativeTo: URL | undefined,
-    realm?: string,
+    opts?: CreateOptions,
   ): Promise<string | CardErrorJSONAPI>;
   add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: {
-      realm?: string;
-      relativeTo?: URL | undefined;
-      doNotPersist?: true;
-    },
-  ): Promise<T>;
+    opts?: AddOptions,
+  ): Promise<T | CardErrorJSONAPI>;
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
+  peekError(id: string): CardErrorJSONAPI | undefined;
   get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI>;
   delete(id: string): Promise<void>;
   patch<T extends CardDef>(
     id: string,
     patchData: PatchData,
-  ): Promise<T | undefined>;
+  ): Promise<T | CardErrorJSONAPI | undefined>;
   search(query: Query, realmURL: URL): Promise<CardDef[]>;
   getSaveState(id: string): AutoSaveState | undefined;
 }
@@ -394,6 +406,7 @@ export interface CardActions {
     opts?: {
       closeAfterCreating?: boolean;
       realmURL?: URL; // the realm to create the card in
+      localDir?: LocalPath; // the local directory path within the realm to create the card file
       doc?: LooseSingleCardDocument; // initial data for the card
       cardModeAfterCreation?: Format; // by default, the new card opens in the stack in edit mode
     },
@@ -409,7 +422,6 @@ export interface CardActions {
   ) => void;
   copyURLToClipboard: (card: CardDef | URL | string) => Promise<void>;
   editCard: (card: CardDef) => void;
-  copyCard?: (card: CardDef) => Promise<string>;
   saveCard: (id: string) => void;
   delete: (item: CardDef | URL | string) => void;
   doWithStableScroll: (
@@ -425,13 +437,19 @@ export interface CopyCardsWithCodeRef {
 }
 
 export interface CatalogActions {
-  create: (spec: Spec, targetRealm: string) => void;
-  copy: (card: CardDef, targetRealm: string) => Promise<CardDef>;
-  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
+  createFromSpec: (spec: Spec, realm: string, localDir?: LocalPath) => void;
+  copyCard: (
+    card: CardDef,
+    realm: string,
+    codeRef?: ResolvedCodeRef,
+    localDir?: LocalPath,
+  ) => Promise<CardDef>;
   copyCards: (
     cards: CopyCardsWithCodeRef[],
-    targetUrl: string,
+    realm: string,
+    localDir?: LocalPath,
   ) => Promise<CardDef[]>;
+  copySource: (fromUrl: string, toUrl: string) => Promise<void>;
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;

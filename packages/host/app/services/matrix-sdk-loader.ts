@@ -281,10 +281,14 @@ function extendedClient({
           return fileDefManager.uploadCards.bind(fileDefManager);
         case 'uploadCommandDefinitions':
           return fileDefManager.uploadCommandDefinitions.bind(fileDefManager);
+        case 'uploadFiles':
+          return fileDefManager.uploadFiles.bind(fileDefManager);
         case 'uploadContent':
           return fileDefManager.uploadContent.bind(fileDefManager);
         case 'downloadCardFileDef':
           return fileDefManager.downloadCardFileDef.bind(fileDefManager);
+        case 'cacheContentHashIfNeeded':
+          return fileDefManager.cacheContentHashIfNeeded.bind(fileDefManager);
         default:
           return Reflect.get(target, key, receiver);
       }

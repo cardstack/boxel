@@ -22,7 +22,7 @@ export default class OpenAiAssistantRoomCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.OpenAiAssistantRoomInput,
   ): Promise<undefined> {
-    this.operatorModeStateService.aiAssistantOpen = true;
+    this.operatorModeStateService.openAiAssistant();
     this.matrixService.currentRoomId = input.roomId;
   }
 }

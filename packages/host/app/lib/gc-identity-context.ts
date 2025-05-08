@@ -28,6 +28,7 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 // identity map
 class IDResolver {
   #remoteIds = new Map<string, string[]>(); // localId => remoteId[]
+  #oldRemoteIds = new Map<string, string[]>(); // localId => remoteId[]
   #localIds = new Map<string, string>(); // remoteId => localId
 
   addIdPair(localId: string, remoteId: string) {
@@ -47,7 +48,9 @@ class IDResolver {
   }
 
   getRemoteIds(localId: string) {
-    return this.#remoteIds.get(localId) ?? [];
+    return (
+      this.#remoteIds.get(localId) ?? this.#oldRemoteIds.get(localId) ?? []
+    );
   }
 
   getLocalId(remoteId: string) {
@@ -65,7 +68,19 @@ class IDResolver {
     this.#localIds.delete(remoteId);
   }
 
+  findRemoteId(searchString: string) {
+    return [...this.#localIds.keys()].find((remoteId) =>
+      remoteId.includes(searchString),
+    );
+  }
+
   reset() {
+    // we roll over the old local ID mappings so we can still ask about it after
+    // a loader refresh, but we segregate these so that we don't try to reverse
+    // lookup on the local ID's since they won't exist any more.
+    for (let [localId, remoteIds] of this.#remoteIds) {
+      this.#oldRemoteIds.set(localId, remoteIds);
+    }
     this.#localIds = new Map();
     this.#remoteIds = new Map();
   }
@@ -94,6 +109,10 @@ export default class IdentityContextWithGarbageCollection
     return this.getItem('instance', id);
   }
 
+  getRemoteIds(localId: string) {
+    return this.#idResolver.getRemoteIds(localId);
+  }
+
   set(id: string, instance: CardDef): void {
     this.setItem(id, instance);
   }
@@ -110,7 +129,13 @@ export default class IdentityContextWithGarbageCollection
   }
 
   getInstanceOrError(id: string) {
+    // favor instances over errors so that we can get stale values when the
+    // server goes into an error state
     return this.getItem('instance', id) ?? this.getItem('error', id);
+  }
+
+  getError(id: string) {
+    return this.getItem('error', id);
   }
 
   delete(id: string): void {
@@ -148,9 +173,7 @@ export default class IdentityContextWithGarbageCollection
 
   reset() {
     this.#cards.clear();
-    this.#cardErrors.clear();
     this.#nonTrackedCards.clear();
-    this.#nonTrackedCardErrors.clear();
     this.#gcCandidates.clear();
     this.#idResolver.reset();
   }
@@ -241,18 +264,33 @@ export default class IdentityContextWithGarbageCollection
     type: 'instance' | 'error',
     id: string,
   ): CardDef | CardError | undefined {
-    let item: CardDef | CardError | undefined;
+    let { item, localId } = this.tryFindingItem(type, id);
+
+    if (!item && isLocalId(id)) {
+      let maybeRemoteId = this.#idResolver.findRemoteId(id);
+      if (maybeRemoteId) {
+        ({ item, localId } = this.tryFindingItem(type, maybeRemoteId));
+      }
+    }
+
+    if (localId) {
+      this.#gcCandidates.delete(localId);
+    }
+    return item;
+  }
+
+  private tryFindingItem(type: 'instance' | 'error', localOrRemoteId: string) {
     let bucket = type === 'instance' ? this.#cards : this.#cardErrors;
     let silentBucket =
       type === 'instance' ? this.#nonTrackedCards : this.#nonTrackedCardErrors;
-    let localId = isLocalId(id) ? id : undefined;
-    let remoteId = !isLocalId(id) ? id : undefined;
-
-    if (localId) {
-      remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
-    }
-
+    let localId = isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
+    let remoteId = !isLocalId(localOrRemoteId) ? localOrRemoteId : undefined;
+    let item: CardDef | CardError | undefined;
     if (remoteId) {
+      if (localId) {
+        remoteId = this.#idResolver.getRemoteIds(localId)?.[0];
+      }
+
       localId = this.#idResolver.getLocalId(remoteId);
       // try correlating the last part of the URL with a local ID to handle
       // the scenario where the instance has a newly assigned remote id
@@ -280,16 +318,17 @@ export default class IdentityContextWithGarbageCollection
       (remoteId
         ? (bucket.get(remoteId) ?? silentBucket.get(remoteId))
         : undefined);
-    if (localId) {
-      this.#gcCandidates.delete(localId);
-    }
-    return item;
+    return { item, localId };
   }
 
   private setItem(id: string, item: CardDef | CardError, notTracked?: true) {
     if (!isLocalId(id) && isCardInstance(item)) {
       this.#idResolver.addIdPair(item[localIdSymbol], id);
     }
+    let cardBucket = notTracked ? this.#nonTrackedCards : this.#cards;
+    let errorBucket = notTracked
+      ? this.#nonTrackedCardErrors
+      : this.#cardErrors;
     let instance = isCardInstance(item) ? item : undefined;
     let error = !isCardInstance(item) ? item : undefined;
     let localId = isLocalId(id) ? id : undefined;
@@ -301,16 +340,15 @@ export default class IdentityContextWithGarbageCollection
       localId =
         (instance ? instance[localIdSymbol] : undefined) ??
         this.#idResolver.getLocalId(remoteIds[0]);
+
+      let maybeOldLocalId = remoteIds[0].split('/').pop()!;
+      errorBucket.delete(maybeOldLocalId);
     }
 
     if (localId) {
       this.#gcCandidates.delete(localId);
     }
 
-    let cardBucket = notTracked ? this.#nonTrackedCards : this.#cards;
-    let errorBucket = notTracked
-      ? this.#nonTrackedCardErrors
-      : this.#cardErrors;
     // make entries for both the local ID and the remote ID in the identity map
     if (instance) {
       // instances always have a local ID
@@ -327,12 +365,10 @@ export default class IdentityContextWithGarbageCollection
     if (error) {
       if (localId) {
         setIfDifferent(errorBucket, localId, error);
-        cardBucket.delete(localId);
       }
       if (remoteIds.length > 0) {
         for (let remoteId of remoteIds) {
           setIfDifferent(errorBucket, remoteId, error);
-          cardBucket.delete(remoteId);
         }
       }
     }

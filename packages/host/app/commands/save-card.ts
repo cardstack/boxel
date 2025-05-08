@@ -24,6 +24,9 @@ export default class SaveCardCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.SaveCardInput,
   ): Promise<undefined> {
-    await this.store.add(input.card, { realm: input.realm });
+    await this.store.add(input.card, {
+      realm: input.realm,
+      localDir: input.localDir,
+    });
   }
 }

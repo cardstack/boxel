@@ -147,7 +147,7 @@ class MonacoDiffEditor extends Modifier<MonacoDiffEditorSignature> {
       language,
     }: MonacoDiffEditorSignature['Args']['Named'],
   ) {
-    if (!originalCode || !modifiedCode) {
+    if (originalCode === undefined || modifiedCode === undefined) {
       return;
     }
     if (this.monacoState) {

@@ -80,12 +80,14 @@ module(basename(__filename), function () {
             'person.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
             import StringField from "https://cardstack.com/base/string";
+            import NumberField from "https://cardstack.com/base/number";
 
             export class Person extends CardDef {
               @field firstName = contains(StringField);
+              @field hourlyRate = contains(NumberField);
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
-                  <h1><@fields.firstName/></h1>
+                  <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
                 </template>
               }
               static embedded = class Embedded extends Component<typeof this> {
@@ -216,6 +218,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Van Gogh',
+                  hourlyRate: 50,
                 },
                 meta: {
                   adoptsFrom: {
@@ -348,7 +351,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h1> Mango </h1>`),
+          cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
         assert.strictEqual(
@@ -415,7 +418,7 @@ module(basename(__filename), function () {
           if (item?.type === 'instance') {
             assert.strictEqual(
               trimCardContainer(stripScopedCSSAttributes(item.isolatedHtml!)),
-              cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+              cleanWhiteSpace(`<h1> Van Gogh $50</h1>`),
             );
             assert.strictEqual(
               trimCardContainer(
@@ -532,7 +535,7 @@ module(basename(__filename), function () {
         'person.gts',
         `
           // syntax error
-          export class IntentionallyThrownError {
+          export class Intentionally Thrown Error {}
         `,
       );
       assert.deepEqual(
@@ -879,12 +882,13 @@ module(basename(__filename), function () {
           // we splat because despite having the same shape, the constructors are different
           { ...actual.error.errorDetail },
           {
+            id: `${testRealm}post`,
             isCardError: true,
             additionalErrors: null,
-            message: 'http://test-realm/post not found',
+            message: `${testRealm}post not found`,
             status: 404,
             title: 'Not Found',
-            deps: ['http://test-realm/post'],
+            deps: [`${testRealm}post`],
           },
           'card instance is an error document',
         );
@@ -1116,6 +1120,198 @@ module(basename(__filename), function () {
       ['random-file.txt', 'random-image.png', '.DS_Store'].forEach((file) => {
         assert.notOk(deletedEntryUrls.includes(file));
       });
+    });
+
+    test('should be able to handle dependencies between modules', async function (assert) {
+      // Create author.gts that depends on blog-app
+      await realm.write(
+        'author.gts',
+        `
+              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              import { BlogApp } from "./blog-app";
+              
+              export class Author extends CardDef {
+                @field name = contains(StringField);
+                @field blog = linksTo(BlogApp);
+              }
+            `,
+      );
+      // Create blog-category.gts that depends on blog-app
+      await realm.write(
+        'blog-category.gts',
+        `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { BlogApp } from "./blog-app";
+
+          export class BlogCategory extends CardDef {
+            @field name = contains(StringField);
+            @field blog = linksTo(BlogApp);
+          }
+        `,
+      );
+      // Create blog-post.gts that depends on author and blog-app
+      await realm.write(
+        'blog-post.gts',
+        `
+          import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { Author } from "./author";
+          import { BlogApp } from "./blog-app";
+          
+          export class BlogPost extends CardDef {
+            @field title = contains(StringField);
+            @field author = linksToMany(Author);
+            @field blog = linksTo(BlogApp);
+          }
+        `,
+      );
+      // Create blog-app.gts that depends on blog-post type
+      await realm.write(
+        'blog-app.gts',
+        `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import type { BlogPost } from "./blog-post";
+          
+          export class BlogApp extends CardDef {
+            @field title = contains(StringField);
+          }
+        `,
+      );
+
+      let blogPostModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-post`),
+      );
+      assert.strictEqual(
+        blogPostModule?.type,
+        'module',
+        'BlogPost module is in resolved module successfully',
+      );
+
+      let blogCategoryModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-category`),
+      );
+      assert.strictEqual(
+        blogCategoryModule?.type,
+        'module',
+        'BlogCategory module is in resolved module successfully',
+      );
+
+      let authorModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}author`),
+      );
+      assert.strictEqual(
+        authorModule?.type,
+        'module',
+        'Author module is in resolved module successfully',
+      );
+
+      let blogAppModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-app`),
+      );
+      assert.strictEqual(
+        blogAppModule?.type,
+        'module',
+        'BlogApp module is in resolved module successfully',
+      );
+    });
+
+    test('should be able to handle dependencies between modules - with thunk', async function (assert) {
+      // Create author.gts that depends on blog-app
+      await realm.write(
+        'author.gts',
+        `
+              import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+              import StringField from "https://cardstack.com/base/string";
+              import { BlogApp } from "./blog-app";
+              
+              export class Author extends CardDef {
+                @field name = contains(StringField);
+                @field blog = linksTo(() => BlogApp);
+              }
+            `,
+      );
+      // Create blog-category.gts that depends on blog-app
+      await realm.write(
+        'blog-category.gts',
+        `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { BlogApp } from "./blog-app";
+
+          export class BlogCategory extends CardDef {
+            @field name = contains(StringField);
+            @field blog = linksTo(() =>BlogApp);
+          }
+        `,
+      );
+      // Create blog-post.gts that depends on author and blog-app
+      await realm.write(
+        'blog-post.gts',
+        `
+          import { contains, field, CardDef, linksTo, linksToMany } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import { Author } from "./author";
+          import { BlogApp } from "./blog-app";
+          
+          export class BlogPost extends CardDef {
+            @field title = contains(StringField);
+            @field author = linksToMany(() => Author);
+            @field blog = linksTo(() => BlogApp);
+          }
+        `,
+      );
+      // Create blog-app.gts that depends on blog-post type
+      await realm.write(
+        'blog-app.gts',
+        `
+          import { contains, field, CardDef, linksTo } from "https://cardstack.com/base/card-api";
+          import StringField from "https://cardstack.com/base/string";
+          import type { BlogPost } from "./blog-post";
+          
+          export class BlogApp extends CardDef {
+            @field title = contains(StringField);
+          }
+        `,
+      );
+
+      let blogPostModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-post`),
+      );
+      assert.strictEqual(
+        blogPostModule?.type,
+        'module',
+        'BlogPost module is in resolved module successfully',
+      );
+
+      let blogCategoryModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-category`),
+      );
+      assert.strictEqual(
+        blogCategoryModule?.type,
+        'module',
+        'BlogCategory module is in resolved module successfully',
+      );
+
+      let authorModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}author`),
+      );
+      assert.strictEqual(
+        authorModule?.type,
+        'module',
+        'Author module is in resolved module successfully',
+      );
+
+      let blogAppModule = await realm.realmIndexQueryEngine.module(
+        new URL(`${testRealm}blog-app`),
+      );
+      assert.strictEqual(
+        blogAppModule?.type,
+        'module',
+        'BlogApp module is in resolved module successfully',
+      );
     });
   });
 

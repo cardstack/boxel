@@ -51,6 +51,7 @@ import {
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
+  DEFAULT_CODING_LLM,
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -78,14 +79,17 @@ import type {
   Tool,
 } from 'https://cardstack.com/base/matrix-event';
 
-import type * as SkillCardModule from 'https://cardstack.com/base/skill-card';
+import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
 
-import { CurrentRoomIdPersistenceKey } from '../utils/local-storage-keys';
+import {
+  CurrentRoomIdPersistenceKey,
+  clearLocalStorage,
+} from '../utils/local-storage-keys';
 
 import { type SerializedState as OperatorModeSerializedState } from './operator-mode-state-service';
 
@@ -634,17 +638,35 @@ export default class MatrixService extends Service {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
 
+  async uploadCardsAndUpdateSkillCommands(cards: CardDef[], roomId: string) {
+    this.ensureRoomData(roomId);
+    let roomResource = this.roomResources.get(roomId);
+    if (!roomResource) {
+      throw new Error(`Room resource not found for room ${roomId}`);
+    }
+    return await this.client.uploadCardsAndUpdateSkillCommands(
+      cards,
+      roomResource,
+      (roomId, eventType, stateKey, transformContent) =>
+        this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+    );
+  }
+
   async uploadCards(cards: CardDef[]) {
     let cardFileDefs = await this.client.uploadCards(cards);
     return cardFileDefs;
   }
 
   async uploadCommandDefinitions(
-    commandDefinitions: SkillCardModule.CommandField[],
+    commandDefinitions: SkillModule.CommandField[],
   ) {
     let commandFileDefs =
       await this.client.uploadCommandDefinitions(commandDefinitions);
     return commandFileDefs;
+  }
+
+  async cacheContentHashIfNeeded(event: DiscreteMatrixEvent) {
+    await this.client.cacheContentHashIfNeeded(event);
   }
 
   async sendCommandResultEvent(
@@ -700,35 +722,7 @@ export default class MatrixService extends Service {
   }
 
   async uploadFiles(files: FileDef[]) {
-    let uploadedFiles = await Promise.all(
-      files.map(async (file) => {
-        if (!file.sourceUrl) {
-          throw new Error('File needs a realm server source URL to upload');
-        }
-
-        let response = await this.network.authedFetch(file.sourceUrl, {
-          headers: {
-            Accept: 'application/vnd.card+source',
-          },
-        });
-
-        // We only support uploading text files (code) for now.
-        // When we start supporting other file types (pdfs, images, etc)
-        // we will need to update this to support those file types.
-        let text = await response.text();
-        let contentType = response.headers.get('content-type');
-
-        if (!contentType) {
-          throw new Error(`File has no content type: ${file.sourceUrl}`);
-        }
-        file.url = await this.client.uploadContent(text, contentType);
-        file.contentType = contentType;
-
-        return file;
-      }),
-    );
-
-    return uploadedFiles;
+    return await this.client.uploadFiles(files);
   }
 
   async sendMessage(
@@ -761,21 +755,9 @@ export default class MatrixService extends Service {
       }
     }
 
-    let roomResource = this.roomResources.get(roomId);
-    if (!roomResource) {
-      throw new Error(`Room resource not found for room ${roomId}`);
-    }
-    let cardFileDefs = await this.client.uploadCardsAndUpdateSkillCommands(
+    let cardFileDefs = await this.uploadCardsAndUpdateSkillCommands(
       attachedCards,
-      roomResource,
-      (
-        roomId: string,
-        eventType: string,
-        stateKey: string,
-        transformContent: (
-          content: Record<string, any>,
-        ) => Promise<Record<string, any>>,
-      ) => this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+      roomId,
     );
 
     await this.sendEvent(roomId, 'm.room.message', {
@@ -866,11 +848,11 @@ export default class MatrixService extends Service {
   }
 
   async loadDefaultSkills(submode: Submode) {
-    let interactModeDefaultSkills = [`${baseRealm.url}SkillCard/card-editing`];
+    let interactModeDefaultSkills = [`${baseRealm.url}Skill/card-editing`];
 
     let codeModeDefaultSkills = [
-      `${baseRealm.url}SkillCard/boxel-coding`,
-      `${baseRealm.url}SkillCard/source-code-editing`,
+      `${baseRealm.url}Skill/boxel-coding`,
+      `${baseRealm.url}Skill/source-code-editing`,
     ];
 
     let defaultSkills;
@@ -884,12 +866,11 @@ export default class MatrixService extends Service {
     return (
       await Promise.all(
         defaultSkills.map(async (skillCardURL) => {
-          let maybeCard =
-            await this.store.get<SkillCardModule.SkillCard>(skillCardURL);
+          let maybeCard = await this.store.get<SkillModule.Skill>(skillCardURL);
           return isCardInstance(maybeCard) ? maybeCard : undefined;
         }),
       )
-    ).filter(Boolean) as SkillCardModule.SkillCard[];
+    ).filter(Boolean) as SkillModule.Skill[];
   }
 
   @cached
@@ -920,6 +901,11 @@ export default class MatrixService extends Service {
     this.cardsToSend = new TrackedMap();
     this.filesToSend = new TrackedMap();
     this.currentUserEventReadReceipts = new TrackedMap();
+
+    // Reset it here rather than in the reset function of each service
+    // because it is possible that
+    // there are some services that are not initialized yet
+    clearLocalStorage();
   }
 
   private bindEventListeners() {
@@ -1440,7 +1426,7 @@ export default class MatrixService extends Service {
   }
 
   setLLMForCodeMode() {
-    this.setLLMModel('anthropic/claude-3.5-sonnet');
+    this.setLLMModel(DEFAULT_CODING_LLM);
   }
 
   private setLLMModel(model: string) {

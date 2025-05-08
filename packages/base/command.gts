@@ -11,7 +11,7 @@ import {
 import CodeRefField from './code-ref';
 import BooleanField from './boolean';
 import NumberField from './number';
-import { SkillCard } from './skill-card';
+import { Skill } from './skill';
 import {
   JsonField,
   SearchCardsByQueryInput,
@@ -22,15 +22,16 @@ import {
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
 export class SaveCardInput extends CardDef {
-  @field realm = contains(StringField);
   @field card = linksTo(CardDef);
+  @field realm = contains(StringField);
+  @field localDir = contains(StringField);
 }
 
 export class CopyCardInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
-  @field targetUrl = contains(StringField);
   @field targetStackIndex = contains(NumberField);
   @field realm = contains(StringField);
+  @field localDir = contains(StringField);
   @field codeRef = contains(CodeRefField);
 }
 
@@ -96,6 +97,7 @@ export class PatchCodeInput extends CardDef {
 
 export class CreateAIAssistantRoomInput extends CardDef {
   @field name = contains(StringField);
+  @field defaultSkills = linksToMany(Skill);
 }
 
 export class CreateAIAssistantRoomResult extends CardDef {
@@ -109,7 +111,7 @@ export class SetActiveLLMInput extends CardDef {
 
 export class AddSkillsToRoomInput extends CardDef {
   @field roomId = contains(StringField);
-  @field skills = linksToMany(SkillCard);
+  @field skills = linksToMany(Skill);
 }
 
 export class UpdateSkillActivationInput extends CardDef {
@@ -123,7 +125,7 @@ export class UseAiAssistantInput extends CardDef {
   @field roomName = contains(StringField); // only used when creating a new room
   @field llmModel = contains(StringField);
   @field openRoom = contains(BooleanField);
-  @field skillCards = linksToMany(SkillCard);
+  @field skillCards = linksToMany(Skill);
   @field skillCardIds = containsMany(StringField);
   @field attachedCards = linksToMany(CardDef);
   @field attachedCardIds = containsMany(StringField);

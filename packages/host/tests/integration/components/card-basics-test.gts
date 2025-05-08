@@ -72,6 +72,7 @@ import {
   TextAreaField,
   unsubscribeFromChanges,
   ReadOnlyField,
+  instanceOf,
 } from '../../helpers/base-realm';
 import { mango } from '../../helpers/image-fixture';
 import { renderCard } from '../../helpers/render-component';
@@ -146,6 +147,53 @@ module('Integration | card-basics', function (hooks) {
       provideConsumeContext(PermissionsContextName, {
         canWrite: true,
       });
+    });
+
+    test('"instanceOf()" returns true when provided instance is a direct instance of the provided card class', async function (assert) {
+      class Foo extends CardDef {}
+      loader.shimModule(`${testRealmURL}test-cards`, { Foo });
+
+      assert.true(
+        instanceOf(new Foo(), Foo),
+        'instance is direct instantiation of card class',
+      );
+    });
+
+    test('"instanceOf()" returns true when instance adopts from the provided card class', async function (assert) {
+      class Foo extends CardDef {}
+      class Bar extends Foo {}
+      class Baz extends Bar {}
+      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
+
+      assert.true(
+        instanceOf(new Baz(), Foo),
+        'instance adopts from card class',
+      );
+    });
+
+    test('"instanceOf()" returns false when instance does not adopt from the provided card class', async function (assert) {
+      class Foo extends CardDef {}
+      class Bar extends CardDef {}
+      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar });
+
+      assert.false(
+        instanceOf(new Bar(), Foo),
+        'instance does not adopt from card class',
+      );
+    });
+
+    test('"instanceOf()" returns true after loader reset when instance adopts from the provided card class', async function (assert) {
+      class Foo extends CardDef {}
+      class Bar extends Foo {}
+      class Baz extends Bar {}
+      loader.shimModule(`${testRealmURL}test-cards`, { Foo, Bar, Baz });
+
+      lookupLoaderService().resetLoader();
+
+      assert.true(
+        instanceOf(new Baz(), Foo),
+        'instance adopts from card class',
+      );
     });
 
     test('primitive field type checking', async function (assert) {
@@ -1111,17 +1159,13 @@ module('Integration | card-basics', function (hooks) {
         workExperiences: [],
       });
 
-      let changeEvent:
-        | { instance: BaseDef; fieldName: string; value: any }
-        | undefined;
-      let eventCount = 0;
+      let events: any[] = [];
       let subscriber = (instance: BaseDef, fieldName: string, value: any) => {
-        eventCount++;
-        changeEvent = {
+        events.push({
           instance,
           fieldName,
           value,
-        };
+        });
       };
       subscribeToChanges(mango, subscriber);
 
@@ -1129,57 +1173,51 @@ module('Integration | card-basics', function (hooks) {
         let firstWorkExperience = new WorkExperience();
         mango.workExperiences.push(firstWorkExperience);
         await flushLogs();
-        await waitUntil(() => eventCount === 1);
         assert.deepEqual(
-          changeEvent?.instance,
-          mango,
-          'the instance was correctly specified in change event',
+          events,
+          [
+            {
+              instance: mango,
+              fieldName: 'workExperiences',
+              value: [firstWorkExperience],
+            },
+          ],
+          'the change event is correct',
         );
-        assert.strictEqual(
-          changeEvent?.fieldName,
-          'workExperiences',
-          'the fieldName was correctly specified in change event',
-        );
-        assert.deepEqual(
-          changeEvent?.value[0],
-          firstWorkExperience,
-          'the field value was correctly specified in change event',
-        );
+        events = [];
 
         firstWorkExperience.company = 'First Company';
-        await waitUntil(() => eventCount === 2);
+        await flushLogs();
         assert.deepEqual(
-          changeEvent?.instance,
-          firstWorkExperience,
-          'the instance was correctly specified in change event',
+          events,
+          [
+            {
+              instance: firstWorkExperience,
+              fieldName: 'company',
+              value: 'First Company',
+            },
+            {
+              instance: mango,
+              fieldName: 'workExperiences.0.company',
+              value: 'First Company',
+            },
+          ],
+          'the change event is correct',
         );
-        assert.strictEqual(
-          changeEvent?.fieldName,
-          'company',
-          'the fieldName was correctly specified in change event',
-        );
-        assert.deepEqual(
-          changeEvent?.value,
-          'First Company',
-          'the field value was correctly specified in change event',
-        );
+        events = [];
 
         mango.workExperiences.pop();
-        await waitUntil(() => eventCount === 3);
+        await flushLogs();
         assert.deepEqual(
-          changeEvent?.instance,
-          mango,
-          'the instance was correctly specified in change event',
-        );
-        assert.strictEqual(
-          changeEvent?.fieldName,
-          'workExperiences',
-          'the fieldName was correctly specified in change event',
-        );
-        assert.deepEqual(
-          changeEvent?.value.length,
-          0,
-          'the field value was correctly specified in change event',
+          events,
+          [
+            {
+              instance: mango,
+              fieldName: 'workExperiences',
+              value: [],
+            },
+          ],
+          'the change event is correct',
         );
       } finally {
         unsubscribeFromChanges(mango, subscriber);
@@ -2078,6 +2116,10 @@ module('Integration | card-basics', function (hooks) {
           </template>
         };
       }
+      loader.shimModule(`${testRealmURL}test-cards`, {
+        TestCard,
+        SubTestField,
+      });
 
       let card = new TestCard({
         specialField: new TestField({
@@ -2153,6 +2195,7 @@ module('Integration | card-basics', function (hooks) {
       loader.shimModule(`${testRealmURL}test-cards`, {
         TestCardWithField,
         TestCard,
+        SubTestField,
       });
       let cardWithField1 = new TestCardWithField({});
       let cardWithField2 = new TestCardWithField({});

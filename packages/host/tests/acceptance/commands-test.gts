@@ -20,6 +20,7 @@ import {
   baseRealm,
   buildCommandFunctionName,
   Command,
+  skillCardRef,
 } from '@cardstack/runtime-common';
 
 import {
@@ -33,7 +34,7 @@ import {
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
 import GetBoxelUIStateCommand from '@cardstack/host/commands/get-boxel-ui-state';
 import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import PatchCardCommand from '@cardstack/host/commands/patch-card';
+import PatchCardInstanceCommand from '@cardstack/host/commands/patch-card-instance';
 import SaveCardCommand from '@cardstack/host/commands/save-card';
 import { SearchCardsByTypeAndTitleCommand } from '@cardstack/host/commands/search-cards';
 import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
@@ -167,9 +168,12 @@ module('Acceptance | Commands tests', function (hooks) {
         });
 
         // Mutate and save again
-        let patchCardCommand = new PatchCardCommand(this.commandContext, {
-          cardType: Meeting,
-        });
+        let patchCardInstanceCommand = new PatchCardInstanceCommand(
+          this.commandContext,
+          {
+            cardType: Meeting,
+          },
+        );
 
         let createAIAssistantRoomCommand = new CreateAiAssistantRoomCommand(
           this.commandContext,
@@ -184,10 +188,10 @@ module('Acceptance | Commands tests', function (hooks) {
           roomId,
           prompt: `Change the topic of the meeting to "${input.topic}"`,
           attachedCards: [meeting],
-          commands: [{ command: patchCardCommand, autoExecute: true }],
+          commands: [{ command: patchCardInstanceCommand, autoExecute: true }],
         });
 
-        await patchCardCommand.waitForNextCompletion();
+        await patchCardInstanceCommand.waitForNextCompletion();
 
         let showCardCommand = new ShowCardCommand(this.commandContext);
         await showCardCommand.execute({
@@ -523,10 +527,7 @@ module('Acceptance | Commands tests', function (hooks) {
               thumbnailURL: null,
             },
             meta: {
-              adoptsFrom: {
-                module: 'https://cardstack.com/base/skill-card',
-                name: 'SkillCard',
-              },
+              adoptsFrom: skillCardRef,
             },
           },
         },
