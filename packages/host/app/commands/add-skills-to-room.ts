@@ -53,7 +53,8 @@ export default class AddSkillsToRoomCommand extends HostBaseCommand<
             (newCommandDefinition) =>
               !commandDefinitions.some(
                 (commandDefinition) =>
-                  commandDefinition.name === newCommandDefinition.name,
+                  commandDefinition.sourceUrl ===
+                  newCommandDefinition.sourceUrl,
               ),
           );
         const updatedCommandDefinitions = [

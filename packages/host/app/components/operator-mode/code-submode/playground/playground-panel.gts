@@ -393,8 +393,9 @@ export default class PlaygroundPanel extends Component<Signature> {
     }
     let maybeId: string | CardErrorJSONAPI = await this.store.create(
       newCardJSON,
-      undefined,
-      this.currentRealm,
+      {
+        realm: this.currentRealm,
+      },
     );
     if (typeof maybeId !== 'string') {
       this.cardCreationError = maybeId;
