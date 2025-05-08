@@ -42,7 +42,7 @@ export default class UpdateSkillActivationCommand extends HostBaseCommand<
         if (!skillFileDef) {
           return newSkillsConfig;
         }
-        debugger;
+
         if (isActive) {
           newSkillsConfig.enabledSkillCards.push(skillFileDef);
         } else {

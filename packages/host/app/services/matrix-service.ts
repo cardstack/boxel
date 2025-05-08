@@ -1043,6 +1043,7 @@ export default class MatrixService extends Service {
         stateKey,
       );
 
+      // Store the original content string for comparison
       let currentContentString = stringify(currentContent ?? {});
       let newContent = await transformContent(currentContent ?? {});
 
