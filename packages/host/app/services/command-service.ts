@@ -224,7 +224,7 @@ export default class CommandService extends Service {
         );
       }
       this.executedCommandRequestIds.add(commandRequestId!);
-      await this.matrixService.sendCommandResultEvent(
+      await this.matrixService.sendToolCallCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
@@ -281,15 +281,58 @@ export default class CommandService extends Service {
   }
 
   async patchCode(
+    roomId: string,
     fileUrl: string,
     codeBlocks: { codeBlock: string; eventId: string; index: number }[],
   ) {
-    let patchCodeCommand = new PatchCodeCommand(this.commandContext);
-    await patchCodeCommand.execute({
-      fileUrl,
-      codeBlocks: codeBlocks.map((codeBlock) => codeBlock.codeBlock),
-    });
-    // TODO: create command result events
+    for (const codeBlock of codeBlocks) {
+      this.currentlyExecutingCommandRequestIds.add(
+        `${codeBlock.eventId}:${codeBlock.index}`,
+      );
+    }
+    try {
+      let patchCodeCommand = new PatchCodeCommand(this.commandContext);
+      await patchCodeCommand.execute({
+        fileUrl,
+        codeBlocks: codeBlocks.map((codeBlock) => codeBlock.codeBlock),
+      });
+      for (const codeBlock of codeBlocks) {
+        this.executedCommandRequestIds.add(
+          `${codeBlock.eventId}:${codeBlock.index}`,
+        );
+      }
+      let resultSends = [];
+      for (const codeBlock of codeBlocks) {
+        resultSends.push(
+          this.matrixService.sendCodeBlockCommandResultEvent(
+            roomId,
+            codeBlock.eventId,
+            codeBlock.index,
+            'applied',
+          ),
+        );
+      }
+      await Promise.all(resultSends);
+    } finally {
+      // remove the code blocks from the currently executing command request ids
+      for (const codeBlock of codeBlocks) {
+        this.currentlyExecutingCommandRequestIds.delete(
+          `${codeBlock.eventId}:${codeBlock.index}`,
+        );
+      }
+    }
+  }
+
+  isCodeBlockApplying(codeBlock: { eventId: string; index: number }) {
+    return this.currentlyExecutingCommandRequestIds.has(
+      `${codeBlock.eventId}:${codeBlock.index}`,
+    );
+  }
+
+  isCodeBlockApplied(codeBlock: { eventId: string; index: number }) {
+    return this.executedCommandRequestIds.has(
+      `${codeBlock.eventId}:${codeBlock.index}`,
+    );
   }
 }
 

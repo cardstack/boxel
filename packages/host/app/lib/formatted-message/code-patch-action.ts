@@ -1,7 +1,6 @@
 import Owner from '@ember/owner';
 import { setOwner } from '@ember/owner';
 import { service } from '@ember/service';
-import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 
@@ -11,13 +10,12 @@ import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 
 export class CodePatchAction {
+  roomId: string;
   eventId: string;
   fileUrl: string;
   index: number;
   searchReplaceBlock: string;
 
-  @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
-    'ready';
   @service declare private loaderService: LoaderService;
   @service declare private commandService: CommandService;
   @service declare private cardService: CardService;
@@ -27,33 +25,53 @@ export class CodePatchAction {
     if (
       !codeData.fileUrl ||
       !codeData.searchReplaceBlock ||
-      !codeData.index ||
+      codeData.index === undefined ||
+      codeData.index === null ||
+      !codeData.roomId ||
       !codeData.eventId
     ) {
       throw new Error(
-        'fileUrl and searchReplaceBlock and index and eventId are required',
+        'fileUrl, searchReplaceBlock, index, roomId and eventId are required',
       );
     }
     this.fileUrl = codeData.fileUrl;
     this.index = codeData.index;
     this.eventId = codeData.eventId;
+    this.roomId = codeData.roomId;
     this.searchReplaceBlock = codeData.searchReplaceBlock;
   }
 
+  get patchCodeState() {
+    if (
+      this.commandService.isCodeBlockApplying({
+        eventId: this.eventId,
+        index: this.index,
+      })
+    ) {
+      return 'applying';
+    } else if (
+      this.commandService.isCodeBlockApplied({
+        eventId: this.eventId,
+        index: this.index,
+      })
+    ) {
+      return 'applied';
+    }
+    return 'ready';
+  }
+
   patchCodeTask = dropTask(async () => {
-    this.patchCodeTaskState = 'applying';
     try {
-      this.commandService.patchCode(this.fileUrl, [
+      await this.commandService.patchCode(this.roomId, this.fileUrl, [
         {
           codeBlock: this.searchReplaceBlock,
           eventId: this.eventId,
           index: this.index,
         },
       ]);
-      this.patchCodeTaskState = 'applied';
     } catch (error) {
       console.error(error);
-      this.patchCodeTaskState = 'failed';
+      // this.patchCodeTaskState = 'failed'; TODO: ???
     }
   });
 }

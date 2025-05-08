@@ -17,6 +17,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
@@ -187,16 +188,25 @@ export default class MessageBuilder {
 
     if (this.builderContext.commandResultEvent && message.commands.length > 0) {
       let event = this.builderContext.commandResultEvent;
-      let messageCommand = message.commands.find(
-        (c) => c.commandRequest.id === event.content.commandRequestId,
-      );
-      if (messageCommand) {
-        messageCommand.commandStatus = event.content['m.relates_to']
-          .key as CommandStatus;
-        messageCommand.commandResultFileDef =
-          event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-            ? event.content.data.card
-            : undefined;
+      if (
+        event.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+        event.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE
+      ) {
+        let commandRequestId = event.content.commandRequestId;
+        let messageCommand = message.commands.find(
+          (c) => c.commandRequest.id === commandRequestId,
+        );
+        if (messageCommand) {
+          messageCommand.commandStatus = event.content['m.relates_to']
+            .key as CommandStatus;
+          messageCommand.commandResultFileDef =
+            event.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+              ? event.content.data.card
+              : undefined;
+        }
       }
     }
   }

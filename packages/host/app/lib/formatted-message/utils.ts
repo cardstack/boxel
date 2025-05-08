@@ -11,6 +11,7 @@ import {
 
 export function extractCodeData(
   preElementString: string,
+  roomId: string,
   eventId: string,
   index: number,
 ): CodeData {
@@ -29,6 +30,7 @@ export function extractCodeData(
       code: null,
       language: null,
       searchReplaceBlock: null,
+      roomId: null,
       eventId: null,
       index,
     };
@@ -89,6 +91,7 @@ export function extractCodeData(
     searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
       ? contentWithoutFileUrl
       : null,
+    roomId,
     eventId,
     index,
   };

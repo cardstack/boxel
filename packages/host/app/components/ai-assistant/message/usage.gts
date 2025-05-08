@@ -59,7 +59,8 @@ export default class AiAssistantMessageUsage extends Component {
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
               @index={{0}}
-              @eventId={{'123'}}
+              @eventId='123'
+              @roomId='!abcd'
               @registerScroller={{this.noop}}
               @profileAvatar={{component
                 Avatar
@@ -142,7 +143,8 @@ export default class AiAssistantMessageUsage extends Component {
               @datetime={{this.twoMinutesAgo}}
               @isFromAssistant={{false}}
               @index={{0}}
-              @eventId={{'124'}}
+              @eventId='124'
+              @roomId='!abcd'
               @registerScroller={{this.noop}}
               @monacoSDK={{this.noopMonacoSDK}}
               @profileAvatar={{component
@@ -158,6 +160,7 @@ export default class AiAssistantMessageUsage extends Component {
               }}
               @index={{1}}
               @eventId={{'125'}}
+              @roomId='!abcd'
               @monacoSDK={{this.noopMonacoSDK}}
               @registerScroller={{this.noop}}
               @datetime={{this.oneMinutesAgo}}

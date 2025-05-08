@@ -544,7 +544,7 @@ class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
     {{/if}}
     <ApplyButton
       data-test-apply-code-button
-      @state={{@codePatchAction.patchCodeTaskState}}
+      @state={{@codePatchAction.patchCodeState}}
       {{on 'click' (perform @codePatchAction.patchCodeTask)}}
     >
       Apply
