@@ -505,13 +505,8 @@ export default class InteractSubmode extends Component {
   });
 
   private _copyCards = dropTask(
-    async (
-      cards: CopyCardsWithCodeRef[],
-      realm: string,
-      localDir?: string, //
-    ) => {
+    async (cards: CopyCardsWithCodeRef[], realm: string, localDir?: string) => {
       let { commandContext } = this.commandService;
-      // let targetDir = combine realmUrl and localDir
       return await Promise.all(
         cards.map(async (cardWithNewCodeRef) => {
           let newCard = await new CopyCardCommand(commandContext).execute({
