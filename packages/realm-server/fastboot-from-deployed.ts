@@ -92,11 +92,6 @@ export async function instantiateFastBoot(
     }
   }
 
-  html = html.replace(
-    '/assets/content-tag/standalone.js',
-    new URL('/assets/content-tag/standalone.js', distURL).href,
-  );
-
   writeJSONSync(join(distPath, 'package.json'), pkgJSON);
   writeFileSync(join(distPath, pkgFastboot.htmlEntrypoint), html);
   for (let { local, remote } of scripts) {
