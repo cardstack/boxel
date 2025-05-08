@@ -78,7 +78,7 @@
     "@typescript-eslint/eslint-plugin": "catalog:",
     "@typescript-eslint/parser": "catalog:",
     "broccoli-asset-rev": "catalog:",
-    "broccoli-funnel": "^3.0.8",
+    "broccoli-funnel": "catalog:",
     "broccoli-merge-trees": "catalog:",
     "broccoli-plugin": "catalog:",
     "broccoli-source": "catalog:",
