@@ -219,7 +219,7 @@ export default class StoreService extends Service implements StoreInterface {
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions & { doNotPersist: true },
-  ): Promise<T | CardErrorJSONAPI>;
+  ): Promise<T>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
     opts?: CreateOptions,
