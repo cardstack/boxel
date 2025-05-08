@@ -211,7 +211,7 @@ export default class StoreService extends Service implements StoreInterface {
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let cardOrError = await this.getInstance({
-        urlOrDoc: doc,
+        idOrDoc: doc,
         relativeTo: opts?.relativeTo,
         realm: opts?.realm,
         opts: {
@@ -307,7 +307,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   async get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI> {
-    return await this.getInstance<T>({ urlOrDoc: id });
+    return await this.getInstance<T>({ idOrDoc: id });
   }
 
   async delete(id: string): Promise<void> {
@@ -387,7 +387,7 @@ export default class StoreService extends Service implements StoreInterface {
         collectionDoc.data.map(async (doc) => {
           try {
             return await this.getInstance({
-              urlOrDoc: { data: doc },
+              idOrDoc: { data: doc },
               relativeTo: new URL(doc.id!), // all results will have id's
             });
           } catch (e) {
@@ -430,7 +430,7 @@ export default class StoreService extends Service implements StoreInterface {
         let instanceOrError = this.peek(url);
         if (!instanceOrError) {
           instanceOrError = await this.getInstance({
-            urlOrDoc: url,
+            idOrDoc: url,
           });
         }
         await this.updateInstanceChangeSubscription(
@@ -530,6 +530,7 @@ export default class StoreService extends Service implements StoreInterface {
       // code before re-running the card
       this.loaderService.resetLoader();
       this.identityContext.reset();
+      this.reestablishReferences.perform();
     }
 
     for (let invalidation of invalidations) {
@@ -584,11 +585,11 @@ export default class StoreService extends Service implements StoreInterface {
   };
 
   private loadInstanceTask = task(
-    async (urlOrDoc: string | LooseSingleCardDocument) => {
-      let url = asURL(urlOrDoc);
+    async (idOrDoc: string | LooseSingleCardDocument) => {
+      let url = asURL(idOrDoc);
       let oldInstance = url ? this.identityContext.get(url) : undefined;
       let instanceOrError = await this.getInstance({
-        urlOrDoc,
+        idOrDoc,
         opts: { noCache: true },
       });
       if (oldInstance) {
@@ -603,6 +604,25 @@ export default class StoreService extends Service implements StoreInterface {
       );
     },
   );
+
+  private reestablishReferences = task(async () => {
+    let remoteIds = new Set<string>();
+    for (let [id, referenceCount] of this.referenceCount) {
+      if (referenceCount === 0) {
+        continue;
+      }
+      if (isLocalId(id)) {
+        for (let remoteId of this.identityContext.getRemoteIds(id)) {
+          remoteIds.add(remoteId);
+        }
+      } else {
+        remoteIds.add(id);
+      }
+    }
+    await Promise.all(
+      [...remoteIds].map((id) => this.getInstance({ idOrDoc: id })),
+    );
+  });
 
   private reloadTask = task(async (instance: CardDef) => {
     let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
@@ -683,30 +703,30 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async getInstance<T extends CardDef>({
-    urlOrDoc,
+    idOrDoc,
     relativeTo,
     realm,
     opts,
   }: {
-    urlOrDoc: string | LooseSingleCardDocument;
+    idOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
     opts?: { noCache?: boolean; localDir?: string };
   }) {
     let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
-    let url = asURL(urlOrDoc);
-    if (url) {
-      let working = this.inflightCards.get(url);
+    let id = asURL(idOrDoc);
+    if (id) {
+      let working = this.inflightCards.get(id);
       if (working) {
         return working as Promise<T>;
       }
       deferred = new Deferred<CardDef | CardErrorJSONAPI>();
-      this.inflightCards.set(url, deferred.promise);
+      this.inflightCards.set(id, deferred.promise);
     }
     try {
-      if (!url) {
+      if (!id) {
         // this is a new card so instantiate it and save it
-        let doc = urlOrDoc as LooseSingleCardDocument;
+        let doc = idOrDoc as LooseSingleCardDocument;
         let newInstance = await this.createFromSerialized(
           doc.data,
           doc,
@@ -724,18 +744,23 @@ export default class StoreService extends Service implements StoreInterface {
         return newInstance as T;
       }
 
-      let existingInstance = this.peek(url);
+      let existingInstance = this.peek(id);
       if (!opts?.noCache && existingInstance) {
         deferred?.fulfill(existingInstance);
         return existingInstance as T;
       }
-      if (isLocalId(url)) {
-        throw new Error(
-          `instance with local id ${url} does not exist in the store`,
-        );
+      if (isLocalId(id)) {
+        // we might have lost the local id via a loader refresh, try loading from remote id instead
+        let remoteId = this.identityContext.getRemoteIds(id)?.[0];
+        if (!remoteId) {
+          throw new Error(
+            `instance with local id ${id} does not exist in the store`,
+          );
+        }
+        id = remoteId;
       }
-
-      let doc = (typeof urlOrDoc !== 'string' ? urlOrDoc : undefined) as
+      let url = id; // after this point we know we are dealing with a remote id, e.g. url
+      let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
       if (!doc) {
@@ -762,17 +787,17 @@ export default class StoreService extends Service implements StoreInterface {
       }
       return instance as T;
     } catch (error: any) {
-      let errorResponse = processCardError(url, error);
+      let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
       console.error(
-        `error getting instance ${JSON.stringify(urlOrDoc, null, 2)}`,
+        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}`,
         error,
       );
       return cardError;
     } finally {
-      if (url) {
-        this.inflightCards.delete(url);
+      if (id) {
+        this.inflightCards.delete(id);
       }
     }
   }
@@ -1116,7 +1141,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let id = rel.links.self;
     let instance = await this.getInstance({
-      urlOrDoc: new URL(id, relativeTo).href,
+      idOrDoc: new URL(id, relativeTo).href,
     });
     return isCardInstance(instance) ? instance : undefined;
   }
