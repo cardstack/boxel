@@ -775,6 +775,30 @@ module(basename(__filename), function () {
                   kind: 'file',
                 },
               },
+              'multiple-default-exports-card.gts': {
+                links: {
+                  related: `${testRealmHref}multiple-default-exports-card.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'multiple-default-exports-card.json': {
+                links: {
+                  related: `${testRealmHref}multiple-default-exports-card.json`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'multiple-default-exports.gts': {
+                links: {
+                  related: `${testRealmHref}multiple-default-exports.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
               'person-1.json': {
                 links: {
                   related: `${testRealmHref}person-1.json`,
@@ -826,6 +850,22 @@ module(basename(__filename), function () {
               'query-test-cards.gts': {
                 links: {
                   related: `${testRealmHref}query-test-cards.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'timers-card.gts': {
+                links: {
+                  related: `${testRealmHref}timers-card.gts`,
+                },
+                meta: {
+                  kind: 'file',
+                },
+              },
+              'timers-card.json': {
+                links: {
+                  related: `${testRealmHref}timers-card.json`,
                 },
                 meta: {
                   kind: 'file',

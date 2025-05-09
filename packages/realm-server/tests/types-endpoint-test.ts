@@ -164,6 +164,15 @@ module(basename(__filename), function () {
               iconHTML,
             },
           },
+          {
+            type: 'card-type-summary',
+            id: `${testRealm.url}timers-card/TimersCard`,
+            attributes: {
+              displayName: 'TimersCard',
+              total: 1,
+              iconHTML,
+            },
+          },
         ],
       });
     });

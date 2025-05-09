@@ -515,6 +515,7 @@ export class Loader {
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
+      module.deferred.fulfill();
       throw exception;
     }
 
@@ -532,16 +533,27 @@ export class Loader {
 
     let src: string | null | undefined = loaded.source;
 
-    src = transformSync(src, {
-      plugins: [
-        [
-          TransformModulesAmdPlugin,
-          { noInterop: true, moduleId: moduleIdentifier },
+    try {
+      src = transformSync(src, {
+        plugins: [
+          [
+            TransformModulesAmdPlugin,
+            { noInterop: true, moduleId: moduleIdentifier },
+          ],
         ],
-      ],
-      sourceMaps: 'inline',
-      filename: moduleIdentifier,
-    })?.code;
+        sourceMaps: 'inline',
+        filename: moduleIdentifier,
+      })?.code;
+    } catch (exception) {
+      this.setModule(moduleIdentifier, {
+        state: 'broken',
+        exception,
+        consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
+      });
+      module.deferred.fulfill();
+      throw exception;
+    }
+
     if (!src) {
       throw new Error(`bug: should never get here`);
     }
@@ -579,6 +591,7 @@ export class Loader {
         exception,
         consumedModules: new Set(), // we blew up before we could understand what was inside ourselves
       });
+      module.deferred.fulfill();
       throw exception;
     }
 

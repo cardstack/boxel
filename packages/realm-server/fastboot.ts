@@ -41,6 +41,8 @@ export async function makeFastBootIndexRunner(
         getRunnerOpts,
         _logDefinitions: (globalThis as any)._logDefinitions,
         jsdom: new JSDOM(''),
+        setTimeout: () => {}, // setTimeout is disabled during indexing
+        setInterval: () => {}, // setInterval is disabled during indexing
       });
     },
   ));

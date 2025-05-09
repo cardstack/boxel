@@ -234,7 +234,7 @@ export class PgQueueRunner implements QueueRunner {
   constructor({
     adapter,
     workerId,
-    maxTimeoutSec = 10 * 60,
+    maxTimeoutSec = 5 * 60,
     priority = 0,
   }: {
     adapter: PgAdapter;
@@ -487,7 +487,7 @@ export class PgQueueRunner implements QueueRunner {
   }
 }
 
-function serializableError(err: any): Record<string, any> {
+export function serializableError(err: any): Record<string, any> {
   try {
     let result = Object.create(null);
     for (let field of Object.getOwnPropertyNames(err)) {

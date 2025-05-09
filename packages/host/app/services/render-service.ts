@@ -58,7 +58,7 @@ export class IdentityContextWithErrors implements IdentityContext {
   readonly errors = new Set<string>();
 }
 
-interface RenderCardParams {
+export interface RenderCardParams {
   card: CardDef;
   visit: (
     url: URL,

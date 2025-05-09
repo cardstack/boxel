@@ -25,6 +25,7 @@ declare const config: {
   serverEchoDebounceMs: number;
   loginMessageTimeoutMs: number;
   minSaveTaskDurationMs: number;
+  renderTimeoutMs: number;
   sqlSchema: string;
   assetsURL: string;
   stripePaymentLink: string;
