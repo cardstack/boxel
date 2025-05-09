@@ -52,7 +52,7 @@ interface CopyMeta {
   targetCodeRef: ResolvedCodeRef;
 }
 
-function getNewPackageName(listingName?: string) {
+function nameWithUuid(listingName?: string) {
   if (!listingName) {
     return '';
   }
@@ -64,12 +64,11 @@ function getNewPackageName(listingName?: string) {
   return newPackageName;
 }
 
-export async function installListing(args: any, realmUrl: string) {
+export async function installListing(args: any, realm: string) {
   const listing = args.model as Partial<Listing>;
   const copyMeta: CopyMeta[] = [];
 
-  const newModulePath = getNewPackageName(listing.name).concat('/');
-  const targetUrl = new URL(newModulePath, realmUrl).href;
+  const localDir = nameWithUuid(listing.name);
 
   // first spec as the selected code ref with new url
   // if there are examples, take the first example's code ref
@@ -82,15 +81,14 @@ export async function installListing(args: any, realmUrl: string) {
     const absoluteModulePath = spec.moduleHref;
     const relativeModulePath = spec.ref.module;
     const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-    const newPath = newModulePath.concat(normalizedPath);
-    const fileTargetUrl = new URL(newPath, realmUrl).href;
+    const newPath = localDir.concat('/').concat(normalizedPath);
+    const fileTargetUrl = new URL(newPath, realm).href;
     const targetFilePath = fileTargetUrl.concat('.gts');
 
     await args.context?.actions?.copySource?.(
       absoluteModulePath,
       targetFilePath,
     );
-
     copyMeta.push({
       sourceCodeRef: {
         module: absoluteModulePath,
@@ -145,17 +143,24 @@ export async function installListing(args: any, realmUrl: string) {
     const copyCardsWithCodeRef = results.filter(
       (result) => result !== null,
     ) as CopyCardsWithCodeRef[];
-    const copyCardResults = await args.context?.actions?.copyCards?.(
-      copyCardsWithCodeRef,
-      targetUrl,
-    );
-    firstExampleCardId = copyCardResults[0].newCardId;
+    for (const cardWithNewCodeRef of copyCardsWithCodeRef) {
+      const { newCardId } = await args.context?.actions?.copyCard(
+        cardWithNewCodeRef.sourceCard,
+        cardWithNewCodeRef.sourceCard,
+        realm,
+        cardWithNewCodeRef.codeRef,
+        localDir,
+      );
+      if (!firstExampleCardId) {
+        firstExampleCardId = newCardId;
+      }
+    }
   }
 
   if (listing instanceof SkillListing) {
     await Promise.all(
       listing.skills.map((skill) => {
-        args.context?.actions?.copy?.(skill, realmUrl);
+        args.context?.actions?.copyCard?.(skill, realm, undefined, localDir);
       }),
     );
   }
@@ -216,23 +221,26 @@ class EmbeddedTemplate extends Component<typeof Listing> {
     this.writableRealms = await setupAllRealmsInfo(this.args);
   });
 
-  _use = task(async (realmUrl: string) => {
+  _use = task(async (realm: string) => {
     const specsToCopy: Spec[] = this.args.model?.specs ?? [];
     const specsWithoutFields = specsToCopy.filter(
       (spec: Spec) => spec.specType !== 'field',
     );
 
-    const newModulePath = getNewPackageName(this.args.model?.name).concat('/');
-    const targetUrl = new URL(newModulePath, realmUrl).href;
-
+    const localDir = nameWithUuid(this.args.model?.name);
     for (const spec of specsWithoutFields) {
-      await this.args.context?.actions?.create?.(spec, targetUrl);
+      await this.args.context?.actions?.createFromSpec?.(spec, realm, localDir);
     }
 
     if (this.args.model instanceof SkillListing) {
       await Promise.all(
         this.args.model.skills.map((skill) => {
-          this.args.context?.actions?.copy?.(skill, realmUrl);
+          this.args.context?.actions?.copyCard?.(
+            skill,
+            realm,
+            undefined,
+            localDir,
+          );
         }),
       );
     }
@@ -240,13 +248,17 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       const sourceCards = this.args.model.examples.map((example) => ({
         sourceCard: example,
       }));
-      await this.args.context?.actions?.copyCards?.(sourceCards, targetUrl);
+      await this.args.context?.actions?.copyCards?.(
+        sourceCards,
+        realm,
+        localDir,
+      );
     }
     this.createdInstances = true;
   });
 
-  _install = task(async (realmUrl: string) => {
-    await installListing(this.args, realmUrl);
+  _install = task(async (realm: string) => {
+    await installListing(this.args, realm);
     this.installedListing = true;
   });
 
@@ -268,7 +280,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   get useButtonDisabled() {
     return (
       this.createdInstances ||
-      !this.args.context?.actions?.create ||
+      !this.args.context?.actions?.createFromSpec ||
       this.useOrInstallDisabled
     );
   }

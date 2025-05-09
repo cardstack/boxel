@@ -27,7 +27,10 @@ import {
   meta,
   logger,
   formattedError,
+  RealmPaths,
   type Store as StoreInterface,
+  type AddOptions,
+  type CreateOptions,
   type Query,
   type PatchData,
   type Relationship,
@@ -66,7 +69,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
-export { CardErrorJSONAPI, CardSaveSubscriber };
+export { CardErrorJSONAPI, CardSaveSubscriber, isLocalId };
 
 let waiter = buildWaiter('store-service');
 
@@ -183,22 +186,37 @@ export default class StoreService extends Service implements StoreInterface {
       `adding reference to ${id}, current reference count: ${this.referenceCount.get(id)}`,
     );
 
-    // intentionally not awaiting this. we keep track of the promise in
-    // this.newReferencePromises
-    this.wireUpNewReference(id);
+    if (isLocalId(id)) {
+      let instanceOrError = this.peek(id);
+      if (instanceOrError) {
+        let realmURL = isCardInstance(instanceOrError)
+          ? instanceOrError[realmURLSymbol]?.href
+          : instanceOrError.realm;
+        if (realmURL) {
+          this.subscribeToRealm(new URL(realmURL));
+        }
+      }
+    } else {
+      this.subscribeToRealm(new URL(id));
+      // intentionally not awaiting this. we keep track of the promise in
+      // this.newReferencePromises
+      this.wireUpNewReference(id);
+    }
   }
 
   // This method creates a new instance in the store and return the new card ID
   async create(
     doc: LooseSingleCardDocument,
-    relativeTo: URL | undefined,
-    realm?: string,
+    opts?: CreateOptions,
   ): Promise<string | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let cardOrError = await this.getInstance({
-        urlOrDoc: doc,
-        relativeTo,
-        realm,
+        idOrDoc: doc,
+        relativeTo: opts?.relativeTo,
+        realm: opts?.realm,
+        opts: {
+          localDir: opts?.localDir,
+        },
       });
       if (isCardInstance(cardOrError)) {
         return cardOrError.id;
@@ -213,36 +231,20 @@ export default class StoreService extends Service implements StoreInterface {
 
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts: {
-      realm?: string;
-      relativeTo?: URL | undefined;
-      // if you don't save then there is no possibility for error, hence a
-      // simpler return type
-      doNotPersist: true;
-    },
+    opts?: CreateOptions & { doNotPersist: true },
   ): Promise<T>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: {
-      realm?: string;
-      relativeTo?: URL | undefined;
-    },
+    opts?: CreateOptions & { doNotWaitForPersist: true },
+  ): Promise<T>;
+  async add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
   async add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: {
-      // TODO: apparently this is getting abused by the catalog actions and we
-      // are using this to tell the store the folder _within_ the realm to
-      // upload an instance to, this is not always the actual realm...
-      realm?: string;
-      relativeTo?: URL | undefined;
-      doNotPersist?: true;
-    },
+    opts?: AddOptions,
   ): Promise<T | CardErrorJSONAPI> {
-    // need to figure out the actual realm because opts.realm is being abused
-    let realmURL = opts?.realm
-      ? this.realm.realmOfURL(new URL(opts.realm))?.href
-      : undefined;
     let instance: T;
     if (!isCardInstance(instanceOrDoc)) {
       instance = await this.createFromSerialized(
@@ -260,10 +262,10 @@ export default class StoreService extends Service implements StoreInterface {
         }
       }
     }
-    if (realmURL) {
+    if (opts?.realm) {
       instance[meta] = {
         ...instance[meta],
-        ...{ realmURL },
+        ...{ realmURL: opts.realm },
       } as CardResourceMeta;
     }
 
@@ -279,13 +281,16 @@ export default class StoreService extends Service implements StoreInterface {
 
     await this.updateInstanceChangeSubscription('start-tracking', instance);
 
-    if (!opts?.doNotPersist) {
+    if (opts?.doNotWaitForPersist) {
+      // intentionally not awaiting
+      this.persistAndUpdate(instance, { realm: opts?.realm });
+    } else if (!opts?.doNotPersist) {
       if (instance.id) {
         this.save(instance.id);
       } else {
-        return (await this.persistAndUpdate(instance, opts?.realm)) as
-          | T
-          | CardErrorJSONAPI;
+        return (await this.persistAndUpdate(instance, {
+          realm: opts?.realm,
+        })) as T | CardErrorJSONAPI;
       }
     }
 
@@ -309,7 +314,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   async get<T extends CardDef>(id: string): Promise<T | CardErrorJSONAPI> {
-    return await this.getInstance<T>({ urlOrDoc: id });
+    return await this.getInstance<T>({ idOrDoc: id });
   }
 
   async delete(id: string): Promise<void> {
@@ -389,7 +394,7 @@ export default class StoreService extends Service implements StoreInterface {
         collectionDoc.data.map(async (doc) => {
           try {
             return await this.getInstance({
-              urlOrDoc: { data: doc },
+              idOrDoc: { data: doc },
               relativeTo: new URL(doc.id!), // all results will have id's
             });
           } catch (e) {
@@ -423,32 +428,18 @@ export default class StoreService extends Service implements StoreInterface {
     return this.referenceCount.get(id) ?? 0;
   }
 
-  private async wireUpNewReference(id: string) {
+  private async wireUpNewReference(url: string) {
     let deferred = new Deferred<void>();
     await this.withTestWaiters(async () => {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
-        let instanceOrError = this.peek(id);
-        if (isLocalId(id)) {
-          if (instanceOrError) {
-            let realmURL = isCardInstance(instanceOrError)
-              ? instanceOrError[realmURLSymbol]?.href
-              : instanceOrError.realm;
-            if (realmURL) {
-              this.subscribeToRealm(new URL(realmURL));
-            }
-          }
-          deferred.fulfill();
-          return;
-        }
-
+        let instanceOrError = this.peek(url);
         if (!instanceOrError) {
           instanceOrError = await this.getInstance({
-            urlOrDoc: id,
+            idOrDoc: url,
           });
         }
-        this.subscribeToRealm(new URL(id));
         await this.updateInstanceChangeSubscription(
           'start-tracking',
           instanceOrError,
@@ -456,12 +447,12 @@ export default class StoreService extends Service implements StoreInterface {
 
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
-          this.identityContext.addInstanceOrError(id, instanceOrError);
+          this.identityContext.addInstanceOrError(url, instanceOrError);
         }
         deferred.fulfill();
       } catch (e) {
         console.error(
-          `error encountered wiring up new reference for ${JSON.stringify(id)}`,
+          `error encountered wiring up new reference for ${JSON.stringify(url)}`,
           e,
         );
         deferred.reject(e);
@@ -549,6 +540,7 @@ export default class StoreService extends Service implements StoreInterface {
       // code before re-running the card
       this.loaderService.resetLoader();
       this.identityContext.reset();
+      this.reestablishReferences.perform();
     }
 
     for (let invalidation of invalidations) {
@@ -603,11 +595,11 @@ export default class StoreService extends Service implements StoreInterface {
   };
 
   private loadInstanceTask = task(
-    async (urlOrDoc: string | LooseSingleCardDocument) => {
-      let url = asURL(urlOrDoc);
+    async (idOrDoc: string | LooseSingleCardDocument) => {
+      let url = asURL(idOrDoc);
       let oldInstance = url ? this.identityContext.get(url) : undefined;
       let instanceOrError = await this.getInstance({
-        urlOrDoc,
+        idOrDoc,
         opts: { noCache: true },
       });
       if (oldInstance) {
@@ -622,6 +614,25 @@ export default class StoreService extends Service implements StoreInterface {
       );
     },
   );
+
+  private reestablishReferences = task(async () => {
+    let remoteIds = new Set<string>();
+    for (let [id, referenceCount] of this.referenceCount) {
+      if (referenceCount === 0) {
+        continue;
+      }
+      if (isLocalId(id)) {
+        for (let remoteId of this.identityContext.getRemoteIds(id)) {
+          remoteIds.add(remoteId);
+        }
+      } else {
+        remoteIds.add(id);
+      }
+    }
+    await Promise.all(
+      [...remoteIds].map((id) => this.getInstance({ idOrDoc: id })),
+    );
+  });
 
   private reloadTask = task(async (instance: CardDef) => {
     let maybeReloadedInstance: CardDef | CardErrorJSONAPI | undefined;
@@ -702,36 +713,39 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async getInstance<T extends CardDef>({
-    urlOrDoc,
+    idOrDoc,
     relativeTo,
     realm,
     opts,
   }: {
-    urlOrDoc: string | LooseSingleCardDocument;
+    idOrDoc: string | LooseSingleCardDocument;
     relativeTo?: URL;
     realm?: string; // used for new cards
-    opts?: { noCache?: boolean };
+    opts?: { noCache?: boolean; localDir?: string };
   }) {
     let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
-    let url = asURL(urlOrDoc);
-    if (url) {
-      let working = this.inflightCards.get(url);
+    let id = asURL(idOrDoc);
+    if (id) {
+      let working = this.inflightCards.get(id);
       if (working) {
         return working as Promise<T>;
       }
       deferred = new Deferred<CardDef | CardErrorJSONAPI>();
-      this.inflightCards.set(url, deferred.promise);
+      this.inflightCards.set(id, deferred.promise);
     }
     try {
-      if (!url) {
+      if (!id) {
         // this is a new card so instantiate it and save it
-        let doc = urlOrDoc as LooseSingleCardDocument;
+        let doc = idOrDoc as LooseSingleCardDocument;
         let newInstance = await this.createFromSerialized(
           doc.data,
           doc,
           relativeTo,
         );
-        let maybeError = await this.persistAndUpdate(newInstance, realm);
+        let maybeError = await this.persistAndUpdate(newInstance, {
+          realm,
+          localDir: opts?.localDir,
+        });
         if (!isCardInstance(maybeError)) {
           return maybeError;
         }
@@ -740,18 +754,23 @@ export default class StoreService extends Service implements StoreInterface {
         return newInstance as T;
       }
 
-      let existingInstance = this.peek(url);
+      let existingInstance = this.peek(id);
       if (!opts?.noCache && existingInstance) {
         deferred?.fulfill(existingInstance);
         return existingInstance as T;
       }
-      if (isLocalId(url)) {
-        throw new Error(
-          `instance with local id ${url} does not exist in the store`,
-        );
+      if (isLocalId(id)) {
+        // we might have lost the local id via a loader refresh, try loading from remote id instead
+        let remoteId = this.identityContext.getRemoteIds(id)?.[0];
+        if (!remoteId) {
+          throw new Error(
+            `instance with local id ${id} does not exist in the store`,
+          );
+        }
+        id = remoteId;
       }
-
-      let doc = (typeof urlOrDoc !== 'string' ? urlOrDoc : undefined) as
+      let url = id; // after this point we know we are dealing with a remote id, e.g. url
+      let doc = (typeof idOrDoc !== 'string' ? idOrDoc : undefined) as
         | SingleCardDocument
         | undefined;
       if (!doc) {
@@ -778,17 +797,17 @@ export default class StoreService extends Service implements StoreInterface {
       }
       return instance as T;
     } catch (error: any) {
-      let errorResponse = processCardError(url, error);
+      let errorResponse = processCardError(id, error);
       let cardError = errorResponse.errors[0];
       deferred?.fulfill(cardError);
       console.error(
-        `error getting instance ${JSON.stringify(urlOrDoc, null, 2)}`,
+        `error getting instance ${JSON.stringify(idOrDoc, null, 2)}`,
         error,
       );
       return cardError;
     } finally {
-      if (url) {
-        this.inflightCards.delete(url);
+      if (id) {
+        this.inflightCards.delete(id);
       }
     }
   }
@@ -870,10 +889,11 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async saveCardDocument(
     doc: LooseSingleCardDocument,
-    realmUrl: URL,
+    opts?: CreateOptions,
   ): Promise<SingleCardDocument> {
     let isSaved = !!doc.data.id;
-    let json = await this.cardService.fetchJSON(doc.data.id ?? realmUrl, {
+    let url = resolveDocUrl(doc.data.id, opts?.realm, opts?.localDir);
+    let json = await this.cardService.fetchJSON(url, {
       method: isSaved ? 'PATCH' : 'POST',
       body: JSON.stringify(doc, null, 2),
     });
@@ -920,7 +940,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async persistAndUpdate(
     instance: CardDef,
-    defaultRealmHref?: string,
+    opts?: CreateOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
       let cardChanged = false;
@@ -946,14 +966,17 @@ export default class StoreService extends Service implements StoreInterface {
         // in the case where we get no realm URL from the card, we are dealing with
         // a new card instance that does not have a realm URL yet.
         if (!realmURL) {
-          defaultRealmHref =
-            defaultRealmHref ?? this.realm.defaultWritableRealm?.path;
+          let defaultRealmHref =
+            opts?.realm ?? this.realm.defaultWritableRealm?.path;
           if (!defaultRealmHref) {
             throw new Error('Could not find a writable realm');
           }
           realmURL = new URL(defaultRealmHref);
         }
-        let json = await this.saveCardDocument(doc, realmURL);
+        let json = await this.saveCardDocument(doc, {
+          realm: realmURL.href,
+          localDir: opts?.localDir,
+        });
 
         // if the card changed while the save was in flight then don't merge the
         // server state--the next auto save will include these
@@ -1128,7 +1151,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let id = rel.links.self;
     let instance = await this.getInstance({
-      urlOrDoc: new URL(id, relativeTo).href,
+      idOrDoc: new URL(id, relativeTo).href,
     });
     return isCardInstance(instance) ? instance : undefined;
   }
@@ -1175,4 +1198,21 @@ export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
   return typeof urlOrDoc === 'string'
     ? urlOrDoc.replace(/\.json$/, '')
     : urlOrDoc.data.id;
+}
+
+// Resolves either to
+// - an instance
+// - a directory
+function resolveDocUrl(id?: string, realm?: string, local?: string) {
+  if (id) {
+    return id;
+  }
+  if (!realm) {
+    throw new Error('Cannot resolve target url without a realm');
+  }
+  let path = new RealmPaths(new URL(realm));
+  if (local) {
+    return path.directoryURL(local).href;
+  }
+  return path.url;
 }

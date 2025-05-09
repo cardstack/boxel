@@ -27,7 +27,7 @@ interface CopyMeta {
   targetCodeRef: ResolvedCodeRef;
 }
 
-function getNewPackageName(listingName?: string) {
+function nameWithUuid(listingName?: string) {
   if (!listingName) {
     return '';
   }
@@ -78,8 +78,7 @@ export class RemixCommand extends HostBaseCommand<
 
     const copyMeta: CopyMeta[] = [];
 
-    const newModulePath = getNewPackageName(listing.name).concat('/');
-    const targetUrl = new URL(newModulePath, realmUrl).href;
+    const localDir = nameWithUuid(listing.name).concat('/');
 
     // first spec as the selected code ref with new url
     // if there are examples, take the first example's code ref
@@ -92,7 +91,7 @@ export class RemixCommand extends HostBaseCommand<
       const absoluteModulePath = spec.moduleHref;
       const relativeModulePath = spec.ref.module;
       const normalizedPath = relativeModulePath.split('/').slice(2).join('/');
-      const newPath = newModulePath.concat(normalizedPath);
+      const newPath = localDir.concat('/').concat(normalizedPath);
       const fileTargetUrl = new URL(newPath, realmUrl).href;
       const targetFilePath = fileTargetUrl.concat('.gts');
 
@@ -165,7 +164,8 @@ export class RemixCommand extends HostBaseCommand<
           this.commandContext,
         ).execute({
           sourceCard: cardWithNewCodeRef.sourceCard,
-          targetUrl,
+          realm: realmUrl,
+          localDir,
           codeRef: cardWithNewCodeRef.codeRef,
         });
         if (!firstExampleCardId) {
@@ -179,7 +179,8 @@ export class RemixCommand extends HostBaseCommand<
         listing.skills.map((skill) =>
           new CopyCardCommand(this.commandContext).execute({
             sourceCard: skill,
-            targetUrl: realmUrl,
+            realm: realmUrl,
+            localDir,
           }),
         ),
       );

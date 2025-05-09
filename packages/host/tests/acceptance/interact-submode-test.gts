@@ -6,6 +6,7 @@ import {
   find,
   triggerKeyEvent,
   settled,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { triggerEvent } from '@ember/test-helpers';
@@ -18,9 +19,9 @@ import { FieldContainer, GridContainer } from '@cardstack/boxel-ui/components';
 
 import {
   baseRealm,
-  type LooseSingleCardDocument,
   Deferred,
   SingleCardDocument,
+  type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -29,6 +30,8 @@ import type MessageService from '@cardstack/host/services/message-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
+
+import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
 
 import type {
   IncrementalIndexEventContent,
@@ -40,12 +43,12 @@ import {
   setupLocalIndexing,
   setupOnSave,
   testRealmURL,
-  type TestContextWithSave,
   setupAcceptanceTestRealm,
   visitOperatorMode,
   lookupLoaderService,
   lookupNetworkService,
   setupUserSubscription,
+  type TestContextWithSave,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -1170,7 +1173,8 @@ module('Acceptance | interact submode tests', function (hooks) {
         id = url.href;
       });
 
-      await click(`[data-test-card-catalog-go-button]`);
+      // intentionally not awaiting the click
+      click(`[data-test-card-catalog-go-button]`);
 
       // new card is not serialized into the url before it is saved
       assert.operatorModeParametersMatch(currentURL(), {
@@ -1184,11 +1188,7 @@ module('Acceptance | interact submode tests', function (hooks) {
         ],
       });
 
-      // updating a field triggers the auto save of the new card
-      await fillIn(
-        '[data-test-field="instructions"] textarea',
-        'Do this and that and this and that',
-      );
+      await waitUntil(() => id);
 
       assert.ok(id, 'new card has been assigned a remote id');
       id = id!;
@@ -1235,10 +1235,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
       await click(`[data-test-card-catalog-go-button]`);
-      await fillIn(
-        `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
-        'Paper',
-      );
     });
 
     test<TestContextWithSave>('new linked card is created in a different realm than its consuming reference', async function (assert) {
@@ -1301,11 +1297,6 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-card-catalog-create-new-button="${testRealm3URL}"]`,
       );
       await click(`[data-test-card-catalog-go-button]`);
-      await fillIn(
-        `[data-test-stack-card-index="1"] [data-test-field="name"] input`,
-        'Paper',
-      );
-
       await consumerSaved.promise;
     });
   });
@@ -1712,7 +1703,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {
-      assert.expect(2);
+      assert.expect(1);
       await visitOperatorMode({
         stacks: [
           [
@@ -1731,11 +1722,6 @@ module('Acceptance | interact submode tests', function (hooks) {
           if (typeof json === 'string') {
             throw new Error('expected JSON save data');
           }
-          assert.strictEqual(
-            json.data.attributes?.name,
-            'Paper',
-            'saved card data is correct',
-          );
         }
       });
       await click(
@@ -1751,16 +1737,12 @@ module('Acceptance | interact submode tests', function (hooks) {
         `[data-test-card-catalog-create-new-button="${testRealmURL}"]`,
       );
       await click(`[data-test-card-catalog-go-button]`);
-      await fillIn(
-        `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-field="name"] input`,
-        'Paper',
-      );
       await click(
         `[data-test-operator-mode-stack="0"] [data-test-stack-card-index="1"] [data-test-edit-button]`,
       );
       assert
-        .dom(`[data-test-card="${petId}"]`)
-        .includesText('Paper', 'the card is rendered correctly');
+        .dom(`[data-test-stack-card="${petId}"]`)
+        .exists('the card is rendered correctly');
     });
 
     test('visiting 2 stacks from differing realms', async function (assert) {
@@ -1790,7 +1772,7 @@ module('Acceptance | interact submode tests', function (hooks) {
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
       window.localStorage.setItem(
-        'recent-cards',
+        RecentCards,
         JSON.stringify([`${testRealmURL}Person/fadhlan`]),
       );
 
