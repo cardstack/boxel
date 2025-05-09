@@ -20,9 +20,14 @@ declare module '@cardstack/host/templates/*' {
 }
 
 declare global {
+  // For Node.js environments
+  var ContentTagGlobal: typeof import('content-tag');
+
   function showDirectoryPicker(): Promise<FileSystemDirectoryHandle>;
   interface Window {
     test__refreshOverlayedButtons: () => void;
+    // Make ContentTagGlobal a property of globalThis
+    ContentTagGlobal: typeof import('content-tag');
   }
 }
 

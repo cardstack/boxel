@@ -5,10 +5,10 @@
   "dependencies": {
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "stripe": "^17.2.1"
+    "stripe": "catalog:"
   },
   "devDependencies": {
-    "concurrently": "^8.0.1"
+    "concurrently": "catalog:"
   },
   "scripts": {
     "lint": "concurrently \"pnpm:lint:*(!fix)\" --names \"lint:\"",

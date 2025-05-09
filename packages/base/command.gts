@@ -22,15 +22,16 @@ import {
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
 export class SaveCardInput extends CardDef {
-  @field realm = contains(StringField);
   @field card = linksTo(CardDef);
+  @field realm = contains(StringField);
+  @field localDir = contains(StringField);
 }
 
 export class CopyCardInput extends CardDef {
   @field sourceCard = linksTo(CardDef);
-  @field targetUrl = contains(StringField);
   @field targetStackIndex = contains(NumberField);
   @field realm = contains(StringField);
+  @field localDir = contains(StringField);
   @field codeRef = contains(CodeRefField);
 }
 

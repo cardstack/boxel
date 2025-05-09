@@ -1,4 +1,3 @@
-import { preprocessEmbeddedTemplates } from '@cardstack/ember-template-imports/lib/preprocess-embedded-templates';
 import * as babel from '@babel/core';
 //@ts-ignore type import requires a newer Typescript with node16 moduleResolution
 import makeEmberTemplatePlugin from 'babel-plugin-ember-template-compilation/browser';
@@ -11,8 +10,6 @@ import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilat
 //@ts-ignore no types are available
 import * as etc from 'ember-source/dist/ember-template-compiler';
 import { loaderPlugin } from './loader-plugin';
-//@ts-ignore no types are available
-import glimmerTemplatePlugin from '@cardstack/ember-template-imports/src/babel-plugin';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
@@ -33,14 +30,11 @@ export function transpileJS(content: string, debugFilename: string): string {
     return '';
   }
 
-  content = preprocessEmbeddedTemplates(content, {
-    relativePath: debugFilename,
-    getTemplateLocals: etc._GlimmerSyntax.getTemplateLocals,
-    templateTag: 'template',
-    templateTagReplacement: '__GLIMMER_TEMPLATE',
-    includeSourceMaps: true,
-    includeTemplateTokens: true,
-  }).output;
+  const processor = new ContentTagGlobal.Preprocessor();
+  content = processor.process(content, {
+    filename: debugFilename,
+    inline_source_map: true,
+  }).code;
 
   let templateOptions: EmberTemplatePluginOptions = {
     compiler: etc as unknown as EmberTemplateCompiler,
@@ -51,7 +45,6 @@ export function transpileJS(content: string, debugFilename: string): string {
     filename: debugFilename,
     compact: false, // this helps for readability when debugging
     plugins: [
-      glimmerTemplatePlugin,
       emberConcurrencyAsyncPlugin,
       [typescriptPlugin, { allowDeclareFields: true }],
       [decoratorTransforms],

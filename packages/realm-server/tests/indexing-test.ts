@@ -80,12 +80,14 @@ module(basename(__filename), function () {
             'person.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
             import StringField from "https://cardstack.com/base/string";
+            import NumberField from "https://cardstack.com/base/number";
 
             export class Person extends CardDef {
               @field firstName = contains(StringField);
+              @field hourlyRate = contains(NumberField);
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
-                  <h1><@fields.firstName/></h1>
+                  <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
                 </template>
               }
               static embedded = class Embedded extends Component<typeof this> {
@@ -216,6 +218,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Van Gogh',
+                  hourlyRate: 50,
                 },
                 meta: {
                   adoptsFrom: {
@@ -348,7 +351,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h1> Mango </h1>`),
+          cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
         assert.strictEqual(
@@ -415,7 +418,7 @@ module(basename(__filename), function () {
           if (item?.type === 'instance') {
             assert.strictEqual(
               trimCardContainer(stripScopedCSSAttributes(item.isolatedHtml!)),
-              cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+              cleanWhiteSpace(`<h1> Van Gogh $50</h1>`),
             );
             assert.strictEqual(
               trimCardContainer(
@@ -532,7 +535,7 @@ module(basename(__filename), function () {
         'person.gts',
         `
           // syntax error
-          export class IntentionallyThrownError {
+          export class Intentionally Thrown Error {}
         `,
       );
       assert.deepEqual(

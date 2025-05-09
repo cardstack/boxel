@@ -23,6 +23,7 @@ import {
   setupAcceptanceTestRealm,
   visitOperatorMode,
   assertMessages,
+  type TestContextWithSave,
 } from '../helpers';
 
 import {
@@ -375,6 +376,49 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     await click('[data-test-boxel-menu-item-text="Code"]');
     assert.dom('[data-test-autoattached-file]').exists();
     assert.dom('[data-test-autoattached-card]').exists();
+  });
+
+  test<TestContextWithSave>('can send a newly created auto-attached card', async function (assert) {
+    await visitOperatorMode({
+      submode: 'interact',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}index`,
+            format: 'isolated',
+          },
+        ],
+      ],
+    });
+    let id: string | undefined;
+    this.onSave((url) => {
+      id = url.href;
+    });
+
+    await click('[data-test-open-ai-assistant]');
+    assert.dom('[data-test-attached-card]').doesNotExist();
+    await click('[data-test-create-new-card-button]');
+    await click(`[data-test-select="https://cardstack.com/base/types/card"]`);
+
+    await click(`[data-test-card-catalog-go-button]`);
+
+    await waitUntil(() => id);
+    id = id!;
+
+    await fillIn('[data-test-field="title"] input', 'new card');
+    assert.dom(`[data-test-attached-card]`).containsText('new card');
+
+    await fillIn('[data-test-message-field]', `Message with updated card`);
+    await click('[data-test-send-message-btn]');
+
+    assertMessages(assert, [
+      {
+        from: 'testuser',
+        message: 'Message with updated card new card',
+        cards: [{ id, title: 'new card' }],
+      },
+    ]);
   });
 
   test('can open attach file modal', async function (assert) {

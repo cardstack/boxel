@@ -143,6 +143,7 @@ export class RoomResource extends Resource<Args> {
             await this.loadRoomNameEvent(event);
             break;
         }
+        this.matrixService.cacheContentHashIfNeeded(event);
       }
     } catch (e) {
       throw new Error(`Error loading room ${e}`);

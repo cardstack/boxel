@@ -12,6 +12,7 @@ import {
   Pill,
   RealmIcon,
   Switch,
+  LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
 import { cn } from '@cardstack/boxel-ui/helpers';
 import { IconX } from '@cardstack/boxel-ui/icons';
@@ -51,52 +52,60 @@ export default class CardPill extends Component<CardPillSignature> {
     return this.cardResource?.card;
   }
 
+  private get isCreating() {
+    return this.card && !this.card.id;
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     {{#if this.card}}
-      <Pill
-        class={{cn
-          'card-pill'
-          is-autoattached=@isAutoAttachedCard
-          hide-icon-right=this.hideIconRight
-        }}
-        data-test-attached-card={{@cardId}}
-        data-test-autoattached-card={{@isAutoAttachedCard}}
-        ...attributes
-      >
-        <:iconLeft>
-          <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
-        </:iconLeft>
-        <:default>
-          <div class='card-content' title={{this.card.title}}>
-            {{this.card.title}}
-          </div>
-        </:default>
-        <:iconRight>
-          {{#if @onToggle}}
-            <Switch
-              @isEnabled={{@isEnabled}}
-              @onChange={{@onToggle}}
-              @label={{this.card.title}}
-              data-test-card-pill-toggle='{{@cardId}}-{{if
-                @isEnabled
-                "on"
-                "off"
-              }}'
-            />
-          {{/if}}
-          {{#if @removeCard}}
-            <IconButton
-              class='remove-button'
-              @icon={{IconX}}
-              @height='10'
-              @width='10'
-              {{on 'click' (fn @removeCard @cardId)}}
-              data-test-remove-card-btn
-            />
-          {{/if}}
-        </:iconRight>
-      </Pill>
+      {{#if this.isCreating}}
+        <LoadingIndicator />
+      {{else}}
+        <Pill
+          class={{cn
+            'card-pill'
+            is-autoattached=@isAutoAttachedCard
+            hide-icon-right=this.hideIconRight
+          }}
+          data-test-attached-card={{@cardId}}
+          data-test-autoattached-card={{@isAutoAttachedCard}}
+          ...attributes
+        >
+          <:iconLeft>
+            <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+          </:iconLeft>
+          <:default>
+            <div class='card-content' title={{this.card.title}}>
+              {{this.card.title}}
+            </div>
+          </:default>
+          <:iconRight>
+            {{#if @onToggle}}
+              <Switch
+                @isEnabled={{@isEnabled}}
+                @onChange={{@onToggle}}
+                @label={{this.card.title}}
+                data-test-card-pill-toggle='{{@cardId}}-{{if
+                  @isEnabled
+                  "on"
+                  "off"
+                }}'
+              />
+            {{/if}}
+            {{#if @removeCard}}
+              <IconButton
+                class='remove-button'
+                @icon={{IconX}}
+                @height='10'
+                @width='10'
+                {{on 'click' (fn @removeCard @cardId)}}
+                data-test-remove-card-btn
+              />
+            {{/if}}
+          </:iconRight>
+        </Pill>
+      {{/if}}
     {{/if}}
     <style scoped>
       .card-pill {

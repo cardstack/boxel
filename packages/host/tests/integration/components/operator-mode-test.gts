@@ -43,6 +43,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   lookupLoaderService,
+  lookupService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -61,10 +62,10 @@ module('Integration | operator-mode', function (hooks) {
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
-    store = this.owner.lookup('service:store') as StoreService;
+    operatorModeStateService = lookupService<OperatorModeStateService>(
+      'operator-mode-state-service',
+    );
+    store = lookupService<StoreService>('store');
   });
 
   setupLocalIndexing(hooks);
@@ -1014,57 +1015,72 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('can optimistically create a card using the cards-grid', async function (assert) {
-    setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    let saved = new Deferred<void>();
-    let savedCards = new Set<string>();
-    this.onSave((url) => {
-      savedCards.add(url.href);
-      saved.fulfill();
-    });
+    (store as any)._originalPersist = (store as any).persistAndUpdate;
+    (store as any).persistAndUpdate = async (
+      card: CardDef,
+      defaultRealmHref?: string,
+    ) => {
+      // slow down the save so we can see the optimistic save at work
+      await delay(1000);
+      await (store as any)._originalPersist(card, defaultRealmHref);
+    };
+    try {
+      setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let saved = new Deferred<void>();
+      let savedCards = new Set<string>();
+      this.onSave((url) => {
+        savedCards.add(url.href);
+        saved.fulfill();
+      });
 
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      assert.dom(`[data-test-stack-card-index="0"]`).exists();
 
-    await click('[data-test-create-new-card-button]');
-    assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Spec card');
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
-    );
-    assert
-      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-      .exists({ count: 3 });
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+        .containsText('Choose a Spec card');
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      );
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .exists({ count: 3 });
 
-    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor('[data-test-stack-card-index="1"]');
-    assert
-      .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
-      .exists();
-    assert.strictEqual(
-      savedCards.size,
-      0,
-      'the new card has not been saved yet',
-    );
-    await click(
-      '[data-test-stack-card-index="1"] [data-test-more-options-button]',
-    );
-    await fillIn(`[data-test-field="title"] input`, 'New Post');
-    await saved.promise;
-    let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
-    setCardInOperatorModeState(packetId);
+      await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-stack-card-index="1"]');
+      assert
+        .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
+        .exists();
+      assert.strictEqual(
+        savedCards.size,
+        0,
+        'the new card has not been saved yet',
+      );
+      await click(
+        '[data-test-stack-card-index="1"] [data-test-more-options-button]',
+      );
+      await fillIn(`[data-test-field="title"] input`, 'New Post');
+      await saved.promise;
+      let packetId = [...savedCards].find((k) =>
+        k.includes('PublishingPacket'),
+      )!;
+      setCardInOperatorModeState(packetId);
 
-    await waitFor(`[data-test-stack-card="${packetId}"]`);
-    assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
+      await waitFor(`[data-test-stack-card="${packetId}"]`);
+      assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
+    } finally {
+      (store as any).persistAndUpdate = (store as any)._originalPersist;
+    }
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {

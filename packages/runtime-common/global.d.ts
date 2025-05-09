@@ -8,11 +8,6 @@ declare module 'ember-source/dist/ember-template-compiler' {
   };
 }
 
-declare module '@cardstack/ember-template-imports/src/babel-plugin' {
-  import * as Babel from '@babel/core';
-  export default function makePlugin(babel: typeof Babel): Babel.PluginObj;
-}
-
 declare module '@babel/plugin-transform-typescript' {
   import * as Babel from '@babel/core';
   export default function makePlugin(babel: typeof Babel): Babel.PluginObj;

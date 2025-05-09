@@ -28,6 +28,7 @@ type InstanceGraph = Map<LocalId, Set<LocalId>>;
 // identity map
 class IDResolver {
   #remoteIds = new Map<string, string[]>(); // localId => remoteId[]
+  #oldRemoteIds = new Map<string, string[]>(); // localId => remoteId[]
   #localIds = new Map<string, string>(); // remoteId => localId
 
   addIdPair(localId: string, remoteId: string) {
@@ -47,7 +48,9 @@ class IDResolver {
   }
 
   getRemoteIds(localId: string) {
-    return this.#remoteIds.get(localId) ?? [];
+    return (
+      this.#remoteIds.get(localId) ?? this.#oldRemoteIds.get(localId) ?? []
+    );
   }
 
   getLocalId(remoteId: string) {
@@ -72,6 +75,12 @@ class IDResolver {
   }
 
   reset() {
+    // we roll over the old local ID mappings so we can still ask about it after
+    // a loader refresh, but we segregate these so that we don't try to reverse
+    // lookup on the local ID's since they won't exist any more.
+    for (let [localId, remoteIds] of this.#remoteIds) {
+      this.#oldRemoteIds.set(localId, remoteIds);
+    }
     this.#localIds = new Map();
     this.#remoteIds = new Map();
   }
@@ -98,6 +107,10 @@ export default class IdentityContextWithGarbageCollection
 
   get(id: string): CardDef | undefined {
     return this.getItem('instance', id);
+  }
+
+  getRemoteIds(localId: string) {
+    return this.#idResolver.getRemoteIds(localId);
   }
 
   set(id: string, instance: CardDef): void {

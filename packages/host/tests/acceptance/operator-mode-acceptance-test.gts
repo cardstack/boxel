@@ -491,6 +491,8 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     await click(`[data-test-cards-grid-item="${testRealmURL}Pet/mango"]`);
+    await waitFor(`[data-test-stack-card="${testRealmURL}Pet/mango"]`);
+
     await percySnapshot(assert); /* snapshot for special styling */
     assert.operatorModeParametersMatch(currentURL(), {
       stacks: [

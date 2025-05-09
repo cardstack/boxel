@@ -39,7 +39,7 @@ export default class CopyCardCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.CopyCardInput,
   ): Promise<BaseCommandModule.CopyCardResult> {
-    const targetUrl = await this.determineTargetUrl(input);
+    let realm = await this.determineTargetRealm(input);
     let doc = await this.cardService.serializeCard(input.sourceCard, {
       useAbsoluteURL: true,
     });
@@ -50,7 +50,10 @@ export default class CopyCardCommand extends HostBaseCommand<
       }
       doc.data.meta.adoptsFrom = input.codeRef;
     }
-    let newCardId = await this.store.create(doc, undefined, targetUrl);
+    let newCardId = await this.store.create(doc, {
+      realm,
+      localDir: input.localDir,
+    });
     if (typeof newCardId !== 'string') {
       throw new Error(
         `unable to save copied card instance: ${JSON.stringify(
@@ -65,17 +68,17 @@ export default class CopyCardCommand extends HostBaseCommand<
     return new CopyCardResult({ newCardId });
   }
 
-  private async determineTargetUrl({
+  private async determineTargetRealm({
     targetStackIndex,
-    targetUrl,
+    realm,
   }: BaseCommandModule.CopyCardInput) {
-    if (targetUrl !== undefined && targetStackIndex !== undefined) {
+    if (realm !== undefined && targetStackIndex !== undefined) {
       console.warn(
-        'Both targetStackIndex and targetUrl are set; only one should be set; using targetUrl',
+        'Both targetStackIndex and targetRealmUrl are set; only one should be set; using targetRealmUrl',
       );
     }
-    if (targetUrl) {
-      return targetUrl;
+    if (realm) {
+      return realm;
     }
     if (targetStackIndex !== undefined) {
       // use existing card in stack to determine realm url,

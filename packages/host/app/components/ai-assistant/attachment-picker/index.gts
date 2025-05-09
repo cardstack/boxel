@@ -18,6 +18,7 @@ import {
   isCardInstance,
   chooseFile,
   GetCardCollectionContextName,
+  localId,
   type getCardCollection,
 } from '@cardstack/runtime-common';
 
@@ -61,7 +62,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               <Tooltip @placement='top'>
                 <:trigger>
                   <CardPill
-                    @cardId={{item.id}}
+                    @cardId={{idFor item}}
                     @isAutoAttachedCard={{true}}
                     @removeCard={{@removeCard}}
                     @urlForRealmLookup={{urlForRealmLookup item}}
@@ -78,7 +79,7 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
               </Tooltip>
             {{else}}
               <CardPill
-                @cardId={{item.id}}
+                @cardId={{idFor item}}
                 @isAutoAttachedCard={{false}}
                 @removeCard={{@removeCard}}
                 @urlForRealmLookup={{urlForRealmLookup item}}
@@ -288,4 +289,8 @@ export default class AiAssistantAttachmentPicker extends Component<Signature> {
     let chosenFile: FileDef | undefined = await chooseFile();
     return chosenFile;
   });
+}
+
+function idFor(instance: CardDef) {
+  return instance.id ?? instance[localId];
 }

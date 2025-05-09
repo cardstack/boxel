@@ -256,10 +256,14 @@ export class RealmServer {
       },
     );
 
-    indexHTML = indexHTML.replace(
-      /(src|href)="\//g,
-      `$1="${this.assetsURL.href}`,
-    );
+    indexHTML = indexHTML
+      .replace(/(src|href)="\//g, `$1="${this.assetsURL.href}`)
+      // This is imported within a script tag vs being in an attribute
+      .replace(
+        '/assets/content-tag/standalone.js',
+        new URL('/assets/content-tag/standalone.js', this.assetsURL.href).href,
+      );
+
     deferred.fulfill(indexHTML);
     return indexHTML;
   }
