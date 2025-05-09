@@ -2,7 +2,7 @@
   "data": {
     "type": "card",
     "attributes": {
-      "instructions": "Before running the remix operation, make sure the following rules are met:\n\n1. The 'remix' command must exist and be callable.\n2. The user must provide:\n   - A valid URL\n   - A Listing card attached\n\nIf either value is missing, prompt the user clearly to provide the missing one(s). Wait until both are available before proceeding.\n\nOnce both values are available, run the remix command using:\n- Realm URL: [user's input]\n- Listing: [user's input]\n\nRespond with a confirmation message summarizing the remix operation with both values.",
+      "instructions": "To ensure the remix operation can run, the remix command must exist and be callable.\n\nThe user MUST provide both:\n- A valid Realm URL\n- A Listing Card attached\n\nIf either value is missing, ask the user clearly for the missing one. Wait until both values are present before continuing.\n\nOnce both values are available, run the remix command using:\n- Realm URL: [user input]\n- Listing: [user input]\n\nRespond with a confirmation message that summarizes the remix operation using both values.\n\nAfter the operation is complete, respond with two example questions. These questions should be relevant to the listing and helpful for remixing.\n\nIf no listing-specific questions can be generated, instead provide two general remix suggestions (e.g. \"Do you want to change the layout?\" or \"Would you like a different color theme?\").",
       "commands": [
         {
           "codeRef": {
