@@ -43,6 +43,7 @@ import {
   setupOnSave,
   type TestContextWithSave,
   lookupLoaderService,
+  lookupService,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -61,10 +62,10 @@ module('Integration | operator-mode', function (hooks) {
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
-    store = this.owner.lookup('service:store') as StoreService;
+    operatorModeStateService = lookupService<OperatorModeStateService>(
+      'operator-mode-state-service',
+    );
+    store = lookupService<StoreService>('store');
   });
 
   setupLocalIndexing(hooks);
@@ -336,6 +337,25 @@ module('Integration | operator-mode', function (hooks) {
       };
     }
 
+    class SpecCardLinker extends CardDef {
+      static displayName = 'Spec Card Link';
+      @field spec = linksTo(Spec);
+      @field title = contains(StringField);
+      // Don't render the spec, it causes an error about constructors in the test
+      // and isn't required.
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-spec-card-linker-isolated>
+            The card is:
+            <@fields.title />
+            <br />
+            Linked to:
+            {{@model.spec.title}}
+          </div>
+        </template>
+      };
+    }
+
     class BlogPost extends CardDef {
       static displayName = 'Blog Post';
       @field title = contains(StringField);
@@ -427,9 +447,23 @@ module('Integration | operator-mode', function (hooks) {
           'publishing-packet.gts': { PublishingPacket },
           'pet-room.gts': { PetRoom },
           'Pet/mango.json': petMango,
+          'spec-card-linker.gts': { SpecCardLinker },
           'BoomPet/paper.json': new BoomPet({ name: 'Paper' }),
           'Car/myvi.json': myvi,
           'Car/proton.json': proton,
+          'SpecCardLinker/spec-card-linker.json': {
+            data: {
+              attributes: {
+                title: 'Spec Card Linker',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../spec-card-linker.gts',
+                  name: 'SpecCardLinker',
+                },
+              },
+            },
+          } as LooseSingleCardDocument,
           'Pet/jackie.json': petJackie,
           'Pet/woody.json': petWoody,
           'Pet/buzz.json': petBuzz,
@@ -1014,57 +1048,72 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('can optimistically create a card using the cards-grid', async function (assert) {
-    setCardInOperatorModeState(`${testRealmURL}grid`);
-    await renderComponent(
-      class TestDriver extends GlimmerComponent {
-        <template>
-          <OperatorMode @onClose={{noop}} />
-          <CardPrerender />
-        </template>
-      },
-    );
-    let saved = new Deferred<void>();
-    let savedCards = new Set<string>();
-    this.onSave((url) => {
-      savedCards.add(url.href);
-      saved.fulfill();
-    });
+    (store as any)._originalPersist = (store as any).persistAndUpdate;
+    (store as any).persistAndUpdate = async (
+      card: CardDef,
+      defaultRealmHref?: string,
+    ) => {
+      // slow down the save so we can see the optimistic save at work
+      await delay(1000);
+      await (store as any)._originalPersist(card, defaultRealmHref);
+    };
+    try {
+      setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template>
+            <OperatorMode @onClose={{noop}} />
+            <CardPrerender />
+          </template>
+        },
+      );
+      let saved = new Deferred<void>();
+      let savedCards = new Set<string>();
+      this.onSave((url) => {
+        savedCards.add(url.href);
+        saved.fulfill();
+      });
 
-    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
-    assert.dom(`[data-test-stack-card-index="0"]`).exists();
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      assert.dom(`[data-test-stack-card-index="0"]`).exists();
 
-    await click('[data-test-create-new-card-button]');
-    assert
-      .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
-      .containsText('Choose a Spec card');
-    await waitFor(
-      `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
-    );
-    assert
-      .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
-      .exists({ count: 3 });
+      await click('[data-test-create-new-card-button]');
+      assert
+        .dom('[data-test-card-catalog-modal] [data-test-boxel-header-title]')
+        .containsText('Choose a Spec card');
+      await waitFor(
+        `[data-test-card-catalog-item="${testRealmURL}Spec/publishing-packet"]`,
+      );
+      assert
+        .dom(`[data-test-realm="${realmName}"] [data-test-card-catalog-item]`)
+        .exists({ count: 3 });
 
-    await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
-    await click('[data-test-card-catalog-go-button]');
-    await waitFor('[data-test-stack-card-index="1"]');
-    assert
-      .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
-      .exists();
-    assert.strictEqual(
-      savedCards.size,
-      0,
-      'the new card has not been saved yet',
-    );
-    await click(
-      '[data-test-stack-card-index="1"] [data-test-more-options-button]',
-    );
-    await fillIn(`[data-test-field="title"] input`, 'New Post');
-    await saved.promise;
-    let packetId = [...savedCards].find((k) => k.includes('PublishingPacket'))!;
-    setCardInOperatorModeState(packetId);
+      await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
+      await click('[data-test-card-catalog-go-button]');
+      await waitFor('[data-test-stack-card-index="1"]');
+      assert
+        .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
+        .exists();
+      assert.strictEqual(
+        savedCards.size,
+        0,
+        'the new card has not been saved yet',
+      );
+      await click(
+        '[data-test-stack-card-index="1"] [data-test-more-options-button]',
+      );
+      await fillIn(`[data-test-field="title"] input`, 'New Post');
+      await saved.promise;
+      let packetId = [...savedCards].find((k) =>
+        k.includes('PublishingPacket'),
+      )!;
+      setCardInOperatorModeState(packetId);
 
-    await waitFor(`[data-test-stack-card="${packetId}"]`);
-    assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
+      await waitFor(`[data-test-stack-card="${packetId}"]`);
+      assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
+    } finally {
+      (store as any).persistAndUpdate = (store as any)._originalPersist;
+    }
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {
@@ -1329,6 +1378,45 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-stack-card-index="0"] [data-test-edit-button]');
     assert.dom('[data-test-blog-post-isolated]').hasText('Beginnings by Alice');
+  });
+
+  test('can choose a card from a publicly readable realm to link to a card in the current realm', async function (assert) {
+    setCardInOperatorModeState(
+      `${testRealmURL}SpecCardLinker/spec-card-linker`,
+    );
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    await waitFor(
+      `[data-test-stack-card="${testRealmURL}SpecCardLinker/spec-card-linker"]`,
+    );
+    await click('[data-test-edit-button]');
+    assert.dom('[data-test-add-new]').exists();
+
+    await click('[data-test-add-new]');
+    // try and link a card from the base realm that we know exists
+    await waitFor(
+      `[data-test-card-catalog-item="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click(
+      `[data-test-select="https://cardstack.com/base/fields/biginteger-field"]`,
+    );
+    await click('[data-test-card-catalog-go-button]');
+
+    await waitUntil(() => !document.querySelector('[card-catalog-modal]'));
+
+    await click('[data-test-edit-button]');
+    await waitFor('.operator-mode [data-test-spec-card-linker-isolated]');
+
+    assert
+      .dom('.operator-mode [data-test-spec-card-linker-isolated]')
+      .hasText('The card is: Spec Card Linker Linked to: Bigint Field');
   });
 
   test('can remove the link for a linksTo field', async function (assert) {
@@ -3093,7 +3181,7 @@ module('Integration | operator-mode', function (hooks) {
       .dom(`[data-test-cards-grid-item="${testRealmURL}CardDef/1"]`)
       .exists();
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 11 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
 
     await click('[data-test-create-new-card-button]');
@@ -3107,7 +3195,7 @@ module('Integration | operator-mode', function (hooks) {
     await fillIn('[data-test-field="title"] input', 'New Skill');
     await click('[data-test-close-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 13 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).exists();
 
     await click('[data-test-boxel-filter-list-button="Skill"]');
@@ -3117,7 +3205,7 @@ module('Integration | operator-mode', function (hooks) {
 
     await click('[data-test-confirm-delete-button]');
 
-    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 11 });
+    assert.dom(`[data-test-boxel-filter-list-button]`).exists({ count: 12 });
     assert.dom(`[data-test-boxel-filter-list-button="Skill"]`).doesNotExist();
     assert
       .dom(`[data-test-boxel-filter-list-button="All Cards"]`)

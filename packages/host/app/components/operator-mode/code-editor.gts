@@ -166,7 +166,7 @@ export default class CodeEditor extends Component<Signature> {
     let loc =
       selectedDeclaration?.path?.node &&
       'body' in selectedDeclaration.path.node &&
-      'loc' in selectedDeclaration.path.node.body &&
+      'loc' in selectedDeclaration.path.node.body! &&
       selectedDeclaration.path.node.body.loc
         ? selectedDeclaration?.path?.node.body.loc
         : undefined;
@@ -211,7 +211,7 @@ export default class CodeEditor extends Component<Signature> {
     } else if (
       declaration.path?.node &&
       'body' in declaration.path.node &&
-      'loc' in declaration.path.node.body &&
+      'loc' in declaration.path.node.body! &&
       declaration.path.node.body.loc
     ) {
       let { start, end } = declaration.path.node.body.loc;
@@ -279,7 +279,7 @@ export default class CodeEditor extends Component<Signature> {
         if (
           declaration.path?.node &&
           'body' in declaration.path.node &&
-          'loc' in declaration.path.node.body &&
+          'loc' in declaration.path.node.body! &&
           declaration.path.node.body.loc
         ) {
           let { start, end } = declaration.path.node.body.loc;

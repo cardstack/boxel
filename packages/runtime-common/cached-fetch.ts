@@ -55,7 +55,8 @@ export async function cachedFetch(
     return new Response(cached.body);
   } else if (response.ok) {
     let maybeETag = response.headers.get('ETag');
-    if (maybeETag) {
+    let maybeRealmURL = response.headers.get('X-boxel-realm-url');
+    if (maybeETag && maybeRealmURL) {
       let etag = maybeETag;
       response.cacheResponse = (body: string) => {
         cache.set(key, { etag, body });
