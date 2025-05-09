@@ -179,56 +179,30 @@ export default class FileDefManagerImpl implements FileDefManager {
           const enabledSkillCards = [
             ...(currentSkillsConfig.enabledSkillCards || []),
           ];
-          const newEnabledCards = updatedSkillFileDefs
-            .map((fileDef) => fileDef.serialize())
-            .filter(
-              (newCard) =>
-                !enabledSkillCards.some(
-                  (existingCard) =>
-                    existingCard.sourceUrl === newCard.sourceUrl,
-                ),
-            );
-          const updatedEnabledCards = [
-            ...enabledSkillCards,
-            ...newEnabledCards,
-          ].map((card) => {
-            const matchingFileDef = updatedSkillFileDefs.find(
-              (fileDef) => fileDef.sourceUrl === card.sourceUrl,
-            );
-            if (matchingFileDef) {
-              return { ...card, url: matchingFileDef.url };
-            }
-            return card;
-          });
-
           const disabledSkillCards = [
             ...(currentSkillsConfig.disabledSkillCards || []),
           ];
-          const newDisabledCards = updatedSkillFileDefs
-            .map((fileDef) => fileDef.serialize())
-            .filter(
-              (newCard) =>
-                !enabledSkillCards.some(
-                  (existingCard) =>
-                    existingCard.sourceUrl === newCard.sourceUrl,
-                ),
-            );
-          const updatedDisabledCards = [
-            ...disabledSkillCards,
-            ...newDisabledCards,
-          ].map((card) => {
+          const commandDefinitions = [
+            ...(currentSkillsConfig.commandDefinitions || []),
+          ];
+
+          // For skill cards, only use updatedSkillFileDefs if they exist in the current enabledSkillCards or disabledSkillCards
+          const updatedEnabledCards = enabledSkillCards.map((card) => {
             const matchingFileDef = updatedSkillFileDefs.find(
               (fileDef) => fileDef.sourceUrl === card.sourceUrl,
             );
-            if (matchingFileDef) {
-              return { ...card, url: matchingFileDef.url };
-            }
-            return card;
+            return matchingFileDef ? matchingFileDef.serialize() : card;
           });
 
-          let commandDefinitions = [
-            ...(currentSkillsConfig.commandDefinitions || []),
-          ];
+          const updatedDisabledCards = disabledSkillCards.map((card) => {
+            const matchingFileDef = updatedSkillFileDefs.find(
+              (fileDef) => fileDef.sourceUrl === card.sourceUrl,
+            );
+            return matchingFileDef ? matchingFileDef.serialize() : card;
+          });
+
+          // Command definitions might be added or removed, so we use updatedCommandFileDefs
+          // to determine which ones are new or removed
           const newCommandDefinitions = updatedCommandFileDefs
             .map((fileDef) => fileDef.serialize())
             .filter(
@@ -239,8 +213,14 @@ export default class FileDefManagerImpl implements FileDefManager {
                     newCommandDefinition.sourceUrl,
                 ),
             );
+
+          // Only keep commands that exist in updatedCommandFileDefs
           const updatedCommandDefinitions = [
-            ...commandDefinitions,
+            ...commandDefinitions.filter((cmd) =>
+              updatedCommandFileDefs.some(
+                (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
+              ),
+            ),
             ...newCommandDefinitions,
           ].map((cmd) => {
             const matchingFileDef = updatedCommandFileDefs.find(
@@ -251,6 +231,7 @@ export default class FileDefManagerImpl implements FileDefManager {
             }
             return cmd;
           });
+
           return {
             enabledSkillCards: updatedEnabledCards,
             disabledSkillCards: updatedDisabledCards,
