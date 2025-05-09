@@ -4,16 +4,21 @@ import {
   logger,
   userInitiatedPriority,
   systemInitiatedPriority,
+  query as _query,
+  param,
+  separatedByCommas,
+  type Expression,
 } from '@cardstack/runtime-common';
 import yargs from 'yargs';
 import * as Sentry from '@sentry/node';
 import flattenDeep from 'lodash/flattenDeep';
-import { spawn } from 'child_process';
+import { spawn, type ChildProcess } from 'child_process';
 import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
 import { ecsMetadata, fullRequestURL, livenessCheck } from './middleware';
 import { Server } from 'http';
+import { PgAdapter, serializableError } from '@cardstack/postgres';
 
 /* About the Worker Manager
  *
@@ -46,6 +51,7 @@ let {
   distURL = process.env.HOST_URL ?? 'http://localhost:4200',
   fromUrl: fromUrls,
   toUrl: toUrls,
+  migrateDB,
 } = yargs(process.argv.slice(2))
   .usage('Start worker manager')
   .options({
@@ -63,6 +69,11 @@ let {
       description:
         'The number of workers that service all jobs regardless of priority to start (default 1)',
       type: 'number',
+    },
+    migrateDB: {
+      description:
+        'When this flag is set the database will automatically migrate when server is started',
+      type: 'boolean',
     },
     fromUrl: {
       description: 'the source of the realm URL proxy',
@@ -93,6 +104,7 @@ process.on('SIGINT', () => (isExiting = true));
 process.on('SIGTERM', () => (isExiting = true));
 
 let webServerInstance: Server | undefined;
+let autoMigrate = migrateDB || undefined;
 
 if (port) {
   let webServer = new Koa<Koa.DefaultState, Koa.Context>();
@@ -175,6 +187,8 @@ process.on('message', (message) => {
   }
 });
 
+let adapter: PgAdapter;
+
 (async () => {
   log.info(
     `starting ${highPriorityCount} high-priority ${pluralize(
@@ -189,6 +203,7 @@ process.on('message', (message) => {
     new URL(String(fromUrl)),
     new URL(String(toUrls[i])),
   ]);
+  adapter = new PgAdapter({ autoMigrate });
 
   for (let i = 0; i < highPriorityCount; i++) {
     await startWorker(userInitiatedPriority, urlMappings);
@@ -206,6 +221,47 @@ process.on('message', (message) => {
   );
   process.exit(1);
 });
+
+async function monitorWorker(workerId: string, worker: ChildProcess) {
+  let stuckJobs = (await query([
+    `SELECT id, job_id FROM job_reservations WHERE worker_id=`,
+    param(workerId),
+    `AND completed_at IS NULL AND locked_until < NOW()`,
+  ])) as { id: string; job_id: string }[];
+
+  if (stuckJobs.length > 0) {
+    log.error(`detected stuck jobs for worker ${workerId}`);
+    for (let { id, job_id: jobId } of stuckJobs) {
+      log.info(`marking job ${jobId} as timed-out for worker ${workerId}`);
+      await query([
+        `UPDATE jobs SET `,
+        ...separatedByCommas([
+          [
+            `result =`,
+            param(
+              serializableError(
+                new Error(
+                  `Timed-out. Worker manager killed unresponsive worker ${workerId} for job reservation ${id}`,
+                ),
+              ),
+            ),
+          ],
+          [`status = 'rejected'`],
+          [`finished_at = NOW()`],
+        ]),
+        'WHERE id =',
+        param(jobId),
+      ] as Expression);
+      await query([
+        `UPDATE job_reservations SET completed_at = NOW() WHERE id =`,
+        param(id),
+      ]);
+      await query([`NOTIFY jobs_finished`]);
+    }
+    log.info(`killing worker ${workerId} due to stuck jobs`);
+    worker.kill();
+  }
+}
 
 async function startWorker(priority: number, urlMappings: URL[][]) {
   let worker = spawn(
@@ -227,35 +283,40 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
     },
   );
-  let workerId = ECS_CONTAINER_METADATA_URI
-    ? `${ECS_CONTAINER_METADATA_URI.split('/').pop()!}-pid-${worker.pid}`
-    : worker.pid;
+  let name = String(
+    (ECS_CONTAINER_METADATA_URI
+      ? `${ECS_CONTAINER_METADATA_URI.split('/').pop()!}-pid-${worker.pid}`
+      : worker.pid)!,
+  );
+
+  let watchdog: NodeJS.Timeout;
 
   worker.on('exit', () => {
+    clearInterval(watchdog);
     if (!isExiting) {
-      log.info(`worker ${workerId} exited. spawning replacement worker`);
+      log.info(`worker ${name} exited. spawning replacement worker`);
       startWorker(priority, urlMappings);
     }
   });
 
   if (worker.stdout) {
     worker.stdout.on('data', (data: Buffer) =>
-      log.info(`[worker ${workerId} priority ${priority}]: ${data.toString()}`),
+      log.info(`[worker ${name} priority ${priority}]: ${data.toString()}`),
     );
   }
   if (worker.stderr) {
     worker.stderr.on('data', (data: Buffer) =>
-      log.error(
-        `[worker ${workerId} priority ${priority}]: ${data.toString()}`,
-      ),
+      log.error(`[worker ${name} priority ${priority}]: ${data.toString()}`),
     );
   }
 
   let timeout = await Promise.race([
     new Promise<void>((r) => {
       worker.on('message', (message) => {
-        if (message === 'ready') {
-          log.info(`[worker ${workerId} priority ${priority}]: worker ready`);
+        if (typeof message === 'string' && message.startsWith('ready:')) {
+          let id = message.substring('ready:'.length);
+          watchdog = setInterval(() => monitorWorker(id, worker), 60_000);
+          log.info(`[worker ${name} priority ${priority}]: worker ready`);
           r();
         }
       });
@@ -264,8 +325,12 @@ async function startWorker(priority: number, urlMappings: URL[][]) {
   ]);
   if (timeout) {
     console.error(
-      `timed-out waiting for worker ${workerId} to start. Stopping worker manager`,
+      `timed-out waiting for worker ${name} to start. Stopping worker manager`,
     );
     process.exit(-2);
   }
+}
+
+async function query(expression: Expression) {
+  return await _query(adapter, expression);
 }
