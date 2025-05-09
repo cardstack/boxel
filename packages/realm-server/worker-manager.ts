@@ -230,6 +230,9 @@ async function monitorWorker(workerId: string, worker: ChildProcess) {
   ])) as { id: string; job_id: string }[];
 
   if (stuckJobs.length > 0) {
+    Sentry.captureMessage(
+      `Detected stuck jobs for worker ${workerId}. job id(s): ${stuckJobs.map((j) => j.job_id).join()}. recycling worker`,
+    );
     log.error(`detected stuck jobs for worker ${workerId}`);
     for (let { id, job_id: jobId } of stuckJobs) {
       log.info(`marking job ${jobId} as timed-out for worker ${workerId}`);

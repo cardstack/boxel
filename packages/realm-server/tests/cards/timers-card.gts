@@ -1,6 +1,6 @@
 import { CardDef, Component } from 'https://cardstack.com/base/card-api';
 
-// Success is the worker being able to start up and not die/thrash
+// Success is the worker being able to process this module and not die/thrash
 export class TimersCard extends CardDef {
   static isolated = class Isolated extends Component<typeof this> {
     <template>
@@ -10,12 +10,12 @@ export class TimersCard extends CardDef {
     get mischief() {
       setTimeout(() => {
         throw new Error(
-          `I'm an intentional error being thrown in a setTimeout() in the naughty.gts module`,
+          `I'm an intentional error being thrown in a setTimeout() in the timers-card.gts module`,
         );
       }, 100);
       setInterval(() => {
         throw new Error(
-          `I'm an intentional error being thrown in a setInterval() in the naughty.gts module`,
+          `I'm an intentional error being thrown in a setInterval() in the timers-card.gts module`,
         );
       }, 100);
       return '';

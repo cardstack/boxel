@@ -1,3 +1,5 @@
+// Success is the worker being able to process this module and not hang
+
 function a() {
   return 'a';
 }
