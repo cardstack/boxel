@@ -630,8 +630,6 @@ Above code blocks are now complete`;
       },
     );
 
-    await this.pauseTest();
-
     await waitUntil(
       () =>
         document.querySelectorAll('.code-block-diff .cdr.line-delete').length >
