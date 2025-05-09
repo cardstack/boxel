@@ -830,6 +830,83 @@ We are one!
     );
   });
 
+  test('can create new files using the search/replace block', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+
+    // there are 3 patches in the message
+    // 1. file1.gts -> I am a newly created file1
+    // 2. file2.gts -> I am a newly created file2
+    // 3. hi.txt -> I am a newly created hi.txt file but I will get a suffix because hi.txt already exists!
+
+    let codeBlock = `\`\`\`
+// File url: http://test-realm/test/file1.gts
+<<<<<<< SEARCH
+=======
+I am a newly created file1
+>>>>>>> REPLACE
+\`\`\`
+
+ \`\`\`
+// File url: http://test-realm/test/file2.gts
+<<<<<<< SEARCH
+=======
+I am a newly created file2
+>>>>>>> REPLACE
+\`\`\`
+
+\`\`\`
+// File url: http://test-realm/test/hi.txt
+<<<<<<< SEARCH
+=======
+I am a newly created hi.txt file but I will get a suffix because hi.txt already exists!
+>>>>>>> REPLACE
+\`\`\``;
+
+    await click('[data-test-open-ai-assistant]');
+    let roomId = getRoomIds().pop()!;
+
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: 'org.text',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    await waitFor('.code-block-diff');
+    assert.dom('.code-block-diff').exists({ count: 3 });
+    await click('[data-test-file-browser-toggle]'); // open file tree
+    await waitFor('[data-test-apply-all-code-patches-button]');
+
+    // file1.gts and file2.gts should not exist yet because we haven't applied the patches yet
+    assert.dom('[data-test-file="file1.gts"]').doesNotExist();
+    assert.dom('[data-test-file="file2.gts"]').doesNotExist();
+    // hi.txt already exists
+    assert.dom('[data-test-file="hi.txt"]').exists();
+
+    assert.dom('[data-test-apply-code-button]').exists({ count: 3 });
+    // clicks the first apply button, assert that file1.gts got created
+    await click('[data-test-apply-code-button]');
+    await waitFor('[data-test-file="file1.gts"]');
+
+    // click the "Accept All" button, which will apply the remaining 2 patches (we already applied the first one)
+    await click('[data-test-apply-all-code-patches-button]');
+    await waitFor('[data-test-file="file2.gts"]');
+
+    // assert that file2 got created, but for hi.txt, it got a suffix because there already exists a file with the same name
+    assert.dom('[data-test-file="file2.gts"]').exists();
+    assert.dom('[data-test-file="hi.txt"]').exists();
+
+    // assert that a file exists with this pattern: hi-XXX.txt where XXX is a random string that can be anything
+    let files = findAll('[data-test-file]');
+    let newlyCreatedFileWhosePropodedNameAlreadyExisted = files.find((file) =>
+      /^hi-[A-Za-z0-9]{3}\.txt$/.test(file.getAttribute('data-test-file')!),
+    );
+    assert.ok(newlyCreatedFileWhosePropodedNameAlreadyExisted);
+  });
+
   test('a command sent via SendAiAssistantMessageCommand without autoExecute flag is not automatically executed by the bot', async function (assert) {
     await visitOperatorMode({
       stacks: [

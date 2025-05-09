@@ -91,6 +91,7 @@ export class LintAndFixResult extends CardDef {
 
 export class PatchCodeInput extends CardDef {
   @field fileUrl = contains(StringField);
+  @field isNewFile = contains(BooleanField);
   @field codeBlocks = containsMany(StringField);
 }
 
