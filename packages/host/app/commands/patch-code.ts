@@ -27,9 +27,11 @@ export default class PatchCodeCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.PatchCodeInput,
   ): Promise<BaseCommandModule.LintAndFixResult> {
-    let { fileUrl, codeBlocks } = input;
+    let { fileUrl, codeBlocks, isNewFile } = input;
 
-    let source = await this.cardService.getSource(new URL(fileUrl));
+    let source = isNewFile
+      ? ''
+      : (await this.cardService.getSource(new URL(fileUrl))).content;
 
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
       this.commandContext,
@@ -52,6 +54,19 @@ export default class PatchCodeCommand extends HostBaseCommand<
       realm: realmURL,
       fileContent: patchedCode,
     });
+
+    if (isNewFile) {
+      let isFileUrlAvailable =
+        (await this.cardService.getSource(new URL(fileUrl))).status === 404;
+      if (!isFileUrlAvailable) {
+        // add a 3-character suffix to the file name (before the extension) to make it unique
+        fileUrl = fileUrl.replace(
+          /\.([^.]+)$/,
+          `-${Math.random().toString(36).substring(2, 5)}.$1`,
+        );
+      }
+    }
+
     await this.cardService.saveSource(
       new URL(fileUrl),
       lintAndFixResult.output,

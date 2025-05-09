@@ -36,27 +36,31 @@ export function extractCodeData(preElementString: string): CodeData {
   let parsedContent = parseSearchReplace(content);
 
   // Transform the incomplete search/replace block into a format for streaming,
-  // so that the user can see the search replace block in a human friendly format.
+  // so that the user can see the search replace block in a human friendly format, like this:
   // // existing code ...
   // SEARCH BLOCK
   // // new code ...
-  // REPLACE BLOCK
+  // REPLACE BLOCK.
+  // If the search block is empty, we omit the "existing code" and "new code" lines - we just show the new code because it's a brand new file.
   let adjustedContentForStreamedContentInMonacoEditor = '';
-  if (parsedContent.searchContent) {
-    // get count of leading spaces in the first line of searchContent
-    let firstLine = parsedContent.searchContent.split('\n')[0];
-    let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
-    let emptyString = ' '.repeat(leadingSpaces);
-    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${parsedContent.searchContent.replace(
-      new RegExp(emptyString, 'g'),
-      '',
-    )}`;
 
-    if (parsedContent.replaceContent) {
-      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
-        new RegExp(emptyString, 'g'),
-        '',
-      )}`;
+  function removeLeadingSpaces(content: string): string {
+    let firstLine = content.split('\n')[0];
+    let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
+    return content.replace(new RegExp(' '.repeat(leadingSpaces), 'g'), '');
+  }
+
+  if (parsedContent.searchContent) {
+    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${removeLeadingSpaces(parsedContent.searchContent)}`;
+  }
+
+  if (parsedContent.replaceContent) {
+    if (parsedContent.searchContent) {
+      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${removeLeadingSpaces(parsedContent.replaceContent)}`;
+    } else {
+      adjustedContentForStreamedContentInMonacoEditor += removeLeadingSpaces(
+        parsedContent.replaceContent,
+      );
     }
   }
 
@@ -76,13 +80,28 @@ export function extractCodeData(preElementString: string): CodeData {
   }
 
   tempContainer.remove();
+
+  let _isCompleteSearchReplaceBlock = isCompleteSearchReplaceBlock(
+    contentWithoutFileUrl,
+  );
+
+  // If search/replace block looks like this then we know this should result in a new file
+  // <<<<<<< SEARCH
+  // =======
+  // code ...
+  // >>>>>>> REPLACE
+  let isNewFile =
+    _isCompleteSearchReplaceBlock &&
+    parseSearchReplace(contentWithoutFileUrl!).searchContent.length === 0;
+
   return {
     language: language ?? '',
     code: adjustedContentForStreamedContentInMonacoEditor || content,
     fileUrl,
-    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
+    searchReplaceBlock: _isCompleteSearchReplaceBlock
       ? contentWithoutFileUrl
       : null,
+    isNewFile,
   };
 }
 
