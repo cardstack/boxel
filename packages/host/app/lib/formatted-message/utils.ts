@@ -36,40 +36,31 @@ export function extractCodeData(preElementString: string): CodeData {
   let parsedContent = parseSearchReplace(content);
 
   // Transform the incomplete search/replace block into a format for streaming,
-  // so that the user can see the search replace block in a human friendly format.
+  // so that the user can see the search replace block in a human friendly format, like this:
   // // existing code ...
   // SEARCH BLOCK
   // // new code ...
-  // REPLACE BLOCK
+  // REPLACE BLOCK.
+  // If the search block is empty, we omit the "existing code" and "new code" lines - we just show the new code because it's a brand new file.
   let adjustedContentForStreamedContentInMonacoEditor = '';
 
-  if (parsedContent.searchContent) {
-    // get count of leading spaces in the first line of searchContent
-    let firstLine = parsedContent.searchContent.split('\n')[0];
+  function removeLeadingSpaces(content: string): string {
+    let firstLine = content.split('\n')[0];
     let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
-    let emptyString = ' '.repeat(leadingSpaces);
-    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${parsedContent.searchContent.replace(
-      new RegExp(emptyString, 'g'),
-      '',
-    )}`;
+    return content.replace(new RegExp(' '.repeat(leadingSpaces), 'g'), '');
+  }
+
+  if (parsedContent.searchContent) {
+    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${removeLeadingSpaces(parsedContent.searchContent)}`;
   }
 
   if (parsedContent.replaceContent) {
-    let firstLine = parsedContent.replaceContent.split('\n')[0];
-    let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
-    let emptyString = ' '.repeat(leadingSpaces);
-
     if (parsedContent.searchContent) {
-      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
-        new RegExp(emptyString, 'g'),
-        '',
-      )}`;
-      // if search block is empty, we omit the "existing code" and "new code" lines - we just show the new code because it's a brand new file
+      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${removeLeadingSpaces(parsedContent.replaceContent)}`;
     } else {
-      adjustedContentForStreamedContentInMonacoEditor += `${parsedContent.replaceContent.replace(
-        new RegExp(emptyString, 'g'),
-        '',
-      )}`;
+      adjustedContentForStreamedContentInMonacoEditor += removeLeadingSpaces(
+        parsedContent.replaceContent,
+      );
     }
   }
 
