@@ -749,7 +749,7 @@ Hi, world!
 >>>>>>> REPLACE\n\`\`\``;
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
-      msgtype: 'org.text',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });
@@ -803,7 +803,7 @@ We are one!
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
-      msgtype: 'org.text',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
       format: 'org.matrix.custom.html',
       isStreamingFinished: true,
     });

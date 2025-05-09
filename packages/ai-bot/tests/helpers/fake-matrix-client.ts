@@ -1,5 +1,5 @@
-import { IContent } from 'matrix-js-sdk';
-import { MatrixClient } from '../../lib/matrix';
+import type { IContent } from 'matrix-js-sdk';
+import type { MatrixClient } from '../../lib/matrix/util';
 
 export class FakeMatrixClient implements MatrixClient {
   private eventId = 0;

@@ -162,6 +162,7 @@ export class RoomResource extends Resource<Args> {
     }
     return [...this._messageCache.values()]
       .filter((m) => m.roomId === this.roomId)
+      .filter((m) => !m.continuationOf)
       .sort((a, b) => a.created.getTime() - b.created.getTime());
   }
 
@@ -380,8 +381,11 @@ export class RoomResource extends Resource<Args> {
     index: number;
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
-
     let message = this._messageCache.get(effectiveEventId);
+    if (message?.isStreamingOfEventFinished) {
+      return;
+    }
+
     let author = this.upsertRoomMember({
       roomId,
       userId: event.sender,
@@ -402,9 +406,16 @@ export class RoomResource extends Resource<Args> {
         message.clientGeneratedId ?? effectiveEventId,
         message as any,
       );
+    } else {
+      messageBuilder.updateMessage(message);
     }
 
-    messageBuilder.updateMessage(message);
+    if (message.continuationOf) {
+      let continuedFromMessage = this._messageCache.get(message.continuationOf);
+      if (continuedFromMessage) {
+        continuedFromMessage.continuedInMessage = message;
+      }
+    }
   }
 
   private updateMessageCommandResult({
