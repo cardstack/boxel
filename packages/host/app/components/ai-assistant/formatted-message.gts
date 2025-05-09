@@ -41,6 +41,7 @@ export interface CodeData {
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
+  isNewFile?: boolean | null;
 }
 
 interface FormattedMessageSignature {
@@ -176,6 +177,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         codeBlocks: codePatchActionsGroupedByFileUrl[fileUrl].map(
           (codePatchAction) => codePatchAction.searchReplaceBlock,
         ),
+        isNewFile: codePatchActionsGroupedByFileUrl[fileUrl][0].isNewFile,
       });
       codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
         codePatchAction.patchCodeTaskState = 'applied';
@@ -340,6 +342,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           this,
           this.args.codeData.fileUrl,
           this.args.codeData.searchReplaceBlock,
+          this.args.codeData.isNewFile ?? false,
         )
       : undefined;
   }

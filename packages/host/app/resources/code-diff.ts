@@ -13,6 +13,7 @@ interface CodeDiffResourceArgs {
   named: {
     fileUrl?: string | null;
     searchReplaceBlock?: string | null;
+    isNewFile?: boolean;
   };
 }
 
@@ -21,14 +22,16 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   @tracked originalCode: string | undefined | null;
   @tracked modifiedCode: string | undefined | null;
   @tracked searchReplaceBlock: string | undefined | null;
+  @tracked isNewFile: boolean | undefined | null;
 
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
-    let { fileUrl, searchReplaceBlock } = named;
+    let { fileUrl, searchReplaceBlock, isNewFile } = named;
     this.fileUrl = fileUrl;
     this.searchReplaceBlock = searchReplaceBlock;
+    this.isNewFile = isNewFile;
 
     this.load.perform();
   }
@@ -42,8 +45,15 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     if (!fileUrl || !searchReplaceBlock) {
       return;
     }
-    let result = await this.cardService.getSource(new URL(fileUrl));
-    this.originalCode = result;
+
+    if (this.isNewFile) {
+      this.originalCode = '';
+    } else {
+      this.originalCode = (
+        await this.cardService.getSource(new URL(fileUrl))
+      ).content;
+    }
+
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
       this.commandService.commandContext,
     );
@@ -61,6 +71,7 @@ export function getCodeDiffResultResource(
   parent: object,
   fileUrl?: string | null,
   searchReplaceBlock?: string | null,
+  isNewFile?: boolean,
 ) {
   if (!fileUrl || !searchReplaceBlock) {
     throw new Error('fileUrl and searchReplaceBlock are required');
@@ -69,6 +80,7 @@ export function getCodeDiffResultResource(
     named: {
       fileUrl,
       searchReplaceBlock,
+      isNewFile,
     },
   }));
 }

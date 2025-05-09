@@ -42,7 +42,8 @@ export function extractCodeData(preElementString: string): CodeData {
   // // new code ...
   // REPLACE BLOCK
   let adjustedContentForStreamedContentInMonacoEditor = '';
-  if (parsedContent.searchContent) {
+
+  if (parsedContent.searchContent || parsedContent.replaceContent) {
     // get count of leading spaces in the first line of searchContent
     let firstLine = parsedContent.searchContent.split('\n')[0];
     let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
@@ -76,13 +77,28 @@ export function extractCodeData(preElementString: string): CodeData {
   }
 
   tempContainer.remove();
+
+  let _isCompleteSearchReplaceBlock = isCompleteSearchReplaceBlock(
+    contentWithoutFileUrl,
+  );
+
+  // If search/replace block looks like this then we know this should result in a new file
+  // <<<<<<< SEARCH
+  // =======
+  // code ...
+  // >>>>>>> REPLACE
+  let isNewFile =
+    _isCompleteSearchReplaceBlock &&
+    parseSearchReplace(contentWithoutFileUrl!).searchContent.length === 0;
+
   return {
     language: language ?? '',
     code: adjustedContentForStreamedContentInMonacoEditor || content,
     fileUrl,
-    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
+    searchReplaceBlock: _isCompleteSearchReplaceBlock
       ? contentWithoutFileUrl
       : null,
+    isNewFile,
   };
 }
 

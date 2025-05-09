@@ -37,7 +37,10 @@ module('Integration | Component | FormattedMessage', function (hooks) {
     cardService = this.owner.lookup('service:card-service') as CardService;
 
     cardService.getSource = async () => {
-      return Promise.resolve('let a = 1;\nlet b = 2;');
+      return {
+        status: 200,
+        content: 'let a = 1;\nlet b = 2;',
+      };
     };
   });
 
