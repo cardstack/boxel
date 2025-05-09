@@ -43,7 +43,7 @@ export function extractCodeData(preElementString: string): CodeData {
   // REPLACE BLOCK
   let adjustedContentForStreamedContentInMonacoEditor = '';
 
-  if (parsedContent.searchContent || parsedContent.replaceContent) {
+  if (parsedContent.searchContent) {
     // get count of leading spaces in the first line of searchContent
     let firstLine = parsedContent.searchContent.split('\n')[0];
     let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
@@ -52,9 +52,21 @@ export function extractCodeData(preElementString: string): CodeData {
       new RegExp(emptyString, 'g'),
       '',
     )}`;
+  }
 
-    if (parsedContent.replaceContent) {
+  if (parsedContent.replaceContent) {
+    let firstLine = parsedContent.replaceContent.split('\n')[0];
+    let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
+    let emptyString = ' '.repeat(leadingSpaces);
+
+    if (parsedContent.searchContent) {
       adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
+        new RegExp(emptyString, 'g'),
+        '',
+      )}`;
+      // if search block is empty, we omit the "existing code" and "new code" lines - we just show the new code because it's a brand new file
+    } else {
+      adjustedContentForStreamedContentInMonacoEditor += `${parsedContent.replaceContent.replace(
         new RegExp(emptyString, 'g'),
         '',
       )}`;
