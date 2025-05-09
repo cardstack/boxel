@@ -80,7 +80,9 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     let cardService = this.owner.lookup('service:card-service') as CardService;
     cardService.getSource = async (url: URL) => {
       if (url.toString() === 'https://example.com/component.gts') {
-        return Promise.resolve(`import Component from '@glimmer/component';
+        return Promise.resolve({
+          status: 200,
+          content: `import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
   a = 1;
@@ -92,9 +94,13 @@ export default class MyComponent extends Component {
       <p>Value of b: {{this.b}}</p>
     </div>
   </template>
-}`);
+}`,
+        });
       }
-      return Promise.resolve('');
+      return Promise.resolve({
+        status: 404,
+        content: '',
+      });
     };
 
     class Address extends FieldDef {
@@ -623,6 +629,8 @@ Above code blocks are now complete`;
         origin_server_ts: new Date(2024, 0, 3, 12, 30).getTime(),
       },
     );
+
+    await this.pauseTest();
 
     await waitUntil(
       () =>
