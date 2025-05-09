@@ -49,6 +49,8 @@ module('Integration | Component | FormattedMessage', function (hooks) {
         @renderCodeBlocks={{testScenario.renderCodeBlocks}}
         @monacoSDK={{monacoSDK}}
         @html={{testScenario.html}}
+        @roomId={{testScenario.roomId}}
+        @eventId={{testScenario.eventId}}
         @isStreaming={{testScenario.isStreaming}}
       />
     </template>);
@@ -66,6 +68,8 @@ main = putStrLn "🖤"
 </pre>
 <p>I hope you like it!</p>
 `,
+      roomId: '!abcd',
+      eventId: '1234',
       isStreaming: false,
     });
 
@@ -97,6 +101,9 @@ puts "💎"
 </pre>
 <p>I hope you like this one too!</p>
 `,
+
+      roomId: '!abcd',
+      eventId: '1234',
       isStreaming: false,
     });
 
@@ -135,6 +142,9 @@ puts "💎"
 <pre data-code-language="css">
           background: #ff7f24;
 </pre>`,
+
+      roomId: '!abcd',
+      eventId: '1234',
       isStreaming: false,
     });
 
@@ -202,6 +212,9 @@ let b = 2;
 let a = 3;
 >>>>>>> REPLACE
 </pre>`,
+
+      roomId: '!abcd',
+      eventId: '1234',
       isStreaming: false,
     });
 
@@ -242,6 +255,9 @@ let a = 1;
 let c = 3;
 </pre>
 `,
+
+      roomId: '!abcd',
+      eventId: '1234',
       isStreaming: false,
     });
 
@@ -275,6 +291,9 @@ let c = 2;
 >>>>>>> REPLACE
 </pre>
 `,
+
+      roomId: '!abcd',
+      eventId: '1234',
       isStreaming: false,
     });
 
@@ -303,6 +322,9 @@ let c = 2;
 >>>>>>> REPLACE
 </pre>
 `,
+
+      roomId: '!abcd',
+      eventId: '1234',
       isStreaming: true,
     });
 
@@ -327,6 +349,8 @@ let c = 2;
           @renderCodeBlocks={{true}}
           @monacoSDK={{monacoSDK}}
           @html={{htmlSafe this.html}}
+          @roomId='!abcd'
+          @eventId='1234'
           @isStreaming={{true}}
         />
       </template>
@@ -369,6 +393,8 @@ let c = 2;
           @renderCodeBlocks={{true}}
           @monacoSDK={{monacoSDK}}
           @html={{htmlSafe this.html}}
+          @roomId='!abcd'
+          @eventId='1234'
           @isStreaming={{this.isStreaming}}
         />
       </template>

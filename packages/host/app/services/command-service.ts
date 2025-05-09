@@ -20,6 +20,7 @@ import {
   delay,
 } from '@cardstack/runtime-common';
 
+import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type Realm from '@cardstack/host/services/realm';
 
@@ -223,7 +224,7 @@ export default class CommandService extends Service {
         );
       }
       this.executedCommandRequestIds.add(commandRequestId!);
-      await this.matrixService.sendCommandResultEvent(
+      await this.matrixService.sendToolCallCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
@@ -277,6 +278,61 @@ export default class CommandService extends Service {
       typedInput = undefined;
     }
     return typedInput;
+  }
+
+  async patchCode(
+    roomId: string,
+    fileUrl: string,
+    codeBlocks: { codeBlock: string; eventId: string; index: number }[],
+  ) {
+    for (const codeBlock of codeBlocks) {
+      this.currentlyExecutingCommandRequestIds.add(
+        `${codeBlock.eventId}:${codeBlock.index}`,
+      );
+    }
+    try {
+      let patchCodeCommand = new PatchCodeCommand(this.commandContext);
+      await patchCodeCommand.execute({
+        fileUrl,
+        codeBlocks: codeBlocks.map((codeBlock) => codeBlock.codeBlock),
+      });
+      for (const codeBlock of codeBlocks) {
+        this.executedCommandRequestIds.add(
+          `${codeBlock.eventId}:${codeBlock.index}`,
+        );
+      }
+      let resultSends = [];
+      for (const codeBlock of codeBlocks) {
+        resultSends.push(
+          this.matrixService.sendCodePatchResultEvent(
+            roomId,
+            codeBlock.eventId,
+            codeBlock.index,
+            'applied',
+          ),
+        );
+      }
+      await Promise.all(resultSends);
+    } finally {
+      // remove the code blocks from the currently executing command request ids
+      for (const codeBlock of codeBlocks) {
+        this.currentlyExecutingCommandRequestIds.delete(
+          `${codeBlock.eventId}:${codeBlock.index}`,
+        );
+      }
+    }
+  }
+
+  isCodeBlockApplying(codeBlock: { eventId: string; index: number }) {
+    return this.currentlyExecutingCommandRequestIds.has(
+      `${codeBlock.eventId}:${codeBlock.index}`,
+    );
+  }
+
+  isCodeBlockApplied(codeBlock: { eventId: string; index: number }) {
+    return this.executedCommandRequestIds.has(
+      `${codeBlock.eventId}:${codeBlock.index}`,
+    );
   }
 }
 

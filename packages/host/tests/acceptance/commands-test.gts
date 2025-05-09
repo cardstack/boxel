@@ -29,6 +29,9 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
@@ -747,7 +750,7 @@ Hello, world!
 =======
 Hi, world!
 >>>>>>> REPLACE\n\`\`\``;
-    simulateRemoteMessage(roomId, '@aibot:localhost', {
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: codeBlock,
       msgtype: 'org.text',
       format: 'org.matrix.custom.html',
@@ -758,6 +761,20 @@ Hi, world!
     await waitFor('[data-test-apply-code-button]');
     await click('[data-test-apply-code-button]');
     await waitUntil(() => getMonacoContent() === 'Hi, world!');
+
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.event_id === eventId &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      codePatchResultEvents.length,
+      1,
+      'code patch result event is dispatched',
+    );
   });
 
   test('can patch code when there are multiple patches using "Accept All" button', async function (assert) {
@@ -808,10 +825,16 @@ We are one!
       isStreamingFinished: true,
     });
 
-    await waitFor('[data-test-apply-all-code-patches-button]');
-    await click('[data-test-apply-all-code-patches-button]');
-
-    await waitFor('.code-patch-actions [data-test-apply-state="applied"]');
+    await waitFor('[data-test-apply-all-code-patches-button]', {
+      timeout: 4000,
+    });
+    click('[data-test-apply-all-code-patches-button]');
+    await waitFor('.code-patch-actions [data-test-apply-state="applying"]');
+    await waitFor('.code-patch-actions [data-test-apply-state="applied"]', {
+      timeout: 3000,
+      timeoutMessage:
+        'timed out waiting for Accept All button to be in applied state',
+    });
     assert.dom('[data-test-apply-state="applied"]').exists({ count: 4 }); // 3 patches + 1 for "Accept All" button
 
     assert.strictEqual(
@@ -828,6 +851,92 @@ We are one!
     await waitUntil(
       () => getMonacoContent() === 'Greetings, world!\nWe are one!',
     );
+
+    let codePatchResultEvents = getRoomEvents(roomId).filter(
+      (event) =>
+        event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        event.content['m.relates_to']?.rel_type ===
+          APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        event.content['m.relates_to']?.key === 'applied',
+    );
+    assert.equal(
+      codePatchResultEvents.length,
+      3,
+      'code patch result events are dispatched',
+    );
+  });
+
+  test('previously applied code patches show the correct applied state', async function (assert) {
+    // there are 3 patches in the message
+    // 1. hello.txt: Hello, world! -> Hi, world!
+    // 2. hi.txt: Hi, world! -> Greetings, world!
+    // 3. hi.txt: How are you? -> We are one!
+
+    let codeBlock = `\`\`\`
+// File url: http://test-realm/test/hello.txt
+<<<<<<< SEARCH
+Hello, world!
+=======
+Hi, world!
+>>>>>>> REPLACE
+\`\`\`
+
+ \`\`\`
+// File url: http://test-realm/test/hi.txt
+<<<<<<< SEARCH
+Hi, world!
+=======
+Greetings, world!
+>>>>>>> REPLACE
+\`\`\`
+
+\`\`\`
+// File url: http://test-realm/test/hi.txt
+<<<<<<< SEARCH
+How are you?
+=======
+We are one!
+>>>>>>> REPLACE
+\`\`\``;
+
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-test',
+    });
+
+    let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: codeBlock,
+      msgtype: 'org.text',
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+    });
+
+    simulateRemoteMessage(
+      roomId,
+      '@testuser:localhost',
+      {
+        msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+        'm.relates_to': {
+          event_id: eventId,
+          rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+          key: 'applied',
+        },
+        codeBlockIndex: 1,
+      },
+      {
+        type: APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+      },
+    );
+
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}hello.txt`,
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitUntil(() => findAll('[data-test-apply-state]').length === 4);
+    assert
+      .dom('[data-test-apply-state="applied"]')
+      .exists({ count: 1 }, 'one patch is applied');
   });
 
   test('a command sent via SendAiAssistantMessageCommand without autoExecute flag is not automatically executed by the bot', async function (assert) {

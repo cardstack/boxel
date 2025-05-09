@@ -17,8 +17,6 @@ import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
-import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-
 import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
 import {
   type HtmlTagGroup,
@@ -41,12 +39,17 @@ export interface CodeData {
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
+  roomId: string | null;
+  eventId: string | null;
+  index: number;
 }
 
 interface FormattedMessageSignature {
   Element: HTMLDivElement;
   Args: {
     html: SafeString;
+    eventId: string;
+    roomId: string;
     monacoSDK: MonacoSDK;
     renderCodeBlocks: boolean;
     isStreaming: boolean;
@@ -67,6 +70,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     [],
   );
 
+  @tracked isRunningApplyAll = false;
   @tracked applyAllCodePatchTasksState:
     | 'ready'
     | 'applying'
@@ -138,51 +142,59 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     return this.codePatchActions.length > 1 && !this.args.isStreaming;
   }
 
+  get applyAllButtonState() {
+    if (
+      this.codePatchActions.every(
+        (action) => action.patchCodeState === 'applied',
+      )
+    ) {
+      return 'applied';
+    } else if (this.isRunningApplyAll) {
+      return 'applying';
+    }
+    return 'ready';
+  }
+
   private applyAllCodePatchTasks = dropTask(async () => {
-    this.applyAllCodePatchTasksState = 'applying';
-    let unappliedCodePatchActions = this.codePatchActions.filter(
-      (codePatchAction) => codePatchAction.patchCodeTaskState !== 'applied',
-    );
+    this.isRunningApplyAll = true;
+    try {
+      let unappliedCodePatchActions = this.codePatchActions.filter(
+        (codePatchAction) => codePatchAction.patchCodeState !== 'applied',
+      );
 
-    if (unappliedCodePatchActions.length === 0) {
-      this.applyAllCodePatchTasksState = 'applied';
-      return;
+      if (unappliedCodePatchActions.length === 0) {
+        return;
+      }
+
+      let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions.reduce(
+        (acc, codePatchAction) => {
+          acc[codePatchAction.fileUrl] = [
+            ...(acc[codePatchAction.fileUrl] || []),
+            codePatchAction,
+          ];
+          return acc;
+        },
+        {} as Record<string, CodePatchAction[]>,
+      );
+
+      // TODO: Handle possible errors (fetching source, patching, saving source)
+      // Handle in CS-8369
+      for (let fileUrl in codePatchActionsGroupedByFileUrl) {
+        await this.commandService.patchCode(
+          this.args.roomId,
+          fileUrl,
+          codePatchActionsGroupedByFileUrl[fileUrl].map((codePatchAction) => {
+            return {
+              codeBlock: codePatchAction.searchReplaceBlock,
+              eventId: codePatchAction.eventId,
+              index: codePatchAction.index,
+            };
+          }),
+        );
+      }
+    } finally {
+      this.isRunningApplyAll = false;
     }
-
-    unappliedCodePatchActions.forEach((codePatchAction) => {
-      codePatchAction.patchCodeTaskState = 'applying';
-    });
-
-    let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions.reduce(
-      (acc, codePatchAction) => {
-        acc[codePatchAction.fileUrl] = [
-          ...(acc[codePatchAction.fileUrl] || []),
-          codePatchAction,
-        ];
-        return acc;
-      },
-      {} as Record<string, CodePatchAction[]>,
-    );
-
-    let patchCodeCommand = new PatchCodeCommand(
-      this.commandService.commandContext,
-    );
-
-    // TODO: Handle possible errors (fetching source, patching, saving source)
-    // Handle in CS-8369
-    for (let fileUrl in codePatchActionsGroupedByFileUrl) {
-      await patchCodeCommand.execute({
-        fileUrl,
-        codeBlocks: codePatchActionsGroupedByFileUrl[fileUrl].map(
-          (codePatchAction) => codePatchAction.searchReplaceBlock,
-        ),
-      });
-      codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
-        codePatchAction.patchCodeTaskState = 'applied';
-      });
-    }
-
-    this.applyAllCodePatchTasksState = 'applied';
   });
 
   sanitizeSafeString = (html: SafeString) => {
@@ -212,7 +224,11 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         }}
         {{#each this.htmlGroups as |htmlGroup index|}}
           {{#if (eq htmlGroup.type 'pre_tag')}}
-            {{#let (extractCodeData htmlGroup.content) as |codeData|}}
+
+            {{#let
+              (extractCodeData htmlGroup.content @roomId @eventId index)
+              as |codeData|
+            }}
               {{#let
                 (this.createCodePatchAction codeData)
                 as |codePatchAction|
@@ -239,7 +255,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           <div class='code-patch-actions'>
             <ApplyButton
               {{on 'click' (perform this.applyAllCodePatchTasks)}}
-              @state={{this.applyAllCodePatchTasksState}}
+              @state={{this.applyAllButtonState}}
               data-test-apply-all-code-patches-button
             >
               Accept All

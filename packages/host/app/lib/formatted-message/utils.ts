@@ -9,7 +9,12 @@ import {
   parseSearchReplace,
 } from '../search-replace-block-parsing';
 
-export function extractCodeData(preElementString: string): CodeData {
+export function extractCodeData(
+  preElementString: string,
+  roomId: string,
+  eventId: string,
+  index: number,
+): CodeData {
   // We are creating a new element in the dom
   // so that we can easily parse the content of the top level <pre> tags.
   // Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that
@@ -25,6 +30,9 @@ export function extractCodeData(preElementString: string): CodeData {
       code: null,
       language: null,
       searchReplaceBlock: null,
+      roomId: null,
+      eventId: null,
+      index,
     };
   }
 
@@ -83,6 +91,9 @@ export function extractCodeData(preElementString: string): CodeData {
     searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
       ? contentWithoutFileUrl
       : null,
+    roomId,
+    eventId,
+    index,
   };
 }
 

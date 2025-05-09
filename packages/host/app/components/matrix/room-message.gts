@@ -135,6 +135,7 @@ export default class RoomMessage extends Component<Signature> {
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
+        @roomId={{this.message.roomId}}
         @eventId={{this.message.eventId}}
         @index={{@index}}
         @registerScroller={{@registerScroller}}

@@ -9,27 +9,31 @@ import {
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
-  Tool,
-  SkillsConfigEvent,
   ActiveLLMEvent,
+  CardMessageContent,
   CardMessageEvent,
   CommandResultEvent,
-  CardMessageContent,
   EncodedCommandRequest,
+  SkillsConfigEvent,
+  Tool,
+  CodePatchResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
@@ -165,8 +169,11 @@ export async function constructHistory(
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
     if (
-      event.type !== 'm.room.message' &&
-      event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+      ![
+        'm.room.message',
+        APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+      ].includes(event.type)
     ) {
       continue;
     }
@@ -252,6 +259,10 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
       return history.slice(lastEventIndex).some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          (event.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+            event.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
           event.content.commandRequestId === commandRequest.id
         );
       });
@@ -545,6 +556,22 @@ function getCommandResults(
   return commandResultEvents;
 }
 
+function getCodePatchResults(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+) {
+  let codePatchResultEvents = history.filter((e) => {
+    if (
+      isCodePatchResultEvent(e) &&
+      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
+    ) {
+      return true;
+    }
+    return false;
+  }) as CodePatchResultEvent[];
+  return codePatchResultEvents;
+}
+
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
   return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
@@ -563,15 +590,18 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
 
 function toPromptMessageWithToolResults(
   event: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
+  commandResults: CommandResultEvent[] = [],
 ): OpenAIPromptMessage[] {
-  let commandResults = getCommandResults(event, history);
   const messageContent = event.content as CardMessageContent;
   return (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
     (commandRequest: Partial<EncodedCommandRequest>) => {
       let content = 'pending';
       let commandResult = commandResults.find(
         (commandResult) =>
+          (commandResult.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+            commandResult.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
           commandResult.content.commandRequestId === commandRequest.id,
       );
       if (commandResult) {
@@ -629,9 +659,17 @@ export async function getModifyPrompt(
     let body = event.content.body;
     if (event.sender === aiBotUserId) {
       let toolCalls = toToolCalls(event as CardMessageEvent);
+      let commandResults = getCommandResults(
+        event as CardMessageEvent,
+        history,
+      );
+      let codePatchReults = getCodePatchResults(
+        event as CardMessageEvent,
+        history,
+      );
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
-        content: elideCodeBlocks(body),
+        content: elideCodeBlocks(body, codePatchReults),
       };
       if (toolCalls.length) {
         historicalMessage.tool_calls = toolCalls;
@@ -640,7 +678,7 @@ export async function getModifyPrompt(
       if (toolCalls.length) {
         toPromptMessageWithToolResults(
           event as CardMessageEvent,
-          history,
+          commandResults,
         ).forEach((message) => historicalMessages.push(message));
       }
     }
@@ -772,9 +810,44 @@ export function isCommandResultEvent(
   );
 }
 
-function elideCodeBlocks(content: string) {
-  const PLACEHOLDER: string = '[Proposed code change]';
+export function isCodePatchResultEvent(
+  event?: DiscreteMatrixEvent,
+): event is CodePatchResultEvent {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+    event.content['m.relates_to']?.rel_type ===
+      APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE
+  );
+}
 
+function elideCodeBlocks(
+  content: string,
+  codePatchResults: CodePatchResultEvent[],
+) {
+  const DEFAULT_PLACEHOLDER: string = '[Proposed code change]';
+  const PLACEHOLDERS = {
+    applied: '[Proposed code change: applied]',
+    rejected: '[Proposed code change: rejected]',
+    failed: '[Proposed code change: failed]',
+  };
+
+  function getPlaceholder(codeBlockIndex: number) {
+    let codePatchResult = codePatchResults.find((codePatchResult) => {
+      return codePatchResult.content.codeBlockIndex === codeBlockIndex;
+    });
+    if (codePatchResult) {
+      return (
+        PLACEHOLDERS[codePatchResult.content['m.relates_to'].key] ??
+        DEFAULT_PLACEHOLDER
+      );
+    }
+    return DEFAULT_PLACEHOLDER;
+  }
+
+  let codeBlockIndex = 0;
   while (
     content.includes(SEARCH_MARKER) &&
     content.includes(SEPARATOR_MARKER) &&
@@ -793,8 +866,10 @@ function elideCodeBlocks(content: string) {
     // replace the content between the markers with a placeholder
     content =
       content.substring(0, searchStartIndex) +
-      PLACEHOLDER +
+      getPlaceholder(codeBlockIndex) +
       content.substring(replaceEndIndex + REPLACE_MARKER.length);
+
+    codeBlockIndex++;
   }
   return content;
 }
