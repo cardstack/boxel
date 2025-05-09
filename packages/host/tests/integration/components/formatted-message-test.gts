@@ -312,6 +312,52 @@ let c = 2;
     assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
   });
 
+  test('it will render search/replace in a more human readable format when streaming', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+let b = 2;
+=======
+let a = 3;
+</pre>
+`, // note the missing >>>>>> REPLACE (this is intentional because streaming is in progress)
+      isStreaming: true,
+    });
+
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+          .innerText ==
+        '// existing code ... \nlet a = 1;\nlet b = 2;\n// new code ... \nlet a = 3;',
+    );
+
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `
+<pre data-code-language="typescript">
+// File url: https://example.com/file.ts
+<<<<<<< SEARCH
+=======
+let a = 3;
+</pre>
+`, // note the missing search block - this is a case when we are creating a new file
+      isStreaming: true,
+    });
+
+    // in this case where search block is empty, we omit the "existing code" and "new code" lines
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+          .innerText == 'let a = 3;',
+    );
+
+    assert.dom('.code-block').exists();
+  });
+
   test('unincremental updates are handled gracefully', async function (assert) {
     let monacoSDK = await monacoService.getMonacoContext();
 
