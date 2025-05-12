@@ -49,8 +49,8 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';

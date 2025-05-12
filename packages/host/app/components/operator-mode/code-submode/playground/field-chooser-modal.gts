@@ -7,8 +7,8 @@ import focusTrap from 'ember-focus-trap/modifiers/focus-trap';
 import { CardContainer } from '@cardstack/boxel-ui/components';
 import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
 
-import ModalContainer from '@cardstack/host/components/modal-container';
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import ModalContainer from '@cardstack/host/components/modal-container';
 
 import type { FieldOption } from './playground-panel';
 
