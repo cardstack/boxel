@@ -20,7 +20,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import CardError from '@cardstack/host/components/operator-mode/card-error';
-import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel/index';
+import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
 import SchemaEditor, {
@@ -321,7 +321,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         </A.Item>
       </Accordion>
     {{else if @card}}
-      <CardPreviewPanel
+      <CardRendererPanel
         @card={{@card}}
         @realmURL={{this.operatorModeStateService.realmURL}}
         @format={{@previewFormat}}

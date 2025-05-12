@@ -51,7 +51,7 @@ interface Signature {
   Blocks: {};
 }
 
-export default class CardPreviewPanel extends Component<Signature> {
+export default class CardRendererPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
 

@@ -5,7 +5,7 @@ import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
-import FittedFormatGallery from '@cardstack/host/components/operator-mode/card-preview-panel/fitted-format-gallery';
+import FittedFormatGallery from '@cardstack/host/components/operator-mode/card-renderer-panel/fitted-format-gallery';
 import Preview from '@cardstack/host/components/preview';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
