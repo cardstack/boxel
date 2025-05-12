@@ -1004,7 +1004,7 @@ module(basename(__filename), function () {
       );
     });
 
-    only('random behaviour where linked field only resolves for default isolated templates but not custom isolated templates', async function(assert){
+    test('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function(assert){
       await realm.write(
         'task.gts',
         `
@@ -1037,36 +1037,6 @@ module(basename(__filename), function () {
               <template>
               </template>
               }
-            }
-            `
-      );
-
-      await realm.write(
-        'task-without-custom-isolated-template.gts',
-        `
-            import StringField from 'https://cardstack.com/base/string';
-            import {
-              Component,
-              CardDef,
-              contains,
-              field,
-              linksTo,
-            } from 'https://cardstack.com/base/card-api';
-
-
-            export class Team extends CardDef {
-              static displayName = 'Team'
-              @field name = contains(StringField, {isUsed: true});
-            }
-
-            export class SimpleTask extends CardDef {
-              static displayName = 'Sprint Task';
-              @field team = linksTo(() => Team, {isUsed: true}); //even using isUsed doesn't fix this
-              @field shortId = contains(StringField, {
-                computeVia: function (this: Task) {
-                  return this.team?.name
-                },
-              });
             }
             `
       );
@@ -1120,48 +1090,13 @@ module(basename(__filename), function () {
 
         )
       );
-
-      await realm.write(
-        'task-without-custom-isolated-template.json',
-        JSON.stringify(
-          {
-            "data": {
-              "type": "card",
-              "attributes": {
-                "title": null,
-                "description": null,
-                "thumbnailURL": null
-              },
-              "relationships": {
-                "team": {
-                  "links": {
-                    "self": "./team"
-                  }
-                }
-              },
-              "meta": {
-                "adoptsFrom": {
-                  "module": "./task-without-custom-isolated-template",
-                  "name": "SimpleTask"
-                }
-              }
-            }
-          }
-
-        )
-      );
       let taskInstance = (await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}task`),
       )) as any;
-      let taskInstanceWithoutCustomIsolatedTemplate = (await realm.realmIndexQueryEngine.instance(
-        new URL(`${testRealm}task-without-custom-isolated-template`),
-      )) as any;
       assert.strictEqual(
-        taskInstance?.error.message,
-        'The field Task.team refers to the card instance ./team which is not loaded'
-      )
-      assert.strictEqual(
-        taskInstanceWithoutCustomIsolatedTemplate.type, 'instance'
+        taskInstance?.type,
+        'instance',
+        'task instance created without any error'
       )
     })
 
