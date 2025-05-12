@@ -50,7 +50,7 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
-import Preview from '@cardstack/host/components/preview';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
@@ -358,13 +358,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               @onSelectCard={{@viewCardInPlayground}}
             />
             {{#if this.displayIsolated}}
-              <Preview
+              <CardRenderer
                 @card={{@spec}}
                 @format='isolated'
                 @cardContext={{this.cardContext}}
               />
             {{else}}
-              <Preview
+              <CardRenderer
                 @card={{@spec}}
                 @format='edit'
                 @cardContext={{this.cardContext}}

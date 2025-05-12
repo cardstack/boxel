@@ -6,7 +6,7 @@ import { eq, or, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { cardTypeDisplayName, cardTypeIcon } from '@cardstack/runtime-common';
 
 import FittedFormatGallery from '@cardstack/host/components/operator-mode/card-renderer-panel/fitted-format-gallery';
-import Preview from '@cardstack/host/components/preview';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
 import type {
@@ -47,18 +47,18 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
           @moreOptionsMenuItems={{@contextMenuItems}}
         />
       {{/unless}}
-      <Preview class='preview' @card={{@card}} @format={{@format}} />
+      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
     </CardContainer>
   {{else if (eq @format 'embedded')}}
     <CardContainer
       class={{if @isFieldDef 'field-preview-container' 'preview-container'}}
     >
-      <Preview class='preview' @card={{@card}} @format={{@format}} />
+      <CardRenderer class='preview' @card={{@card}} @format={{@format}} />
     </CardContainer>
   {{else if (eq @format 'atom')}}
     <div class='atom-preview-container' data-test-atom-preview>Lorem ipsum dolor
       sit amet, consectetur adipiscing elit, sed do
-      <Preview
+      <CardRenderer
         class='atom-preview'
         @card={{@card}}
         @format={{@format}}

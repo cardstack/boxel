@@ -27,7 +27,7 @@ import {
   RealmURLContextName,
 } from '@cardstack/runtime-common';
 
-import Preview from '@cardstack/host/components/preview';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
@@ -95,8 +95,8 @@ export default class CardRendererPanel extends Component<Signature> {
 
   <template>
     <div
-      class='preview-header'
-      data-test-code-mode-card-preview-header={{@card.id}}
+      class='card-renderer-header'
+      data-test-code-mode-card-renderer-header={{@card.id}}
       ...attributes
     >
       <RealmIcon @realmInfo={{this.realm.info this.urlForRealmLookup}} />
@@ -146,34 +146,34 @@ export default class CardRendererPanel extends Component<Signature> {
     </div>
 
     <div
-      class='preview-body'
-      data-test-code-mode-card-preview-body
+      class='card-renderer-body'
+      data-test-code-mode-card-renderer-body
       {{ScrollModifier
         initialScrollPosition=this.scrollPosition
         onScroll=this.onScroll
       }}
     >
-      <div class='preview-content'>
+      <div class='card-renderer-content'>
         {{#if (eq this.format 'fitted')}}
           <FittedFormatGallery @card={{@card}} />
         {{else if (eq this.format 'embedded')}}
           <EmbeddedPreview @card={{@card}} />
         {{else if (eq this.format 'atom')}}
           <div class='atom-wrapper'>
-            <Preview @card={{@card}} @format={{this.format}} />
+            <CardRenderer @card={{@card}} @format={{this.format}} />
           </div>
         {{else}}
-          <Preview @card={{@card}} @format={{this.format}} />
+          <CardRenderer @card={{@card}} @format={{this.format}} />
         {{/if}}
       </div>
     </div>
-    <div class='preview-footer' data-test-code-mode-card-preview-footer>
-      <div class='preview-footer-title'>Preview as</div>
+    <div class='card-renderer-footer' data-test-code-mode-card-renderer-footer>
+      <div class='card-renderer-footer-title'>Preview as</div>
       <FormatChooser @format={{this.format}} @setFormat={{@setFormat}} />
     </div>
 
     <style scoped>
-      .preview-header {
+      .card-renderer-header {
         background-color: var(--boxel-light);
         padding: var(--boxel-sp);
         display: flex;
@@ -181,17 +181,17 @@ export default class CardRendererPanel extends Component<Signature> {
         align-items: center;
       }
 
-      .preview-body {
+      .card-renderer-body {
         flex-grow: 1;
         overflow-y: auto;
       }
 
-      .preview-content {
+      .card-renderer-content {
         height: auto;
         margin: var(--boxel-sp-sm);
       }
 
-      .preview-content > :deep(.boxel-card-container.boundaries) {
+      .card-renderer-content > :deep(.boxel-card-container.boundaries) {
         overflow: hidden;
       }
 
@@ -204,7 +204,7 @@ export default class CardRendererPanel extends Component<Signature> {
         letter-spacing: var(--boxel-lsp-xs);
       }
 
-      .preview-footer {
+      .card-renderer-footer {
         background-color: var(--boxel-200);
         border-bottom-left-radius: var(--boxel-border-radius);
         border-bottom-right-radius: var(--boxel-border-radius);
@@ -213,7 +213,7 @@ export default class CardRendererPanel extends Component<Signature> {
         );
       }
 
-      .preview-footer-title {
+      .card-renderer-footer-title {
         text-align: center;
         padding: var(--boxel-sp-xs) 0;
         text-transform: uppercase;
