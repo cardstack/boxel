@@ -49,6 +49,7 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
+import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/rhs-panel';
 import Preview from '@cardstack/host/components/preview';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
@@ -82,7 +83,6 @@ import ElementTracker, {
 } from '../../../resources/element-tracker';
 import Overlays from '../overlays';
 
-import type { SelectedAccordionItem } from '../code-submode';
 import type { CardDefOrId } from '../stack-item';
 import type { WithBoundArgs } from '@glint/template';
 
