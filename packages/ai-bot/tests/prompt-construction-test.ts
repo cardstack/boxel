@@ -2734,12 +2734,12 @@ Attached files:
       'Right, let us make a tic tac toe game.\n' +
         '\n' +
         '```gts\n' +
-        '__META: { \"fileUrl\": \"https://test.com/tic-tac.gts\" }\n' +
+        '__META: { "fileUrl": "https://test.com/tic-tac.gts" }\n' +
         '[Proposed code change]\n' +
         '```\n' +
         '\n' +
         '```gts\n' +
-        '__META: { \"fileUrl\": \"https://test.com/tac-toe.gts\" }\n' +
+        '__META: { "fileUrl": "https://test.com/tac-toe.gts" }\n' +
         '[Proposed code change]\n' +
         '```\n' +
         '\n' +
