@@ -741,7 +741,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
 
     let codeBlock = `\`\`\`
-// File url: http://test-realm/test/hello.txt
+__META: { \"fileUrl\": \"http://test-realm/test/hello.txt\" }
 <<<<<<< SEARCH
 Hello, world!
 =======
@@ -772,7 +772,7 @@ Hi, world!
     // 3. hi.txt: How are you? -> We are one!
 
     let codeBlock = `\`\`\`
-// File url: http://test-realm/test/hello.txt
+__META: { \"fileUrl\": \"http://test-realm/test/hello.txt\" }
 <<<<<<< SEARCH
 Hello, world!
 =======
@@ -781,7 +781,7 @@ Hi, world!
 \`\`\`
 
  \`\`\`
-// File url: http://test-realm/test/hi.txt
+__META: { \"fileUrl\": \"http://test-realm/test/hi.txt\" }
 <<<<<<< SEARCH
 Hi, world!
 =======
@@ -790,7 +790,7 @@ Greetings, world!
 \`\`\`
 
 \`\`\`
-// File url: http://test-realm/test/hi.txt
+__META: { \"fileUrl\": \"http://test-realm/test/hi.txt\" }
 <<<<<<< SEARCH
 How are you?
 =======
@@ -842,7 +842,7 @@ We are one!
     // 3. hi.txt -> I am a newly created hi.txt file but I will get a suffix because hi.txt already exists!
 
     let codeBlock = `\`\`\`
-// File url: http://test-realm/test/file1.gts
+__META: { \"fileUrl\": \"http://test-realm/test/file1.gts\" }
 <<<<<<< SEARCH
 =======
 I am a newly created file1
@@ -850,7 +850,7 @@ I am a newly created file1
 \`\`\`
 
  \`\`\`
-// File url: http://test-realm/test/file2.gts
+__META: { \"fileUrl\": \"http://test-realm/test/file2.gts\" }
 <<<<<<< SEARCH
 =======
 I am a newly created file2
@@ -858,7 +858,7 @@ I am a newly created file2
 \`\`\`
 
 \`\`\`
-// File url: http://test-realm/test/hi.txt
+__META: { \"fileName\": \"hi.txt\", \"isNewFile\": true }
 <<<<<<< SEARCH
 =======
 I am a newly created hi.txt file but I will get a suffix because hi.txt already exists!
@@ -904,6 +904,7 @@ I am a newly created hi.txt file but I will get a suffix because hi.txt already 
     let newlyCreatedFileWhosePropodedNameAlreadyExisted = files.find((file) =>
       /^hi-[A-Za-z0-9]{3}\.txt$/.test(file.getAttribute('data-test-file')!),
     );
+
     assert.ok(newlyCreatedFileWhosePropodedNameAlreadyExisted);
   });
 

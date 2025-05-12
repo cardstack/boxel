@@ -2733,11 +2733,15 @@ Attached files:
       messages![2].content,
       'Right, let us make a tic tac toe game.\n' +
         '\n' +
-        '// File url: https://test.com/tic-tac.gts\n' +
+        '```gts\n' +
+        '__META: { \"fileUrl\": \"https://test.com/tic-tac.gts\" }\n' +
         '[Proposed code change]\n' +
+        '```\n' +
         '\n' +
-        '// File url: https://test.com/tac-toe.gts\n' +
+        '```gts\n' +
+        '__META: { \"fileUrl\": \"https://test.com/tac-toe.gts\" }\n' +
         '[Proposed code change]\n' +
+        '```\n' +
         '\n' +
         'I can add some more whiz bang if you want. Let me know!',
     );

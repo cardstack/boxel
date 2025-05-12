@@ -21,7 +21,7 @@ export function extractCodeData(preElementString: string): CodeData {
   if (!preElement) {
     tempContainer.remove();
     return {
-      fileUrl: null,
+      boxelMeta: null,
       code: null,
       language: null,
       searchReplaceBlock: null,
@@ -40,68 +40,65 @@ export function extractCodeData(preElementString: string): CodeData {
   // // existing code ...
   // SEARCH BLOCK
   // // new code ...
-  // REPLACE BLOCK.
-  // If the search block is empty, we omit the "existing code" and "new code" lines - we just show the new code because it's a brand new file.
+  // REPLACE BLOCK
   let adjustedContentForStreamedContentInMonacoEditor = '';
-
-  function removeLeadingSpaces(content: string): string {
-    let firstLine = content.split('\n')[0];
-    let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
-    return content.replace(new RegExp(' '.repeat(leadingSpaces), 'g'), '');
-  }
-
   if (parsedContent.searchContent) {
-    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${removeLeadingSpaces(parsedContent.searchContent)}`;
-  }
+    // get count of leading spaces in the first line of searchContent
+    let firstLine = parsedContent.searchContent.split('\n')[0];
+    let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
+    let emptyString = ' '.repeat(leadingSpaces);
+    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${parsedContent.searchContent.replace(
+      new RegExp(emptyString, 'g'),
+      '',
+    )}`;
 
-  if (parsedContent.replaceContent) {
-    if (parsedContent.searchContent) {
-      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${removeLeadingSpaces(parsedContent.replaceContent)}`;
-    } else {
-      adjustedContentForStreamedContentInMonacoEditor += removeLeadingSpaces(
-        parsedContent.replaceContent,
-      );
+    if (parsedContent.replaceContent) {
+      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
+        new RegExp(emptyString, 'g'),
+        '',
+      )}`;
     }
   }
 
   const lines = content.split('\n');
 
-  let fileUrl: string | null = null;
-  const fileUrlIndex = lines.findIndex((line) =>
-    line.startsWith('// File url: '),
+  let boxelMetaString: string | null = null;
+  const boxelMetaStringIndex = lines.findIndex((line) =>
+    line.startsWith('__META: '),
   );
-  if (fileUrlIndex !== -1) {
-    fileUrl = lines[fileUrlIndex].substring('// File url: '.length).trim();
+  if (boxelMetaStringIndex !== -1) {
+    boxelMetaString = lines[boxelMetaStringIndex]
+      .substring('__META: '.length)
+      .trim();
   }
 
-  let contentWithoutFileUrl;
-  if (fileUrl) {
-    contentWithoutFileUrl = lines.slice(fileUrlIndex + 1).join('\n');
+  let contentWithoutBoxelMetaLine;
+  let boxelMeta = null;
+  if (boxelMetaString) {
+    contentWithoutBoxelMetaLine = lines
+      .slice(boxelMetaStringIndex + 1)
+      .join('\n');
+
+    try {
+      boxelMeta = JSON.parse(boxelMetaString);
+    } catch (error) {
+      // do nothing, it's probably an unfinished boxel meta string as the code is streaming in
+    }
   }
 
   tempContainer.remove();
-
-  let _isCompleteSearchReplaceBlock = isCompleteSearchReplaceBlock(
-    contentWithoutFileUrl,
-  );
-
-  // If search/replace block looks like this then we know this should result in a new file
-  // <<<<<<< SEARCH
-  // =======
-  // code ...
-  // >>>>>>> REPLACE
-  let isNewFile =
-    _isCompleteSearchReplaceBlock &&
-    parseSearchReplace(contentWithoutFileUrl!).searchContent.length === 0;
-
   return {
     language: language ?? '',
-    code: adjustedContentForStreamedContentInMonacoEditor || content,
-    fileUrl,
-    searchReplaceBlock: _isCompleteSearchReplaceBlock
-      ? contentWithoutFileUrl
+    code:
+      adjustedContentForStreamedContentInMonacoEditor ||
+      parsedContent.replaceContent ||
+      content,
+    boxelMeta,
+    searchReplaceBlock: isCompleteSearchReplaceBlock(
+      contentWithoutBoxelMetaLine,
+    )
+      ? contentWithoutBoxelMetaLine
       : null,
-    isNewFile,
   };
 }
 

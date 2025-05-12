@@ -6,16 +6,18 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-import type { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
+import type {
+  BoxelMeta,
+  CodeData,
+} from '@cardstack/host/components/ai-assistant/formatted-message';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export class CodePatchAction {
-  fileUrl: string;
+  boxelMeta: BoxelMeta;
   searchReplaceBlock: string;
-  isNewFile: boolean;
 
   @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
     'ready';
@@ -26,14 +28,11 @@ export class CodePatchAction {
 
   constructor(owner: Owner, codeData: CodeData) {
     setOwner(this, owner);
-    if (!codeData.fileUrl || !codeData.searchReplaceBlock) {
-      throw new Error('fileUrl and searchReplaceBlock are required');
+    if (!codeData.boxelMeta || !codeData.searchReplaceBlock) {
+      throw new Error('boxelMeta and searchReplaceBlock are required');
     }
     this.searchReplaceBlock = codeData.searchReplaceBlock;
-    this.isNewFile = codeData.isNewFile ?? false;
-    this.fileUrl = codeData.isNewFile
-      ? new URL(codeData.fileUrl, this.operatorModeStateService.realmURL).href
-      : codeData.fileUrl;
+    this.boxelMeta = codeData.boxelMeta;
   }
 
   patchCodeTask = dropTask(async () => {
@@ -43,9 +42,10 @@ export class CodePatchAction {
         this.commandService.commandContext,
       );
       await patchCodeCommand.execute({
-        fileUrl: this.fileUrl,
+        fileUrl: this.boxelMeta.fileUrl || undefined,
+        fileName: this.boxelMeta.fileName,
+        isNewFile: this.boxelMeta.isNewFile,
         codeBlocks: [this.searchReplaceBlock],
-        isNewFile: this.isNewFile,
       });
       this.patchCodeTaskState = 'applied';
     } catch (error) {

@@ -36,12 +36,17 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
 
-export interface CodeData {
+export interface BoxelMeta {
   fileUrl: string | null;
+  fileName: string;
+  isNewFile: boolean;
+}
+
+export interface CodeData {
+  boxelMeta: BoxelMeta | null;
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
-  isNewFile?: boolean | null;
 }
 
 interface FormattedMessageSignature {
@@ -154,16 +159,25 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       codePatchAction.patchCodeTaskState = 'applying';
     });
 
-    let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions.reduce(
-      (acc, codePatchAction) => {
-        acc[codePatchAction.fileUrl] = [
-          ...(acc[codePatchAction.fileUrl] || []),
-          codePatchAction,
-        ];
-        return acc;
-      },
-      {} as Record<string, CodePatchAction[]>,
+    let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions
+      .filter((codePatchAction) => codePatchAction.boxelMeta?.fileUrl)
+      .reduce(
+        (acc, codePatchAction) => {
+          let fileUrl = codePatchAction.boxelMeta?.fileUrl;
+          if (!fileUrl) {
+            throw new Error('fileUrl is required');
+          }
+          acc[fileUrl] = [...(acc[fileUrl] || []), codePatchAction];
+          return acc;
+        },
+        {} as Record<string, CodePatchAction[]>,
+      );
+
+    let codePatchActionsResultingInNewFiles = unappliedCodePatchActions.filter(
+      (codePatchAction) => !codePatchAction.boxelMeta?.fileUrl,
     );
+
+    debugger;
 
     let patchCodeCommand = new PatchCodeCommand(
       this.commandService.commandContext,
@@ -174,15 +188,26 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     for (let fileUrl in codePatchActionsGroupedByFileUrl) {
       await patchCodeCommand.execute({
         fileUrl,
+        isNewFile:
+          codePatchActionsGroupedByFileUrl[fileUrl][0].boxelMeta.isNewFile,
         codeBlocks: codePatchActionsGroupedByFileUrl[fileUrl].map(
           (codePatchAction) => codePatchAction.searchReplaceBlock,
         ),
-        isNewFile: codePatchActionsGroupedByFileUrl[fileUrl][0].isNewFile,
       });
       codePatchActionsGroupedByFileUrl[fileUrl].forEach((codePatchAction) => {
         codePatchAction.patchCodeTaskState = 'applied';
       });
     }
+
+    codePatchActionsResultingInNewFiles.forEach(async (codePatchAction) => {
+      debugger;
+      await patchCodeCommand.execute({
+        isNewFile: true,
+        fileName: codePatchAction.boxelMeta?.fileName,
+        codeBlocks: [codePatchAction.searchReplaceBlock],
+      });
+      codePatchAction.patchCodeTaskState = 'applied';
+    });
 
     this.applyAllCodePatchTasksState = 'applied';
   });
@@ -337,12 +362,14 @@ interface HtmlGroupCodeBlockSignature {
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   @cached
   get codeDiffResource() {
+    if (!this.args.codeData.boxelMeta) {
+      throw new Error('boxelMeta is required');
+    }
     return this.args.codeData.searchReplaceBlock
       ? getCodeDiffResultResource(
           this,
-          this.args.codeData.fileUrl,
           this.args.codeData.searchReplaceBlock,
-          this.args.codeData.isNewFile ?? false,
+          this.args.codeData.boxelMeta,
         )
       : undefined;
   }

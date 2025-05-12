@@ -8,31 +8,28 @@ import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 
 import ApplySearchReplaceBlockCommand from '../commands/apply-search-replace-block';
+import { BoxelMeta } from '../components/ai-assistant/formatted-message';
 
 interface CodeDiffResourceArgs {
   named: {
-    fileUrl?: string | null;
     searchReplaceBlock?: string | null;
-    isNewFile?: boolean;
+    boxelMeta: BoxelMeta;
   };
 }
 
 export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
-  @tracked fileUrl: string | undefined | null;
+  @tracked boxelMeta: BoxelMeta | undefined | null;
   @tracked originalCode: string | undefined | null;
   @tracked modifiedCode: string | undefined | null;
   @tracked searchReplaceBlock: string | undefined | null;
-  @tracked isNewFile: boolean | undefined | null;
 
   @service declare private cardService: CardService;
   @service declare private commandService: CommandService;
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
-    let { fileUrl, searchReplaceBlock, isNewFile } = named;
-    this.fileUrl = fileUrl;
+    let { boxelMeta, searchReplaceBlock } = named;
+    this.boxelMeta = boxelMeta;
     this.searchReplaceBlock = searchReplaceBlock;
-    this.isNewFile = isNewFile;
-
     this.load.perform();
   }
 
@@ -41,16 +38,19 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   }
 
   private load = restartableTask(async () => {
-    let { fileUrl, searchReplaceBlock } = this;
-    if (!fileUrl || !searchReplaceBlock) {
+    let { boxelMeta, searchReplaceBlock } = this;
+    if (!boxelMeta || !searchReplaceBlock) {
       return;
     }
 
-    if (this.isNewFile) {
+    if (boxelMeta.isNewFile) {
       this.originalCode = '';
     } else {
+      if (!boxelMeta.fileUrl) {
+        throw new Error('boxelMeta.fileUrl is required');
+      }
       this.originalCode = (
-        await this.cardService.getSource(new URL(fileUrl))
+        await this.cardService.getSource(new URL(boxelMeta.fileUrl))
       ).content;
     }
 
@@ -69,18 +69,16 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
 
 export function getCodeDiffResultResource(
   parent: object,
-  fileUrl?: string | null,
   searchReplaceBlock?: string | null,
-  isNewFile?: boolean,
+  boxelMeta?: BoxelMeta | null,
 ) {
-  if (!fileUrl || !searchReplaceBlock) {
-    throw new Error('fileUrl and searchReplaceBlock are required');
+  if (!boxelMeta || !searchReplaceBlock) {
+    throw new Error('boxelMeta and searchReplaceBlock are required');
   }
   return CodeDiffResource.from(parent, () => ({
     named: {
-      fileUrl,
+      boxelMeta,
       searchReplaceBlock,
-      isNewFile,
     },
   }));
 }

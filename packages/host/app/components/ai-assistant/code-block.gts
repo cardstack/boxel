@@ -447,7 +447,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
           applyCodePatch=(component
             ApplyCodePatchButton
             codePatch=@codeData.searchReplaceBlock
-            fileUrl=@codeData.fileUrl
+            boxelMeta=@codeData.boxelMeta
           )
         )
       }}
@@ -522,7 +522,7 @@ class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
 
   // This is for debugging purposes only
   logCodePatchAction = () => {
-    console.log('fileUrl \n', this.args.codePatchAction.fileUrl);
+    console.log('fileUrl \n', this.args.codePatchAction.boxelMeta.fileUrl);
     console.log(
       'searchReplaceBlock \n',
       this.args.codePatchAction.searchReplaceBlock,

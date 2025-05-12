@@ -9,6 +9,7 @@ import LintAndFixCommand from './lint-and-fix';
 
 import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
+import OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class PatchCodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.PatchCodeInput,
@@ -16,6 +17,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   description = `Apply code changes to file and then apply lint fixes`;
 
   async getInputType() {
@@ -27,7 +29,7 @@ export default class PatchCodeCommand extends HostBaseCommand<
   protected async run(
     input: BaseCommandModule.PatchCodeInput,
   ): Promise<BaseCommandModule.LintAndFixResult> {
-    let { fileUrl, codeBlocks, isNewFile } = input;
+    let { fileUrl, fileName, codeBlocks, isNewFile } = input;
 
     let source = isNewFile
       ? ''
@@ -48,22 +50,24 @@ export default class PatchCodeCommand extends HostBaseCommand<
 
     // lint and fix the final result
     let lintAndFixCommand = new LintAndFixCommand(this.commandContext);
-    let realmURL = this.realm.url(fileUrl);
+    let realmURL = this.operatorModeStateService.realmURL;
 
     let lintAndFixResult = await lintAndFixCommand.execute({
-      realm: realmURL,
+      realm: realmURL.href,
       fileContent: patchedCode,
     });
 
     if (isNewFile) {
       let isFileUrlAvailable =
-        (await this.cardService.getSource(new URL(fileUrl))).status === 404;
+        (await this.cardService.getSource(new URL(fileName, realmURL)))
+          .status === 404;
       if (!isFileUrlAvailable) {
         // add a 3-character suffix to the file name (before the extension) to make it unique
-        fileUrl = fileUrl.replace(
+        fileName = fileName.replace(
           /\.([^.]+)$/,
           `-${Math.random().toString(36).substring(2, 5)}.$1`,
         );
+        fileUrl = new URL(fileName, realmURL).href;
       }
     }
 
