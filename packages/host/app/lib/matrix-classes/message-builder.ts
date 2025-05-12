@@ -100,7 +100,9 @@ export default class MessageBuilder {
     let content = this.event.content as CardMessageContent;
     let attachedCardIds: string[] = [];
     if (content.data?.attachedCards) {
-      attachedCardIds = content.data.attachedCards.map((c) => c.sourceUrl);
+      attachedCardIds = content.data.attachedCards
+        .map((c) => c.sourceUrl)
+        .filter(Boolean);
     }
     return attachedCardIds;
   }

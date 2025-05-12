@@ -75,7 +75,7 @@ const coreVisitor = {
   FunctionDeclaration: {
     enter(path: NodePath<t.FunctionDeclaration>, state: State) {
       let localName = getLocalName(path);
-      if (t.isExportDeclaration(path.parentPath)) {
+      if (t.isExportDeclaration(path.parentPath.node)) {
         // == handle direct export ==
         insertOrReplace(
           {
@@ -109,7 +109,8 @@ const coreVisitor = {
         }
 
         // == handle direct exports ==
-        if (t.isExportDeclaration(path.parentPath)) {
+        // FIXME are these changes correct?
+        if (t.isExportDeclaration(path.parentPath.node)) {
           insertOrReplace(
             {
               localName,
@@ -161,7 +162,7 @@ const coreVisitor = {
           insertOrReplace(possibleCardOrField, state.opts.declarations);
         } else {
           // == handle non-card or non-field ==
-          if (t.isExportDeclaration(path.parentPath)) {
+          if (t.isExportDeclaration(path.parentPath.node)) {
             insertOrReplace(
               {
                 localName,
