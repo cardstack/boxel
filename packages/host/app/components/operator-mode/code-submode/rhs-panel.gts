@@ -1,102 +1,49 @@
-import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
-import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
-import { htmlSafe } from '@ember/template';
-import { buildWaiter } from '@ember/test-waiters';
-import { isTesting } from '@embroider/macros';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
-import { dropTask, timeout } from 'ember-concurrency';
-
-import perform from 'ember-concurrency/helpers/perform';
-
-import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
-
-import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
 
 import { Accordion } from '@cardstack/boxel-ui/components';
 
-import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
-import { File } from '@cardstack/boxel-ui/icons';
+import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   identifyCard,
   isCardDocumentString,
-  hasExecutableExtension,
-  RealmPaths,
   isResolvedCodeRef,
-  PermissionsContextName,
-  GetCardContextName,
   CodeRef,
   type ResolvedCodeRef,
-  type getCard,
   CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
-import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
 
-import RecentFiles from '@cardstack/host/components/editor/recent-files';
-import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
-import consumeContext from '@cardstack/host/helpers/consume-context';
-import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
-  moduleContentsResource,
+  type ModuleContentsResource,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
-  type State as ModuleState,
-  findDeclarationByName,
 } from '@cardstack/host/resources/module-contents';
-import type CardService from '@cardstack/host/services/card-service';
-import type EnvironmentService from '@cardstack/host/services/environment-service';
-import type LoaderService from '@cardstack/host/services/loader-service';
-import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
-import type RealmService from '@cardstack/host/services/realm';
-import type RecentFilesService from '@cardstack/host/services/recent-files-service';
-import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-import { type SpecType } from 'https://cardstack.com/base/spec';
 
-import {
-  CodeModePanelWidths,
-  CodeModePanelHeights,
-  CodeModePanelSelections,
-} from '@cardstack/host/utils/local-storage-keys';
-import FileTree from '../editor/file-tree';
+import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import { type Ready } from '@cardstack/host/resources/file';
-import type FileResource from '@cardstack/host/resources/file';
+import type { FileResource } from '@cardstack/host/resources/file';
 
-import AttachFileModal from '@cardstack/host/components/operator-mode/attach-file-modal';
-import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
-import CodeEditor from '@cardstack/host/components/operator-mode/code-editor';
-import InnerContainer from '@cardstack/host/components/operator-mode/code-submode/inner-container';
-import CodeSubmodeLeftPanelToggle from '@cardstack/host/components/operator-mode/code-submode/left-panel-toggle';
 import SchemaEditor, {
   SchemaEditorTitle,
 } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
-import CreateFileModal, {
-  type FileType,
-} from '@cardstack/host/components/operator-mode/create-file-modal';
-import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
-import DetailPanel from '@cardstack/host/components/operator-mode/detail-panel';
-import NewFileButton from '@cardstack/host/components/operator-mode/new-file-button';
-import SubmodeLayout from '@cardstack/host/components/operator-mode/submode-layout';
 
 export type SelectedAccordionItem =
   | 'schema-editor'
@@ -136,7 +83,7 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
-  constructor(owner: Owner, args: Signature['Args']) {
+  constructor(owner: Owner, args: RhsPanelSignature['Args']) {
     super(owner, args);
 
     let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
@@ -211,7 +158,7 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
       if (!this.hasCardDefOrFieldDef) {
         return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
       } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
-        return `No tools are available for the selected item: ${this.args.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
+        return `No tools are available for the selected item: ${this.args.selectedDeclaration?.type} "${this.args.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
       }
     }
     // If rhs doesn't handle any case but we can't capture the error

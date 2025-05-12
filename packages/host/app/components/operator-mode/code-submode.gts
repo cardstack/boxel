@@ -1,5 +1,4 @@
 import { registerDestructor } from '@ember/destroyable';
-import { fn } from '@ember/helper';
 import { hash } from '@ember/helper';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
@@ -19,20 +18,14 @@ import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
 import { consume, provide } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
-import { TrackedObject } from 'tracked-built-ins';
-
-import { Accordion } from '@cardstack/boxel-ui/components';
-
 import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
-import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { not, bool } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
-  identifyCard,
   isCardDocumentString,
   hasExecutableExtension,
   RealmPaths,
-  isResolvedCodeRef,
   PermissionsContextName,
   GetCardContextName,
   CodeRef,
@@ -43,14 +36,12 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
-import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import RhsPanel from '@cardstack/host/components/operator-mode/code-submode/rhs-panel';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
   moduleContentsResource,
-  isCardOrFieldDeclaration,
   type ModuleDeclaration,
   type State as ModuleState,
   findDeclarationByName,
@@ -71,20 +62,14 @@ import { type SpecType } from 'https://cardstack.com/base/spec';
 import {
   CodeModePanelWidths,
   CodeModePanelHeights,
-  CodeModePanelSelections,
 } from '../../utils/local-storage-keys';
 import FileTree from '../editor/file-tree';
 
 import AttachFileModal from './attach-file-modal';
-import CardError from './card-error';
-import CardPreviewPanel from './card-preview-panel/index';
 import CardURLBar from './card-url-bar';
 import CodeEditor from './code-editor';
 import InnerContainer from './code-submode/inner-container';
 import CodeSubmodeLeftPanelToggle from './code-submode/left-panel-toggle';
-import Playground from './code-submode/playground/playground';
-import SchemaEditor, { SchemaEditorTitle } from './code-submode/schema-editor';
-import SpecPreview from './code-submode/spec-preview';
 import CreateFileModal, { type FileType } from './create-file-modal';
 import DeleteModal from './delete-modal';
 import DetailPanel from './detail-panel';
