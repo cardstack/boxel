@@ -1024,6 +1024,97 @@ module(basename(__filename), function () {
       );
     });
 
+    test('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function (assert) {
+      await realm.write(
+        'task.gts',
+        `
+            import StringField from 'https://cardstack.com/base/string';
+            import {
+              Component,
+              CardDef,
+              contains,
+              field,
+              linksTo,
+            } from 'https://cardstack.com/base/card-api';
+
+
+            export class Team extends CardDef {
+              static displayName = 'Team'
+              @field name = contains(StringField, {isUsed: true});
+            }
+
+            export class Task extends CardDef {
+              static displayName = 'Sprint Task';
+              @field team = linksTo(() => Team, {isUsed: true}); 
+              @field shortId = contains(StringField, {
+                computeVia: function (this: Task) {
+                  return this.team?.name
+                },
+              });
+
+              //template with no reference to shortId
+              static isolated = class TaskIsolated extends Component<typeof this> {
+              <template>
+              </template>
+              }
+            }
+            `,
+      );
+      await realm.write(
+        'team.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Team B',
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: './task',
+                name: 'Team',
+              },
+            },
+          },
+        }),
+      );
+      await realm.write(
+        'task.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              title: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            relationships: {
+              team: {
+                links: {
+                  self: './team',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './task',
+                name: 'Task',
+              },
+            },
+          },
+        }),
+      );
+      let taskInstance = (await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}task`),
+      )) as any;
+      assert.strictEqual(
+        taskInstance?.type,
+        'instance',
+        'task instance created without any error',
+      );
+    });
+
     test('sets resource_created_at for modules and instances', async function (assert) {
       let entry = (await realm.realmIndexQueryEngine.module(
         new URL(`${testRealm}fancy-person.gts`),

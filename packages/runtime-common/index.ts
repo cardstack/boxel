@@ -314,6 +314,7 @@ export interface CreateOptions {
 
 export interface AddOptions extends CreateOptions {
   doNotPersist?: boolean;
+  doNotWaitForPersist?: boolean;
 }
 
 export interface Store {
@@ -324,7 +325,15 @@ export interface Store {
   ): Promise<string | CardErrorJSONAPI>;
   add<T extends CardDef>(
     instanceOrDoc: T | LooseSingleCardDocument,
-    opts?: AddOptions,
+    opts?: CreateOptions & { doNotPersist: true },
+  ): Promise<T>;
+  add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: CreateOptions & { doNotWaitForPersist: true },
+  ): Promise<T>;
+  add<T extends CardDef>(
+    instanceOrDoc: T | LooseSingleCardDocument,
+    opts?: CreateOptions,
   ): Promise<T | CardErrorJSONAPI>;
   peek<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;
   peekLive<T extends CardDef>(id: string): T | CardErrorJSONAPI | undefined;

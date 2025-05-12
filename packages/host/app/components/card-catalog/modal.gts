@@ -597,6 +597,15 @@ export default class CardCatalogModal extends Component<Signature> {
             `Cannot determine the realm user id of ${realmOfConsumer}`,
           );
         }
+        // First check if the realm we're reading from has public read permissions
+        await this.realm.ensureRealmMeta(realmOfSelectedCard);
+        let selectedCardRealmInfo = this.realm.info(realmOfSelectedCard);
+        if (selectedCardRealmInfo.isPublic) {
+          // Nothing to do, the realm is publicly readable
+          return;
+        }
+        // If the realm is not publicly readable, try to set the permissions
+        // for the consuming realm
         let selectedCardRealmPermissions =
           await this.realm.allUsersPermissions(realmOfSelectedCard);
         if (selectedCardRealmPermissions == null) {

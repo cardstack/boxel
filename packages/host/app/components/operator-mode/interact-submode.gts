@@ -204,7 +204,7 @@ export default class InteractSubmode extends Component {
         let instance: CardDef;
         if (opts?.doc) {
           instance = await here.store.add(opts.doc, {
-            doNotPersist: true,
+            doNotWaitForPersist: true,
             realm: opts?.realmURL?.href,
           });
         } else {
@@ -216,7 +216,7 @@ export default class InteractSubmode extends Component {
           );
           instance = new CardKlass() as CardDef;
           await here.store.add(instance, {
-            doNotPersist: true,
+            doNotWaitForPersist: true,
             realm: opts?.realmURL?.href,
             localDir: opts?.localDir,
           });
