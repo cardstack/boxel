@@ -523,7 +523,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 0,
-          instanceErrors: 3, // 1 post, 2 persons, 1 bad-link post
+          instanceErrors: 3, // 1 post, 2 persons
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
           totalIndexEntries: 3,
@@ -1032,7 +1032,7 @@ module(basename(__filename), function () {
                 },
               });
 
-              //breaks when u have a custom template
+              //template with no reference to shortId
               static isolated = class TaskIsolated extends Component<typeof this> {
               <template>
               </template>
