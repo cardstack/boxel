@@ -1,4 +1,4 @@
-import { module, test, only } from 'qunit';
+import { module, test } from 'qunit';
 import { dirSync } from 'tmp';
 import {
   baseRealm,
