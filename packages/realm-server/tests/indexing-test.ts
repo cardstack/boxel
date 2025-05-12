@@ -933,7 +933,7 @@ module(basename(__filename), function () {
     // Note this particular test should only be a server test as the nature of
     // the TestAdapter in the host tests will trigger the linked card to be
     // already loaded when in fact in the real world it is not.
-    only('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
+    test('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
       const hassanId = `${testRealm}hassan`;
       let queryEngine = realm.realmIndexQueryEngine;
       let hassan = await queryEngine.cardDocument(new URL(hassanId));
