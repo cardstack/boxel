@@ -12,11 +12,13 @@ import type {
   ActiveLLMEvent,
   CardMessageContent,
   CardMessageEvent,
+  MessageEvent,
   CommandResultEvent,
   EncodedCommandRequest,
   SkillsConfigEvent,
   Tool,
   CodePatchResultEvent,
+  RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
@@ -177,6 +179,12 @@ export async function constructHistory(
     ) {
       continue;
     }
+    event = event as
+      | CardMessageEvent
+      | CommandResultEvent
+      | CodePatchResultEvent
+      | RealmServerEvent
+      | MessageEvent; // Typescript could have inferred this from the line above
     let eventId = event.event_id!;
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       let { attachedCards } = event.content.data ?? {};
