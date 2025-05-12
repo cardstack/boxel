@@ -13,11 +13,8 @@ import { Accordion } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
-  identifyCard,
   isCardDocumentString,
-  isResolvedCodeRef,
   CodeRef,
-  type ResolvedCodeRef,
   CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
@@ -27,6 +24,7 @@ import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-prev
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
 import {
+  type CardOrFieldDeclaration,
   type ModuleContentsResource,
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
@@ -73,6 +71,8 @@ interface RhsPanelSignature {
     moduleContentsResource: ModuleContentsResource;
     previewFormat: Format;
     readyFile: Ready;
+    selectedCardOrField: CardOrFieldDeclaration | undefined;
+    selectedCodeRef: CodeRef | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     setPreviewFormat: (format: Format) => void;
   };
@@ -96,23 +96,8 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
     return this.args.moduleContentsResource?.declarations;
   }
 
-  private get selectedCardOrField() {
-    if (
-      this.args.selectedDeclaration !== undefined &&
-      isCardOrFieldDeclaration(this.args.selectedDeclaration)
-    ) {
-      return this.args.selectedDeclaration;
-    }
-    return undefined;
-  }
-
-  private get selectedCodeRef(): ResolvedCodeRef | undefined {
-    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
-    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
-  }
-
   get showSpecPreview() {
-    return Boolean(this.selectedCardOrField?.exportName);
+    return Boolean(this.args.selectedCardOrField?.exportName);
   }
 
   private get hasCardDefOrFieldDef() {
@@ -162,7 +147,7 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
       }
     }
     // If rhs doesn't handle any case but we can't capture the error
-    if (!this.args.card && !this.selectedCardOrField) {
+    if (!this.args.card && !this.args.selectedCardOrField) {
       // this will prevent displaying message during a page refresh
       if (isCardDocumentString(this.args.readyFile.content)) {
         return null;
@@ -233,7 +218,7 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
       >
         {{this.fileIncompatibilityMessage}}
       </div>
-    {{else if this.selectedCardOrField.cardOrField}}
+    {{else if @selectedCardOrField.cardOrField}}
       <Accordion
         data-test-rhs-panel='card-or-field'
         data-test-selected-accordion-item={{this.selectedAccordionItem}}
@@ -242,8 +227,8 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
         <SchemaEditor
           @file={{@readyFile}}
           @moduleContentsResource={{this.args.moduleContentsResource}}
-          @card={{this.selectedCardOrField.cardOrField}}
-          @cardTypeResource={{this.selectedCardOrField.cardType}}
+          @card={{@selectedCardOrField.cardOrField}}
+          @cardTypeResource={{@selectedCardOrField.cardType}}
           @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
           @isReadOnly={{@isReadOnly}}
           as |SchemaEditorTitle SchemaEditorPanel|
@@ -265,9 +250,9 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
         </SchemaEditor>
         <Playground
           @isOpen={{eq this.selectedAccordionItem 'playground'}}
-          @codeRef={{this.selectedCodeRef}}
+          @codeRef={{@selectedCodeRef}}
           @isUpdating={{this.args.moduleContentsResource.isLoading}}
-          @cardOrField={{this.selectedCardOrField.cardOrField}}
+          @cardOrField={{@selectedCardOrField.cardOrField}}
           as |PlaygroundTitle PlaygroundContent|
         >
           <A.Item

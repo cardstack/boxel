@@ -23,7 +23,9 @@ import { not, bool } from '@cardstack/boxel-ui/helpers';
 import { File } from '@cardstack/boxel-ui/icons';
 
 import {
+  identifyCard,
   isCardDocumentString,
+  isResolvedCodeRef,
   hasExecutableExtension,
   RealmPaths,
   PermissionsContextName,
@@ -41,6 +43,7 @@ import RhsPanel from '@cardstack/host/components/operator-mode/code-submode/rhs-
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
 import {
+  isCardOrFieldDeclaration,
   moduleContentsResource,
   type ModuleDeclaration,
   type State as ModuleState,
@@ -343,6 +346,21 @@ export default class CodeSubmode extends Component<Signature> {
       // default to 1st selection
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
+  }
+
+  private get selectedCardOrField() {
+    if (
+      this.selectedDeclaration !== undefined &&
+      isCardOrFieldDeclaration(this.selectedDeclaration)
+    ) {
+      return this.selectedDeclaration;
+    }
+    return undefined;
+  }
+
+  private get selectedCodeRef(): ResolvedCodeRef | undefined {
+    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
+    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
   }
 
   private get itemToDeleteAsCard() {
@@ -755,6 +773,8 @@ export default class CodeSubmode extends Component<Signature> {
                     @moduleContentsResource={{this.moduleContentsResource}}
                     @previewFormat={{this.previewFormat}}
                     @readyFile={{this.readyFile}}
+                    @selectedCardOrField={{this.selectedCardOrField}}
+                    @selectedCodeRef={{this.selectedCodeRef}}
                     @selectedDeclaration={{this.selectedDeclaration}}
                     @setPreviewFormat={{this.setPreviewFormat}}
                   />
