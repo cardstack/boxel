@@ -38,7 +38,7 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
-import RhsPanel from '@cardstack/host/components/operator-mode/code-submode/rhs-panel';
+import ModuleInspector from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -761,7 +761,7 @@ export default class CodeSubmode extends Component<Signature> {
             <ResizablePanel @defaultSize={{this.defaultPanelWidths.rightPanel}}>
               <InnerContainer>
                 {{#if this.isReady}}
-                  <RhsPanel
+                  <ModuleInspector
                     @card={{this.card}}
                     @cardError={{this.cardError}}
                     @currentOpenFile={{this.currentOpenFile}}

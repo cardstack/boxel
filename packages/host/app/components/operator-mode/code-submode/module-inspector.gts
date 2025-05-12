@@ -53,7 +53,7 @@ const accordionItems: SelectedAccordionItem[] = [
   'spec-preview',
 ];
 
-interface RhsPanelSignature {
+interface ModuleInspectorSignature {
   Args: {
     card: CardDef | undefined;
     cardError: CardErrorJSONAPI | undefined;
@@ -77,7 +77,7 @@ interface RhsPanelSignature {
   };
 }
 
-export default class RhsPanel extends Component<RhsPanelSignature> {
+export default class ModuleInspector extends Component<ModuleInspectorSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
 
   private panelSelections: Record<string, SelectedAccordionItem>;

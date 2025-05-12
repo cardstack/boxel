@@ -49,7 +49,7 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/rhs-panel';
+import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 import Preview from '@cardstack/host/components/preview';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
