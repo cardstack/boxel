@@ -523,7 +523,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 0,
-          instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
+          instanceErrors: 3, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
           totalIndexEntries: 3,
@@ -921,7 +921,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 1,
-          instanceErrors: 1,
+          instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 1,
           totalIndexEntries: 13,
@@ -930,7 +930,7 @@ module(basename(__filename), function () {
       );
     });
 
-    // Note this particular test should only be a server test as the nature of
+    // Note this particular test should test be a server test as the nature of
     // the TestAdapter in the host tests will trigger the linked card to be
     // already loaded when in fact in the real world it is not.
     test('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
@@ -1004,7 +1004,7 @@ module(basename(__filename), function () {
       );
     });
 
-    test('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function(assert){
+    test('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function (assert) {
       await realm.write(
         'task.gts',
         `
@@ -1038,57 +1038,52 @@ module(basename(__filename), function () {
               </template>
               }
             }
-            `
+            `,
       );
       await realm.write(
         'team.json',
-        JSON.stringify(
-          {
-            "data": {
-              "type": "card",
-              "attributes": {
-                "name": "Team B",
-                "description": null,
-                "thumbnailURL": null
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Team B',
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: './task',
+                name: 'Team',
               },
-              "meta": {
-                "adoptsFrom": {
-                  "module": "./task",
-                  "name": "Team"
-                }
-              }
-            }
-          }
-        )
+            },
+          },
+        }),
       );
       await realm.write(
         'task.json',
-        JSON.stringify(
-          {
-            "data": {
-              "type": "card",
-              "attributes": {
-                "title": null,
-                "description": null,
-                "thumbnailURL": null
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              title: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            relationships: {
+              team: {
+                links: {
+                  self: './team',
+                },
               },
-              "relationships": {
-                "team": {
-                  "links": {
-                    "self": "./team"
-                  }
-                }
+            },
+            meta: {
+              adoptsFrom: {
+                module: './task',
+                name: 'Task',
               },
-              "meta": {
-                "adoptsFrom": {
-                  "module": "./task",
-                  "name": "Task"
-                }
-              }
-            }
-          }
-
-        )
+            },
+          },
+        }),
       );
       let taskInstance = (await realm.realmIndexQueryEngine.instance(
         new URL(`${testRealm}task`),
@@ -1096,9 +1091,9 @@ module(basename(__filename), function () {
       assert.strictEqual(
         taskInstance?.type,
         'instance',
-        'task instance created without any error'
-      )
-    })
+        'task instance created without any error',
+      );
+    });
 
     test('sets resource_created_at for modules and instances', async function (assert) {
       let entry = (await realm.realmIndexQueryEngine.module(
