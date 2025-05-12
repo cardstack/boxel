@@ -16,6 +16,7 @@ import {
   isCardDocumentString,
   CodeRef,
   CardErrorJSONAPI,
+  ResolvedCodeRef,
 } from '@cardstack/runtime-common';
 
 import CardError from '@cardstack/host/components/operator-mode/card-error';
@@ -70,7 +71,7 @@ interface RhsPanelSignature {
     previewFormat: Format;
     readyFile: Ready;
     selectedCardOrField: CardOrFieldDeclaration | undefined;
-    selectedCodeRef: CodeRef | undefined;
+    selectedCodeRef: ResolvedCodeRef | undefined;
     selectedDeclaration: ModuleDeclaration | undefined;
     setPreviewFormat: (format: Format) => void;
   };
