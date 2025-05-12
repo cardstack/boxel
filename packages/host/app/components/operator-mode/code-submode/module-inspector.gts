@@ -82,7 +82,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
-  constructor(owner: Owner, args: RhsPanelSignature['Args']) {
+  constructor(owner: Owner, args: ModuleInspectorSignature['Args']) {
     super(owner, args);
 
     let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
