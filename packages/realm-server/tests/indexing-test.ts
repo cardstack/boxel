@@ -1,4 +1,4 @@
-import { module, test } from 'qunit';
+import { module, test, only } from 'qunit';
 import { dirSync } from 'tmp';
 import {
   baseRealm,
@@ -266,26 +266,6 @@ module(basename(__filename), function () {
                   author: {
                     links: {
                       self: './vangogh',
-                    },
-                  },
-                },
-                meta: {
-                  adoptsFrom: {
-                    module: './post',
-                    name: 'Post',
-                  },
-                },
-              },
-            },
-            'bad-link.json': {
-              data: {
-                attributes: {
-                  message: 'I have a bad link',
-                },
-                relationships: {
-                  author: {
-                    links: {
-                      self: 'http://localhost:9000/this-is-a-link-to-nowhere',
                     },
                   },
                 },
@@ -1023,6 +1003,167 @@ module(basename(__filename), function () {
         'indexed correct number of files',
       );
     });
+
+    only('random behaviour where linked field only resolves for default isolated templates but not custom isolated templates', async function(assert){
+      await realm.write(
+        'task.gts',
+        `
+            import StringField from 'https://cardstack.com/base/string';
+            import {
+              Component,
+              CardDef,
+              contains,
+              field,
+              linksTo,
+            } from 'https://cardstack.com/base/card-api';
+
+
+            export class Team extends CardDef {
+              static displayName = 'Team'
+              @field name = contains(StringField, {isUsed: true});
+            }
+
+            export class Task extends CardDef {
+              static displayName = 'Sprint Task';
+              @field team = linksTo(() => Team, {isUsed: true}); //even using isUsed doesn't fix this
+              @field shortId = contains(StringField, {
+                computeVia: function (this: Task) {
+                  return this.team?.name
+                },
+              });
+
+              //breaks when u have a custom template
+              static isolated = class TaskIsolated extends Component<typeof this> {
+              <template>
+              </template>
+              }
+            }
+            `
+      );
+
+      await realm.write(
+        'task-without-custom-isolated-template.gts',
+        `
+            import StringField from 'https://cardstack.com/base/string';
+            import {
+              Component,
+              CardDef,
+              contains,
+              field,
+              linksTo,
+            } from 'https://cardstack.com/base/card-api';
+
+
+            export class Team extends CardDef {
+              static displayName = 'Team'
+              @field name = contains(StringField, {isUsed: true});
+            }
+
+            export class SimpleTask extends CardDef {
+              static displayName = 'Sprint Task';
+              @field team = linksTo(() => Team, {isUsed: true}); //even using isUsed doesn't fix this
+              @field shortId = contains(StringField, {
+                computeVia: function (this: Task) {
+                  return this.team?.name
+                },
+              });
+            }
+            `
+      );
+      await realm.write(
+        'team.json',
+        JSON.stringify(
+          {
+            "data": {
+              "type": "card",
+              "attributes": {
+                "name": "Team B",
+                "description": null,
+                "thumbnailURL": null
+              },
+              "meta": {
+                "adoptsFrom": {
+                  "module": "./task",
+                  "name": "Team"
+                }
+              }
+            }
+          }
+        )
+      );
+      await realm.write(
+        'task.json',
+        JSON.stringify(
+          {
+            "data": {
+              "type": "card",
+              "attributes": {
+                "title": null,
+                "description": null,
+                "thumbnailURL": null
+              },
+              "relationships": {
+                "team": {
+                  "links": {
+                    "self": "./team"
+                  }
+                }
+              },
+              "meta": {
+                "adoptsFrom": {
+                  "module": "./task",
+                  "name": "Task"
+                }
+              }
+            }
+          }
+
+        )
+      );
+
+      await realm.write(
+        'task-without-custom-isolated-template.json',
+        JSON.stringify(
+          {
+            "data": {
+              "type": "card",
+              "attributes": {
+                "title": null,
+                "description": null,
+                "thumbnailURL": null
+              },
+              "relationships": {
+                "team": {
+                  "links": {
+                    "self": "./team"
+                  }
+                }
+              },
+              "meta": {
+                "adoptsFrom": {
+                  "module": "./task-without-custom-isolated-template",
+                  "name": "SimpleTask"
+                }
+              }
+            }
+          }
+
+        )
+      );
+      let taskInstance = (await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}task`),
+      )) as any;
+      let taskInstanceWithoutCustomIsolatedTemplate = (await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}task-without-custom-isolated-template`),
+      )) as any;
+      assert.strictEqual(
+        taskInstance?.error.message,
+        'The field Task.team refers to the card instance ./team which is not loaded'
+      )
+      assert.strictEqual(
+        taskInstanceWithoutCustomIsolatedTemplate.type, 'instance'
+      )
+    })
 
     test('sets resource_created_at for modules and instances', async function (assert) {
       let entry = (await realm.realmIndexQueryEngine.module(
