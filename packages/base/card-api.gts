@@ -3054,10 +3054,10 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
       let card = Reflect.getPrototypeOf(instance)!
         .constructor as typeof BaseDef;
       let field: Field = getField(card, fieldName as string)!;
-      return (await field.handleNotLoadedError(instance, e, opts)) as
-        | T[K]
-        | T[K][]
-        | undefined;
+      return (await field.handleNotLoadedError(instance, e, {
+        ...(field.isUsed ? { loadFields: true } : {}),
+        ...opts,
+      })) as T[K] | T[K][] | undefined;
     } else {
       throw e;
     }
