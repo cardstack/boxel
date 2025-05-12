@@ -556,7 +556,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 3, // 1 post and 2 persons
-          instanceErrors: 1,
+          instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 3,
           totalIndexEntries: 9,
