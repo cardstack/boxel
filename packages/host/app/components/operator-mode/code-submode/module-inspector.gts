@@ -145,7 +145,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         return `No tools are available for the selected item: ${this.args.selectedDeclaration?.type} "${this.args.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
       }
     }
-    // If rhs doesn't handle any case but we can't capture the error
+    // If module inspector doesn't handle any case but we can't capture the error
     if (!this.args.card && !this.args.selectedCardOrField) {
       // this will prevent displaying message during a page refresh
       if (isCardDocumentString(this.args.readyFile.content)) {

@@ -1322,7 +1322,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
   });
 
-  test('After opening definition from card type and fields on RHS, "in-this-file" highlights selected definition', async function (assert) {
+  test('After opening definition from card type and fields in module inspector, "in-this-file" highlights selected definition', async function (assert) {
     let operatorModeState = {
       submode: Submodes.Code,
       codePath: `${testRealmURL}imports.gts`,
