@@ -1803,7 +1803,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .exists('closing the final panel opens the previous panel');
 
       await click('[data-test-file="country.gts"]');
-      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert.dom('[data-test-module-inspector="card-or-field"]').exists();
       assert
         .dom('[data-test-selected-accordion-item="schema-editor"]')
         .exists();
@@ -1818,7 +1818,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-file="pet-person.gts"]');
       assert.dom('[data-test-selected-accordion-item="playground"]').exists();
       await click('[data-test-accordion-item="playground"] > button'); // toggle playground closed
-      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert.dom('[data-test-module-inspector="card-or-field"]').exists();
       assert
         .dom('[data-test-selected-accordion-item="spec-preview"]')
         .exists('closing panel toggles next panel open');

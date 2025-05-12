@@ -219,7 +219,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       </div>
     {{else if @selectedCardOrField.cardOrField}}
       <Accordion
-        data-test-rhs-panel='card-or-field'
+        data-test-module-inspector='card-or-field'
         data-test-selected-accordion-item={{this.selectedAccordionItem}}
         as |A|
       >
