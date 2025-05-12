@@ -226,7 +226,7 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
       >
         <SchemaEditor
           @file={{@readyFile}}
-          @moduleContentsResource={{this.args.moduleContentsResource}}
+          @moduleContentsResource={{@moduleContentsResource}}
           @card={{@selectedCardOrField.cardOrField}}
           @cardTypeResource={{@selectedCardOrField.cardType}}
           @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
@@ -251,7 +251,7 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
         <Playground
           @isOpen={{eq this.selectedAccordionItem 'playground'}}
           @codeRef={{@selectedCodeRef}}
-          @isUpdating={{this.args.moduleContentsResource.isLoading}}
+          @isUpdating={{@moduleContentsResource.isLoading}}
           @cardOrField={{@selectedCardOrField.cardOrField}}
           as |PlaygroundTitle PlaygroundContent|
         >
@@ -271,8 +271,8 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
           </A.Item>
         </Playground>
         <SpecPreview
-          @selectedDeclaration={{this.args.selectedDeclaration}}
-          @isLoadingNewModule={{this.args.moduleContentsResource.isLoadingNewModule}}
+          @selectedDeclaration={{@selectedDeclaration}}
+          @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
           @toggleAccordionItem={{this.toggleAccordionItem}}
           @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
           as |SpecPreviewTitle SpecPreviewContent|
@@ -303,7 +303,7 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
           </A.Item>
         </SpecPreview>
       </Accordion>
-    {{else if this.args.moduleContentsResource.moduleError}}
+    {{else if @moduleContentsResource.moduleError}}
       <Accordion as |A|>
         <A.Item
           class='accordion-item'
@@ -316,7 +316,7 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
           </:title>
           <:content>
             <SyntaxErrorDisplay
-              @syntaxErrors={{this.args.moduleContentsResource.moduleError.message}}
+              @syntaxErrors={{@moduleContentsResource.moduleError.message}}
             />
           </:content>
         </A.Item>
