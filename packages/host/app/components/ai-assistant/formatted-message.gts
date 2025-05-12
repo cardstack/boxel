@@ -83,6 +83,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         return new TrackedObject({
           type: part.type,
           content: part.content,
+          codeBlockIndex: part.codeBlockIndex,
         });
       }),
     );
@@ -99,8 +100,12 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       this.setHtmlGroups(htmlGroups);
     } else {
       this.htmlGroups.forEach((oldPart, index) => {
-        if (oldPart.content !== htmlGroups[index].content) {
+        if (
+          oldPart.content !== htmlGroups[index].content ||
+          oldPart.codeBlockIndex !== htmlGroups[index].codeBlockIndex
+        ) {
           oldPart.content = htmlGroups[index].content;
+          oldPart.codeBlockIndex = htmlGroups[index].codeBlockIndex;
         }
       });
       if (htmlGroups.length > this.htmlGroups.length) {
@@ -109,6 +114,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
             return new TrackedObject({
               type: part.type,
               content: part.content,
+              codeBlockIndex: part.codeBlockIndex,
             });
           }),
         );
@@ -226,7 +232,9 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
           {{#if (eq htmlGroup.type 'pre_tag')}}
 
             {{#let
-              (extractCodeData htmlGroup.content @roomId @eventId index)
+              (extractCodeData
+                htmlGroup.content @roomId @eventId htmlGroup.codeBlockIndex
+              )
               as |codeData|
             }}
               {{#let

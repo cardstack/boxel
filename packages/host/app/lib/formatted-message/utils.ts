@@ -13,7 +13,7 @@ export function extractCodeData(
   preElementString: string,
   roomId: string,
   eventId: string,
-  index: number,
+  index?: number,
 ): CodeData {
   // We are creating a new element in the dom
   // so that we can easily parse the content of the top level <pre> tags.
@@ -32,7 +32,7 @@ export function extractCodeData(
       searchReplaceBlock: null,
       roomId: null,
       eventId: null,
-      index,
+      index: index ?? 0,
     };
   }
 
@@ -93,7 +93,7 @@ export function extractCodeData(
       : null,
     roomId,
     eventId,
-    index,
+    index: index ?? 0,
   };
 }
 
@@ -129,6 +129,7 @@ export function wrapLastTextNodeInStreamingTextSpan(
 export interface HtmlTagGroup {
   type: 'pre_tag' | 'non_pre_tag';
   content: string;
+  codeBlockIndex?: number;
 }
 
 export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
@@ -142,6 +143,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   let doc = document.createElement('div');
   doc.innerHTML = htmlString;
 
+  let codeBlockIndex = 0;
   Array.from(doc.childNodes).forEach((node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       let textContent = node.textContent?.trim() || '';
@@ -159,6 +161,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,
+          codeBlockIndex: codeBlockIndex++,
         });
       } else {
         result.push({
