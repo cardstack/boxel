@@ -119,7 +119,7 @@ let autoMigrate = migrateDB || undefined;
   await worker.run();
   log.info(`worker started`);
   if (process.send) {
-    process.send('ready');
+    process.send(`ready:${workerId}`);
   }
 })().catch((e: any) => {
   Sentry.captureException(e);
