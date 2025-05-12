@@ -1025,7 +1025,7 @@ module(basename(__filename), function () {
 
             export class Task extends CardDef {
               static displayName = 'Sprint Task';
-              @field team = linksTo(() => Team, {isUsed: true}); //even using isUsed doesn't fix this
+              @field team = linksTo(() => Team, {isUsed: true}); 
               @field shortId = contains(StringField, {
                 computeVia: function (this: Task) {
                   return this.team?.name
