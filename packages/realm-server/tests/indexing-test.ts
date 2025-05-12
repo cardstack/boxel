@@ -277,6 +277,26 @@ module(basename(__filename), function () {
                 },
               },
             },
+            'bad-link.json': {
+              data: {
+                attributes: {
+                  message: 'I have a bad link',
+                },
+                relationships: {
+                  author: {
+                    links: {
+                      self: 'http://localhost:9000/this-is-a-link-to-nowhere',
+                    },
+                  },
+                },
+                meta: {
+                  adoptsFrom: {
+                    module: './post',
+                    name: 'Post',
+                  },
+                },
+              },
+            },
             'boom.json': {
               data: {
                 attributes: {
@@ -523,7 +543,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 0,
-          instanceErrors: 3, // 1 post, 2 persons
+          instanceErrors: 4, // 1 post, 2 persons, 1 bad-link post
           moduleErrors: 3, // post, fancy person, person
           modulesIndexed: 0,
           totalIndexEntries: 3,
@@ -556,7 +576,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 3, // 1 post and 2 persons
-          instanceErrors: 0,
+          instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
           totalIndexEntries: 9,
@@ -787,7 +807,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 1,
-          instanceErrors: 0,
+          instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
           totalIndexEntries: 13,
@@ -829,7 +849,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 3,
-          instanceErrors: 0,
+          instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 3,
           totalIndexEntries: 13,
@@ -880,7 +900,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 0,
-          instanceErrors: 1,
+          instanceErrors: 2,
           moduleErrors: 0,
           modulesIndexed: 0,
           totalIndexEntries: 11,
@@ -921,7 +941,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 1,
-          instanceErrors: 0,
+          instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 1,
           totalIndexEntries: 13,
@@ -930,7 +950,7 @@ module(basename(__filename), function () {
       );
     });
 
-    // Note this particular test should test be a server test as the nature of
+    // Note this particular test should only be a server test as the nature of
     // the TestAdapter in the host tests will trigger the linked card to be
     // already loaded when in fact in the real world it is not.
     test('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
@@ -995,7 +1015,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           moduleErrors: 0,
-          instanceErrors: 2,
+          instanceErrors: 3,
           modulesIndexed: 7,
           instancesIndexed: 6,
           totalIndexEntries: 13,
