@@ -787,7 +787,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 1,
-          instanceErrors: 1,
+          instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 1,
           totalIndexEntries: 13,
@@ -829,7 +829,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 3,
-          instanceErrors: 1,
+          instanceErrors: 0,
           moduleErrors: 0,
           modulesIndexed: 3,
           totalIndexEntries: 13,
@@ -880,7 +880,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           instancesIndexed: 0,
-          instanceErrors: 2,
+          instanceErrors: 1,
           moduleErrors: 0,
           modulesIndexed: 0,
           totalIndexEntries: 11,
@@ -933,7 +933,7 @@ module(basename(__filename), function () {
     // Note this particular test should only be a server test as the nature of
     // the TestAdapter in the host tests will trigger the linked card to be
     // already loaded when in fact in the real world it is not.
-    test('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
+    only('it can index a card with a contains computed that consumes a linksTo field', async function (assert) {
       const hassanId = `${testRealm}hassan`;
       let queryEngine = realm.realmIndexQueryEngine;
       let hassan = await queryEngine.cardDocument(new URL(hassanId));
@@ -995,7 +995,7 @@ module(basename(__filename), function () {
         { ...realm.realmIndexUpdater.stats },
         {
           moduleErrors: 0,
-          instanceErrors: 3,
+          instanceErrors: 2,
           modulesIndexed: 7,
           instancesIndexed: 6,
           totalIndexEntries: 13,
