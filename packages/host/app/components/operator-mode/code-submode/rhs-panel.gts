@@ -345,5 +345,78 @@ export default class RhsPanel extends Component<RhsPanelSignature> {
         data-test-card-resource-loaded
       />
     {{/if}}
+
+    <style scoped>
+      .file-incompatible-message {
+        display: flex;
+        flex-wrap: wrap;
+        align-content: center;
+        justify-content: center;
+        text-align: center;
+        height: 100%;
+        background-color: var(--boxel-200);
+        font: var(--boxel-font-sm);
+        color: var(--boxel-450);
+        font-weight: 500;
+        padding: var(--boxel-sp-xl);
+        margin-block: 0;
+      }
+
+      .file-incompatible-message > span {
+        max-width: 400px;
+      }
+
+      .accordion-item {
+        --accordion-item-title-font: 600 var(--boxel-font-sm);
+        box-sizing: content-box; /* prevent shift during accordion toggle because of border-width */
+      }
+      .playground-accordion-item > :deep(.title) {
+        padding-block: var(--boxel-sp-4xs);
+      }
+      .accordion-item > :deep(.title) {
+        height: var(--accordion-item-closed-height);
+      }
+      .accordion-item :deep(.accordion-item-content) {
+        overflow-y: auto;
+      }
+      .accordion-item:last-child {
+        border-bottom: var(--boxel-border);
+      }
+
+      .accordion-content {
+        padding: var(--boxel-sp-xs);
+        background-color: var(--code-mode-panel-background-color);
+        min-height: 100%;
+      }
+
+      .preview-error-container {
+        background: var(--boxel-100);
+        padding: var(--boxel-sp);
+        border-radius: var(--boxel-radius);
+        height: 100%;
+      }
+
+      .preview-error-box {
+        border-radius: var(--boxel-border-radius);
+        padding: var(--boxel-sp);
+        background: var(--boxel-200);
+      }
+
+      .preview-error-text {
+        color: red;
+        font-weight: 600;
+      }
+
+      hr.preview-error {
+        width: calc(100% + var(--boxel-sp) * 2);
+        margin-left: calc(var(--boxel-sp) * -1);
+        margin-top: calc(var(--boxel-sp-sm) + 1px);
+      }
+
+      pre.preview-error {
+        white-space: pre-wrap;
+        text-align: left;
+      }
+    </style>
   </template>
 }
