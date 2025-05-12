@@ -1,0 +1,402 @@
+import { registerDestructor } from '@ember/destroyable';
+import { fn } from '@ember/helper';
+import { hash } from '@ember/helper';
+import { action } from '@ember/object';
+import type Owner from '@ember/owner';
+import { service } from '@ember/service';
+import { htmlSafe } from '@ember/template';
+import { buildWaiter } from '@ember/test-waiters';
+import { isTesting } from '@embroider/macros';
+import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
+
+import { dropTask, timeout } from 'ember-concurrency';
+
+import perform from 'ember-concurrency/helpers/perform';
+
+import FromElseWhere from 'ember-elsewhere/components/from-elsewhere';
+
+import { consume, provide } from 'ember-provide-consume-context';
+import window from 'ember-window-mock';
+
+import { TrackedObject } from 'tracked-built-ins';
+
+import { Accordion } from '@cardstack/boxel-ui/components';
+
+import { ResizablePanelGroup } from '@cardstack/boxel-ui/components';
+import { not, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { File } from '@cardstack/boxel-ui/icons';
+
+import {
+  identifyCard,
+  isCardDocumentString,
+  hasExecutableExtension,
+  RealmPaths,
+  isResolvedCodeRef,
+  PermissionsContextName,
+  GetCardContextName,
+  CodeRef,
+  type ResolvedCodeRef,
+  type getCard,
+  CardErrorJSONAPI,
+} from '@cardstack/runtime-common';
+import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analysis-plugin';
+
+import RecentFiles from '@cardstack/host/components/editor/recent-files';
+import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
+import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+import CardError from '@cardstack/host/components/operator-mode/card-error';
+import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel/index';
+import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
+
+import consumeContext from '@cardstack/host/helpers/consume-context';
+import { isReady, type FileResource } from '@cardstack/host/resources/file';
+import {
+  moduleContentsResource,
+  isCardOrFieldDeclaration,
+  type ModuleDeclaration,
+  type State as ModuleState,
+  findDeclarationByName,
+} from '@cardstack/host/resources/module-contents';
+import type CardService from '@cardstack/host/services/card-service';
+import type EnvironmentService from '@cardstack/host/services/environment-service';
+import type LoaderService from '@cardstack/host/services/loader-service';
+import type { FileView } from '@cardstack/host/services/operator-mode-state-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type RealmService from '@cardstack/host/services/realm';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
+import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
+
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { type SpecType } from 'https://cardstack.com/base/spec';
+
+import {
+  CodeModePanelWidths,
+  CodeModePanelHeights,
+  CodeModePanelSelections,
+} from '@cardstack/host/utils/local-storage-keys';
+import FileTree from '../editor/file-tree';
+
+import { type Ready } from '@cardstack/host/resources/file';
+import type FileResource from '@cardstack/host/resources/file';
+
+import AttachFileModal from '@cardstack/host/components/operator-mode/attach-file-modal';
+import CardURLBar from '@cardstack/host/components/operator-mode/card-url-bar';
+import CodeEditor from '@cardstack/host/components/operator-mode/code-editor';
+import InnerContainer from '@cardstack/host/components/operator-mode/code-submode/inner-container';
+import CodeSubmodeLeftPanelToggle from '@cardstack/host/components/operator-mode/code-submode/left-panel-toggle';
+import SchemaEditor, {
+  SchemaEditorTitle,
+} from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
+import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
+import CreateFileModal, {
+  type FileType,
+} from '@cardstack/host/components/operator-mode/create-file-modal';
+import DeleteModal from '@cardstack/host/components/operator-mode/delete-modal';
+import DetailPanel from '@cardstack/host/components/operator-mode/detail-panel';
+import NewFileButton from '@cardstack/host/components/operator-mode/new-file-button';
+import SubmodeLayout from '@cardstack/host/components/operator-mode/submode-layout';
+
+export type SelectedAccordionItem =
+  | 'schema-editor'
+  | 'spec-preview'
+  | 'playground';
+
+const accordionItems: SelectedAccordionItem[] = [
+  'schema-editor',
+  'playground',
+  'spec-preview',
+];
+
+interface RhsPanelSignature {
+  Args: {
+    card: CardDef | undefined;
+    cardError: CardErrorJSONAPI | undefined;
+    currentOpenFile: FileResource | undefined;
+    goToDefinitionAndResetCursorPosition: (
+      codeRef: CodeRef | undefined,
+      localName: string | undefined,
+      fieldName?: string,
+    ) => void;
+    isCard: boolean;
+    isIncompatibleFile: boolean;
+    isModule: boolean;
+    isReadOnly: boolean;
+    moduleContentsResource: ModuleContentsResource;
+    previewFormat: Format;
+    readyFile: Ready;
+    selectedDeclaration: ModuleDeclaration | undefined;
+    setPreviewFormat: (format: Format) => void;
+  };
+}
+
+export default class RhsPanel extends Component<RhsPanelSignature> {
+  @service private declare operatorModeStateService: OperatorModeStateService;
+
+  private panelSelections: Record<string, SelectedAccordionItem>;
+
+  constructor(owner: Owner, args: Signature['Args']) {
+    super(owner, args);
+
+    let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
+    this.panelSelections = new TrackedObject(
+      panelSelections ? JSON.parse(panelSelections) : {},
+    );
+  }
+
+  private get declarations() {
+    return this.args.moduleContentsResource?.declarations;
+  }
+
+  private get selectedCardOrField() {
+    if (
+      this.args.selectedDeclaration !== undefined &&
+      isCardOrFieldDeclaration(this.args.selectedDeclaration)
+    ) {
+      return this.args.selectedDeclaration;
+    }
+    return undefined;
+  }
+
+  private get selectedCodeRef(): ResolvedCodeRef | undefined {
+    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
+    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
+  }
+
+  get showSpecPreview() {
+    return Boolean(this.selectedCardOrField?.exportName);
+  }
+
+  private get hasCardDefOrFieldDef() {
+    return this.declarations.some(isCardOrFieldDeclaration);
+  }
+
+  private get isCardPreviewError() {
+    return this.args.isCard && this.args.cardError;
+  }
+
+  private get isEmptyFile() {
+    return this.args.readyFile?.content.match(/^\s*$/);
+  }
+
+  private get isSelectedItemIncompatibleWithSchemaEditor() {
+    if (!this.args.selectedDeclaration) {
+      return undefined;
+    }
+    return !isCardOrFieldDeclaration(this.args.selectedDeclaration);
+  }
+
+  private get fileIncompatibilityMessage() {
+    if (this.args.isCard) {
+      if (this.args.cardError) {
+        return `Card preview failed. Make sure both the card instance data and card definition files have no errors and that their data schema matches. `;
+      }
+    }
+
+    if (this.args.moduleContentsResource.moduleError) {
+      return null; // Handled in code-submode schema editor
+    }
+
+    if (this.args.isIncompatibleFile) {
+      return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
+    }
+
+    // If the module is incompatible
+    if (this.args.isModule) {
+      //this will prevent displaying message during a page refresh
+      if (this.args.moduleContentsResource.isLoading) {
+        return null;
+      }
+      if (!this.hasCardDefOrFieldDef) {
+        return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
+      } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
+        return `No tools are available for the selected item: ${this.args.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
+      }
+    }
+    // If rhs doesn't handle any case but we can't capture the error
+    if (!this.args.card && !this.selectedCardOrField) {
+      // this will prevent displaying message during a page refresh
+      if (isCardDocumentString(this.args.readyFile.content)) {
+        return null;
+      }
+      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
+    }
+
+    if (
+      !this.args.isModule &&
+      !this.args.readyFile?.name.endsWith('.json') &&
+      !this.args.card //for case of creating new card instance
+    ) {
+      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
+    }
+
+    return null;
+  }
+
+  private get selectedAccordionItem(): SelectedAccordionItem {
+    let selection = this.panelSelections[this.args.readyFile.url];
+    return selection ?? 'schema-editor';
+  }
+
+  @action private toggleAccordionItem(item: SelectedAccordionItem) {
+    if (this.selectedAccordionItem === item) {
+      let index = accordionItems.indexOf(item);
+      if (index !== -1 && index === accordionItems.length - 1) {
+        index--;
+      } else if (index !== -1) {
+        index++;
+      }
+      item = accordionItems[index];
+    }
+    this.panelSelections[this.args.readyFile.url] = item;
+    // persist in local storage
+    window.localStorage.setItem(
+      CodeModePanelSelections,
+      JSON.stringify(this.panelSelections),
+    );
+  }
+
+  <template>
+    {{#if this.isCardPreviewError}}
+      {{! this is here to make TS happy, this is always true }}
+      {{#if @cardError}}
+        <CardError @error={{@cardError}} @hideHeader={{true}} />
+      {{/if}}
+    {{else if this.isEmptyFile}}
+      <Accordion as |A|>
+        <A.Item
+          class='accordion-item'
+          @contentClass='accordion-item-content'
+          @isOpen={{true}}
+        >
+          <:title>
+            <SchemaEditorTitle @hasModuleError={{true}} />
+          </:title>
+          <:content>
+            <SyntaxErrorDisplay @syntaxErrors='File is empty' />
+          </:content>
+        </A.Item>
+      </Accordion>
+    {{else if this.fileIncompatibilityMessage}}
+
+      <div
+        class='file-incompatible-message'
+        data-test-file-incompatibility-message
+      >
+        {{this.fileIncompatibilityMessage}}
+      </div>
+    {{else if this.selectedCardOrField.cardOrField}}
+      <Accordion
+        data-test-rhs-panel='card-or-field'
+        data-test-selected-accordion-item={{this.selectedAccordionItem}}
+        as |A|
+      >
+        <SchemaEditor
+          @file={{@readyFile}}
+          @moduleContentsResource={{this.args.moduleContentsResource}}
+          @card={{this.selectedCardOrField.cardOrField}}
+          @cardTypeResource={{this.selectedCardOrField.cardType}}
+          @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
+          @isReadOnly={{@isReadOnly}}
+          as |SchemaEditorTitle SchemaEditorPanel|
+        >
+          <A.Item
+            class='accordion-item'
+            @contentClass='accordion-item-content'
+            @onClick={{fn this.toggleAccordionItem 'schema-editor'}}
+            @isOpen={{eq this.selectedAccordionItem 'schema-editor'}}
+            data-test-accordion-item='schema-editor'
+          >
+            <:title>
+              <SchemaEditorTitle />
+            </:title>
+            <:content>
+              <SchemaEditorPanel class='accordion-content' />
+            </:content>
+          </A.Item>
+        </SchemaEditor>
+        <Playground
+          @isOpen={{eq this.selectedAccordionItem 'playground'}}
+          @codeRef={{this.selectedCodeRef}}
+          @isUpdating={{this.args.moduleContentsResource.isLoading}}
+          @cardOrField={{this.selectedCardOrField.cardOrField}}
+          as |PlaygroundTitle PlaygroundContent|
+        >
+          <A.Item
+            class='accordion-item playground-accordion-item'
+            @contentClass='accordion-item-content'
+            @onClick={{fn this.toggleAccordionItem 'playground'}}
+            @isOpen={{eq this.selectedAccordionItem 'playground'}}
+            data-test-accordion-item='playground'
+          >
+            <:title><PlaygroundTitle /></:title>
+            <:content>
+              {{#if (eq this.selectedAccordionItem 'playground')}}
+                <PlaygroundContent />
+              {{/if}}
+            </:content>
+          </A.Item>
+        </Playground>
+        <SpecPreview
+          @selectedDeclaration={{this.args.selectedDeclaration}}
+          @isLoadingNewModule={{this.args.moduleContentsResource.isLoadingNewModule}}
+          @toggleAccordionItem={{this.toggleAccordionItem}}
+          @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
+          as |SpecPreviewTitle SpecPreviewContent|
+        >
+          <A.Item
+            class='accordion-item'
+            @contentClass='accordion-item-content'
+            @onClick={{fn this.toggleAccordionItem 'spec-preview'}}
+            @isOpen={{eq this.selectedAccordionItem 'spec-preview'}}
+            data-test-accordion-item='spec-preview'
+          >
+            <:title>
+              <SpecPreviewTitle />
+            </:title>
+            <:content>
+              {{#if this.showSpecPreview}}
+                <SpecPreviewContent class='accordion-content' />
+              {{else}}
+                <p
+                  class='file-incompatible-message'
+                  data-test-incompatible-spec-nonexports
+                >
+                  <span>Boxel Spec is not supported for card or field
+                    definitions that are not exported.</span>
+                </p>
+              {{/if}}
+            </:content>
+          </A.Item>
+        </SpecPreview>
+      </Accordion>
+    {{else if this.args.moduleContentsResource.moduleError}}
+      <Accordion as |A|>
+        <A.Item
+          class='accordion-item'
+          @contentClass='accordion-item-content'
+          @isOpen={{true}}
+          data-test-module-error-panel
+        >
+          <:title>
+            <SchemaEditorTitle @hasModuleError={{true}} />
+          </:title>
+          <:content>
+            <SyntaxErrorDisplay
+              @syntaxErrors={{this.args.moduleContentsResource.moduleError.message}}
+            />
+          </:content>
+        </A.Item>
+      </Accordion>
+    {{else if @card}}
+      <CardPreviewPanel
+        @card={{@card}}
+        @realmURL={{this.operatorModeStateService.realmURL}}
+        @format={{@previewFormat}}
+        @setFormat={{@setPreviewFormat}}
+        data-test-card-resource-loaded
+      />
+    {{/if}}
+  </template>
+}

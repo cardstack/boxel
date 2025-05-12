@@ -44,6 +44,7 @@ import { isEquivalentBodyPosition } from '@cardstack/runtime-common/schema-analy
 import RecentFiles from '@cardstack/host/components/editor/recent-files';
 import CodeSubmodeEditorIndicator from '@cardstack/host/components/operator-mode/code-submode/editor-indicator';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+import RhsPanel from '@cardstack/host/components/operator-mode/code-submode/rhs-panel';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { isReady, type FileResource } from '@cardstack/host/resources/file';
@@ -108,17 +109,6 @@ type PanelHeights = {
   recentPanel: number;
 };
 
-export type SelectedAccordionItem =
-  | 'schema-editor'
-  | 'spec-preview'
-  | 'playground';
-
-const accordionItems: SelectedAccordionItem[] = [
-  'schema-editor',
-  'playground',
-  'spec-preview',
-];
-
 const defaultLeftPanelWidth =
   ((14.0 * parseFloat(getComputedStyle(document.documentElement).fontSize)) /
     (document.documentElement.clientWidth - 40 - 36)) *
@@ -172,7 +162,6 @@ export default class CodeSubmode extends Component<Signature> {
   private updateCursorByName:
     | ((name: string, fieldName?: string) => void)
     | undefined;
-  private panelSelections: Record<string, SelectedAccordionItem>;
 
   private createFileModal: CreateFileModal | undefined;
   private moduleContentsResource = moduleContentsResource(
@@ -186,11 +175,6 @@ export default class CodeSubmode extends Component<Signature> {
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.operatorModeStateService.subscribeToOpenFileStateChanges(this);
-
-    let panelSelections = window.localStorage.getItem(CodeModePanelSelections);
-    this.panelSelections = new TrackedObject(
-      panelSelections ? JSON.parse(panelSelections) : {},
-    );
 
     let persistedDefaultPanelWidths = window.localStorage.getItem(
       CodeModePanelWidths,
@@ -293,17 +277,6 @@ export default class CodeSubmode extends Component<Signature> {
     );
   }
 
-  private get hasCardDefOrFieldDef() {
-    return this.declarations.some(isCardOrFieldDeclaration);
-  }
-
-  private get isSelectedItemIncompatibleWithSchemaEditor() {
-    if (!this.selectedDeclaration) {
-      return undefined;
-    }
-    return !isCardOrFieldDeclaration(this.selectedDeclaration);
-  }
-
   private get isNonCardJson() {
     return (
       this.readyFile.name.endsWith('.json') &&
@@ -317,61 +290,6 @@ export default class CodeSubmode extends Component<Signature> {
 
   private get isFileOpen() {
     return !!(this.codePath && this.currentOpenFile?.state !== 'not-found');
-  }
-
-  private get isCardPreviewError() {
-    return this.isCard && this.cardError;
-  }
-
-  private get isEmptyFile() {
-    return this.readyFile.content.match(/^\s*$/);
-  }
-
-  private get fileIncompatibilityMessage() {
-    if (this.isCard) {
-      if (this.cardError) {
-        return `Card preview failed. Make sure both the card instance data and card definition files have no errors and that their data schema matches. `;
-      }
-    }
-
-    if (this.moduleContentsResource.moduleError) {
-      return null; // Handled in code-submode schema editor
-    }
-
-    if (this.isIncompatibleFile) {
-      return `No tools are available to be used with this file type. Choose a file representing a card instance or module.`;
-    }
-
-    // If the module is incompatible
-    if (this.isModule) {
-      //this will prevent displaying message during a page refresh
-      if (this.moduleContentsResource.isLoading) {
-        return null;
-      }
-      if (!this.hasCardDefOrFieldDef) {
-        return `No tools are available to be used with these file contents. Choose a module that has a card or field definition inside of it.`;
-      } else if (this.isSelectedItemIncompatibleWithSchemaEditor) {
-        return `No tools are available for the selected item: ${this.selectedDeclaration?.type} "${this.selectedDeclaration?.localName}". Select a card or field definition in the inspector.`;
-      }
-    }
-    // If rhs doesn't handle any case but we can't capture the error
-    if (!this.card && !this.selectedCardOrField) {
-      // this will prevent displaying message during a page refresh
-      if (isCardDocumentString(this.readyFile.content)) {
-        return null;
-      }
-      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
-    if (
-      !this.isModule &&
-      !this.readyFile.name.endsWith('.json') &&
-      !this.card //for case of creating new card instance
-    ) {
-      return 'No tools are available to inspect this file or its contents. Select a file with a .json, .gts or .ts extension.';
-    }
-
-    return null;
   }
 
   private get currentOpenFile() {
@@ -440,25 +358,6 @@ export default class CodeSubmode extends Component<Signature> {
       // default to 1st selection
       return this.declarations.length > 0 ? this.declarations[0] : undefined;
     }
-  }
-
-  private get selectedCardOrField() {
-    if (
-      this.selectedDeclaration !== undefined &&
-      isCardOrFieldDeclaration(this.selectedDeclaration)
-    ) {
-      return this.selectedDeclaration;
-    }
-    return undefined;
-  }
-
-  private get selectedCodeRef(): ResolvedCodeRef | undefined {
-    let codeRef = identifyCard(this.selectedCardOrField?.cardOrField);
-    return isResolvedCodeRef(codeRef) ? codeRef : undefined;
-  }
-
-  get showSpecPreview() {
-    return Boolean(this.selectedCardOrField?.exportName);
   }
 
   private get itemToDeleteAsCard() {
@@ -709,29 +608,6 @@ export default class CodeSubmode extends Component<Signature> {
     this.previewFormat = format;
   }
 
-  private get selectedAccordionItem(): SelectedAccordionItem {
-    let selection = this.panelSelections[this.readyFile.url];
-    return selection ?? 'schema-editor';
-  }
-
-  @action private toggleAccordionItem(item: SelectedAccordionItem) {
-    if (this.selectedAccordionItem === item) {
-      let index = accordionItems.indexOf(item);
-      if (index !== -1 && index === accordionItems.length - 1) {
-        index--;
-      } else if (index !== -1) {
-        index++;
-      }
-      item = accordionItems[index];
-    }
-    this.panelSelections[this.readyFile.url] = item;
-    // persist in local storage
-    window.localStorage.setItem(
-      CodeModePanelSelections,
-      JSON.stringify(this.panelSelections),
-    );
-  }
-
   get isReadOnly() {
     return !this.realm.canWrite(this.readyFile.url);
   }
@@ -882,164 +758,21 @@ export default class CodeSubmode extends Component<Signature> {
             <ResizablePanel @defaultSize={{this.defaultPanelWidths.rightPanel}}>
               <InnerContainer>
                 {{#if this.isReady}}
-                  {{#if this.isCardPreviewError}}
-                    {{! this is here to make TS happy, this is always true }}
-                    {{#if this.cardError}}
-                      <CardError
-                        @error={{this.cardError}}
-                        @hideHeader={{true}}
-                      />
-                    {{/if}}
-                  {{else if this.isEmptyFile}}
-                    <Accordion as |A|>
-                      <A.Item
-                        class='accordion-item'
-                        @contentClass='accordion-item-content'
-                        @isOpen={{true}}
-                      >
-                        <:title>
-                          <SchemaEditorTitle @hasModuleError={{true}} />
-                        </:title>
-                        <:content>
-                          <SyntaxErrorDisplay @syntaxErrors='File is empty' />
-                        </:content>
-                      </A.Item>
-                    </Accordion>
-                  {{else if this.fileIncompatibilityMessage}}
-
-                    <div
-                      class='file-incompatible-message'
-                      data-test-file-incompatibility-message
-                    >
-                      {{this.fileIncompatibilityMessage}}
-                    </div>
-                  {{else if this.selectedCardOrField.cardOrField}}
-                    <Accordion
-                      data-test-rhs-panel='card-or-field'
-                      data-test-selected-accordion-item={{this.selectedAccordionItem}}
-                      as |A|
-                    >
-                      <SchemaEditor
-                        @file={{this.readyFile}}
-                        @moduleContentsResource={{this.moduleContentsResource}}
-                        @card={{this.selectedCardOrField.cardOrField}}
-                        @cardTypeResource={{this.selectedCardOrField.cardType}}
-                        @goToDefinition={{this.goToDefinitionAndResetCursorPosition}}
-                        @isReadOnly={{this.isReadOnly}}
-                        as |SchemaEditorTitle SchemaEditorPanel|
-                      >
-                        <A.Item
-                          class='accordion-item'
-                          @contentClass='accordion-item-content'
-                          @onClick={{fn
-                            this.toggleAccordionItem
-                            'schema-editor'
-                          }}
-                          @isOpen={{eq
-                            this.selectedAccordionItem
-                            'schema-editor'
-                          }}
-                          data-test-accordion-item='schema-editor'
-                        >
-                          <:title>
-                            <SchemaEditorTitle />
-                          </:title>
-                          <:content>
-                            <SchemaEditorPanel class='accordion-content' />
-                          </:content>
-                        </A.Item>
-                      </SchemaEditor>
-                      <Playground
-                        @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                        @codeRef={{this.selectedCodeRef}}
-                        @isUpdating={{this.moduleContentsResource.isLoading}}
-                        @cardOrField={{this.selectedCardOrField.cardOrField}}
-                        as |PlaygroundTitle PlaygroundContent|
-                      >
-                        <A.Item
-                          class='accordion-item playground-accordion-item'
-                          @contentClass='accordion-item-content'
-                          @onClick={{fn this.toggleAccordionItem 'playground'}}
-                          @isOpen={{eq this.selectedAccordionItem 'playground'}}
-                          data-test-accordion-item='playground'
-                        >
-                          <:title><PlaygroundTitle /></:title>
-                          <:content>
-                            {{#if (eq this.selectedAccordionItem 'playground')}}
-                              <PlaygroundContent />
-                            {{/if}}
-                          </:content>
-                        </A.Item>
-                      </Playground>
-                      <SpecPreview
-                        @selectedDeclaration={{this.selectedDeclaration}}
-                        @isLoadingNewModule={{this.moduleContentsResource.isLoadingNewModule}}
-                        @toggleAccordionItem={{this.toggleAccordionItem}}
-                        @isPanelOpen={{eq
-                          this.selectedAccordionItem
-                          'spec-preview'
-                        }}
-                        as |SpecPreviewTitle SpecPreviewContent|
-                      >
-                        <A.Item
-                          class='accordion-item'
-                          @contentClass='accordion-item-content'
-                          @onClick={{fn
-                            this.toggleAccordionItem
-                            'spec-preview'
-                          }}
-                          @isOpen={{eq
-                            this.selectedAccordionItem
-                            'spec-preview'
-                          }}
-                          data-test-accordion-item='spec-preview'
-                        >
-                          <:title>
-                            <SpecPreviewTitle />
-                          </:title>
-                          <:content>
-                            {{#if this.showSpecPreview}}
-                              <SpecPreviewContent class='accordion-content' />
-                            {{else}}
-                              <p
-                                class='file-incompatible-message'
-                                data-test-incompatible-spec-nonexports
-                              >
-                                <span>Boxel Spec is not supported for card or
-                                  field definitions that are not exported.</span>
-                              </p>
-                            {{/if}}
-                          </:content>
-                        </A.Item>
-                      </SpecPreview>
-                    </Accordion>
-                  {{else if this.moduleContentsResource.moduleError}}
-                    <Accordion as |A|>
-                      <A.Item
-                        class='accordion-item'
-                        @contentClass='accordion-item-content'
-                        @isOpen={{true}}
-                        data-test-module-error-panel
-                      >
-                        <:title>
-                          <SchemaEditorTitle @hasModuleError={{true}} />
-                        </:title>
-                        <:content>
-                          <SyntaxErrorDisplay
-                            @syntaxErrors={{this.moduleContentsResource.moduleError.message}}
-                          />
-                        </:content>
-                      </A.Item>
-                    </Accordion>
-                  {{else if this.card}}
-                    <CardPreviewPanel
-                      @card={{this.card}}
-                      @realmURL={{this.realmURL}}
-                      @format={{this.previewFormat}}
-                      @setFormat={{this.setPreviewFormat}}
-                      data-test-card-resource-loaded
-                    />
-                  {{/if}}
+                  <RhsPanel
+                    @card={{this.card}}
+                    @cardError={{this.cardError}}
+                    @currentOpenFile={{this.currentOpenFile}}
+                    @goToDefinitionAndResetCursorPosition={{this.goToDefinitionAndResetCursorPosition}}
+                    @isCard={{this.isCard}}
+                    @isIncompatibleFile={{this.isIncompatibleFile}}
+                    @isModule={{this.isModule}}
+                    @isReadOnly={{this.isReadOnly}}
+                    @moduleContentsResource={{this.moduleContentsResource}}
+                    @previewFormat={{this.previewFormat}}
+                    @readyFile={{this.readyFile}}
+                    @selectedDeclaration={{this.selectedDeclaration}}
+                    @setPreviewFormat={{this.setPreviewFormat}}
+                  />
                 {{/if}}
               </InnerContainer>
             </ResizablePanel>
