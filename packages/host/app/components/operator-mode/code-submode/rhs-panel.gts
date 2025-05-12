@@ -18,11 +18,17 @@ import {
   CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
-import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardPreviewPanel from '@cardstack/host/components/operator-mode/card-preview-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
+import SchemaEditor, {
+  SchemaEditorTitle,
+} from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
+import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
+import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+import { type Ready } from '@cardstack/host/resources/file';
+import type { FileResource } from '@cardstack/host/resources/file';
 import {
   type CardOrFieldDeclaration,
   type ModuleContentsResource,
@@ -31,17 +37,9 @@ import {
 } from '@cardstack/host/resources/module-contents';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
-
 import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
 
-import { type Ready } from '@cardstack/host/resources/file';
-import type { FileResource } from '@cardstack/host/resources/file';
-
-import SchemaEditor, {
-  SchemaEditorTitle,
-} from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
-import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
+import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 
 export type SelectedAccordionItem =
   | 'schema-editor'
