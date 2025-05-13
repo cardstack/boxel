@@ -213,16 +213,18 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         {{#each this.htmlGroups as |htmlGroup index|}}
           {{#if (eq htmlGroup.type 'pre_tag')}}
             {{#let (extractCodeData htmlGroup.content) as |codeData|}}
-              {{#let
-                (this.createCodePatchAction codeData)
-                as |codePatchAction|
-              }}
-                <HtmlGroupCodeBlock
-                  @codeData={{codeData}}
-                  @codePatchAction={{codePatchAction}}
-                  @monacoSDK={{@monacoSDK}}
-                />
-              {{/let}}
+              {{#if codeData.searchReplaceBlock}}
+                {{#let
+                  (this.createCodePatchAction codeData)
+                  as |codePatchAction|
+                }}
+                  <HtmlGroupCodeBlock
+                    @codeData={{codeData}}
+                    @codePatchAction={{codePatchAction}}
+                    @monacoSDK={{@monacoSDK}}
+                  />
+                {{/let}}
+              {{/if}}
             {{/let}}
           {{else}}
             {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
