@@ -81,9 +81,9 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
-import { isSkillCard } from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import { isSkillCard } from '../lib/file-def-manager';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -640,6 +640,8 @@ export default class MatrixService extends Service {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
 
+  // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
+  // If there are new urls and content hashes for skills or commands, The room state will be updated.
   async updateSkillsAndCommandsIfNeeded(roomId: string) {
     this.updateStateEvent(
       roomId,

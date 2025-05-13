@@ -25,7 +25,6 @@ import {
 
 import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
-import { RoomResource } from '@cardstack/host/resources/room';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
 import MatrixService from '@cardstack/host/services/matrix-service';

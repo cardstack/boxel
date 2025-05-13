@@ -33,13 +33,13 @@ import type {
 import type { MatrixEvent } from 'https://cardstack.com/base/matrix-event';
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
-import { RoomResource } from '../resources/room';
-
 import NetworkService from '../services/network';
 
 import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type LoaderService from '../services/loader-service';
+
+export const isSkillCard = Symbol.for('is-skill-card');
 
 interface CacheEntry {
   content: string;
