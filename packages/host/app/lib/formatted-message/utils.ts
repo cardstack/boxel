@@ -7,7 +7,10 @@ import {
   parseSearchReplace,
 } from '../search-replace-block-parsing';
 
-export function extractCodeData(preElementString: string): CodeData {
+export function extractCodeData(
+  preElementString: string,
+  codeBlockIndex: number,
+): CodeData {
   console.log('extractCodeData', preElementString);
   // We are creating a new element in the dom
   // so that we can easily parse the content of the top level <pre> tags.
@@ -24,6 +27,7 @@ export function extractCodeData(preElementString: string): CodeData {
       code: null,
       language: null,
       searchReplaceBlock: null,
+      codeBlockIndex: -1,
     };
   }
 
@@ -82,6 +86,7 @@ export function extractCodeData(preElementString: string): CodeData {
     searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
       ? contentWithoutFileUrl
       : null,
+    codeBlockIndex,
   };
 }
 
@@ -119,6 +124,7 @@ export interface CodeData {
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
+  codeBlockIndex: number;
 }
 
 export type HtmlTagGroup = HtmlPreTagGroup | HtmlNonPreTagGroup;
@@ -146,6 +152,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   let doc = document.createElement('div');
   doc.innerHTML = htmlString;
 
+  let codeBlockIndex = 0;
   Array.from(doc.childNodes).forEach((node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       let textContent = node.textContent?.trim() || '';
@@ -164,7 +171,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,
-          codeData: extractCodeData(element.outerHTML),
+          codeData: extractCodeData(element.outerHTML, codeBlockIndex++),
         });
       } else {
         result.push({

@@ -11,7 +11,7 @@ import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
@@ -55,9 +55,8 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   @service private declare commandService: CommandService;
   @tracked stableHtmlParts: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
 
-  @tracked codePatchActions: TrackedArray<CodePatchAction> = new TrackedArray(
-    [],
-  );
+  @tracked codePatchActions: TrackedMap<number, CodePatchAction> =
+    new TrackedMap();
 
   @tracked applyAllCodePatchTasksState:
     | 'ready'
@@ -125,17 +124,23 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
 
   private createCodePatchAction = (codeData: CodeData) => {
     let codePatchAction = new CodePatchAction(getOwner(this)!, codeData);
-    this.codePatchActions.push(codePatchAction);
+    this.codePatchActions.set(codeData.codeBlockIndex, codePatchAction);
+    console.log(
+      'createCodePatchAction',
+      codeData,
+      'length now',
+      this.codePatchActions.size,
+    );
     return codePatchAction;
   };
 
   private get isApplyAllButtonDisplayed() {
-    return this.codePatchActions.length > 1 && !this.args.isStreaming;
+    return this.codePatchActions.size > 1 && !this.args.isStreaming;
   }
 
   private applyAllCodePatchTasks = dropTask(async () => {
     this.applyAllCodePatchTasksState = 'applying';
-    let unappliedCodePatchActions = this.codePatchActions.filter(
+    let unappliedCodePatchActions = [...this.codePatchActions.values()].filter(
       (codePatchAction) => codePatchAction.patchCodeTaskState !== 'applied',
     );
 

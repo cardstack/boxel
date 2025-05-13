@@ -6,10 +6,11 @@ import { tracked } from '@glimmer/tracking';
 import { dropTask } from 'ember-concurrency';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
-import type { CodeData } from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
+
+import { CodeData } from './utils';
 
 export class CodePatchAction {
   fileUrl: string;
