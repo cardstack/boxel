@@ -664,25 +664,6 @@ export class MockClient implements ExtendedClient {
     );
   }
 
-  async uploadCardsAndUpdateSkillCommands(
-    cards: CardDef[],
-    roomResource: RoomResource,
-    updateStateEvent: (
-      roomId: string,
-      eventType: string,
-      stateKey: string,
-      transformContent: (
-        content: Record<string, any>,
-      ) => Promise<Record<string, any>>,
-    ) => Promise<void>,
-  ): Promise<FileDef[]> {
-    return await this.fileDefManager.uploadCardsAndUpdateSkillCommands(
-      cards,
-      roomResource,
-      updateStateEvent,
-    );
-  }
-
   async uploadFiles(files: FileDef[]): Promise<FileDef[]> {
     return await this.fileDefManager.uploadFiles(files);
   }

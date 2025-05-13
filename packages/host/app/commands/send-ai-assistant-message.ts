@@ -106,19 +106,10 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
     if (files?.length) {
       files = await this.matrixService.uploadFiles(files);
     }
-    // Upload skill cards and attached cards together to ensure:
-    // 1. Latest skill cards are deployed with the message
-    // 2. FileDefManager's cache prevents re-uploading unchanged skill cards
-    let skillCards =
-      this.matrixService.roomResources.get(roomId)?.skillCards ?? [];
-    let attachedCardsAndSkills = [...input.attachedCards, ...skillCards].filter(
-      (card, index, self) => index === self.findIndex((c) => c.id === card.id),
+    await this.matrixService.updateSkillsAndCommandsIfNeeded(roomId);
+    let cardFileDefs = await matrixService.uploadCards(
+      input.attachedCards ?? [],
     );
-    let cardFileDefs =
-      await this.matrixService.uploadCardsAndUpdateSkillCommands(
-        attachedCardsAndSkills,
-        roomId,
-      );
 
     let clientGeneratedId = input.clientGeneratedId ?? uuidv4();
 
@@ -129,13 +120,7 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       clientGeneratedId,
       data: {
         attachedFiles: files?.map((file: FileDef) => file.serialize()),
-        attachedCards: cardFileDefs
-          .filter((file: FileDef) =>
-            input.attachedCards.find(
-              (attachedCard) => attachedCard.id === file.sourceUrl,
-            ),
-          )
-          .map((file: FileDef) => file.serialize()),
+        attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,

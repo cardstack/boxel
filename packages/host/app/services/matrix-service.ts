@@ -54,6 +54,7 @@ import {
   DEFAULT_CODING_LLM,
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -80,6 +81,7 @@ import type {
 } from 'https://cardstack.com/base/matrix-event';
 
 import type * as SkillModule from 'https://cardstack.com/base/skill';
+import { isSkillCard } from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
 import { importResource } from '../resources/import';
@@ -181,7 +183,7 @@ export default class MatrixService extends Service {
   }
 
   private setLoggerLevelFromEnvironment() {
-    // This will pick up the level if it's in LOG_LEVELS
+    // This will pick up the level if it’s in LOG_LEVELS
     logger('matrix');
   }
 
@@ -638,19 +640,114 @@ export default class MatrixService extends Service {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
 
-  async uploadCardsAndUpdateSkillCommands(cards: CardDef[], roomId: string) {
-    this.ensureRoomData(roomId);
-    let roomResource = this.roomResources.get(roomId);
-    if (!roomResource) {
-      throw new Error(`Room resource not found for room ${roomId}`);
-    }
-    let cardFileDefs = await this.client.uploadCardsAndUpdateSkillCommands(
-      cards,
-      roomResource,
-      (roomId, eventType, stateKey, transformContent) =>
-        this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+  async updateSkillsAndCommandsIfNeeded(roomId: string) {
+    this.updateStateEvent(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      '',
+      async (currentSkillsConfig) => {
+        let existingSkillCardFileDefs = [
+          ...(currentSkillsConfig?.enabledSkillCards ?? []),
+          ...(currentSkillsConfig?.disabledSkillCards ?? []),
+        ] as FileAPI.SerializedFile[];
+        let skillCards = (
+          await Promise.all(
+            existingSkillCardFileDefs.map(
+              async (fileDef) =>
+                await this.store.get<SkillModule.Skill>(fileDef.sourceUrl),
+            ),
+          )
+        ).filter((card) => isSkillCard in card) as SkillModule.Skill[];
+
+        let updatedSkillFileDefs = await this.uploadCards(
+          skillCards as CardDef[],
+        );
+        let updatedCommandFileDefs: FileDef[] = [];
+        for (let skillCard of skillCards) {
+          let commandDefinitions = (skillCard as SkillModule.Skill).commands;
+          if (commandDefinitions.length) {
+            let commandDefFileDefs =
+              await this.uploadCommandDefinitions(commandDefinitions);
+            updatedCommandFileDefs.push(...commandDefFileDefs);
+          }
+        }
+
+        const enabledSkillCards = [
+          ...(currentSkillsConfig.enabledSkillCards || []),
+        ];
+        const disabledSkillCards = [
+          ...(currentSkillsConfig.disabledSkillCards || []),
+        ];
+        const commandDefinitions = [
+          ...(currentSkillsConfig.commandDefinitions || []),
+        ];
+
+        // For skill cards, only use updatedSkillFileDefs if they exist in the current enabledSkillCards or disabledSkillCards
+        const updatedEnabledCards = enabledSkillCards.map(
+          (enabledSkillCard) => {
+            const matchingFileDef = updatedSkillFileDefs.find(
+              (fileDef) =>
+                fileDef.sourceUrl === enabledSkillCard.sourceUrl &&
+                fileDef.url !== enabledSkillCard.url &&
+                fileDef.contentHash !== enabledSkillCard.contentHash,
+            );
+            return matchingFileDef
+              ? matchingFileDef.serialize()
+              : enabledSkillCard;
+          },
+        );
+
+        const updatedDisabledCards = disabledSkillCards.map(
+          (disabledSkillCard) => {
+            const matchingFileDef = updatedSkillFileDefs.find(
+              (fileDef) =>
+                fileDef.sourceUrl === disabledSkillCard.sourceUrl &&
+                fileDef.url !== disabledSkillCard.url &&
+                fileDef.contentHash !== disabledSkillCard.contentHash,
+            );
+            return matchingFileDef
+              ? matchingFileDef.serialize()
+              : disabledSkillCard;
+          },
+        );
+
+        // Command definitions might be added or removed, so we use updatedCommandFileDefs
+        // to determine which ones are new or removed
+        const newCommandDefinitions = updatedCommandFileDefs
+          .map((fileDef) => fileDef.serialize())
+          .filter(
+            (commandFileDef) =>
+              !commandDefinitions.some(
+                (commandDefinition) =>
+                  commandDefinition.sourceUrl === commandFileDef.sourceUrl,
+              ),
+          );
+
+        // Only keep commands that exist in updatedCommandFileDefs
+        const updatedCommandDefinitions = [
+          ...commandDefinitions.filter((cmd) =>
+            updatedCommandFileDefs.some(
+              (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
+            ),
+          ),
+          ...newCommandDefinitions,
+        ].map((cmd) => {
+          const matchingFileDef = updatedCommandFileDefs.find(
+            (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
+          );
+          if (matchingFileDef) {
+            return { ...cmd, url: matchingFileDef.url };
+          }
+          return cmd;
+        });
+
+        return {
+          enabledSkillCards: updatedEnabledCards,
+          disabledSkillCards: updatedDisabledCards,
+          commandDefinitions: updatedCommandDefinitions,
+        };
+      },
     );
-    return cardFileDefs;
   }
 
   async uploadCards(cards: CardDef[]) {
@@ -756,17 +853,8 @@ export default class MatrixService extends Service {
       }
     }
 
-    // Upload skill cards and attached cards together to ensure:
-    // 1. Latest skill cards are deployed with the message
-    // 2. FileDefManager's cache prevents re-uploading unchanged skill cards
-    let skillCards = this.roomResources.get(roomId)?.skillCards ?? [];
-    let attachedCardsAndSkills = [...attachedCards, ...skillCards].filter(
-      (card, index, self) => index === self.findIndex((c) => c.id === card.id),
-    );
-    let cardFileDefs = await this.uploadCardsAndUpdateSkillCommands(
-      attachedCardsAndSkills,
-      roomId,
-    );
+    await this.updateSkillsAndCommandsIfNeeded(roomId);
+    let cardFileDefs = await this.uploadCards(attachedCards);
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -775,13 +863,7 @@ export default class MatrixService extends Service {
       clientGeneratedId,
       data: {
         attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
-        attachedCards: cardFileDefs
-          .filter((file: FileDef) =>
-            attachedCards.find(
-              (attachedCard) => attachedCard.id === file.sourceUrl,
-            ),
-          )
-          .map((file: FileDef) => file.serialize()),
+        attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,

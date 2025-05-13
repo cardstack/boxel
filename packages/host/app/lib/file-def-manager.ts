@@ -41,8 +41,6 @@ import type CardService from '../services/card-service';
 import type CommandService from '../services/command-service';
 import type LoaderService from '../services/loader-service';
 
-export const isSkillCard = Symbol.for('is-skill-card');
-
 interface CacheEntry {
   content: string;
   timestamp: number;
@@ -70,19 +68,6 @@ export interface FileDefManager {
   uploadFiles(files: FileDef[]): Promise<FileDef[]>;
 
   uploadContent(content: string, contentType: string): Promise<string>;
-
-  uploadCardsAndUpdateSkillCommands(
-    cards: CardDef[],
-    roomResource: RoomResource,
-    updateStateEvent: (
-      roomId: string,
-      eventType: string,
-      stateKey: string,
-      transformContent: (
-        content: Record<string, any>,
-      ) => Promise<Record<string, any>>,
-    ) => Promise<void>,
-  ): Promise<FileDef[]>;
 
   /**
    * Downloads content from a file definition
@@ -131,117 +116,6 @@ export default class FileDefManagerImpl implements FileDefManager {
 
   get cardAPI() {
     return this.getCardAPI();
-  }
-
-  async uploadCardsAndUpdateSkillCommands(
-    cards: CardDef[],
-    roomResource: RoomResource,
-    updateStateEvent: (
-      roomId: string,
-      eventType: string,
-      stateKey: string,
-      transformContent: (
-        content: Record<string, any>,
-      ) => Promise<Record<string, any>>,
-    ) => Promise<void>,
-  ): Promise<FileDef[]> {
-    if (!roomResource.roomId) {
-      throw new Error('Room resource does not have a roomId');
-    }
-
-    const cardFileDefs = await this.uploadCards(cards);
-    const skillCards = cards.filter((card) => isSkillCard in card);
-    const roomSkills = roomResource?.skills ?? [];
-    const updatedSkillFileDefs: FileDef[] = [];
-    const updatedCommandFileDefs: FileDef[] = [];
-    for (const skillCard of skillCards) {
-      let matchingRoomSkill = roomSkills.find(
-        (roomSkill) => roomSkill.cardId === skillCard.id,
-      );
-      if (matchingRoomSkill) {
-        let commandDefinitions = (skillCard as SkillModule.Skill).commands;
-        if (commandDefinitions.length) {
-          let commandDefFileDefs =
-            await this.uploadCommandDefinitions(commandDefinitions);
-          updatedSkillFileDefs.push(
-            cardFileDefs.find((fileDef) => fileDef.sourceUrl === skillCard.id)!,
-          );
-          updatedCommandFileDefs.push(...commandDefFileDefs);
-        }
-      }
-    }
-    if (updatedSkillFileDefs.length || updatedCommandFileDefs.length) {
-      await updateStateEvent(
-        roomResource.roomId,
-        APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-        '',
-        async (currentSkillsConfig) => {
-          const enabledSkillCards = [
-            ...(currentSkillsConfig.enabledSkillCards || []),
-          ];
-          const disabledSkillCards = [
-            ...(currentSkillsConfig.disabledSkillCards || []),
-          ];
-          const commandDefinitions = [
-            ...(currentSkillsConfig.commandDefinitions || []),
-          ];
-
-          // For skill cards, only use updatedSkillFileDefs if they exist in the current enabledSkillCards or disabledSkillCards
-          const updatedEnabledCards = enabledSkillCards.map((card) => {
-            const matchingFileDef = updatedSkillFileDefs.find(
-              (fileDef) => fileDef.sourceUrl === card.sourceUrl,
-            );
-            return matchingFileDef ? matchingFileDef.serialize() : card;
-          });
-
-          const updatedDisabledCards = disabledSkillCards.map((card) => {
-            const matchingFileDef = updatedSkillFileDefs.find(
-              (fileDef) => fileDef.sourceUrl === card.sourceUrl,
-            );
-            return matchingFileDef ? matchingFileDef.serialize() : card;
-          });
-
-          // Command definitions might be added or removed, so we use updatedCommandFileDefs
-          // to determine which ones are new or removed
-          const newCommandDefinitions = updatedCommandFileDefs
-            .map((fileDef) => fileDef.serialize())
-            .filter(
-              (newCommandDefinition) =>
-                !commandDefinitions.some(
-                  (commandDefinition) =>
-                    commandDefinition.sourceUrl ===
-                    newCommandDefinition.sourceUrl,
-                ),
-            );
-
-          // Only keep commands that exist in updatedCommandFileDefs
-          const updatedCommandDefinitions = [
-            ...commandDefinitions.filter((cmd) =>
-              updatedCommandFileDefs.some(
-                (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
-              ),
-            ),
-            ...newCommandDefinitions,
-          ].map((cmd) => {
-            const matchingFileDef = updatedCommandFileDefs.find(
-              (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
-            );
-            if (matchingFileDef) {
-              return { ...cmd, url: matchingFileDef.url };
-            }
-            return cmd;
-          });
-
-          return {
-            enabledSkillCards: updatedEnabledCards,
-            disabledSkillCards: updatedDisabledCards,
-            commandDefinitions: updatedCommandDefinitions,
-          };
-        },
-      );
-    }
-
-    return cardFileDefs;
   }
 
   private async getContentHash(content: string): Promise<string> {

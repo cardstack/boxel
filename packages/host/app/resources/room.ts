@@ -250,10 +250,6 @@ export class RoomResource extends Resource<Args> {
     return result;
   }
 
-  get skillCards() {
-    return Array.from(this._skillCardsCache.values());
-  }
-
   get commands() {
     // Usable commands are all commands on *active* skills
     let commands = [];
