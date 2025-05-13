@@ -22,6 +22,8 @@ import type {
 } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
+import LimitedSet from '../lib/limited-set';
+
 import type LoaderService from './loader-service';
 import type MessageService from './message-service';
 import type NetworkService from './network';
@@ -47,7 +49,7 @@ export default class CardService extends Service {
     Loader,
     Promise<typeof CardAPI>
   >;
-  declare clientRequestIds: Set<string>;
+  declare clientRequestIds: LimitedSet<string>;
 
   constructor(owner: Owner) {
     super(owner);
@@ -69,7 +71,7 @@ export default class CardService extends Service {
 
   resetState() {
     this.subscriber = undefined;
-    this.clientRequestIds = new Set();
+    this.clientRequestIds = new LimitedSet(250);
     this.loaderToCardAPILoadingCache = new WeakMap();
   }
 
