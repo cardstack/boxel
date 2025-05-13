@@ -1237,6 +1237,41 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click(`[data-test-card-catalog-go-button]`);
     });
 
+    test<TestContextWithSave>('new card can enter edit mode', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            {
+              id: `${testRealmURL}index`,
+              format: 'isolated',
+            },
+          ],
+        ],
+      });
+      await click('[data-test-create-new-card-button]');
+      await click(
+        `[data-test-select="https://cardstack.com/base/cards/skill"]`,
+      );
+
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
+
+      await click(`[data-test-card-catalog-go-button]`);
+      await waitUntil(() => id);
+      await click(`[data-test-edit-button]`);
+      assert
+        .dom(
+          `[data-test-stack-card="${id}"] [data-test-card-format="isolated"]`,
+        )
+        .exists('new card is in isolated format');
+      await click(`[data-test-edit-button]`);
+      assert
+        .dom(`[data-test-stack-card="${id}"] [data-test-card-format="edit"]`)
+        .exists('new card is in edit format');
+    });
+
     test<TestContextWithSave>('new linked card is created in a different realm than its consuming reference', async function (assert) {
       assert.expect(5);
       await visitOperatorMode({

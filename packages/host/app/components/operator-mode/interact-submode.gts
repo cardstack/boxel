@@ -391,10 +391,13 @@ export default class InteractSubmode extends Component {
 
   private findCardInStack(card: CardDef, stackIndex: number): StackItem {
     let item = this.stacks[stackIndex].find(
-      (item: StackItem) => item.id === card.id,
+      (item: StackItem) =>
+        item.id === card.id || item.id === card[localIdSymbol],
     );
     if (!item) {
-      throw new Error(`Could not find card ${card.id} in stack ${stackIndex}`);
+      throw new Error(
+        `Could not find card ${card.id} (localId ${card[localIdSymbol]}) in stack ${stackIndex}`,
+      );
     }
     return item;
   }
