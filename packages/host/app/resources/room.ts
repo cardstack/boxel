@@ -382,32 +382,30 @@ export class RoomResource extends Resource<Args> {
   }) {
     let effectiveEventId = this.getEffectiveEventId(event);
     let message = this._messageCache.get(effectiveEventId);
-    if (message?.isStreamingOfEventFinished) {
-      return;
-    }
+    if (!message?.isStreamingOfEventFinished) {
+      let author = this.upsertRoomMember({
+        roomId,
+        userId: event.sender,
+      });
+      let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
+        roomId,
+        effectiveEventId,
+        author,
+        index,
+        events: this.events,
+        skills: this.skills,
+        skillCardsCache: this._skillCardsCache,
+      });
 
-    let author = this.upsertRoomMember({
-      roomId,
-      userId: event.sender,
-    });
-    let messageBuilder = new MessageBuilder(event, getOwner(this)!, {
-      roomId,
-      effectiveEventId,
-      author,
-      index,
-      events: this.events,
-      skills: this.skills,
-      skillCardsCache: this._skillCardsCache,
-    });
-
-    if (!message) {
-      message = messageBuilder.buildMessage();
-      this._messageCache.set(
-        message.clientGeneratedId ?? effectiveEventId,
-        message as any,
-      );
-    } else {
-      messageBuilder.updateMessage(message);
+      if (!message) {
+        message = messageBuilder.buildMessage();
+        this._messageCache.set(
+          message.clientGeneratedId ?? effectiveEventId,
+          message as any,
+        );
+      } else {
+        messageBuilder.updateMessage(message);
+      }
     }
 
     if (message.continuationOf) {

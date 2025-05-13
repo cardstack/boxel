@@ -168,6 +168,9 @@ export default class MessageBuilder {
         : undefined,
     );
     message.hasContinuation = hasContinuation(this.event);
+    message.continuationOf = isCardMessageEvent(this.event)
+      ? (this.event.content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY] ?? null)
+      : null;
     message.setUpdated(new Date());
     message.errorMessage = this.errorMessage;
 
