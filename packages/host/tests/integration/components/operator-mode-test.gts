@@ -430,7 +430,6 @@ module('Integration | operator-mode', function (hooks) {
 
     ({ adapter: testRealmAdapter, realm: testRealm } =
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'pet.gts': { Pet },

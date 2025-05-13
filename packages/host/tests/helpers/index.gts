@@ -318,7 +318,6 @@ export async function setupIntegrationTestRealm({
   realmURL,
   mockMatrixUtils,
 }: {
-  loader: Loader;
   contents: RealmContents;
   realmURL?: string;
   mockMatrixUtils: MockUtils;
