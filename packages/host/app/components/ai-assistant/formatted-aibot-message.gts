@@ -351,7 +351,11 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         {{#if this.codeDiffResource.isDataLoaded}}
           <codeBlock.actions as |actions|>
             <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
-            <actions.applyCodePatch @codePatchAction={{@codePatchAction}} />
+            <actions.applyCodePatch
+              @codePatchAction={{@codePatchAction}}
+              @originalCode={{this.codeDiffResource.originalCode}}
+              @modifiedCode={{this.codeDiffResource.modifiedCode}}
+            />
           </codeBlock.actions>
           <codeBlock.diffEditor
             @originalCode={{this.codeDiffResource.originalCode}}

@@ -16,6 +16,7 @@ import Modifier from 'ember-modifier';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
+import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -23,8 +24,6 @@ import { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
-
-import { CodeData } from './formatted-aibot-message';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';

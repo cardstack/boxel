@@ -1,10 +1,9 @@
 import { guidFor } from '@ember/object/internals';
-import { scheduleOnce } from '@ember/runloop';
 import { cached, tracked } from '@glimmer/tracking';
 
 import { EventStatus } from 'matrix-js-sdk';
 
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import { TrackedArray } from 'tracked-built-ins';
 
 import { markdownToHtml } from '@cardstack/runtime-common';
 import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
