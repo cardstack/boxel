@@ -5,10 +5,11 @@ import { service } from '@ember/service';
 import { dropTask } from 'ember-concurrency';
 
 import { ApplyButtonState } from '@cardstack/host/components/ai-assistant/apply-button';
-import type { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
+
+import { CodeData } from './utils';
 
 export class CodePatchAction {
   roomId: string;
@@ -26,8 +27,7 @@ export class CodePatchAction {
     if (
       !codeData.fileUrl ||
       !codeData.searchReplaceBlock ||
-      codeData.index === undefined ||
-      codeData.index === null ||
+      codeData.codeBlockIndex === -1 ||
       !codeData.roomId ||
       !codeData.eventId
     ) {
@@ -36,7 +36,7 @@ export class CodePatchAction {
       );
     }
     this.fileUrl = codeData.fileUrl;
-    this.index = codeData.index;
+    this.index = codeData.codeBlockIndex;
     this.eventId = codeData.eventId;
     this.roomId = codeData.roomId;
     this.searchReplaceBlock = codeData.searchReplaceBlock;

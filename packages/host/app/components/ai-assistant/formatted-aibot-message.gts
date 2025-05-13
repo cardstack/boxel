@@ -11,18 +11,18 @@ import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
-import { TrackedArray, TrackedObject } from 'tracked-built-ins';
+import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { and, bool } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
 import {
   type HtmlTagGroup,
-  extractCodeData,
-  parseHtmlContent,
   wrapLastTextNodeInStreamingTextSpan,
+  CodeData,
+  HtmlPreTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
@@ -34,24 +34,13 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
 
-export interface CodeData {
-  fileUrl: string | null;
-  code: string | null;
-  language: string | null;
-  searchReplaceBlock?: string | null;
-  roomId: string | null;
-  eventId: string | null;
-  index: number;
-}
-
-interface FormattedMessageSignature {
+interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
   Args: {
-    html: SafeString;
+    htmlParts?: HtmlTagGroup[];
     eventId: string;
     roomId: string;
     monacoSDK: MonacoSDK;
-    renderCodeBlocks: boolean;
     isStreaming: boolean;
   };
 }
@@ -60,15 +49,14 @@ function sanitize(html: string): SafeString {
   return htmlSafe(sanitizeHtml(html));
 }
 
-export default class FormattedMessage extends Component<FormattedMessageSignature> {
+export default class FormattedAiBotMessage extends Component<FormattedAiBotMessageSignature> {
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
-  @tracked htmlGroups: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
+  @tracked stableHtmlParts: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
 
-  @tracked codePatchActions: TrackedArray<CodePatchAction> = new TrackedArray(
-    [],
-  );
+  @tracked codePatchActions: TrackedMap<number, CodePatchAction> =
+    new TrackedMap();
 
   @tracked isRunningApplyAll = false;
   @tracked applyAllCodePatchTasksState:
@@ -77,52 +65,49 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     | 'applied'
     | 'failed' = 'ready';
 
-  private setHtmlGroups = (htmlGroups: HtmlTagGroup[]) => {
-    this.htmlGroups = new TrackedArray(
-      htmlGroups.map((part) => {
+  private setStableHtmlParts = (htmlParts: HtmlTagGroup[]) => {
+    this.stableHtmlParts = new TrackedArray(
+      htmlParts.map((part) => {
         return new TrackedObject({
           type: part.type,
           content: part.content,
-          codeBlockIndex: part.codeBlockIndex,
-        });
+          codeData: part.codeData,
+        }) as HtmlTagGroup;
       }),
     );
   };
-  // When html is streamed, we need to update htmlParts accordingly,
-  // but only the parts that have changed so that we don't needlesly re-render
-  // parts of the message that haven't changed. Parts are: <pre> html code, and
-  // non-<pre> html. <pre> gets special treatment because we will render it as a
-  // (readonly) Monaco editor
-  private updateHtmlGroups = (html: string) => {
-    let htmlGroups = parseHtmlContent(html);
-    let isIncrementalUpdate = htmlGroups.length >= this.htmlGroups.length; // Not incremental update happens when the new html is shorter than the old html (the content was replaced in a way that removed some parts, e.g. replacing the content with an error message if something goes wrong during chunk processing in the AI bot)
-    if (!this.htmlGroups.length || !isIncrementalUpdate) {
-      this.setHtmlGroups(htmlGroups);
+  // When htmlParts is updated, we need to consume it carefully, so that we don't
+  // needlesly re-render parts of the message that haven't changed. Parts are:
+  // <pre> html code, and non-<pre> html. <pre> gets special treatment because
+  // we will render it as a (readonly) Monaco editor
+  private updateStableHtmlParts = (htmlParts: HtmlTagGroup[]) => {
+    let isIncrementalUpdate = htmlParts.length >= this.stableHtmlParts.length; // Not incremental update happens when the new html is shorter than the old html (the content was replaced in a way that removed some parts, e.g. replacing the content with an error message if something goes wrong during chunk processing in the AI bot)
+    if (!this.stableHtmlParts.length || !isIncrementalUpdate) {
+      this.setStableHtmlParts(htmlParts);
     } else {
-      this.htmlGroups.forEach((oldPart, index) => {
-        if (
-          oldPart.content !== htmlGroups[index].content ||
-          oldPart.codeBlockIndex !== htmlGroups[index].codeBlockIndex
-        ) {
-          oldPart.content = htmlGroups[index].content;
-          oldPart.codeBlockIndex = htmlGroups[index].codeBlockIndex;
+      this.stableHtmlParts.forEach((oldPart, index) => {
+        if (oldPart.content !== htmlParts[index].content) {
+          oldPart.content = htmlParts[index].content;
+        }
+        if (oldPart.codeData !== htmlParts[index].codeData) {
+          oldPart.codeData = htmlParts[index].codeData;
         }
       });
-      if (htmlGroups.length > this.htmlGroups.length) {
-        this.htmlGroups.push(
-          ...htmlGroups.slice(this.htmlGroups.length).map((part) => {
+      if (htmlParts.length > this.stableHtmlParts.length) {
+        this.stableHtmlParts.push(
+          ...htmlParts.slice(this.stableHtmlParts.length).map((part) => {
             return new TrackedObject({
               type: part.type,
               content: part.content,
-              codeBlockIndex: part.codeBlockIndex,
-            });
+              codeData: part.codeData,
+            }) as HtmlTagGroup;
           }),
         );
       }
     }
   };
 
-  private onHtmlUpdate = (html: SafeString) => {
+  private onHtmlPartsUpdate = (htmlParts: HtmlTagGroup[] | undefined) => {
     // The reason why reacting to html argument this way is because we want to
     // have full control of when the @html argument changes so that we can
     // properly fragment it into htmlParts, and in our reactive structure, only update
@@ -130,27 +115,33 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
 
     // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
     scheduleOnce('afterRender', () => {
-      this.updateHtmlGroups(html.toString());
+      this.updateStableHtmlParts(htmlParts ?? []);
     });
   };
 
   private isLastHtmlGroup = (index: number) => {
-    return index === this.htmlGroups.length - 1;
+    return index === this.stableHtmlParts.length - 1;
   };
 
   private createCodePatchAction = (codeData: CodeData) => {
     let codePatchAction = new CodePatchAction(getOwner(this)!, codeData);
-    this.codePatchActions.push(codePatchAction);
+    this.codePatchActions.set(codeData.codeBlockIndex, codePatchAction);
+    console.log(
+      'createCodePatchAction',
+      codeData,
+      'length now',
+      this.codePatchActions.size,
+    );
     return codePatchAction;
   };
 
   private get isApplyAllButtonDisplayed() {
-    return this.codePatchActions.length > 1 && !this.args.isStreaming;
+    return this.codePatchActions.size > 1 && !this.args.isStreaming;
   }
 
   get applyAllButtonState() {
     if (
-      this.codePatchActions.every(
+      [...this.codePatchActions.values()].every(
         (action) => action.patchCodeState === 'applied',
       )
     ) {
@@ -164,7 +155,9 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   private applyAllCodePatchTasks = dropTask(async () => {
     this.isRunningApplyAll = true;
     try {
-      let unappliedCodePatchActions = this.codePatchActions.filter(
+      let unappliedCodePatchActions = [
+        ...this.codePatchActions.values(),
+      ].filter(
         (codePatchAction) => codePatchAction.patchCodeState !== 'applied',
       );
 
@@ -203,79 +196,63 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     }
   });
 
-  sanitizeSafeString = (html: SafeString) => {
-    return sanitize(html.toString());
-  };
-
   <template>
-    {{#if @renderCodeBlocks}}
-      <div
-        class='message'
-        {{HtmlDidUpdate html=@html onHtmlUpdate=this.onHtmlUpdate}}
-      >
-        {{! We are splitting the html into parts so that we can target the
-        code blocks (<pre> tags) and apply Monaco editor to them. Here is an
-        example of the html argument:
+    {{log 'rendering FormattedAiBotMessage'}}
+    <div
+      class='message'
+      {{HtmlPartsDidUpdate
+        htmlParts=@htmlParts
+        onHtmlPartsUpdate=this.onHtmlPartsUpdate
+      }}
+    >
+      {{! We are splitting the html into parts so that we can target the
+      code blocks (<pre> tags) and apply Monaco editor to them. Here is an
+      example of the html argument:
 
-        <p>Here is some code for you.</p>
-        <pre data-codeblock="javascript">const x = 1;</pre>
-        <p>I hope you like this code. But here is some more!</p>
-        <pre data-codeblock="javascript">const y = 2;</pre>
-        <p>Feel free to use it in your project.</p>
+      <p>Here is some code for you.</p>
+      <pre data-codeblock="javascript">const x = 1;</pre>
+      <p>I hope you like this code. But here is some more!</p>
+      <pre data-codeblock="javascript">const y = 2;</pre>
+      <p>Feel free to use it in your project.</p>
 
-        A drawback of this approach is that we can't render monaco editors for
-        code blocks that are nested inside other elements. We should make sure
-        our skills teach the model to respond with code blocks that are not nested
-        inside other elements.
-        }}
-        {{#each this.htmlGroups as |htmlGroup index|}}
-          {{#if (eq htmlGroup.type 'pre_tag')}}
-
-            {{#let
-              (extractCodeData
-                htmlGroup.content @roomId @eventId htmlGroup.codeBlockIndex
-              )
-              as |codeData|
-            }}
-              {{#let
-                (this.createCodePatchAction codeData)
-                as |codePatchAction|
-              }}
-                <HtmlGroupCodeBlock
-                  @codeData={{codeData}}
-                  @codePatchAction={{codePatchAction}}
-                  @monacoSDK={{@monacoSDK}}
-                />
-              {{/let}}
-            {{/let}}
+      A drawback of this approach is that we can't render monaco editors for
+      code blocks that are nested inside other elements. We should make sure
+      our skills teach the model to respond with code blocks that are not nested
+      inside other elements.
+      }}
+      {{#each this.stableHtmlParts as |htmlGroup index|}}
+        {{#if (isHtmlPreTagGroup htmlGroup)}}
+          {{#let
+            (this.createCodePatchAction htmlGroup.codeData)
+            as |codePatchAction|
+          }}
+            <HtmlGroupCodeBlock
+              @codeData={{htmlGroup.codeData}}
+              @codePatchAction={{codePatchAction}}
+              @monacoSDK={{@monacoSDK}}
+            />
+          {{/let}}
+        {{else}}
+          {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
+            {{wrapLastTextNodeInStreamingTextSpan (sanitize htmlGroup.content)}}
           {{else}}
-            {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
-              {{wrapLastTextNodeInStreamingTextSpan
-                (sanitize htmlGroup.content)
-              }}
-            {{else}}
-              {{sanitize htmlGroup.content}}
-            {{/if}}
+            {{sanitize htmlGroup.content}}
           {{/if}}
-        {{/each}}
-
-        {{#if this.isApplyAllButtonDisplayed}}
-          <div class='code-patch-actions'>
-            <ApplyButton
-              {{on 'click' (perform this.applyAllCodePatchTasks)}}
-              @state={{this.applyAllButtonState}}
-              data-test-apply-all-code-patches-button
-            >
-              Accept All
-            </ApplyButton>
-          </div>
         {{/if}}
-      </div>
-    {{else}}
-      <div class='message'>
-        {{this.sanitizeSafeString @html}}
-      </div>
-    {{/if}}
+      {{/each}}
+
+      {{#if this.isApplyAllButtonDisplayed}}
+        <div class='code-patch-actions'>
+          <ApplyButton
+            {{on 'click' (perform this.applyAllCodePatchTasks)}}
+            @state={{this.applyAllCodePatchTasksState}}
+            data-test-apply-all-code-patches-button
+          >
+            Accept All
+          </ApplyButton>
+        </div>
+      {{/if}}
+    </div>
 
     <style scoped>
       .code-patch-actions {
@@ -328,22 +305,31 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   </template>
 }
 
-interface HtmlDidUpdateSignature {
+function isHtmlPreTagGroup(
+  htmlPart: HtmlTagGroup,
+): htmlPart is HtmlPreTagGroup {
+  return htmlPart.type === 'pre_tag';
+}
+
+interface HtmlPartsDidUpdateSignature {
   Args: {
     Named: {
-      html: SafeString;
-      onHtmlUpdate: (html: SafeString) => void;
+      htmlParts: HtmlTagGroup[] | undefined;
+      onHtmlPartsUpdate: (htmlParts: HtmlTagGroup[] | undefined) => void;
     };
   };
 }
 
-class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
+class HtmlPartsDidUpdate extends Modifier<HtmlPartsDidUpdateSignature> {
   modify(
     _element: HTMLElement,
     _positional: [],
-    { html, onHtmlUpdate }: HtmlDidUpdateSignature['Args']['Named'],
+    {
+      htmlParts,
+      onHtmlPartsUpdate,
+    }: HtmlPartsDidUpdateSignature['Args']['Named'],
   ) {
-    onHtmlUpdate(html);
+    onHtmlPartsUpdate(htmlParts);
   }
 }
 
@@ -359,6 +345,7 @@ interface HtmlGroupCodeBlockSignature {
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   @cached
   get codeDiffResource() {
+    console.log('codeDiffResource getter');
     return this.args.codeData.searchReplaceBlock
       ? getCodeDiffResultResource(
           this,
@@ -369,12 +356,17 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   }
 
   <template>
+    {{log 'rendering HtmlGroupCodeBlock'}}
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.codeDiffResource.isDataLoaded}}
           <codeBlock.actions as |actions|>
             <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
-            <actions.applyCodePatch @codePatchAction={{@codePatchAction}} />
+            <actions.applyCodePatch
+              @codePatchAction={{@codePatchAction}}
+              @originalCode={{this.codeDiffResource.originalCode}}
+              @modifiedCode={{this.codeDiffResource.modifiedCode}}
+            />
           </codeBlock.actions>
           <codeBlock.diffEditor
             @originalCode={{this.codeDiffResource.originalCode}}

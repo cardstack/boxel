@@ -449,7 +449,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
       assert
         .dom(
-          `[data-test-code-mode-card-preview-header="${testRealmURL}Author/jane-doe"]`,
+          `[data-test-code-mode-card-renderer-header="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
       assert.dom('[data-test-accordion-item="playground"]').doesNotExist();

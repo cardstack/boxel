@@ -16,6 +16,7 @@ import Modifier from 'ember-modifier';
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
 import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
+import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -23,8 +24,6 @@ import { MonacoSDK } from '@cardstack/host/services/monaco-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import ApplyButton from '../ai-assistant/apply-button';
-
-import { CodeData } from './formatted-message';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
@@ -92,6 +91,7 @@ interface Signature {
 }
 
 let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
+  {{log 'rendering CodeBlockComponent'}}
   {{yield
     (hash
       editor=(component CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData)
@@ -428,6 +428,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
 
 let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> =
   <template>
+    {{log 'rendering CodeBlockActionsComponent'}}
     <style scoped>
       .code-block-actions {
         background: black;
@@ -448,7 +449,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
             ApplyCodePatchButton
             codePatch=@codeData.searchReplaceBlock
             fileUrl=@codeData.fileUrl
-            index=@codeData.index
+            index=@codeData.codeBlockIndex
           )
         )
       }}
