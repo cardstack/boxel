@@ -7,7 +7,7 @@ import { dropTask } from 'ember-concurrency';
 
 import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import type {
-  BoxelMeta,
+  CodeBlockMeta,
   CodeData,
 } from '@cardstack/host/components/ai-assistant/formatted-message';
 import type CardService from '@cardstack/host/services/card-service';
@@ -16,7 +16,7 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 export class CodePatchAction {
-  boxelMeta: BoxelMeta;
+  codeBlockMeta: CodeBlockMeta;
   searchReplaceBlock: string;
 
   @tracked patchCodeTaskState: 'ready' | 'applying' | 'applied' | 'failed' =
@@ -28,11 +28,11 @@ export class CodePatchAction {
 
   constructor(owner: Owner, codeData: CodeData) {
     setOwner(this, owner);
-    if (!codeData.boxelMeta || !codeData.searchReplaceBlock) {
-      throw new Error('boxelMeta and searchReplaceBlock are required');
+    if (!codeData.codeBlockMeta || !codeData.searchReplaceBlock) {
+      throw new Error('codeBlockMeta and searchReplaceBlock are required');
     }
     this.searchReplaceBlock = codeData.searchReplaceBlock;
-    this.boxelMeta = codeData.boxelMeta;
+    this.codeBlockMeta = codeData.codeBlockMeta;
   }
 
   patchCodeTask = dropTask(async () => {
@@ -42,9 +42,9 @@ export class CodePatchAction {
         this.commandService.commandContext,
       );
       await patchCodeCommand.execute({
-        fileUrl: this.boxelMeta.fileUrl || undefined,
-        fileName: this.boxelMeta.fileName,
-        isNewFile: this.boxelMeta.isNewFile,
+        fileUrl: this.codeBlockMeta.fileUrl || undefined,
+        fileName: this.codeBlockMeta.fileName,
+        isNewFile: this.codeBlockMeta.isNewFile,
         codeBlocks: [this.searchReplaceBlock],
       });
       this.patchCodeTaskState = 'applied';

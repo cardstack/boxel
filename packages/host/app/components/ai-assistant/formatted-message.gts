@@ -36,14 +36,14 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
 
-export interface BoxelMeta {
+export interface CodeBlockMeta {
   fileUrl: string | null;
   fileName: string;
   isNewFile: boolean;
 }
 
 export interface CodeData {
-  boxelMeta: BoxelMeta | null;
+  codeBlockMeta: CodeBlockMeta | null;
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
@@ -160,10 +160,10 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     });
 
     let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions
-      .filter((codePatchAction) => codePatchAction.boxelMeta?.fileUrl)
+      .filter((codePatchAction) => codePatchAction.codeBlockMeta?.fileUrl)
       .reduce(
         (acc, codePatchAction) => {
-          let fileUrl = codePatchAction.boxelMeta?.fileUrl;
+          let fileUrl = codePatchAction.codeBlockMeta?.fileUrl;
           if (!fileUrl) {
             throw new Error('fileUrl is required');
           }
@@ -174,10 +174,8 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       );
 
     let codePatchActionsResultingInNewFiles = unappliedCodePatchActions.filter(
-      (codePatchAction) => !codePatchAction.boxelMeta?.fileUrl,
+      (codePatchAction) => !codePatchAction.codeBlockMeta?.fileUrl,
     );
-
-    debugger;
 
     let patchCodeCommand = new PatchCodeCommand(
       this.commandService.commandContext,
@@ -189,7 +187,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       await patchCodeCommand.execute({
         fileUrl,
         isNewFile:
-          codePatchActionsGroupedByFileUrl[fileUrl][0].boxelMeta.isNewFile,
+          codePatchActionsGroupedByFileUrl[fileUrl][0].codeBlockMeta.isNewFile,
         codeBlocks: codePatchActionsGroupedByFileUrl[fileUrl].map(
           (codePatchAction) => codePatchAction.searchReplaceBlock,
         ),
@@ -200,10 +198,9 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     }
 
     codePatchActionsResultingInNewFiles.forEach(async (codePatchAction) => {
-      debugger;
       await patchCodeCommand.execute({
         isNewFile: true,
-        fileName: codePatchAction.boxelMeta?.fileName,
+        fileName: codePatchAction.codeBlockMeta?.fileName,
         codeBlocks: [codePatchAction.searchReplaceBlock],
       });
       codePatchAction.patchCodeTaskState = 'applied';
@@ -362,14 +359,17 @@ interface HtmlGroupCodeBlockSignature {
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   @cached
   get codeDiffResource() {
-    if (!this.args.codeData.boxelMeta) {
-      throw new Error('boxelMeta is required');
+    if (!this.args.codeData.codeBlockMeta) {
+      console.error(
+        'code diff error: was not able to extract metadata from the code block',
+      );
+      return null;
     }
     return this.args.codeData.searchReplaceBlock
       ? getCodeDiffResultResource(
           this,
           this.args.codeData.searchReplaceBlock,
-          this.args.codeData.boxelMeta,
+          this.args.codeData.codeBlockMeta,
         )
       : undefined;
   }

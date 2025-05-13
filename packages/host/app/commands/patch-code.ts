@@ -67,8 +67,8 @@ export default class PatchCodeCommand extends HostBaseCommand<
           /\.([^.]+)$/,
           `-${Math.random().toString(36).substring(2, 5)}.$1`,
         );
-        fileUrl = new URL(fileName, realmURL).href;
       }
+      fileUrl = new URL(fileName, realmURL).href;
     }
 
     await this.cardService.saveSource(

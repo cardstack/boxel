@@ -21,7 +21,7 @@ export function extractCodeData(preElementString: string): CodeData {
   if (!preElement) {
     tempContainer.remove();
     return {
-      boxelMeta: null,
+      codeBlockMeta: null,
       code: null,
       language: null,
       searchReplaceBlock: null,
@@ -29,8 +29,9 @@ export function extractCodeData(preElementString: string): CodeData {
   }
 
   let language = preElement.getAttribute('data-code-language') || 'text';
-
   let content = preElement.innerHTML;
+  tempContainer.remove();
+
   // Decode HTML entities to handle special characters like < and >
   content = unescapeHtml(content);
   let parsedContent = parseSearchReplace(content);
@@ -38,9 +39,10 @@ export function extractCodeData(preElementString: string): CodeData {
   // Transform the incomplete search/replace block into a format for streaming,
   // so that the user can see the search replace block in a human friendly format, like this:
   // // existing code ...
-  // SEARCH BLOCK
+  // <SEARCH BLOCK>
   // // new code ...
-  // REPLACE BLOCK
+  // <REPLACE BLOCK>
+  // The above will only be shown until the search/replace block is complete (while streaming)
   let adjustedContentForStreamedContentInMonacoEditor = '';
   if (parsedContent.searchContent) {
     // get count of leading spaces in the first line of searchContent
@@ -62,42 +64,59 @@ export function extractCodeData(preElementString: string): CodeData {
 
   const lines = content.split('\n');
 
-  let boxelMetaString: string | null = null;
-  const boxelMetaStringIndex = lines.findIndex((line) =>
+  // Boxel meta line is the first line of the code block, which starts with
+  // __META (our own internal metadata line, as dictated in the source code
+  // editing skill). It is used to identify the file that is being edited, or
+  // provides a file name for a new file. It looks like this:
+  // __META: { "fileUrl": "https://example.com/wedding-invitation.gts" }
+  // or
+  // __META: { "fileName": "wedding-invitation.gts", "isNewFile": true }
+  let codeBlockMetaString: string | null = null;
+  const metaStringStartIndex = lines.findIndex((line) =>
     line.startsWith('__META: '),
   );
-  if (boxelMetaStringIndex !== -1) {
-    boxelMetaString = lines[boxelMetaStringIndex]
+  if (metaStringStartIndex !== -1) {
+    codeBlockMetaString = lines[metaStringStartIndex]
       .substring('__META: '.length)
       .trim();
   }
 
-  let contentWithoutBoxelMetaLine;
-  let boxelMeta = null;
-  if (boxelMetaString) {
-    contentWithoutBoxelMetaLine = lines
-      .slice(boxelMetaStringIndex + 1)
+  let contentWithoutcodeBlockMetaLine = content;
+  let codeBlockMeta = null;
+  let unfinishedcodeBlockMeta = false;
+  if (codeBlockMetaString) {
+    contentWithoutcodeBlockMetaLine = lines
+      .slice(metaStringStartIndex + 1)
       .join('\n');
 
     try {
-      boxelMeta = JSON.parse(boxelMetaString);
+      codeBlockMeta = JSON.parse(codeBlockMetaString);
     } catch (error) {
-      // do nothing, it's probably an unfinished boxel meta string as the code is streaming in
+      // Meta line is still streaming in
+      unfinishedcodeBlockMeta = true;
     }
   }
 
-  tempContainer.remove();
-  return {
-    language: language ?? '',
-    code:
+  let hascodeBlockMeta = metaStringStartIndex !== -1;
+  let codeToDisplay;
+
+  if (hascodeBlockMeta && unfinishedcodeBlockMeta) {
+    codeToDisplay = ''; // Don't show anything until the boxel meta line is complete while streaming
+  } else {
+    codeToDisplay =
       adjustedContentForStreamedContentInMonacoEditor ||
       parsedContent.replaceContent ||
-      content,
-    boxelMeta,
+      contentWithoutcodeBlockMetaLine;
+  }
+
+  return {
+    language: language ?? '',
+    code: codeToDisplay,
+    codeBlockMeta,
     searchReplaceBlock: isCompleteSearchReplaceBlock(
-      contentWithoutBoxelMetaLine,
+      contentWithoutcodeBlockMetaLine,
     )
-      ? contentWithoutBoxelMetaLine
+      ? contentWithoutcodeBlockMetaLine
       : null,
   };
 }
