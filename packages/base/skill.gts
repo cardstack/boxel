@@ -8,7 +8,7 @@ import {
   relativeTo,
 } from './card-api';
 import BooleanField from './boolean';
-import { AbsoluteCodeRefField } from './code-ref';
+import CodeRefField from './code-ref';
 import MarkdownField from './markdown';
 import StringField from './string';
 import RobotIcon from '@cardstack/boxel-icons/robot';
@@ -21,7 +21,7 @@ export class CommandField extends FieldDef {
   static displayName = 'CommandField';
   static icon = SquareChevronRightIcon;
 
-  @field codeRef = contains(AbsoluteCodeRefField, {
+  @field codeRef = contains(CodeRefField, {
     description: 'An absolute code reference to the command to be executed',
   });
   @field requiresApproval = contains(BooleanField, {

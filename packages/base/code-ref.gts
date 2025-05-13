@@ -166,23 +166,6 @@ export default class CodeRefField extends FieldDef {
   static edit = EditView;
 }
 
-export class AbsoluteCodeRefField extends CodeRefField {
-  static [serialize](
-    codeRef: ResolvedCodeRef | {},
-    doc: JSONAPISingleResourceDocument,
-    _visited?: Set<string>,
-    opts?: SerializeOpts,
-  ) {
-    return {
-      ...codeRef,
-      ...codeRefAdjustments(codeRef, doc.data.id, {
-        ...opts,
-        useAbsoluteURL: true,
-      }),
-    };
-  }
-}
-
 function maybeSerializeCodeRef(
   codeRef: ResolvedCodeRef | {} | undefined,
   stack: CardDef[] = [],
