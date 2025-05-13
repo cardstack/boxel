@@ -1,7 +1,6 @@
 import { TemplateOnlyComponent } from '@ember/component/template-only';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
@@ -13,7 +12,6 @@ import LayoutList from '@cardstack/boxel-icons/layout-list';
 import StackIcon from '@cardstack/boxel-icons/stack';
 
 import { task } from 'ember-concurrency';
-import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 
 import {
@@ -367,7 +365,6 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                 @card={{@spec}}
                 @format='edit'
                 @cardContext={{this.cardContext}}
-                {{SpecPreviewModifier spec=@spec onSpecView=@onSpecView}}
               />
             {{/if}}
           </div>
@@ -697,30 +694,4 @@ function getRelativePath(baseUrl: string, targetUrl: string) {
   const basePath = new URL(baseUrl).pathname;
   const targetPath = new URL(targetUrl).pathname;
   return targetPath.replace(basePath, '') || '/';
-}
-
-interface ModifierSignature {
-  Args: {
-    Named: {
-      spec?: Spec;
-      onSpecView?: (spec: Spec) => void;
-    };
-  };
-}
-
-export class SpecPreviewModifier extends Modifier<ModifierSignature> {
-  @service private declare playgroundPanelService: PlaygroundPanelService;
-
-  modify(
-    _element: HTMLElement,
-    _positional: [],
-    { spec, onSpecView }: ModifierSignature['Args']['Named'],
-  ) {
-    if (!spec || !onSpecView) {
-      throw new Error('bug: no spec or onSpecView hook');
-    }
-    next(() => {
-      onSpecView(spec);
-    });
-  }
 }

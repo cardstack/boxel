@@ -1,10 +1,12 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
+import { next } from '@ember/runloop';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
@@ -358,6 +360,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{else if @selectedCardOrField.cardOrField}}
       {{consumeContext this.makeSearch}}
       <Accordion
+        {{! FIXME is this the right place? }}
+        {{SpecPreviewModifier spec=this.card onSpecView=this.onSpecView}}
         data-test-module-inspector='card-or-field'
         data-test-selected-accordion-item={{this.selectedAccordionItem}}
         as |A|
@@ -548,4 +552,31 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
     </style>
   </template>
+}
+
+interface ModifierSignature {
+  Args: {
+    Named: {
+      spec?: Spec;
+      onSpecView?: (spec: Spec) => void;
+    };
+  };
+}
+
+// FIXME this is copied from spec-preview, but is it just an on-render, next?
+export class SpecPreviewModifier extends Modifier<ModifierSignature> {
+  modify(
+    _element: HTMLElement,
+    _positional: [],
+    { spec, onSpecView }: ModifierSignature['Args']['Named'],
+  ) {
+    console.log('modifieRR???', spec, onSpecView);
+    if (!spec || !onSpecView) {
+      // throw new Error('bug: no spec or onSpecView hook');
+      return;
+    }
+    next(() => {
+      onSpecView(spec);
+    });
+  }
 }
