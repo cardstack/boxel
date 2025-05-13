@@ -3,7 +3,9 @@ import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
+import { tracked } from '@glimmer/tracking';
 
+import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
@@ -13,12 +15,16 @@ import { Accordion } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
+  type getCards,
+  type Query,
   isCardDocumentString,
   isFieldDef,
   internalKeyFor,
   CodeRef,
   CardErrorJSONAPI,
+  GetCardsContextName,
   ResolvedCodeRef,
+  specRef,
 } from '@cardstack/runtime-common';
 
 import CardError from '@cardstack/host/components/operator-mode/card-error';
@@ -30,6 +36,9 @@ import SchemaEditor, {
 } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
+
+import consumeContext from '@cardstack/host/helpers/consume-context';
+
 import { type Ready } from '@cardstack/host/resources/file';
 import type { FileResource } from '@cardstack/host/resources/file';
 import {
@@ -41,6 +50,8 @@ import {
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type RealmServerService from '@cardstack/host/services/realm-server';
+import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 
 import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
@@ -86,6 +97,12 @@ interface ModuleInspectorSignature {
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service private declare realmServer: RealmServerService;
+  @service private declare specPanelService: SpecPanelService;
+
+  @consume(GetCardsContextName) private declare getCards: getCards;
+
+  @tracked private search: ReturnType<getCards<Spec>> | undefined;
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
@@ -264,6 +281,51 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
+  private get specQuery(): Query {
+    return {
+      filter: {
+        on: specRef,
+        eq: {
+          ref: this.selectedDeclarationAsCodeRef, //ref is primitive
+        },
+      },
+      sort: [
+        {
+          by: 'createdAt',
+          direction: 'desc',
+        },
+      ],
+    };
+  }
+
+  private makeSearch = () => {
+    this.search = this.getCards(
+      this,
+      () => this.specQuery,
+      () => this.realmServer.availableRealmURLs,
+      { isLive: true },
+    ) as ReturnType<getCards<Spec>>;
+  };
+
+  get _selectedCard() {
+    let selectedCardId = this.specPanelService.specSelection;
+    if (selectedCardId) {
+      return this.cards?.find((card) => card.id === selectedCardId);
+    }
+    return this.cards?.[0];
+  }
+
+  get cards() {
+    return this.search?.instances ?? [];
+  }
+
+  private get card() {
+    if (this._selectedCard) {
+      return this._selectedCard;
+    }
+    return this.cards?.[0];
+  }
+
   <template>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
@@ -294,6 +356,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         {{this.fileIncompatibilityMessage}}
       </div>
     {{else if @selectedCardOrField.cardOrField}}
+      {{consumeContext this.makeSearch}}
       <Accordion
         data-test-module-inspector='card-or-field'
         data-test-selected-accordion-item={{this.selectedAccordionItem}}
@@ -353,6 +416,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @onSpecView={{this.onSpecView}}
           @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
+          @card={{this.card}}
+          @cards={{this.cards}}
+          @search={{this.search}}
           as |SpecPreviewTitle SpecPreviewContent|
         >
           <A.Item

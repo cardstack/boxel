@@ -5,7 +5,6 @@ import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
 import GlimmerComponent from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import AppsIcon from '@cardstack/boxel-icons/apps';
 import Brain from '@cardstack/boxel-icons/brain';
@@ -28,7 +27,6 @@ import { cn } from '@cardstack/boxel-ui/helpers';
 
 import {
   type ResolvedCodeRef,
-  type Query,
   type getCard,
   type getCards,
   type getCardCollection,
@@ -49,7 +47,6 @@ import {
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
 import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
-import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import {
@@ -92,6 +89,9 @@ interface Signature {
     onSpecView: (spec: Spec) => void;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
+    card: Spec;
+    cards: Spec[];
+    search: ReturnType<getCards<Spec>> | undefined;
   };
   Blocks: {
     default: [
@@ -476,7 +476,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
-  @tracked private search: ReturnType<getCards<Spec>> | undefined;
 
   private createSpecInstance = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
@@ -507,27 +506,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       }
     },
   );
-
-  private get realms() {
-    return this.realmServer.availableRealmURLs;
-  }
-
-  private get specQuery(): Query {
-    return {
-      filter: {
-        on: specRef,
-        eq: {
-          ref: this.args.selectedDeclarationAsCodeRef, //ref is primitive
-        },
-      },
-      sort: [
-        {
-          by: 'createdAt',
-          direction: 'desc',
-        },
-      ],
-    };
-  }
 
   //TODO: Improve identification of isApp and isSkill
   // isApp and isSkill are far from perfect functions
@@ -604,39 +582,11 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private makeSearch = () => {
-    this.search = this.getCards(
-      this,
-      () => this.specQuery,
-      () => this.realms,
-      { isLive: true },
-    ) as ReturnType<getCards<Spec>>;
-  };
-
-  get _selectedCard() {
-    let selectedCardId = this.specPanelService.specSelection;
-    if (selectedCardId) {
-      return this.cards?.find((card) => card.id === selectedCardId);
-    }
-    return this.cards?.[0];
-  }
-
-  get cards() {
-    return this.search?.instances ?? [];
-  }
-
-  private get card() {
-    if (this._selectedCard) {
-      return this._selectedCard;
-    }
-    return this.cards?.[0];
-  }
-
   get showCreateSpec() {
     return (
       Boolean(this.args.selectedDeclaration?.exportName) &&
-      !this.search?.isLoading &&
-      this.cards.length === 0 &&
+      !this.args.search?.isLoading &&
+      this.args.cards.length === 0 &&
       this.canWrite
     );
   }
@@ -654,7 +604,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
-    {{consumeContext this.makeSearch}}
     {{#if this.isLoading}}
       {{yield
         (component
@@ -662,7 +611,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           showCreateSpec=false
           createSpec=this.createSpec
           isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-          spec=this.card
+          spec=@card
         )
         (component SpecPreviewLoading)
       }}
@@ -673,17 +622,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           showCreateSpec=this.showCreateSpec
           createSpec=this.createSpec
           isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-          spec=this.card
-          numberOfInstances=this.cards.length
+          spec=@card
+          numberOfInstances=@cards.length
         )
         (component
           SpecPreviewContent
           showCreateSpec=this.showCreateSpec
           canWrite=this.canWrite
           onSelectCard=this.onSelectCard
-          spec=this.card
+          spec=@card
           isLoading=false
-          cards=this.cards
+          cards=@cards
           onSpecView=@onSpecView
           viewCardInPlayground=this.viewCardInPlayground
         )
