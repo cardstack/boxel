@@ -92,6 +92,7 @@ interface Signature {
 }
 
 let CodeBlockComponent: TemplateOnlyComponent<Signature> = <template>
+  {{log 'rendering CodeBlockComponent'}}
   {{yield
     (hash
       editor=(component CodeBlockEditor monacoSDK=@monacoSDK codeData=@codeData)
@@ -428,6 +429,7 @@ class CodeBlockDiffEditor extends Component<Signature> {
 
 let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> =
   <template>
+    {{log 'rendering CodeBlockActionsComponent'}}
     <style scoped>
       .code-block-actions {
         background: black;

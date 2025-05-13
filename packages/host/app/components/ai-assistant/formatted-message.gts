@@ -190,6 +190,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
   };
 
   <template>
+    {{log 'rendering FormattedMessage'}}
     {{#if @renderCodeBlocks}}
       <div
         class='message'
@@ -335,6 +336,7 @@ interface HtmlGroupCodeBlockSignature {
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   @cached
   get codeDiffResource() {
+    console.log('codeDiffResource getter');
     return this.args.codeData.searchReplaceBlock
       ? getCodeDiffResultResource(
           this,
@@ -345,6 +347,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   }
 
   <template>
+    {{log 'rendering HtmlGroupCodeBlock'}}
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.codeDiffResource.isDataLoaded}}
