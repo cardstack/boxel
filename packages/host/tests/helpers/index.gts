@@ -346,6 +346,15 @@ export function lookupNetworkService(): NetworkService {
   return owner.lookup('service:network') as NetworkService;
 }
 
+export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
+  (globalThis as any).__disableLoaderMonitoring = true;
+  try {
+    return (await cb()) as T;
+  } finally {
+    (globalThis as any).__disableLoaderMonitoring = false;
+  }
+}
+
 export const testRealmSecretSeed = "shhh! it's a secret";
 async function setupTestRealm({
   contents,

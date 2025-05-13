@@ -28,6 +28,7 @@ import {
   logger,
   formattedError,
   RealmPaths,
+  isLocalId,
   type Store as StoreInterface,
   type AddOptions,
   type CreateOptions,
@@ -54,7 +55,6 @@ import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event'
 
 import IdentityContext, {
   getDeps,
-  isLocalId,
   type ReferenceCount,
 } from '../lib/gc-identity-context';
 
@@ -69,7 +69,7 @@ import type OperatorModeStateService from './operator-mode-state-service';
 import type RealmService from './realm';
 import type ResetService from './reset';
 
-export { CardErrorJSONAPI, CardSaveSubscriber, isLocalId };
+export { CardErrorJSONAPI, CardSaveSubscriber };
 
 let waiter = buildWaiter('store-service');
 
@@ -149,26 +149,7 @@ export default class StoreService extends Service implements StoreInterface {
         console.trace(message); // this will helps us to understand who dropped the reference that made it negative
       }
       this.referenceCount.delete(id);
-      let autoSaveState = this.autoSaveStates.get(id);
-      if (autoSaveState?.hasUnsavedChanges) {
-        this.initiateAutoSaveTask.perform(id, { isImmediate: true });
-      }
-      // await for a microtask to prevent rerender dirty tag error so we don't
-      // get in trouble because we read this.autosaveStates in the same frame as
-      // we mutate this.autosaveStates
-      (async () => {
-        await Promise.resolve();
-        this.autoSaveStates.delete(id);
-        let instance = this.identityContext.get(id);
-        if (instance) {
-          if (isLocalId(id)) {
-            this.autoSaveStates.delete(instance.id);
-          } else {
-            this.autoSaveStates.delete(instance[localIdSymbol]);
-          }
-        }
-      })();
-
+      this.autoSaveStates.delete(id);
       this.unsubscribeFromInstance(id);
     }
   }
@@ -439,11 +420,11 @@ export default class StoreService extends Service implements StoreInterface {
           instanceOrError = await this.getInstance({
             idOrDoc: url,
           });
+          await this.updateInstanceChangeSubscription(
+            'start-tracking',
+            instanceOrError,
+          );
         }
-        await this.updateInstanceChangeSubscription(
-          'start-tracking',
-          instanceOrError,
-        );
 
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing

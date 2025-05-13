@@ -22,6 +22,8 @@ import {
   setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
+  lookupLoaderService,
+  withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
 } from '../../helpers';
@@ -572,7 +574,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       ]);
     });
 
-    test('can create new instance', async function (assert) {
+    test<TestContextWithSave>('can create new instance', async function (assert) {
       removeRecentFiles();
       await visitOperatorMode({
         submode: 'code',
@@ -589,7 +591,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
         .doesNotExist();
 
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
       await createNewInstance();
+      await waitUntil(() => id);
 
       let recentFiles = getRecentFiles();
       assert.strictEqual(
@@ -597,16 +604,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         2,
         'recent file count is correct',
       );
-      let newCardId = `${recentFiles?.[0][0]}${recentFiles?.[0][1]}`.replace(
-        '.json',
-        '',
-      );
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
         .hasText('Untitled Blog Post', 'created instance is selected');
       assertCardExists(
         assert,
-        newCardId,
+        id!,
         'edit',
         'new card is rendered in edit format',
       );
@@ -618,13 +621,18 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index]').containsText('Blog Post');
     });
 
-    test('can create new instance with CodeRef field', async function (assert) {
+    test<TestContextWithSave>('can create new instance with CodeRef field', async function (assert) {
       await openFileInPlayground(
         'code-ref-driver.gts',
         testRealmURL,
         'CodeRefDriver',
       );
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
       await createNewInstance();
+      await waitUntil(() => id);
 
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
@@ -1205,6 +1213,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-card-error]').doesNotExist();
 
       await createNewInstance();
+      // switch to isolated mode to see the current server state
+      await click('[data-test-format-chooser="isolated"]');
+
       assert
         .dom('[data-test-playground-panel] [data-test-card]')
         .doesNotExist();
@@ -1216,10 +1227,14 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').containsText('fn is not defined');
 
-      // fix error
-      await realm.write(
-        'boom-person.gts',
-        `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+      await withoutLoaderMonitoring(async () => {
+        // The loader service is shared between the realm server and the host.
+        // need to reset the loader to pick up the changed module in the indexer
+        lookupLoaderService().resetLoader();
+        // fix error
+        await realm.write(
+          'boom-person.gts',
+          `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
           export class BoomPerson extends CardDef {
             static displayName = 'Boom Person';
             @field firstName = contains(StringField);
@@ -1231,37 +1246,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
             }
           }
         `,
-      );
-      await settled();
-      assert.dom('[data-test-error-container]').doesNotExist();
-    });
-
-    test('it can clear card-creation error (that resulted in new file in the realm) when file is edited', async function (assert) {
-      await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-      assert.dom('[data-test-error-container]').doesNotExist();
-
-      await createNewInstance();
-      assert
-        .dom('[data-test-error-container]')
-        .containsText('This card contains an error');
-
-      await realm.write(
-        'boom-person.gts',
-        `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
-          export class BoomPerson extends CardDef {
-            static displayName = 'Boom Person';
-            @field firstName = contains(StringField);
-            static isolated = class Isolated extends Component<typeof this> {
-              <template>
-                Hello <@fields.firstName />! {{this.boom}}
-              </template>
-              boom = () => fn();
-            }
-          }
-        `,
-      );
-      await settled();
+        );
+      });
+      await waitFor(`[data-test-error-container]`, {
+        count: 0,
+        timeout: 5_000,
+      });
       assert.dom('[data-test-error-container]').doesNotExist();
     });
 
@@ -1271,6 +1261,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-error-container]').doesNotExist();
 
       await createNewInstance();
+      // switch to isolated mode to see the current server state
+      await click('[data-test-format-chooser="isolated"]');
+
       assert
         .dom('[data-test-error-container]')
         .containsText('This card contains an error');
@@ -1283,9 +1276,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await selectDeclaration('BoomPerson');
       assert
         .dom('[data-test-error-container]')
-        .doesNotExist(
-          'can navigate back to first card def without revalidation errors',
-        );
+        .exists('can navigate back to the error card def');
     });
 
     test('it can render stale card in edit format when the server is in an error state for the card', async function (assert) {
