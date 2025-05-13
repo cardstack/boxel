@@ -4,6 +4,7 @@ import { action } from '@ember/object';
 import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 import { htmlSafe } from '@ember/template';
+import type Owner from '@ember/owner';
 import GlimmerComponent from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -17,6 +18,7 @@ import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
+import flatMap from 'lodash/flatMap';
 
 import {
   BoxelButton,
@@ -224,6 +226,51 @@ type SpecPreviewCardContext = Omit<
   'prerenderedCardSearchComponent'
 >;
 
+interface PreviewerSignature {
+  Element: HTMLDivElement;
+  Args: {
+    id: string | undefined;
+    cardContext: SpecPreviewCardContext;
+    onSpecView: (spec: Spec) => void;
+    canWrite: boolean;
+  };
+}
+
+class Previewer extends GlimmerComponent<PreviewerSignature> {
+  @consume(GetCardContextName) private declare getCard: getCard;
+  @tracked private specResource: ReturnType<getCard> | undefined;
+  private makeSpecResource = () => {
+    this.specResource = this.getCard(this, () => this.args.id);
+  };
+
+  private get displayIsolated() {
+    return !this.args.canWrite && this.args.id;
+  }
+
+  get spec() {
+    return this.specResource?.card as Spec;
+  }
+  <template>
+    {{consumeContext this.makeSpecResource}}
+    {{#if this.spec}}
+      {{#if this.displayIsolated}}
+        <Preview
+          @card={{this.spec}}
+          @format='isolated'
+          @cardContext={{@cardContext}}
+        />
+      {{else}}
+        <Preview
+          @card={{this.spec}}
+          @format='edit'
+          @cardContext={{@cardContext}}
+          {{SpecPreviewModifier spec=this.spec onSpecView=@onSpecView}}
+        />
+      {{/if}}
+    {{/if}}
+  </template>
+}
+
 class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
@@ -272,16 +319,12 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     };
   };
 
-  private get displayIsolated() {
-    return !this.args.canWrite && this.args.cards.length > 0;
-  }
-
   private get displayCannotWrite() {
     return !this.args.canWrite && this.args.cards.length === 0;
   }
 
   private get selectedId() {
-    return this.args.spec?.id;
+    return this.specPanelService.specSelection ?? this.args.cards[0]?.id;
   }
 
   @action private viewSpecInstance() {
@@ -357,20 +400,12 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @onSelectCard={{@viewCardInPlayground}}
             />
-            {{#if this.displayIsolated}}
-              <Preview
-                @card={{@spec}}
-                @format='isolated'
-                @cardContext={{this.cardContext}}
-              />
-            {{else}}
-              <Preview
-                @card={{@spec}}
-                @format='edit'
-                @cardContext={{this.cardContext}}
-                {{SpecPreviewModifier spec=@spec onSpecView=@onSpecView}}
-              />
-            {{/if}}
+            <Previewer
+              @id={{this.selectedId}}
+              @cardContext={{this.cardContext}}
+              @onSpecView={{@onSpecView}}
+              @canWrite={{@canWrite}}
+            />
           </div>
         {{/if}}
       {{/if}}
@@ -477,7 +512,23 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
   @service private declare store: StoreService;
-  @tracked private search: ReturnType<getCards<Spec>> | undefined;
+  @tracked cards: Spec[] = [];
+
+  constructor(owner: Owner, args: any) {
+    super(owner, args);
+    this.search.perform();
+  }
+
+  private search = task(async () => {
+    this.cards = flatMap(
+      await Promise.all(
+        this.realms.map(
+          async (realm) =>
+            await this.store.search(this.specQuery, new URL(realm)),
+        ),
+      ),
+    ) as Spec[];
+  });
 
   private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
@@ -519,6 +570,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
             this.args.toggleAccordionItem('spec-preview');
           }
         }
+        this.search.perform();
       } catch (e: any) {
         console.log('Error saving', e);
       }
@@ -621,25 +673,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private makeSearch = () => {
-    this.search = this.getCards(
-      this,
-      () => this.specQuery,
-      () => this.realms,
-      { isLive: true },
-    ) as ReturnType<getCards<Spec>>;
-  };
-
   get _selectedCard() {
     let selectedCardId = this.specPanelService.specSelection;
     if (selectedCardId) {
       return this.cards?.find((card) => card.id === selectedCardId);
     }
     return this.cards?.[0];
-  }
-
-  get cards() {
-    return this.search?.instances ?? [];
   }
 
   private get card() {
@@ -652,14 +691,14 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   get showCreateSpec() {
     return (
       Boolean(this.args.selectedDeclaration?.exportName) &&
-      !this.search?.isLoading &&
+      !this.search?.isRunning &&
       this.cards.length === 0 &&
       this.canWrite
     );
   }
 
   get isLoading() {
-    return this.args.isLoadingNewModule;
+    return this.args.isLoadingNewModule || this.search.isRunning;
   }
 
   private updatePlaygroundSelections(id: string, fieldDefOnly = false) {
@@ -724,7 +763,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   };
 
   <template>
-    {{consumeContext this.makeSearch}}
     {{#if this.isLoading}}
       {{yield
         (component
