@@ -80,12 +80,14 @@ module(basename(__filename), function () {
             'person.gts': `
             import { contains, field, CardDef, Component } from "https://cardstack.com/base/card-api";
             import StringField from "https://cardstack.com/base/string";
+            import NumberField from "https://cardstack.com/base/number";
 
             export class Person extends CardDef {
               @field firstName = contains(StringField);
+              @field hourlyRate = contains(NumberField);
               static isolated = class Isolated extends Component<typeof this> {
                 <template>
-                  <h1><@fields.firstName/></h1>
+                  <h1><@fields.firstName /> \${{@model.hourlyRate}}</h1>
                 </template>
               }
               static embedded = class Embedded extends Component<typeof this> {
@@ -216,6 +218,7 @@ module(basename(__filename), function () {
               data: {
                 attributes: {
                   firstName: 'Van Gogh',
+                  hourlyRate: 50,
                 },
                 meta: {
                   adoptsFrom: {
@@ -348,7 +351,7 @@ module(basename(__filename), function () {
       if (entry?.type === 'instance') {
         assert.strictEqual(
           trimCardContainer(stripScopedCSSAttributes(entry!.isolatedHtml!)),
-          cleanWhiteSpace(`<h1> Mango </h1>`),
+          cleanWhiteSpace(`<h1> Mango $</h1>`),
           'pre-rendered isolated format html is correct',
         );
         assert.strictEqual(
@@ -415,7 +418,7 @@ module(basename(__filename), function () {
           if (item?.type === 'instance') {
             assert.strictEqual(
               trimCardContainer(stripScopedCSSAttributes(item.isolatedHtml!)),
-              cleanWhiteSpace(`<h1> Van Gogh </h1>`),
+              cleanWhiteSpace(`<h1> Van Gogh $50</h1>`),
             );
             assert.strictEqual(
               trimCardContainer(
@@ -532,7 +535,7 @@ module(basename(__filename), function () {
         'person.gts',
         `
           // syntax error
-          export class IntentionallyThrownError {
+          export class Intentionally Thrown Error {}
         `,
       );
       assert.deepEqual(
@@ -1018,6 +1021,97 @@ module(basename(__filename), function () {
           totalIndexEntries: 13,
         },
         'indexed correct number of files',
+      );
+    });
+
+    test('it can index a card with a contains computed that consumes a linksTo field that is NOT in template but uses "isUsed" option', async function (assert) {
+      await realm.write(
+        'task.gts',
+        `
+            import StringField from 'https://cardstack.com/base/string';
+            import {
+              Component,
+              CardDef,
+              contains,
+              field,
+              linksTo,
+            } from 'https://cardstack.com/base/card-api';
+
+
+            export class Team extends CardDef {
+              static displayName = 'Team'
+              @field name = contains(StringField, {isUsed: true});
+            }
+
+            export class Task extends CardDef {
+              static displayName = 'Sprint Task';
+              @field team = linksTo(() => Team, {isUsed: true}); 
+              @field shortId = contains(StringField, {
+                computeVia: function (this: Task) {
+                  return this.team?.name
+                },
+              });
+
+              //template with no reference to shortId
+              static isolated = class TaskIsolated extends Component<typeof this> {
+              <template>
+              </template>
+              }
+            }
+            `,
+      );
+      await realm.write(
+        'team.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              name: 'Team B',
+              description: null,
+              thumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: {
+                module: './task',
+                name: 'Team',
+              },
+            },
+          },
+        }),
+      );
+      await realm.write(
+        'task.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              title: null,
+              description: null,
+              thumbnailURL: null,
+            },
+            relationships: {
+              team: {
+                links: {
+                  self: './team',
+                },
+              },
+            },
+            meta: {
+              adoptsFrom: {
+                module: './task',
+                name: 'Task',
+              },
+            },
+          },
+        }),
+      );
+      let taskInstance = (await realm.realmIndexQueryEngine.instance(
+        new URL(`${testRealm}task`),
+      )) as any;
+      assert.strictEqual(
+        taskInstance?.type,
+        'instance',
+        'task instance created without any error',
       );
     });
 

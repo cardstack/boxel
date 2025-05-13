@@ -9,6 +9,9 @@ import { type ErrorReporter } from '@cardstack/runtime-common/realm';
 import { performance } from 'perf_hooks';
 import { readFileSync } from 'fs-extra';
 import { join } from 'path';
+import * as ContentTagGlobal from 'content-tag';
+
+(globalThis as any).ContentTagGlobal = ContentTagGlobal;
 
 const appName = '@cardstack/host';
 export async function makeFastBootIndexRunner(
@@ -31,12 +34,15 @@ export async function makeFastBootIndexRunner(
         URL: globalThis.URL,
         Request: globalThis.Request,
         Response: globalThis.Response,
+        ContentTagGlobal,
         btoa,
         atob,
         performance,
         getRunnerOpts,
         _logDefinitions: (globalThis as any)._logDefinitions,
         jsdom: new JSDOM(''),
+        setTimeout: () => {}, // setTimeout is disabled during indexing
+        setInterval: () => {}, // setInterval is disabled during indexing
       });
     },
   ));
