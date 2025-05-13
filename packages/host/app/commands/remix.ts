@@ -10,9 +10,10 @@ import {
   type CopyCardsWithCodeRef,
 } from '@cardstack/runtime-common';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
-import { file, type FileResource } from '@cardstack/host/resources/file';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
+
+import { timeout } from 'ember-concurrency';
 
 import HostBaseCommand from '../lib/host-base-command';
 import CopyCardCommand from './copy-card';
@@ -78,7 +79,7 @@ export class RemixCommand extends HostBaseCommand<
 
     const copyMeta: CopyMeta[] = [];
 
-    const localDir = nameWithUuid(listing.name).concat('/');
+    const localDir = nameWithUuid(listing.name);
 
     // first spec as the selected code ref with new url
     // if there are examples, take the first example's code ref
@@ -95,13 +96,10 @@ export class RemixCommand extends HostBaseCommand<
       const fileTargetUrl = new URL(newPath, realmUrl).href;
       const targetFilePath = fileTargetUrl.concat('.gts');
 
-      const copySourceResult = await new CopySourceCommand(
-        this.commandContext,
-      ).execute({
+      await new CopySourceCommand(this.commandContext).execute({
         fromRealmUrl: absoluteModulePath,
         toRealmUrl: targetFilePath,
       });
-      console.log('copySourceResult: ', copySourceResult);
 
       copyMeta.push({
         sourceCodeRef: {
@@ -158,7 +156,6 @@ export class RemixCommand extends HostBaseCommand<
       const copyCardsWithCodeRef = results.filter(
         (result) => result !== null,
       ) as CopyCardsWithCodeRef[];
-
       for (const cardWithNewCodeRef of copyCardsWithCodeRef) {
         const { newCardId } = await new CopyCardCommand(
           this.commandContext,
@@ -188,7 +185,6 @@ export class RemixCommand extends HostBaseCommand<
 
     if (selectedCodeRef) {
       const codePath = selectedCodeRef.module.concat('.gts');
-      console.log('codePath: ', codePath);
       if (shouldPersistPlaygroundSelection && firstExampleCardId) {
         const moduleId = [selectedCodeRef.module, selectedCodeRef.name].join(
           '/',
@@ -218,17 +214,12 @@ export class RemixCommand extends HostBaseCommand<
         },
       );
 
-      await file(this, () => ({
-        url: codePath,
-        onStateChange: async (state: FileResource['state']) => {
-          if (state === 'ready') {
-            await new SwitchSubmodeCommand(this.commandContext).execute({
-              submode: 'code',
-              codePath,
-            });
-          }
-        },
-      }));
+      await timeout(1000);
+
+      await new SwitchSubmodeCommand(this.commandContext).execute({
+        submode: 'code',
+        codePath: selectedCodeRef.module,
+      });
     }
   }
 }
