@@ -4,12 +4,13 @@ import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
 
+import OperatorModeStateService from '../services/operator-mode-state-service';
+
 import ApplySearchReplaceBlockCommand from './apply-search-replace-block';
 import LintAndFixCommand from './lint-and-fix';
 
 import type CardService from '../services/card-service';
 import type RealmService from '../services/realm';
-import OperatorModeStateService from '../services/operator-mode-state-service';
 
 export default class PatchCodeCommand extends HostBaseCommand<
   typeof BaseCommandModule.PatchCodeInput,

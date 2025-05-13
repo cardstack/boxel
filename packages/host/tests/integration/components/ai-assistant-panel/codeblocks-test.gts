@@ -581,7 +581,7 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
     let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
 
 \`\`\`gts
-__META: { \"fileUrl\": \"https://example.com/component.gts\" }
+__META: { "fileUrl": "https://example.com/component.gts" }
 <<<<<<< SEARCH
 import Component from '@glimmer/component';
 
@@ -649,7 +649,7 @@ Above code blocks are now complete`;
     let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
 
 \`\`\`txt
-__META: { \"fileUrl\": \"https://example.com/blank.txt\" }
+__META: { "fileUrl": "https://example.com/blank.txt" }
 <<<<<<< SEARCH
 =======
 hello
