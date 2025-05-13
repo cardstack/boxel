@@ -29,7 +29,8 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
-import FormattedMessage from '../formatted-message';
+import FormattedAiBotMessage from '../formatted-aibot-message';
+import FormattedUserMessage from '../formatted-user-message';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -37,7 +38,7 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     reasoningContent?: string | null;
-    messageHTML: SafeString;
+    messageHTML?: string;
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
@@ -258,12 +259,15 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          <FormattedMessage
-            @renderCodeBlocks={{@isFromAssistant}}
-            @monacoSDK={{@monacoSDK}}
-            @html={{@messageHTML}}
-            @isStreaming={{@isStreaming}}
-          />
+          {{#if @isFromAssistant}}
+            <FormattedAiBotMessage
+              @monacoSDK={{@monacoSDK}}
+              @html={{@messageHTML}}
+              @isStreaming={{@isStreaming}}
+            />
+          {{else}}
+            <FormattedUserMessage @html={{@messageHTML}} />
+          {{/if}}
 
           {{yield}}
 

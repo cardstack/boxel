@@ -43,12 +43,11 @@ export interface CodeData {
   searchReplaceBlock?: string | null;
 }
 
-interface FormattedMessageSignature {
+interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
   Args: {
-    html: SafeString;
+    html?: string;
     monacoSDK: MonacoSDK;
-    renderCodeBlocks: boolean;
     isStreaming: boolean;
   };
 }
@@ -57,7 +56,7 @@ function sanitize(html: string): SafeString {
   return htmlSafe(sanitizeHtml(html));
 }
 
-export default class FormattedMessage extends Component<FormattedMessageSignature> {
+export default class FormattedAiBotMessage extends Component<FormattedAiBotMessageSignature> {
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
@@ -185,74 +184,59 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     this.applyAllCodePatchTasksState = 'applied';
   });
 
-  sanitizeSafeString = (html: SafeString) => {
-    return sanitize(html.toString());
-  };
-
   <template>
-    {{log 'rendering FormattedMessage'}}
-    {{#if @renderCodeBlocks}}
-      <div
-        class='message'
-        {{HtmlDidUpdate html=@html onHtmlUpdate=this.onHtmlUpdate}}
-      >
-        {{! We are splitting the html into parts so that we can target the
-        code blocks (<pre> tags) and apply Monaco editor to them. Here is an
-        example of the html argument:
+    {{log 'rendering FormattedAiBotMessage'}}
+    <div
+      class='message'
+      {{HtmlDidUpdate html=@html onHtmlUpdate=this.onHtmlUpdate}}
+    >
+      {{! We are splitting the html into parts so that we can target the
+      code blocks (<pre> tags) and apply Monaco editor to them. Here is an
+      example of the html argument:
 
-        <p>Here is some code for you.</p>
-        <pre data-codeblock="javascript">const x = 1;</pre>
-        <p>I hope you like this code. But here is some more!</p>
-        <pre data-codeblock="javascript">const y = 2;</pre>
-        <p>Feel free to use it in your project.</p>
+      <p>Here is some code for you.</p>
+      <pre data-codeblock="javascript">const x = 1;</pre>
+      <p>I hope you like this code. But here is some more!</p>
+      <pre data-codeblock="javascript">const y = 2;</pre>
+      <p>Feel free to use it in your project.</p>
 
-        A drawback of this approach is that we can't render monaco editors for
-        code blocks that are nested inside other elements. We should make sure
-        our skills teach the model to respond with code blocks that are not nested
-        inside other elements.
-        }}
-        {{#each this.htmlGroups as |htmlGroup index|}}
-          {{#if (eq htmlGroup.type 'pre_tag')}}
-            {{#let (extractCodeData htmlGroup.content) as |codeData|}}
-              {{#let
-                (this.createCodePatchAction codeData)
-                as |codePatchAction|
-              }}
-                <HtmlGroupCodeBlock
-                  @codeData={{codeData}}
-                  @codePatchAction={{codePatchAction}}
-                  @monacoSDK={{@monacoSDK}}
-                />
-              {{/let}}
+      A drawback of this approach is that we can't render monaco editors for
+      code blocks that are nested inside other elements. We should make sure
+      our skills teach the model to respond with code blocks that are not nested
+      inside other elements.
+      }}
+      {{#each this.htmlGroups as |htmlGroup index|}}
+        {{#if (eq htmlGroup.type 'pre_tag')}}
+          {{#let (extractCodeData htmlGroup.content) as |codeData|}}
+            {{#let (this.createCodePatchAction codeData) as |codePatchAction|}}
+              <HtmlGroupCodeBlock
+                @codeData={{codeData}}
+                @codePatchAction={{codePatchAction}}
+                @monacoSDK={{@monacoSDK}}
+              />
             {{/let}}
+          {{/let}}
+        {{else}}
+          {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
+            {{wrapLastTextNodeInStreamingTextSpan (sanitize htmlGroup.content)}}
           {{else}}
-            {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
-              {{wrapLastTextNodeInStreamingTextSpan
-                (sanitize htmlGroup.content)
-              }}
-            {{else}}
-              {{sanitize htmlGroup.content}}
-            {{/if}}
+            {{sanitize htmlGroup.content}}
           {{/if}}
-        {{/each}}
-
-        {{#if this.isApplyAllButtonDisplayed}}
-          <div class='code-patch-actions'>
-            <ApplyButton
-              {{on 'click' (perform this.applyAllCodePatchTasks)}}
-              @state={{this.applyAllCodePatchTasksState}}
-              data-test-apply-all-code-patches-button
-            >
-              Accept All
-            </ApplyButton>
-          </div>
         {{/if}}
-      </div>
-    {{else}}
-      <div class='message'>
-        {{this.sanitizeSafeString @html}}
-      </div>
-    {{/if}}
+      {{/each}}
+
+      {{#if this.isApplyAllButtonDisplayed}}
+        <div class='code-patch-actions'>
+          <ApplyButton
+            {{on 'click' (perform this.applyAllCodePatchTasks)}}
+            @state={{this.applyAllCodePatchTasksState}}
+            data-test-apply-all-code-patches-button
+          >
+            Accept All
+          </ApplyButton>
+        </div>
+      {{/if}}
+    </div>
 
     <style scoped>
       .code-patch-actions {

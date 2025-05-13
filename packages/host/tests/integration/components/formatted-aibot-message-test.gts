@@ -15,7 +15,7 @@ import { tracked } from '@glimmer/tracking';
 import percySnapshot from '@percy/ember';
 import { module, test } from 'qunit';
 
-import FormattedMessage from '@cardstack/host/components/ai-assistant/formatted-message';
+import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
 
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
@@ -23,7 +23,7 @@ import MonacoService from '@cardstack/host/services/monaco-service';
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
 
-module('Integration | Component | FormattedMessage', function (hooks) {
+module('Integration | Component | FormattedAiBotMessage', function (hooks) {
   setupRenderingTest(hooks);
 
   let monacoService: MonacoService;
@@ -41,12 +41,11 @@ module('Integration | Component | FormattedMessage', function (hooks) {
     };
   });
 
-  async function renderFormattedMessage(testScenario: any) {
+  async function renderFormattedAiBotMessage(testScenario: any) {
     let monacoSDK = await monacoService.getMonacoContext();
 
     await render(<template>
-      <FormattedMessage
-        @renderCodeBlocks={{testScenario.renderCodeBlocks}}
+      <FormattedAiBotMessage
         @monacoSDK={{monacoSDK}}
         @html={{testScenario.html}}
         @isStreaming={{testScenario.isStreaming}}
@@ -54,38 +53,8 @@ module('Integration | Component | FormattedMessage', function (hooks) {
     </template>);
   }
 
-  test('it renders content without monaco editor when renderCodeBlocks is false', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: false,
-      html: `
-<p>Hey there, for Valentine's day I made you a code block!</p>
-<pre data-code-language="haskell">
-import Data.List (intercalate)
-main :: IO ()
-main = putStrLn "🖤"
-</pre>
-<p>I hope you like it!</p>
-`,
-      isStreaming: false,
-    });
-
-    let messageElement = (this as RenderingTestContext).element.querySelector(
-      '.message',
-    );
-
-    assert.ok(
-      messageElement?.innerHTML.includes(
-        `<p>Hey there, for Valentine's day I made you a code block!</p>\n<pre data-code-language="haskell">import Data.List (intercalate)\nmain :: IO ()\nmain = putStrLn "🖤"\n</pre>\n<p>I hope you like it!</p>`,
-      ),
-      'message should render html without monaco editor',
-    );
-
-    assert.dom('.monaco-editor').doesNotExist();
-  });
-
-  test('it renders content with monaco editor in place of pre tags when renderCodeBlocks is true', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
+  test('it renders content with monaco editor in place of pre tags', async function (assert) {
+    await renderFormattedAiBotMessage({
       html: `
 <p>Hey there, for Valentine's day I made you a code block!</p>
 <pre data-code-language="c">
@@ -129,8 +98,7 @@ puts "💎"
   });
 
   test('it will not render apply code button when code patch block is detected but no file url is provided', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
+    await renderFormattedAiBotMessage({
       html: `
 <pre data-code-language="css">
           background: #ff7f24;
@@ -142,8 +110,7 @@ puts "💎"
   });
 
   test('it will render an incomplete code patch block in human readable format when search part is not complete', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
+    await renderFormattedAiBotMessage({
       html: `
 <pre data-code-language="typescript">
 <<<<<<< SEARCH
@@ -165,8 +132,7 @@ puts "💎"
   });
 
   test('it will render an incomplete code patch block in human readable format when replace part is not complete', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
+    await renderFormattedAiBotMessage({
       html: `
 <pre data-code-language="typescript">
 <<<<<<< SEARCH
@@ -190,8 +156,7 @@ puts "💎"
   });
 
   test('it will render a diff editor when search and replace block is complete', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
+    await renderFormattedAiBotMessage({
       html: `
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
@@ -222,8 +187,7 @@ let a = 3;
   });
 
   test('it will render one diff editor and one standard code block if one search replace block is complete and another is not', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
+    await renderFormattedAiBotMessage({
       html: `
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
@@ -254,8 +218,7 @@ let c = 3;
   });
 
   test('it will render "Accept All" button when there are code patch actions and it is not streaming', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
+    await renderFormattedAiBotMessage({
       html: `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
@@ -282,8 +245,7 @@ let c = 2;
   });
 
   test('it will not render "Accept All" button when there are code patch actions and it is streaming', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: true,
+    await renderFormattedAiBotMessage({
       html: `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
@@ -323,8 +285,7 @@ let c = 2;
       }
 
       <template>
-        <FormattedMessage
-          @renderCodeBlocks={{true}}
+        <FormattedAiBotMessage
           @monacoSDK={{monacoSDK}}
           @html={{htmlSafe this.html}}
           @isStreaming={{true}}
@@ -365,8 +326,7 @@ let c = 2;
       }
 
       <template>
-        <FormattedMessage
-          @renderCodeBlocks={{true}}
+        <FormattedAiBotMessage
           @monacoSDK={{monacoSDK}}
           @html={{htmlSafe this.html}}
           @isStreaming={{this.isStreaming}}

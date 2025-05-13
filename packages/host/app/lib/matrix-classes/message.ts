@@ -5,6 +5,9 @@ import { EventStatus } from 'matrix-js-sdk';
 
 import { TrackedArray } from 'tracked-built-ins';
 
+import { markdownToHtml } from '@cardstack/runtime-common';
+import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
+
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
 import { RoomMember } from './member';
@@ -76,10 +79,22 @@ export class Message implements RoomMessageInterface {
     this.commands = new TrackedArray<MessageCommand>();
     this.instanceId = guidFor(this);
   }
+
   get isRetryable() {
     return (
       this.errorMessage === undefined ||
       (this.errorMessage && this.errorMessage !== ErrorMessage['M_TOO_LARGE'])
     );
+  }
+
+  get bodyHTML() {
+    // message is expected to be in markdown so we need to convert the markdown to html when the message is sent by the ai bot
+    if (!this.body) {
+      return this.body;
+    }
+    return markdownToHtml(escapeHtmlOutsideCodeBlocks(this.body), {
+      sanitize: false,
+      escapeHtmlInCodeBlocks: true,
+    });
   }
 }

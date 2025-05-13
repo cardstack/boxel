@@ -17,9 +17,7 @@ import { bool } from '@cardstack/boxel-ui/helpers';
 import {
   type getCardCollection,
   GetCardCollectionContextName,
-  markdownToHtml,
 } from '@cardstack/runtime-common';
-import { escapeHtmlOutsideCodeBlocks } from '@cardstack/runtime-common/helpers/html';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import MessageCommand from '@cardstack/host/lib/matrix-classes/message-command';
@@ -108,17 +106,6 @@ export default class RoomMessage extends Component<Signature> {
     return this.commandService.run.unlinked().perform(command);
   });
 
-  private get messageInHtmlFormat() {
-    // message is expected to be in markdown so we need to convert the markdown to html when the message is sent by the ai bot
-    if (!this.message.body) {
-      return this.message.body;
-    }
-    return markdownToHtml(escapeHtmlOutsideCodeBlocks(this.message.body), {
-      sanitize: false,
-      escapeHtmlInCodeBlocks: true,
-    });
-  }
-
   <template>
     {{consumeContext this.makeCardResources}}
     {{! We Intentionally wait until message resources are loaded (i.e. have a value) before rendering the message.
@@ -131,7 +118,7 @@ export default class RoomMessage extends Component<Signature> {
       <AiAssistantMessage
         id='message-container-{{@index}}'
         class='room-message'
-        @messageHTML={{htmlSafe this.messageInHtmlFormat}}
+        @messageHTML={{this.message.bodyHTML}}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}
