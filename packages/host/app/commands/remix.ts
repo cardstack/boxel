@@ -9,7 +9,7 @@ import {
   isResolvedCodeRef,
   type CopyCardsWithCodeRef,
 } from '@cardstack/runtime-common';
-import type * as BaseCommandModule from 'https://cardstack.com/base/command';
+import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
 
@@ -40,7 +40,8 @@ function nameWithUuid(listingName?: string) {
   return newPackageName;
 }
 export class RemixCommand extends HostBaseCommand<
-  typeof BaseCommandModule.RemixInput
+  typeof BaseCommandModule.RemixInput,
+  typeof BaseCommandModule.RemixResult
 > {
   @service declare private realmServer: RealmServerService;
 
@@ -64,11 +65,15 @@ export class RemixCommand extends HostBaseCommand<
     return RemixInput;
   }
 
-  protected async run(input: BaseCommandModule.RemixInput): Promise<undefined> {
+  protected async run(
+    input: BaseCommandModule.RemixInput,
+  ): Promise<BaseCommandModule.RemixResult> {
     let realmUrls = this.realmServer.availableRealmURLs;
     let { realm: realmUrl, listing: listingInput } = input;
 
     let cardAPI = await this.loadCardAPI();
+    let commandModule = await this.loadCommandModule();
+    const { RemixResult } = commandModule;
 
     const listing = listingInput as any;
 
@@ -220,6 +225,9 @@ export class RemixCommand extends HostBaseCommand<
         submode: 'code',
         codePath: selectedCodeRef.module,
       });
+
+      return new RemixResult({ success: true });
     }
+    return new RemixResult({ success: false });
   }
 }

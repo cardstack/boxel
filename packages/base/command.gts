@@ -193,6 +193,10 @@ export class RemixInput extends CardDef {
   @field listing = linksTo(CardDef);
 }
 
+export class RemixResult extends CardDef {
+  @field success = contains(BooleanField);
+}
+
 export class AddFieldToCardDefinitionInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);
