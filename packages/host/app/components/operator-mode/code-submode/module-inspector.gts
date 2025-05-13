@@ -14,6 +14,8 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   isCardDocumentString,
+  isFieldDef,
+  internalKeyFor,
   CodeRef,
   CardErrorJSONAPI,
   ResolvedCodeRef,
@@ -36,11 +38,15 @@ import {
   isCardOrFieldDeclaration,
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
+
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 
 import { CodeModePanelSelections } from '@cardstack/host/utils/local-storage-keys';
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
+import { Spec } from 'https://cardstack.com/base/spec';
 
 export type SelectedAccordionItem =
   | 'schema-editor'
@@ -79,6 +85,7 @@ interface ModuleInspectorSignature {
 
 export default class ModuleInspector extends Component<ModuleInspectorSignature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare playgroundPanelService: PlaygroundPanelService;
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
@@ -188,6 +195,75 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
+  private onSpecView = (spec: Spec) => {
+    if (!spec.isField) {
+      return; // not a field spec
+    }
+    if (
+      this.getSelectedDeclarationAsCodeRef.name !== spec.ref.name ||
+      this.getSelectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
+    ) {
+      return; // not the right field spec
+    }
+    this.updatePlaygroundSelections(spec.id, true);
+  };
+
+  private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
+    if (!this.args.selectedDeclaration?.exportName) {
+      return {
+        name: '',
+        module: '',
+      };
+    }
+    return {
+      name: this.args.selectedDeclaration.exportName,
+      module: `${this.operatorModeStateService.state.codePath!.href.replace(
+        /\.[^.]+$/,
+        '',
+      )}`,
+    };
+  }
+
+  private updatePlaygroundSelections(id: string, fieldDefOnly = false) {
+    const declaration = this.args.selectedDeclaration;
+
+    if (!declaration?.exportName || !isCardOrFieldDeclaration(declaration)) {
+      return;
+    }
+
+    const isField = isFieldDef(declaration.cardOrField);
+    if (fieldDefOnly && !isField) {
+      return;
+    }
+
+    const moduleId = internalKeyFor(
+      this.getSelectedDeclarationAsCodeRef,
+      undefined,
+    );
+    const cardId = id.replace(/\.json$/, '');
+
+    const selections = window.localStorage.getItem(PlaygroundSelections);
+    let existingFormat: Format = isField ? 'embedded' : 'isolated';
+
+    if (selections) {
+      const selection = JSON.parse(selections)[moduleId];
+      if (selection?.cardId === cardId) {
+        return;
+      }
+      // If we already have selections for this module, preserve the format
+      if (selection?.format) {
+        existingFormat = selection?.format;
+      }
+    }
+
+    this.playgroundPanelService.persistSelections(
+      moduleId,
+      cardId,
+      existingFormat,
+      isField ? 0 : undefined,
+    );
+  }
+
   <template>
     {{#if this.isCardPreviewError}}
       {{! this is here to make TS happy, this is always true }}
@@ -274,6 +350,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
           @toggleAccordionItem={{this.toggleAccordionItem}}
           @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
+          @onSpecView={{this.onSpecView}}
+          @getSelectedDeclarationAsCodeRef={{this.getSelectedDeclarationAsCodeRef}}
+          @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
           as |SpecPreviewTitle SpecPreviewContent|
         >
           <A.Item

@@ -16,7 +16,6 @@ import StackIcon from '@cardstack/boxel-icons/stack';
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
-import window from 'ember-window-mock';
 
 import {
   BoxelButton,
@@ -39,7 +38,6 @@ import {
   specRef,
   isCardDef,
   isFieldDef,
-  internalKeyFor,
   loadCardDef,
   realmURL as realmURLSymbol,
   skillCardRef,
@@ -71,11 +69,9 @@ import type RecentFilesService from '@cardstack/host/services/recent-files-servi
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
 
-import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
-
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import { CardContext, type Format } from 'https://cardstack.com/base/card-api';
+import { CardContext } from 'https://cardstack.com/base/card-api';
 import { Spec, type SpecType } from 'https://cardstack.com/base/spec';
 
 import ElementTracker, {
@@ -93,6 +89,9 @@ interface Signature {
     isLoadingNewModule: boolean;
     toggleAccordionItem: (item: SelectedAccordionItem) => void;
     isPanelOpen: boolean;
+    onSpecView: (spec: Spec) => void;
+    getSelectedDeclarationAsCodeRef: ResolvedCodeRef;
+    updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {
     default: [
@@ -479,22 +478,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   @service private declare store: StoreService;
   @tracked private search: ReturnType<getCards<Spec>> | undefined;
 
-  private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
-    if (!this.args.selectedDeclaration?.exportName) {
-      return {
-        name: '',
-        module: '',
-      };
-    }
-    return {
-      name: this.args.selectedDeclaration.exportName,
-      module: `${this.operatorModeStateService.state.codePath!.href.replace(
-        /\.[^.]+$/,
-        '',
-      )}`,
-    };
-  }
-
   private createSpecInstance = task(
     async (ref: ResolvedCodeRef, specType: SpecType) => {
       let relativeTo = new URL(ref.module);
@@ -534,7 +517,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       filter: {
         on: specRef,
         eq: {
-          ref: this.getSelectedDeclarationAsCodeRef, //ref is primitive
+          ref: this.args.getSelectedDeclarationAsCodeRef, //ref is primitive
         },
       },
       sort: [
@@ -603,12 +586,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');
     }
-    if (!this.getSelectedDeclarationAsCodeRef) {
+    if (!this.args.getSelectedDeclarationAsCodeRef) {
       throw new Error('bug: no code ref');
     }
     let specType = await this.guessSpecType(this.args.selectedDeclaration);
     this.createSpecInstance.perform(
-      this.getSelectedDeclarationAsCodeRef,
+      this.args.getSelectedDeclarationAsCodeRef,
       specType,
     );
   }
@@ -662,64 +645,11 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.args.isLoadingNewModule;
   }
 
-  private updatePlaygroundSelections(id: string, fieldDefOnly = false) {
-    const declaration = this.args.selectedDeclaration;
-
-    if (!declaration?.exportName || !isCardOrFieldDeclaration(declaration)) {
-      return;
-    }
-
-    const isField = isFieldDef(declaration.cardOrField);
-    if (fieldDefOnly && !isField) {
-      return;
-    }
-
-    const moduleId = internalKeyFor(
-      this.getSelectedDeclarationAsCodeRef,
-      undefined,
-    );
-    const cardId = id.replace(/\.json$/, '');
-
-    const selections = window.localStorage.getItem(PlaygroundSelections);
-    let existingFormat: Format = isField ? 'embedded' : 'isolated';
-
-    if (selections) {
-      const selection = JSON.parse(selections)[moduleId];
-      if (selection?.cardId === cardId) {
-        return;
-      }
-      // If we already have selections for this module, preserve the format
-      if (selection?.format) {
-        existingFormat = selection?.format;
-      }
-    }
-
-    this.playgroundPanelService.persistSelections(
-      moduleId,
-      cardId,
-      existingFormat,
-      isField ? 0 : undefined,
-    );
-  }
-
-  private onSpecView = (spec: Spec) => {
-    if (!spec.isField) {
-      return; // not a field spec
-    }
-    if (
-      this.getSelectedDeclarationAsCodeRef.name !== spec.ref.name ||
-      this.getSelectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
-    ) {
-      return; // not the right field spec
-    }
-    this.updatePlaygroundSelections(spec.id, true);
-  };
-
   private viewCardInPlayground = (card: CardDefOrId) => {
     let id = typeof card === 'string' ? card : card.id;
     const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
     this.recentFilesService.addRecentFileUrl(fileUrl);
-    this.updatePlaygroundSelections(id);
+    this.args.updatePlaygroundSelections(id);
     this.args.toggleAccordionItem('playground');
   };
 
@@ -754,7 +684,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           spec=this.card
           isLoading=false
           cards=this.cards
-          onSpecView=this.onSpecView
+          onSpecView=@onSpecView
           viewCardInPlayground=this.viewCardInPlayground
         )
       }}
