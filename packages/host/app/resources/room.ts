@@ -368,7 +368,7 @@ export class RoomResource extends Resource<Args> {
     let skillCard = await this.store.get<Skill>(id);
     if (!isCardInstance(skillCard)) {
       console.warn(
-        `Failed to create skill card with id ${cardId}, this should not happen`,
+        `Failed to get skill card with id ${id}, error ${skillCard.message} this should not happen`,
       );
       return;
     }

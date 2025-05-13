@@ -106,7 +106,7 @@ export default class MessageCommand {
       let card = await this.store.get(id);
       if (!isCardInstance(card)) {
         console.warn(
-          `Failed to get card with id ${id}, error: ${card.message}`,
+          `Failed to get card with id ${id}, error: ${card.message}, this should not happen`,
         );
         return undefined;
       }
