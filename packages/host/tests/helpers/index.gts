@@ -350,7 +350,7 @@ export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
   try {
     return (await cb()) as T;
   } finally {
-    (globalThis as any).__disableLoaderMonitoring = false;
+    (globalThis as any).__disableLoaderMonitoring = undefined;
   }
 }
 
