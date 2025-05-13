@@ -200,15 +200,15 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       return; // not a field spec
     }
     if (
-      this.getSelectedDeclarationAsCodeRef.name !== spec.ref.name ||
-      this.getSelectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
+      this.selectedDeclarationAsCodeRef.name !== spec.ref.name ||
+      this.selectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
     ) {
       return; // not the right field spec
     }
     this.updatePlaygroundSelections(spec.id, true);
   };
 
-  private get getSelectedDeclarationAsCodeRef(): ResolvedCodeRef {
+  private get selectedDeclarationAsCodeRef(): ResolvedCodeRef {
     if (!this.args.selectedDeclaration?.exportName) {
       return {
         name: '',
@@ -237,7 +237,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     }
 
     const moduleId = internalKeyFor(
-      this.getSelectedDeclarationAsCodeRef,
+      this.selectedDeclarationAsCodeRef,
       undefined,
     );
     const cardId = id.replace(/\.json$/, '');
@@ -351,7 +351,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @toggleAccordionItem={{this.toggleAccordionItem}}
           @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
           @onSpecView={{this.onSpecView}}
-          @getSelectedDeclarationAsCodeRef={{this.getSelectedDeclarationAsCodeRef}}
+          @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
           as |SpecPreviewTitle SpecPreviewContent|
         >

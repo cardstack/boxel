@@ -90,7 +90,7 @@ interface Signature {
     toggleAccordionItem: (item: SelectedAccordionItem) => void;
     isPanelOpen: boolean;
     onSpecView: (spec: Spec) => void;
-    getSelectedDeclarationAsCodeRef: ResolvedCodeRef;
+    selectedDeclarationAsCodeRef: ResolvedCodeRef;
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {
@@ -517,7 +517,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       filter: {
         on: specRef,
         eq: {
-          ref: this.args.getSelectedDeclarationAsCodeRef, //ref is primitive
+          ref: this.args.selectedDeclarationAsCodeRef, //ref is primitive
         },
       },
       sort: [
@@ -586,12 +586,12 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     if (!this.args.selectedDeclaration) {
       throw new Error('bug: no selected declaration');
     }
-    if (!this.args.getSelectedDeclarationAsCodeRef) {
+    if (!this.args.selectedDeclarationAsCodeRef) {
       throw new Error('bug: no code ref');
     }
     let specType = await this.guessSpecType(this.args.selectedDeclaration);
     this.createSpecInstance.perform(
-      this.args.getSelectedDeclarationAsCodeRef,
+      this.args.selectedDeclarationAsCodeRef,
       specType,
     );
   }
