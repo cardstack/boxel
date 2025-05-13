@@ -13,7 +13,7 @@ import Modifier from 'ember-modifier';
 
 import { TrackedArray, TrackedObject } from 'tracked-built-ins';
 
-import { and, bool, eq } from '@cardstack/boxel-ui/helpers';
+import { and, bool } from '@cardstack/boxel-ui/helpers';
 
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
@@ -22,9 +22,9 @@ import PatchCodeCommand from '@cardstack/host/commands/patch-code';
 import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
 import {
   type HtmlTagGroup,
-  extractCodeData,
-  parseHtmlContent,
   wrapLastTextNodeInStreamingTextSpan,
+  CodeData,
+  HtmlPreTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
@@ -35,13 +35,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
-
-export interface CodeData {
-  fileUrl: string | null;
-  code: string | null;
-  language: string | null;
-  searchReplaceBlock?: string | null;
-}
 
 interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
@@ -78,7 +71,8 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         return new TrackedObject({
           type: part.type,
           content: part.content,
-        });
+          codeData: part.codeData,
+        }) as HtmlTagGroup;
       }),
     );
   };
@@ -95,6 +89,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         if (oldPart.content !== htmlParts[index].content) {
           oldPart.content = htmlParts[index].content;
         }
+        if (oldPart.codeData !== htmlParts[index].codeData) {
+          oldPart.codeData = htmlParts[index].codeData;
+        }
       });
       if (htmlParts.length > this.stableHtmlParts.length) {
         this.stableHtmlParts.push(
@@ -102,7 +99,8 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
             return new TrackedObject({
               type: part.type,
               content: part.content,
-            });
+              codeData: part.codeData,
+            }) as HtmlTagGroup;
           }),
         );
       }
@@ -207,15 +205,16 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
       inside other elements.
       }}
       {{#each this.stableHtmlParts as |htmlGroup index|}}
-        {{#if (eq htmlGroup.type 'pre_tag')}}
-          {{#let (extractCodeData htmlGroup.content) as |codeData|}}
-            {{#let (this.createCodePatchAction codeData) as |codePatchAction|}}
-              <HtmlGroupCodeBlock
-                @codeData={{codeData}}
-                @codePatchAction={{codePatchAction}}
-                @monacoSDK={{@monacoSDK}}
-              />
-            {{/let}}
+        {{#if (isHtmlPreTagGroup htmlGroup)}}
+          {{#let
+            (this.createCodePatchAction htmlGroup.codeData)
+            as |codePatchAction|
+          }}
+            <HtmlGroupCodeBlock
+              @codeData={{htmlGroup.codeData}}
+              @codePatchAction={{codePatchAction}}
+              @monacoSDK={{@monacoSDK}}
+            />
           {{/let}}
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
@@ -288,6 +287,12 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
       }
     </style>
   </template>
+}
+
+function isHtmlPreTagGroup(
+  htmlPart: HtmlTagGroup,
+): htmlPart is HtmlPreTagGroup {
+  return htmlPart.type === 'pre_tag';
 }
 
 interface HtmlPartsDidUpdateSignature {

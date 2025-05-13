@@ -2,14 +2,13 @@ import { SafeString, htmlSafe } from '@ember/template';
 
 import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
 
-import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
-
 import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
 
 export function extractCodeData(preElementString: string): CodeData {
+  console.log('extractCodeData', preElementString);
   // We are creating a new element in the dom
   // so that we can easily parse the content of the top level <pre> tags.
   // Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that
@@ -115,9 +114,25 @@ export function wrapLastTextNodeInStreamingTextSpan(
   return htmlSafe(doc.body.innerHTML);
 }
 
-export interface HtmlTagGroup {
-  type: 'pre_tag' | 'non_pre_tag';
+export interface CodeData {
+  fileUrl: string | null;
+  code: string | null;
+  language: string | null;
+  searchReplaceBlock?: string | null;
+}
+
+export type HtmlTagGroup = HtmlPreTagGroup | HtmlNonPreTagGroup;
+
+export interface HtmlPreTagGroup {
+  type: 'pre_tag';
   content: string;
+  codeData: CodeData;
+}
+
+export interface HtmlNonPreTagGroup {
+  type: 'non_pre_tag';
+  content: string;
+  codeData: null;
 }
 
 export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
@@ -138,6 +153,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
         result.push({
           type: 'non_pre_tag',
           content: textContent,
+          codeData: null,
         });
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -148,11 +164,13 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,
+          codeData: extractCodeData(element.outerHTML),
         });
       } else {
         result.push({
           type: 'non_pre_tag',
           content: element.outerHTML,
+          codeData: null,
         });
       }
     }
