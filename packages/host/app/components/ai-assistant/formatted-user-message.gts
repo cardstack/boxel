@@ -1,5 +1,6 @@
-import Component from '@glimmer/component';
 import { htmlSafe } from '@ember/template';
+import Component from '@glimmer/component';
+
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 interface Signature {

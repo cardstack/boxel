@@ -1,7 +1,6 @@
 import { fn } from '@ember/helper';
 import { service } from '@ember/service';
 
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 import { tracked, cached } from '@glimmer/tracking';
 
@@ -119,6 +118,7 @@ export default class RoomMessage extends Component<Signature> {
         id='message-container-{{@index}}'
         class='room-message'
         @messageHTML={{this.message.bodyHTML}}
+        @messageHTMLParts={{this.message.htmlParts}}
         @reasoningContent={{this.message.reasoningContent}}
         @monacoSDK={{@monacoSDK}}
         @datetime={{this.message.created}}

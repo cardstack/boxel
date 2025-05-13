@@ -1,5 +1,4 @@
 import Owner from '@ember/owner';
-import { htmlSafe } from '@ember/template';
 import {
   RenderingTestContext,
   render,
@@ -17,6 +16,7 @@ import { module, test } from 'qunit';
 
 import FormattedAiBotMessage from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
 
+import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
 import CardService from '@cardstack/host/services/card-service';
 import MonacoService from '@cardstack/host/services/monaco-service';
 
@@ -47,7 +47,7 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
     await render(<template>
       <FormattedAiBotMessage
         @monacoSDK={{monacoSDK}}
-        @html={{testScenario.html}}
+        @htmlParts={{testScenario.htmlParts}}
         @isStreaming={{testScenario.isStreaming}}
       />
     </template>);
@@ -55,7 +55,7 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
   test('it renders content with monaco editor in place of pre tags', async function (assert) {
     await renderFormattedAiBotMessage({
-      html: `
+      htmlParts: parseHtmlContent(`
 <p>Hey there, for Valentine's day I made you a code block!</p>
 <pre data-code-language="c">
 print("🖤")
@@ -65,7 +65,7 @@ print("🖤")
 puts "💎"
 </pre>
 <p>I hope you like this one too!</p>
-`,
+`),
       isStreaming: false,
     });
 
@@ -99,10 +99,10 @@ puts "💎"
 
   test('it will not render apply code button when code patch block is detected but no file url is provided', async function (assert) {
     await renderFormattedAiBotMessage({
-      html: `
+      htmlParts: parseHtmlContent(`
 <pre data-code-language="css">
           background: #ff7f24;
-</pre>`,
+</pre>`),
       isStreaming: false,
     });
 
@@ -111,13 +111,13 @@ puts "💎"
 
   test('it will render an incomplete code patch block in human readable format when search part is not complete', async function (assert) {
     await renderFormattedAiBotMessage({
-      html: `
+      htmlParts: parseHtmlContent(`
 <pre data-code-language="typescript">
 <<<<<<< SEARCH
           let a = 1;
           let b = 2;
           let c = 3;
-</pre>`,
+</pre>`),
       isStreaming: false,
     });
     await waitUntil(() => document.querySelectorAll('.view-line').length > 3);
@@ -133,14 +133,14 @@ puts "💎"
 
   test('it will render an incomplete code patch block in human readable format when replace part is not complete', async function (assert) {
     await renderFormattedAiBotMessage({
-      html: `
+      htmlParts: parseHtmlContent(`
 <pre data-code-language="typescript">
 <<<<<<< SEARCH
           let a = 1;
           let c = 3;
 =======
           let a = 2;
-</pre>`,
+</pre>`),
       isStreaming: false,
     });
 
@@ -157,7 +157,7 @@ puts "💎"
 
   test('it will render a diff editor when search and replace block is complete', async function (assert) {
     await renderFormattedAiBotMessage({
-      html: `
+      htmlParts: parseHtmlContent(`
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
@@ -166,7 +166,7 @@ let b = 2;
 =======
 let a = 3;
 >>>>>>> REPLACE
-</pre>`,
+</pre>`),
       isStreaming: false,
     });
 
@@ -188,7 +188,7 @@ let a = 3;
 
   test('it will render one diff editor and one standard code block if one search replace block is complete and another is not', async function (assert) {
     await renderFormattedAiBotMessage({
-      html: `
+      htmlParts: parseHtmlContent(`
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
@@ -205,7 +205,7 @@ let a = 3;
 let a = 1;
 let c = 3;
 </pre>
-`,
+`),
       isStreaming: false,
     });
 
@@ -219,7 +219,7 @@ let c = 3;
 
   test('it will render "Accept All" button when there are code patch actions and it is not streaming', async function (assert) {
     await renderFormattedAiBotMessage({
-      html: `<p>We need to fix this:</p>
+      htmlParts: parseHtmlContent(`<p>We need to fix this:</p>
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
@@ -237,7 +237,7 @@ let c = 1;
 let c = 2;
 >>>>>>> REPLACE
 </pre>
-`,
+`),
       isStreaming: false,
     });
 
@@ -246,7 +246,7 @@ let c = 2;
 
   test('it will not render "Accept All" button when there are code patch actions and it is streaming', async function (assert) {
     await renderFormattedAiBotMessage({
-      html: `<p>We need to fix this:</p>
+      htmlParts: parseHtmlContent(`<p>We need to fix this:</p>
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
@@ -264,7 +264,7 @@ let c = 1;
 let c = 2;
 >>>>>>> REPLACE
 </pre>
-`,
+`),
       isStreaming: true,
     });
 
@@ -277,7 +277,9 @@ let c = 2;
     let component = null;
 
     class TestComponent extends Component {
-      @tracked html = '<p>Howdy!</p> <p>How are you today?</p>';
+      @tracked htmlParts = parseHtmlContent(
+        '<p>Howdy!</p> <p>How are you today?</p>',
+      );
 
       constructor(owner: Owner, args: any) {
         super(owner, args);
@@ -287,7 +289,7 @@ let c = 2;
       <template>
         <FormattedAiBotMessage
           @monacoSDK={{monacoSDK}}
-          @html={{htmlSafe this.html}}
+          @htmlParts={{this.htmlParts}}
           @isStreaming={{true}}
         />
       </template>
@@ -317,7 +319,7 @@ let c = 2;
     let component: any = null;
 
     class TestComponent extends Component {
-      @tracked html = '';
+      @tracked htmlParts = [];
       @tracked isStreaming = false;
 
       constructor(owner: Owner, args: any) {
@@ -328,7 +330,7 @@ let c = 2;
       <template>
         <FormattedAiBotMessage
           @monacoSDK={{monacoSDK}}
-          @html={{htmlSafe this.html}}
+          @htmlParts={{this.htmlParts}}
           @isStreaming={{this.isStreaming}}
         />
       </template>
@@ -343,12 +345,13 @@ let c = 2;
     // By assigning html to the component, we are simulating streaming html updates
 
     component.isStreaming = true;
-    component.html = `<pre data-code-language="typescript">
+    component.htmlParts =
+      parseHtmlContent(`<pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======
-let a = 2;`; // incomplete code block - the ending >>>>>> REPLACE is missing
+let a = 2;`); // incomplete code block - the ending >>>>>> REPLACE is missing
 
     await settled();
     assert.dom('.code-block').exists();
@@ -359,7 +362,8 @@ let a = 2;`; // incomplete code block - the ending >>>>>> REPLACE is missing
           .innerText ==
         '// existing code ... \nlet a = 1;\n// new code ... \nlet a = 2;',
     );
-    component.html = `<pre data-code-language="typescript">
+    component.htmlParts =
+      parseHtmlContent(`<pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
@@ -367,7 +371,7 @@ let a = 1;
 let a = 2;
 >>>>>>> REPLACE
 </pre>
-`; // complete code block
+`); // complete code block
 
     component.isStreaming = false;
 

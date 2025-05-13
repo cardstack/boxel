@@ -24,7 +24,7 @@ import OperatorModeStateService from '@cardstack/host/services/operator-mode-sta
 
 import ApplyButton from '../ai-assistant/apply-button';
 
-import { CodeData } from './formatted-message';
+import { CodeData } from './formatted-aibot-message';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';

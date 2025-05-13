@@ -2,7 +2,7 @@ import { SafeString, htmlSafe } from '@ember/template';
 
 import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
 
-import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
+import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-aibot-message';
 
 import {
   isCompleteSearchReplaceBlock,

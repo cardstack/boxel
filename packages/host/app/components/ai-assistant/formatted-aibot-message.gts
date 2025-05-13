@@ -46,7 +46,7 @@ export interface CodeData {
 interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
   Args: {
-    html?: string;
+    htmlParts?: HtmlTagGroup[];
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
   };
@@ -60,7 +60,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
-  @tracked htmlGroups: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
+  @tracked stableHtmlParts: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
 
   @tracked codePatchActions: TrackedArray<CodePatchAction> = new TrackedArray(
     [],
@@ -72,9 +72,9 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     | 'applied'
     | 'failed' = 'ready';
 
-  private setHtmlGroups = (htmlGroups: HtmlTagGroup[]) => {
-    this.htmlGroups = new TrackedArray(
-      htmlGroups.map((part) => {
+  private setStableHtmlParts = (htmlParts: HtmlTagGroup[]) => {
+    this.stableHtmlParts = new TrackedArray(
+      htmlParts.map((part) => {
         return new TrackedObject({
           type: part.type,
           content: part.content,
@@ -82,25 +82,23 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
       }),
     );
   };
-  // When html is streamed, we need to update htmlParts accordingly,
-  // but only the parts that have changed so that we don't needlesly re-render
-  // parts of the message that haven't changed. Parts are: <pre> html code, and
-  // non-<pre> html. <pre> gets special treatment because we will render it as a
-  // (readonly) Monaco editor
-  private updateHtmlGroups = (html: string) => {
-    let htmlGroups = parseHtmlContent(html);
-    let isIncrementalUpdate = htmlGroups.length >= this.htmlGroups.length; // Not incremental update happens when the new html is shorter than the old html (the content was replaced in a way that removed some parts, e.g. replacing the content with an error message if something goes wrong during chunk processing in the AI bot)
-    if (!this.htmlGroups.length || !isIncrementalUpdate) {
-      this.setHtmlGroups(htmlGroups);
+  // When htmlParts is updated, we need to consume it carefully, so that we don't
+  // needlesly re-render parts of the message that haven't changed. Parts are:
+  // <pre> html code, and non-<pre> html. <pre> gets special treatment because
+  // we will render it as a (readonly) Monaco editor
+  private updateStableHtmlParts = (htmlParts: HtmlTagGroup[]) => {
+    let isIncrementalUpdate = htmlParts.length >= this.stableHtmlParts.length; // Not incremental update happens when the new html is shorter than the old html (the content was replaced in a way that removed some parts, e.g. replacing the content with an error message if something goes wrong during chunk processing in the AI bot)
+    if (!this.stableHtmlParts.length || !isIncrementalUpdate) {
+      this.setStableHtmlParts(htmlParts);
     } else {
-      this.htmlGroups.forEach((oldPart, index) => {
-        if (oldPart.content !== htmlGroups[index].content) {
-          oldPart.content = htmlGroups[index].content;
+      this.stableHtmlParts.forEach((oldPart, index) => {
+        if (oldPart.content !== htmlParts[index].content) {
+          oldPart.content = htmlParts[index].content;
         }
       });
-      if (htmlGroups.length > this.htmlGroups.length) {
-        this.htmlGroups.push(
-          ...htmlGroups.slice(this.htmlGroups.length).map((part) => {
+      if (htmlParts.length > this.stableHtmlParts.length) {
+        this.stableHtmlParts.push(
+          ...htmlParts.slice(this.stableHtmlParts.length).map((part) => {
             return new TrackedObject({
               type: part.type,
               content: part.content,
@@ -111,7 +109,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     }
   };
 
-  private onHtmlUpdate = (html: SafeString) => {
+  private onHtmlPartsUpdate = (htmlParts: HtmlTagGroup[] | undefined) => {
     // The reason why reacting to html argument this way is because we want to
     // have full control of when the @html argument changes so that we can
     // properly fragment it into htmlParts, and in our reactive structure, only update
@@ -119,12 +117,12 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
 
     // eslint-disable-next-line ember/no-incorrect-calls-with-inline-anonymous-functions
     scheduleOnce('afterRender', () => {
-      this.updateHtmlGroups(html.toString());
+      this.updateStableHtmlParts(htmlParts ?? []);
     });
   };
 
   private isLastHtmlGroup = (index: number) => {
-    return index === this.htmlGroups.length - 1;
+    return index === this.stableHtmlParts.length - 1;
   };
 
   private createCodePatchAction = (codeData: CodeData) => {
@@ -188,7 +186,10 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     {{log 'rendering FormattedAiBotMessage'}}
     <div
       class='message'
-      {{HtmlDidUpdate html=@html onHtmlUpdate=this.onHtmlUpdate}}
+      {{HtmlPartsDidUpdate
+        htmlParts=@htmlParts
+        onHtmlPartsUpdate=this.onHtmlPartsUpdate
+      }}
     >
       {{! We are splitting the html into parts so that we can target the
       code blocks (<pre> tags) and apply Monaco editor to them. Here is an
@@ -205,7 +206,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
       our skills teach the model to respond with code blocks that are not nested
       inside other elements.
       }}
-      {{#each this.htmlGroups as |htmlGroup index|}}
+      {{#each this.stableHtmlParts as |htmlGroup index|}}
         {{#if (eq htmlGroup.type 'pre_tag')}}
           {{#let (extractCodeData htmlGroup.content) as |codeData|}}
             {{#let (this.createCodePatchAction codeData) as |codePatchAction|}}
@@ -289,22 +290,25 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   </template>
 }
 
-interface HtmlDidUpdateSignature {
+interface HtmlPartsDidUpdateSignature {
   Args: {
     Named: {
-      html: SafeString;
-      onHtmlUpdate: (html: SafeString) => void;
+      htmlParts: HtmlTagGroup[] | undefined;
+      onHtmlPartsUpdate: (htmlParts: HtmlTagGroup[] | undefined) => void;
     };
   };
 }
 
-class HtmlDidUpdate extends Modifier<HtmlDidUpdateSignature> {
+class HtmlPartsDidUpdate extends Modifier<HtmlPartsDidUpdateSignature> {
   modify(
     _element: HTMLElement,
     _positional: [],
-    { html, onHtmlUpdate }: HtmlDidUpdateSignature['Args']['Named'],
+    {
+      htmlParts,
+      onHtmlPartsUpdate,
+    }: HtmlPartsDidUpdateSignature['Args']['Named'],
   ) {
-    onHtmlUpdate(html);
+    onHtmlPartsUpdate(htmlParts);
   }
 }
 
@@ -320,6 +324,7 @@ interface HtmlGroupCodeBlockSignature {
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   @cached
   get codeDiffResource() {
+    console.log('codeDiffResource getter');
     return this.args.codeData.searchReplaceBlock
       ? getCodeDiffResultResource(
           this,
@@ -330,6 +335,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   }
 
   <template>
+    {{log 'rendering HtmlGroupCodeBlock'}}
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.codeDiffResource.isDataLoaded}}

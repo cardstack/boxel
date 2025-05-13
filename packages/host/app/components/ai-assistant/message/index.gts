@@ -11,7 +11,7 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -21,6 +21,7 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -39,6 +40,7 @@ interface Signature {
   Args: {
     reasoningContent?: string | null;
     messageHTML?: string;
+    messageHTMLParts?: HtmlTagGroup[];
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
@@ -195,6 +197,10 @@ export default class AiAssistantMessage extends Component<Signature> {
     );
   };
 
+  get hasMessageHTMLParts() {
+    return !!this.args.messageHTMLParts;
+  }
+
   <template>
     <div
       class={{cn
@@ -259,10 +265,10 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          {{#if @isFromAssistant}}
+          {{#if (and @isFromAssistant this.hasMessageHTMLParts)}}
             <FormattedAiBotMessage
               @monacoSDK={{@monacoSDK}}
-              @html={{@messageHTML}}
+              @htmlParts={{@messageHTMLParts}}
               @isStreaming={{@isStreaming}}
             />
           {{else}}

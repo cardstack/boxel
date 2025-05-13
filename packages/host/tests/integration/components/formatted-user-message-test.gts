@@ -1,9 +1,10 @@
 import { RenderingTestContext, render } from '@ember/test-helpers';
 
+import { module, test } from 'qunit';
+
 import FormattedUserMessage from '@cardstack/host/components/ai-assistant/formatted-user-message';
 
 import { setupRenderingTest } from '../../helpers/setup';
-import { module, test } from 'qunit';
 
 module('Integration | Component | FormattedUserMessage', function (hooks) {
   setupRenderingTest(hooks);
