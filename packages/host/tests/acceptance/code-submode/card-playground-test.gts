@@ -127,6 +127,16 @@ const blogPostCard = `import { contains, field, linksTo, linksToMany, CardDef, C
     }
 }`;
 
+const personCard = `import { field, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
+  export class Pet extends CardDef {
+    static displayName = 'Pet';
+  }
+  export class Person extends CardDef {
+    static displayName = 'Person';
+    @field pet = linksTo(Pet);
+  }
+`;
+
 let matrixRoomId: string;
 
 module('Acceptance | code-submode | card playground', function (_hooks) {
@@ -160,6 +170,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           'author.gts': authorCard,
           'blog-post.gts': blogPostCard,
           'code-ref-driver.gts': codeRefDriverCard,
+          'person.gts': personCard,
           'Author/jane-doe.json': {
             data: {
               attributes: {
@@ -254,6 +265,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
                 adoptsFrom: {
                   module: `${testRealmURL}blog-post`,
                   name: 'Category',
+                },
+              },
+            },
+          },
+          'Person/pet-mango.json': {
+            data: {
+              attributes: { title: 'Mango' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}person`,
+                  name: 'Pet',
                 },
               },
             },
@@ -429,7 +451,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
       assert
         .dom(
-          `[data-test-code-mode-card-preview-header="${testRealmURL}Author/jane-doe"]`,
+          `[data-test-code-mode-card-renderer-header="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
       assert.dom('[data-test-accordion-item="playground"]').doesNotExist();
@@ -589,7 +611,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await togglePlaygroundPanel();
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
-        .doesNotExist();
+        .containsText('Mad As a Hatter', 'card instance found in realm');
+      assertCardExists(assert, `${testRealmURL}BlogPost/mad-hatter`);
 
       let id: string | undefined;
       this.onSave((url) => {
@@ -969,6 +992,75 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-accordion-item="playground"] button');
       assert.dom('[data-test-instance-chooser]').doesNotExist();
     });
+
+    test('can autogenerate card instance if one does not exist in the realm', async function (assert) {
+      removeRecentFiles();
+      setRecentFiles([[testRealmURL, 'person.gts']]);
+      let recentFiles = getRecentFiles();
+      assert.strictEqual(
+        recentFiles?.length,
+        1,
+        'recent file count is correct',
+      );
+
+      let { data: results } = await realm.realmIndexQueryEngine.search({
+        filter: { type: { module: `${testRealmURL}person`, name: 'Person' } },
+      });
+      assert.strictEqual(results.length, 0);
+
+      await openFileInPlayground('person.gts', testRealmURL, 'Person');
+      assert.dom('[data-test-selected-item]').containsText('Untitled Person');
+
+      recentFiles = getRecentFiles();
+      assert.strictEqual(
+        recentFiles?.length,
+        2,
+        'new card is added to recent files',
+      );
+      let newCardId = `${testRealmURL}${recentFiles[0][1]}`.replace(
+        '.json',
+        '',
+      );
+      assertCardExists(assert, newCardId, 'edit');
+
+      await click('[data-test-instance-chooser]');
+      assert
+        .dom('[data-option-index]')
+        .exists({ count: 1 }, 'new card shows up in instance chooser dropdown');
+
+      ({ data: results } = await realm.realmIndexQueryEngine.search({
+        filter: { type: { module: `${testRealmURL}person`, name: 'Person' } },
+      }));
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].id, newCardId);
+    });
+
+    test('does not autogenerate card instance if one exists in the realm but is not in recent cards', async function (assert) {
+      removeRecentFiles();
+      const cardId = `${testRealmURL}Person/pet-mango`;
+      let { data: results } = await realm.realmIndexQueryEngine.search({
+        filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
+      });
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].id, cardId);
+
+      await openFileInPlayground('person.gts', testRealmURL, 'Pet');
+      assert
+        .dom('[data-test-selected-item]')
+        .doesNotContainText('Untitled Pet');
+      assert.dom('[data-test-selected-item]').containsText('Mango');
+      assertCardExists(assert, cardId, 'isolated');
+
+      await click('[data-test-instance-chooser]');
+      assert.dom('[data-option-index]').exists({ count: 1 });
+      assert.dom('[data-option-index="0"]').containsText('Mango');
+
+      ({ data: results } = await realm.realmIndexQueryEngine.search({
+        filter: { type: { module: `${testRealmURL}person`, name: 'Pet' } },
+      }));
+      assert.strictEqual(results.length, 1);
+      assert.strictEqual(results[0].id, cardId);
+    });
   });
 
   module('multiple realms', function (hooks) {
@@ -1038,19 +1130,25 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         additionalRealmURL,
         'Author',
       );
-      assert.deepEqual(getRecentFiles()?.[0], [
+      assert
+        .dom(
+          '[data-test-playground-panel] [data-test-card][data-test-card-format="edit"]',
+        )
+        .exists('new card is autogenerated');
+      let recentFiles = getRecentFiles();
+      assert.strictEqual(
+        recentFiles?.[0][0],
         additionalRealmURL,
-        'author-card.gts',
-        { line: 4, column: 38 },
-      ]);
-      assert.dom('[data-test-card]').doesNotExist();
+        'realm is correct',
+      );
+      assert.strictEqual(recentFiles.length, 2);
 
       await createNewInstance();
 
-      let recentFiles = getRecentFiles();
+      recentFiles = getRecentFiles();
       assert.strictEqual(
         recentFiles?.length,
-        2,
+        3,
         'recent file count is correct',
       );
       let newCardId = document
@@ -1104,15 +1202,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         @field boom = contains(BoomField);
       }
     `;
-    const person = `import { field, linksTo, CardDef } from 'https://cardstack.com/base/card-api';
-      export class Pet extends CardDef {
-        static displayName = 'Pet';
-      }
-      export class Person extends CardDef {
-        static displayName = 'Person';
-        @field pet = linksTo(Pet);
-      }
-    `;
     const boomPerson = `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
       export class BoomPerson extends CardDef {
         static displayName = 'Boom Person';
@@ -1150,7 +1239,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         realmURL: testRealmURL,
         contents: {
           'boom-pet.gts': boomPet,
-          'person.gts': person,
+          'person.gts': personCard,
           'boom-person.gts': boomPerson,
           'Person/delilah.json': {
             data: {
@@ -1210,7 +1299,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
       assert.dom('[data-test-instance-chooser]').hasText('Please Select');
-      assert.dom('[data-test-card-error]').doesNotExist();
+      assert
+        .dom('[data-test-card-error]')
+        .exists('auto-generated card has error in it');
 
       await createNewInstance();
       // switch to isolated mode to see the current server state
@@ -1266,13 +1357,14 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       assert
         .dom('[data-test-error-container]')
-        .containsText('This card contains an error');
-
+        .containsText(
+          'This card contains an error',
+          'Auto-generated card has error in it',
+        );
       await selectDeclaration('WorkingCard');
       assert
         .dom('[data-test-error-container]')
         .doesNotExist('error clears when selecting different card def');
-
       await selectDeclaration('BoomPerson');
       assert
         .dom('[data-test-error-container]')

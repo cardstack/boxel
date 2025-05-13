@@ -1035,9 +1035,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitForCodeEditor();
       await waitFor('[data-test-card-resource-loaded]');
 
-      assert.dom('[data-test-code-mode-card-preview-header]').hasText('Person');
       assert
-        .dom('[data-test-code-mode-card-preview-body]')
+        .dom('[data-test-code-mode-card-renderer-header]')
+        .hasText('Person');
+      assert
+        .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('Fadhlan');
 
       assert.dom('[data-test-format-chooser="isolated"]').hasClass('active');
@@ -1046,7 +1048,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-format-chooser="fitted"]').hasClass('active');
       assert
         .dom(
-          '[data-test-code-mode-card-preview-body ] .field-component-card.fitted-format',
+          '[data-test-code-mode-card-renderer-body ] .field-component-card.fitted-format',
         )
         .exists();
 
@@ -1054,17 +1056,17 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-format-chooser="embedded"]').hasClass('active');
       assert
         .dom(
-          '[data-test-code-mode-card-preview-body ] .field-component-card.embedded-format',
+          '[data-test-code-mode-card-renderer-body ] .field-component-card.embedded-format',
         )
         .exists();
 
       await click('[data-test-format-chooser="atom"]');
       assert.dom('[data-test-format-chooser="atom"]').hasClass('active');
       assert
-        .dom('[data-test-code-mode-card-preview-body] .atom-format')
+        .dom('[data-test-code-mode-card-renderer-body] .atom-format')
         .exists();
       assert
-        .dom('[data-test-code-mode-card-preview-body] .atom-format')
+        .dom('[data-test-code-mode-card-renderer-body] .atom-format')
         .includesText('Fadhlan');
 
       await click('[data-test-format-chooser="edit"]');
@@ -1072,7 +1074,7 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       assert
         .dom(
-          '[data-test-code-mode-card-preview-body ] .field-component-card.edit-format',
+          '[data-test-code-mode-card-renderer-body ] .field-component-card.edit-format',
         )
         .exists();
 
@@ -1389,13 +1391,13 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       await waitForCodeEditor();
-      await waitFor('[data-test-code-mode-card-preview-body]');
+      await waitFor('[data-test-code-mode-card-renderer-body]');
 
-      await scrollTo('[data-test-code-mode-card-preview-body]', 0, 100);
+      await scrollTo('[data-test-code-mode-card-renderer-body]', 0, 100);
       await click('[data-test-format-chooser="edit"]');
       await click('[data-test-format-chooser="isolated"]');
       let element = document.querySelector(
-        '[data-test-code-mode-card-preview-body]',
+        '[data-test-code-mode-card-renderer-body]',
       )!;
       assert.strictEqual(
         element.scrollTop,
@@ -1411,7 +1413,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         codePath: `${testRealmURL}Person/fadhlan.json`,
       });
       await waitForCodeEditor();
-      await waitFor('[data-test-code-mode-card-preview-body]');
+      await waitFor('[data-test-code-mode-card-renderer-body]');
 
       await click('[data-test-format-chooser="edit"]');
 
@@ -1538,11 +1540,11 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await waitUntil(() =>
         document
-          .querySelector('[data-test-code-mode-card-preview-body]')
+          .querySelector('[data-test-code-mode-card-renderer-body]')
           ?.textContent?.includes('FadhlanXXX'),
       );
       assert
-        .dom('[data-test-code-mode-card-preview-body]')
+        .dom('[data-test-code-mode-card-renderer-body]')
         .includesText('FadhlanXXX');
     });
 
@@ -1697,7 +1699,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-card-resource-loaded]');
       assert
         .dom(
-          `[data-test-code-mode-card-preview-header="${testRealmURL}Person/fadhlan"]`,
+          `[data-test-code-mode-card-renderer-header="${testRealmURL}Person/fadhlan"]`,
         )
         .exists();
 
@@ -1769,7 +1771,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-create-file-modal]').doesNotExist();
     });
 
-    test('remembers open RHS panel via local storage', async function (assert) {
+    test('remembers open module inspector panel via local storage', async function (assert) {
       let accordionSelections = {
         [`${testRealmURL}address.gts`]: 'spec-preview',
         [`${testRealmURL}country.gts`]: null,
@@ -1803,7 +1805,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         .exists('closing the final panel opens the previous panel');
 
       await click('[data-test-file="country.gts"]');
-      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert.dom('[data-test-module-inspector="card-or-field"]').exists();
       assert
         .dom('[data-test-selected-accordion-item="schema-editor"]')
         .exists();
@@ -1818,7 +1820,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-file="pet-person.gts"]');
       assert.dom('[data-test-selected-accordion-item="playground"]').exists();
       await click('[data-test-accordion-item="playground"] > button'); // toggle playground closed
-      assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
+      assert.dom('[data-test-module-inspector="card-or-field"]').exists();
       assert
         .dom('[data-test-selected-accordion-item="spec-preview"]')
         .exists('closing panel toggles next panel open');

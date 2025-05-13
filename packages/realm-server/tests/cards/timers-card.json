@@ -1,0 +1,11 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "./timers-card",
+        "name": "TimersCard"
+      }
+    }
+  }
+}

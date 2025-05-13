@@ -27,9 +27,7 @@ import consumeContext from '@cardstack/host/helpers/consume-context';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
-import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import type {
   CardDef,
@@ -63,6 +61,7 @@ interface Signature {
     canWriteRealm: boolean;
     format: Format;
     defaultFormat: Format;
+    availableRealmURLs: string[];
   };
 }
 
@@ -119,7 +118,7 @@ export default class PlaygroundContent extends Component<Signature> {
           {{else if this.maybeGenerateFieldSpec}}
             <SpecSearch
               @query={{this.specQuery}}
-              @realms={{this.realmServer.availableRealmURLs}}
+              @realms={{@availableRealmURLs}}
               @canWriteRealm={{@canWriteRealm}}
               @createNewCard={{@createNew}}
             />
@@ -177,8 +176,6 @@ export default class PlaygroundContent extends Component<Signature> {
 
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
 
@@ -188,6 +185,12 @@ export default class PlaygroundContent extends Component<Signature> {
         on: specRef,
         eq: { ref: this.args.codeRef },
       },
+      sort: [
+        {
+          by: 'lastModified',
+          direction: 'desc',
+        },
+      ],
     };
   }
 

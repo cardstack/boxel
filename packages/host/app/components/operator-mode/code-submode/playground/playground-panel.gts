@@ -26,6 +26,7 @@ import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -69,6 +70,7 @@ interface Signature {
         | 'makeCardResource'
         | 'query'
         | 'recentRealms'
+        | 'availableRealmURLs'
         | 'fieldOptions'
         | 'selection'
         | 'onSelect'
@@ -94,6 +96,7 @@ interface Signature {
             | 'createNew'
             | 'createNewIsRunning'
             | 'isFieldDef'
+            | 'availableRealmURLs'
           >
         | WithBoundArgs<typeof LoadingIndicator, never>
       ),
@@ -106,6 +109,7 @@ export default class PlaygroundPanel extends Component<Signature> {
   @service private declare loaderService: LoaderService;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare realmServer: RealmServerService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare recentCardsService: RecentCardsService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
@@ -190,7 +194,22 @@ export default class PlaygroundPanel extends Component<Signature> {
       },
       sort: [
         {
-          by: 'createdAt',
+          by: 'lastModified',
+          direction: 'desc',
+        },
+      ],
+    };
+  }
+
+  private get expandedQuery(): Query | undefined {
+    if (this.args.isFieldDef) {
+      return undefined;
+    }
+    return {
+      filter: { type: this.args.codeRef },
+      sort: [
+        {
+          by: 'lastModified',
           direction: 'desc',
         },
       ],
@@ -253,7 +272,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         (item as FieldOption).index,
       );
     } else {
-      this.persistSelections(trimJsonExtension((item as PrerenderedCard).url));
+      this.persistSelections((item as PrerenderedCard).url);
     }
   }
 
@@ -293,17 +312,26 @@ export default class PlaygroundPanel extends Component<Signature> {
     if (selection?.cardId) {
       let { cardId, format, fieldIndex } = selection;
       if (
-        cardId === selectedCardId &&
+        cardId === trimJsonExtension(selectedCardId) &&
         format === selectedFormat &&
         fieldIndex === index
       ) {
         return;
       }
     }
+
+    this.persistToLocalStorage(selectedCardId, selectedFormat, index);
+  };
+
+  private persistToLocalStorage = (
+    cardId: string,
+    format: Format,
+    index?: number,
+  ) => {
     this.playgroundPanelService.persistSelections(
       this.moduleId,
-      selectedCardId,
-      selectedFormat,
+      trimJsonExtension(cardId),
+      format,
       index,
     );
   };
@@ -411,7 +439,9 @@ export default class PlaygroundPanel extends Component<Signature> {
         PlaygroundTitle
         makeCardResource=this.makeCardResource
         query=this.query
+        expandedQuery=this.expandedQuery
         recentRealms=this.recentRealms
+        availableRealmURLs=this.realmServer.availableRealmURLs
         fieldOptions=this.fieldInstances
         selection=this.dropdownSelection
         onSelect=this.onSelect
@@ -425,6 +455,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         closeFieldChooser=this.closeFieldChooser
         chooseField=this.chooseField
         moduleId=this.moduleId
+        persistSelections=this.persistToLocalStorage
       )
       (if
         this.isLoading
@@ -444,6 +475,7 @@ export default class PlaygroundPanel extends Component<Signature> {
           canWriteRealm=this.canWriteRealm
           format=this.format
           defaultFormat=this.defaultFormat
+          availableRealmURLs=this.realmServer.availableRealmURLs
         )
       )
     }}
