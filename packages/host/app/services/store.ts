@@ -254,13 +254,11 @@ export default class StoreService extends Service implements StoreInterface {
       ? this.identityContext.get(instance.id)
       : undefined;
     if (maybeOldInstance) {
-      await this.updateInstanceChangeSubscription(
-        'stop-tracking',
-        maybeOldInstance,
-      );
+      await this.stopAutoSaving(maybeOldInstance);
     }
 
-    await this.updateInstanceChangeSubscription('start-tracking', instance);
+    this.setIdentityContext(instance);
+    await this.startAutoSaving(instance);
 
     if (opts?.doNotWaitForPersist) {
       // intentionally not awaiting
@@ -415,17 +413,14 @@ export default class StoreService extends Service implements StoreInterface {
       this.newReferencePromises.push(deferred.promise);
       try {
         await this.ready;
-        let instanceOrError = this.peek(url);
+        let instanceOrError = this.peekLive(url);
         if (!instanceOrError) {
           instanceOrError = await this.getInstance({
             idOrDoc: url,
           });
-          await this.updateInstanceChangeSubscription(
-            'start-tracking',
-            instanceOrError,
-          );
+          this.setIdentityContext(instanceOrError);
         }
-
+        await this.startAutoSaving(instanceOrError);
         if (!instanceOrError.id) {
           // keep track of urls for cards that are missing
           this.identityContext.addInstanceOrError(url, instanceOrError);
@@ -581,15 +576,10 @@ export default class StoreService extends Service implements StoreInterface {
         opts: { noCache: true },
       });
       if (oldInstance) {
-        await this.updateInstanceChangeSubscription(
-          'stop-tracking',
-          oldInstance,
-        );
+        await this.stopAutoSaving(oldInstance);
       }
-      await this.updateInstanceChangeSubscription(
-        'start-tracking',
-        instanceOrError,
-      );
+      this.setIdentityContext(instanceOrError);
+      await this.startAutoSaving(instanceOrError);
     },
   );
 
@@ -629,16 +619,14 @@ export default class StoreService extends Service implements StoreInterface {
       }
     }
     if (!isCardInstance(maybeReloadedInstance)) {
-      await this.updateInstanceChangeSubscription('stop-tracking', instance);
+      await this.stopAutoSaving(instance);
     }
     if (maybeReloadedInstance) {
-      await this.updateInstanceChangeSubscription(
-        'start-tracking',
-        maybeReloadedInstance,
-      );
+      this.setIdentityContext(maybeReloadedInstance);
+      await this.startAutoSaving(maybeReloadedInstance);
     }
     if (isDelete) {
-      await this.updateInstanceChangeSubscription('stop-tracking', instance);
+      await this.stopAutoSaving(instance);
       this.identityContext.delete(instance.id);
     }
   });
@@ -655,39 +643,42 @@ export default class StoreService extends Service implements StoreInterface {
     }
   };
 
-  private async updateInstanceChangeSubscription(
-    operation: 'start-tracking' | 'stop-tracking',
-    instanceOrError: CardDef | CardErrorJSONAPI,
-  ) {
+  private setIdentityContext(instanceOrError: CardDef | CardErrorJSONAPI) {
     let instance = isCardInstance(instanceOrError)
       ? instanceOrError
       : undefined;
     if (!instance && !instanceOrError.id) {
       return;
     }
-    if (operation === 'start-tracking') {
-      this.identityContext.addInstanceOrError(
-        instance
-          ? (instance.id ?? instance[localIdSymbol])
-          : instanceOrError.id!, // we checked above to make sure errors have id's
-        instanceOrError,
-      );
+    this.identityContext.addInstanceOrError(
+      instance ? (instance.id ?? instance[localIdSymbol]) : instanceOrError.id!, // we checked above to make sure errors have id's
+      instanceOrError,
+    );
+  }
+
+  private async startAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {
+    if (!isCardInstance(instanceOrError)) {
+      return;
     }
+    let instance = instanceOrError;
     // module updates will break the cached api. so don't hang on to this longer
     // than necessary
     this.cardApiCache = await this.cardService.getAPI();
-    if (instance) {
-      this.cardApiCache.unsubscribeFromChanges(
-        instance,
-        this.onInstanceUpdated,
-      );
-      if (operation === 'stop-tracking') {
-        this.autoSaveStates.delete(instance.id);
-        this.autoSaveStates.delete(instance[localIdSymbol]);
-      } else if (operation === 'start-tracking') {
-        this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
-      }
+    this.cardApiCache.unsubscribeFromChanges(instance, this.onInstanceUpdated);
+    this.cardApiCache.subscribeToChanges(instance, this.onInstanceUpdated);
+  }
+
+  private async stopAutoSaving(instanceOrError: CardDef | CardErrorJSONAPI) {
+    if (!isCardInstance(instanceOrError)) {
+      return;
     }
+    let instance = instanceOrError;
+    // module updates will break the cached api. so don't hang on to this longer
+    // than necessary
+    this.cardApiCache = await this.cardService.getAPI();
+    this.cardApiCache.unsubscribeFromChanges(instance, this.onInstanceUpdated);
+    this.autoSaveStates.delete(instance.id);
+    this.autoSaveStates.delete(instance[localIdSymbol]);
   }
 
   private async getInstance<T extends CardDef>({
@@ -771,7 +762,8 @@ export default class StoreService extends Service implements StoreInterface {
       this.identityContext.set(url, instance);
       deferred?.fulfill(instance);
       if (!existingInstance || !isCardInstance(existingInstance)) {
-        await this.updateInstanceChangeSubscription('start-tracking', instance);
+        this.setIdentityContext(instance);
+        await this.startAutoSaving(instance);
       }
       return instance as T;
     } catch (error: any) {
@@ -979,10 +971,8 @@ export default class StoreService extends Service implements StoreInterface {
             instance[localIdSymbol],
           );
           await this.updateForeignConsumersOf(instance);
-          await this.updateInstanceChangeSubscription(
-            'start-tracking',
-            instance,
-          );
+          this.setIdentityContext(instance);
+          await this.startAutoSaving(instance);
         }
         return instance;
       } catch (err) {
@@ -992,10 +982,7 @@ export default class StoreService extends Service implements StoreInterface {
           err,
         );
         let cardError = errorResponse.errors[0];
-        await this.updateInstanceChangeSubscription(
-          'start-tracking',
-          cardError,
-        );
+        this.setIdentityContext(cardError);
         return cardError;
       } finally {
         api?.unsubscribeFromChanges(instance, onCardChange);

@@ -1298,10 +1298,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasText('Untitled Boom Person');
       assert
         .dom('[data-test-card-error]')
-        .exists('auto-generated card has error in it');
+        .doesNotExist('auto-generated card has not error in edit format');
 
       await createNewInstance();
       // switch to isolated mode to see the current server state
@@ -1348,7 +1350,9 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasText('Untitled Boom Person');
       assert.dom('[data-test-error-container]').doesNotExist();
 
       await createNewInstance();
