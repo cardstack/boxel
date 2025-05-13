@@ -358,19 +358,12 @@ export class RoomResource extends Resource<Args> {
       return this._skillCardsCache.get(cardId);
     }
 
-    let id = await this.store.create(cardDoc);
-    if (typeof id !== 'string') {
-      console.warn(
-        `Failed to create skill card with id ${cardId}, this should not happen`,
-      );
-      return;
-    }
-    let skillCard = await this.store.get<Skill>(id);
-    if (!isCardInstance(skillCard)) {
-      console.warn(
-        `Failed to get skill card with id ${id}, error ${skillCard.message} this should not happen`,
-      );
-      return;
+    let skillCard: Skill;
+    let maybeSkillCard = await this.store.get(cardId);
+    if (isCardInstance(maybeSkillCard)) {
+      skillCard = maybeSkillCard as Skill;
+    } else {
+      skillCard = await this.store.add<Skill>(cardDoc);
     }
     this._skillCardsCache.set(cardId, skillCard);
     return skillCard;

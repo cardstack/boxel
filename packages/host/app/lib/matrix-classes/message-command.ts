@@ -95,22 +95,14 @@ export default class MessageCommand {
   async getCommandResultCard(): Promise<CardDef | undefined> {
     let cardDoc = await this.commandResultCardDoc();
     let card: CardDef | undefined;
-    if (cardDoc) {
-      let id = await this.store.create(cardDoc);
-      if (typeof id !== 'string') {
-        console.warn(
-          `Failed to create command result card with id ${cardDoc.data.id}, this should not happen`,
-        );
-        return undefined;
-      }
-      let card = await this.store.get(id);
-      if (!isCardInstance(card)) {
-        console.warn(
-          `Failed to get card with id ${id}, error: ${card.message}, this should not happen`,
-        );
-        return undefined;
-      }
-      return card;
+    if (!cardDoc?.data.id) {
+      return undefined;
+    }
+    let maybeCard = await this.store.get(cardDoc.data.id);
+    if (isCardInstance(maybeCard)) {
+      card = maybeCard as CardDef;
+    } else if (cardDoc) {
+      card = await this.store.add<CardDef>(cardDoc);
     }
     return card;
   }
