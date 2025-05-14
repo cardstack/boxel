@@ -2,6 +2,7 @@ import {
   type RenderingTestContext,
   waitUntil,
   waitFor,
+  typeIn,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -45,6 +46,7 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   type TestContextWithSave,
+  withSlowSave,
 } from '../helpers';
 import { TestRealmAdapter } from '../helpers/adapter';
 import {
@@ -775,6 +777,60 @@ module('Integration | Store', function (hooks) {
     (instance as any).name = 'Air';
   });
 
+  test<TestContextWithSave>('an instance can debounce auto saves', async function (assert) {
+    assert.expect(5);
+
+    setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let saveCount = 0;
+    this.onSave((url, doc) => {
+      saveCount++;
+      assert.strictEqual(
+        url.href,
+        `${testRealmURL}Person/hassan`,
+        'correct document is saved',
+      );
+      switch (saveCount) {
+        case 1:
+          assert.strictEqual(
+            (doc as SingleCardDocument).data?.attributes?.name,
+            'Hassan ',
+            'the initial instance mutation event is saved',
+          );
+          break;
+        case 2:
+          assert.strictEqual(
+            (doc as SingleCardDocument).data?.attributes?.name,
+            'Hassan Paper',
+            'the final instance mutation event is saved',
+          );
+          break;
+        default:
+          assert.ok(false, `unexpected number of saves: ${saveCount}`);
+      }
+    });
+
+    // slow down the save so we can get deterministic results
+    await withSlowSave(1000, async () => {
+      // typeIn will fire an event for each character, which in turn results in multiple instance updated events
+      await typeIn(
+        `[data-test-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"] input`,
+        ' Paper',
+      );
+
+      // the leading edge and trailing edge of the key events are saved and the intermediate events are dropped
+      assert.strictEqual(saveCount, 2, 'the number of auto-saves is correct');
+    });
+  });
+
   test<TestContextWithSave>('getSaveState works for initially unsaved instance', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
     await store.add(instance, { doNotPersist: true });
@@ -1247,6 +1303,44 @@ module('Integration | Store', function (hooks) {
       store.getReferenceCount(hassan),
       0,
       `reference count for ${hassan} is 0`,
+    );
+  });
+
+  test<TestContextWithSave>('reference count is balanced during auto saving', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+
+    setCardInOperatorModeState(hassan, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+    // slow down the save so we can get deterministic results
+    await withSlowSave(1000, async () => {
+      // typeIn will fire an event for each character, which in turn results in multiple instance updated events
+      await typeIn(
+        `[data-test-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"] input`,
+        ' Paper',
+      );
+      assert.strictEqual(
+        store.getReferenceCount(hassan),
+        1,
+        `reference count for ${hassan} is 1`,
+      );
+    });
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
     );
   });
 

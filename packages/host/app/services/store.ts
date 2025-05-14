@@ -6,7 +6,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 
 import { formatDistanceToNow } from 'date-fns';
-import { task, timeout } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 import mergeWith from 'lodash/mergeWith';
 
@@ -97,6 +97,8 @@ export default class StoreService extends Service implements StoreInterface {
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
+  private autoSaveQueues = new Map<string, { isImmediate?: true }[]>();
+  private autoSavePromises = new Map<string, Promise<void>>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -207,7 +209,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   save(id: string) {
-    this.initiateAutoSaveTask.perform(id, { isImmediate: true });
+    this.doAutoSave(id, { isImmediate: true });
   }
 
   async add<T extends CardDef>(
@@ -400,7 +402,8 @@ export default class StoreService extends Service implements StoreInterface {
 
   async flush() {
     await this.ready;
-    return await Promise.allSettled(this.newReferencePromises);
+    await Promise.allSettled(this.newReferencePromises);
+    await Promise.allSettled(this.autoSavePromises.values());
   }
 
   getReferenceCount(id: string) {
@@ -639,7 +642,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (isCardInstance(instance)) {
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
-      this.initiateAutoSaveTask.perform(instance);
+      this.doAutoSave(instance);
     }
   };
 
@@ -782,29 +785,53 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private initiateAutoSaveTask = task(
-    async (idOrInstance: string | CardDef, opts?: { isImmediate?: true }) => {
-      let instance: CardDef | undefined;
-      if (typeof idOrInstance === 'string') {
-        instance = this.identityContext.get(idOrInstance);
-        if (!instance) {
-          return;
-        }
-      } else {
-        instance = idOrInstance;
+  private doAutoSave(
+    idOrInstance: string | CardDef,
+    opts?: { isImmediate?: true },
+  ) {
+    let instance: CardDef | undefined;
+    if (typeof idOrInstance === 'string') {
+      instance = this.identityContext.get(idOrInstance);
+      if (!instance) {
+        return;
       }
-      let isNew = !instance.id;
+    } else {
+      instance = idOrInstance;
+    }
+    let autoSaveState = this.initOrGetAutoSaveState(instance);
+    let queueName = instance.id ?? instance[localIdSymbol];
+    let autoSaveQueue = this.autoSaveQueues.get(queueName);
+    if (!autoSaveQueue) {
+      autoSaveQueue = [];
+      this.autoSaveQueues.set(queueName, autoSaveQueue);
+    }
+    autoSaveQueue.push({ ...opts });
+    autoSaveState.isSaving = true;
+    autoSaveState.lastSaveError = undefined;
+    this.drainAutoSaveQueue(queueName);
+  }
+
+  private async drainAutoSaveQueue(queueName: string) {
+    await this.autoSavePromises.get(queueName);
+
+    let done: () => void;
+    this.autoSavePromises.set(queueName, new Promise<void>((r) => (done = r)));
+    let autoSaves = [...(this.autoSaveQueues.get(queueName) ?? [])];
+    this.autoSaveQueues.set(queueName, []);
+    if (autoSaves && autoSaves.length > 0) {
+      let instance = this.peek(queueName);
+      if (!isCardInstance(instance)) {
+        done!();
+        return;
+      }
       let autoSaveState = this.initOrGetAutoSaveState(instance);
+      // favor isImmediate saves
+      let isImmediate = Boolean(autoSaves.find((a) => a.isImmediate));
       try {
-        autoSaveState.isSaving = true;
-        autoSaveState.lastSaveError = undefined;
-        if (!opts?.isImmediate) {
-          await timeout(this.environmentService.autoSaveDelayMs);
-        }
-        if (!opts?.isImmediate) {
-          await timeout(25);
-        }
-        let maybeError = await this.saveInstance(instance, opts);
+        let maybeError = await this.saveInstance(
+          instance,
+          isImmediate ? { isImmediate } : undefined,
+        );
         autoSaveState.hasUnsavedChanges = false;
         autoSaveState.lastSaved = Date.now();
         autoSaveState.lastSavedErrorMsg = undefined;
@@ -812,16 +839,19 @@ export default class StoreService extends Service implements StoreInterface {
           maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
       } catch (error) {
         // error will already be logged in CardService
-        autoSaveState.lastSaveError = error as Error;
+        if (autoSaveState) {
+          autoSaveState.lastSaveError = error as Error;
+        }
       } finally {
         autoSaveState.isSaving = false;
         this.calculateLastSavedMsg(autoSaveState);
-        if (isNew && instance.id) {
+        if (isLocalId(queueName) && instance.id) {
           this.autoSaveStates.set(instance.id, autoSaveState);
         }
       }
-    },
-  );
+    }
+    done!();
+  }
 
   private initOrGetAutoSaveState(instance: CardDef): AutoSaveState {
     let autoSaveState = this.autoSaveStates.get(
