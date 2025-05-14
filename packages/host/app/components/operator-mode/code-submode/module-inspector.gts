@@ -570,7 +570,6 @@ export class SpecPreviewModifier extends Modifier<ModifierSignature> {
     _positional: [],
     { spec, onSpecView }: ModifierSignature['Args']['Named'],
   ) {
-    console.log('modifieRR???', spec, onSpecView);
     if (!spec || !onSpecView) {
       // throw new Error('bug: no spec or onSpecView hook');
       return;
