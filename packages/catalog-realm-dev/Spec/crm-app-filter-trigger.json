@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "FilterTrigger",
+        "module": "../crm-app/components/filter/filter-trigger"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Filter Trigger",
+      "description": "Spec for Filter Trigger component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

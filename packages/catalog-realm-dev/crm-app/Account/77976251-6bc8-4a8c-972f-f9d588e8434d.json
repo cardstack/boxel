@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shippingAddress": {
+        "addressLine1": "456 Pine Street",
+        "addressLine2": null,
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98101",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": "456 Pine Street",
+        "addressLine2": null,
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98101",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "urgencyTag": {
+        "index": 3,
+        "label": "Expiring Soon",
+        "foregroundColor": "#FBC02D",
+        "backgroundColor": "#FFF9C4"
+      },
+      "description": "Current client with website and social media package expiring in 30 days",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/141f3e15-cfd5-4b61-bd4c-37ea31dbeeab"
+        }
+      },
+      "primaryContact": {
+        "links": {
+          "self": "../Customer/1274acf3-5b66-4373-89a2-fe8106c3d586"
+        }
+      },
+      "contacts": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../account",
+        "name": "Account"
+      }
+    }
+  }
+}

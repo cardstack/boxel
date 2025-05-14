@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "DealPriority",
+        "module": "../crm-app/deal-priority"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "Deal Priority",
+      "description": "Spec for Deal Priority field",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

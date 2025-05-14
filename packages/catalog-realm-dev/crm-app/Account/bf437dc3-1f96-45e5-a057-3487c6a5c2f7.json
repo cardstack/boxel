@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shippingAddress": {
+        "addressLine1": "220 Startup Avenue",
+        "addressLine2": "WeWork Floor 3",
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98104",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": "220 Startup Avenue",
+        "addressLine2": "WeWork Floor 3",
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98104",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "urgencyTag": {
+        "index": 4,
+        "label": "Follow-Up Required",
+        "foregroundColor": "#1976D2",
+        "backgroundColor": "#E3F2FD"
+      },
+      "description": "Potential startup client interested in digital marketing services",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/eb6a7c2d-6c94-4e42-aa01-c5823fb5af9a"
+        }
+      },
+      "primaryContact": {
+        "links": {
+          "self": "../Lead/4e70a791-dd4e-4b39-99a1-bb8070392437"
+        }
+      },
+      "contacts": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../account",
+        "name": "Account"
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Emily",
+      "lastName": "Chen",
+      "position": "Head Veterinarian",
+      "department": "Medical",
+      "primaryEmail": "dr.chen@pawspetclinic.com",
+      "secondaryEmail": "emilychen.vet@gmail.com",
+      "phoneMobile": {
+        "phoneNumber": {
+          "number": "2065553210",
+          "countryCode": "1"
+        },
+        "type": {
+          "index": 0,
+          "label": "Mobile"
+        }
+      },
+      "phoneOffice": {
+        "phoneNumber": {
+          "number": "2065559012",
+          "countryCode": "1"
+        },
+        "type": {
+          "index": 2,
+          "label": "Work"
+        }
+      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "linkedin.com/in/dr-emily-chen-vet"
+        },
+        {
+          "label": "X",
+          "value": "@DrEmilyPaws"
+        }
+      ],
+      "description": "Owner and lead veterinarian at Paws Pet Clinic",
+      "thumbnailURL": "https://images.pexels.com/photos/774909/pexels-photo-774909.jpeg"
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/e1856419-27b0-4ce3-98fe-759d21c7144f"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../customer",
+        "name": "Customer"
+      }
+    }
+  }
+}

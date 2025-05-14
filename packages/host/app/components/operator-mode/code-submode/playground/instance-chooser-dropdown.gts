@@ -20,7 +20,7 @@ import {
   type Query,
 } from '@cardstack/runtime-common';
 
-import Preview from '@cardstack/host/components/preview';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
@@ -208,7 +208,7 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
     >
       {{#if @isField}}
         <CardContainer class='field' @displayBoundaries={{true}}>
-          <Preview @card={{item.field}} @format='atom' />
+          <CardRenderer @card={{item.field}} @format='atom' />
         </CardContainer>
       {{else}}
         <CardContainer class='card' @displayBoundaries={{true}}>
