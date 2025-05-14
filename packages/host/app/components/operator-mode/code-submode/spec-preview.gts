@@ -53,13 +53,9 @@ import {
   type ModuleDeclaration,
 } from '@cardstack/host/resources/module-contents';
 
-import type CardService from '@cardstack/host/services/card-service';
-import type EnvironmentService from '@cardstack/host/services/environment-service';
 import type LoaderService from '@cardstack/host/services/loader-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
-import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type SpecPanelService from '@cardstack/host/services/spec-panel-service';
 import type StoreService from '@cardstack/host/services/store';
@@ -464,11 +460,7 @@ const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
 export default class SpecPreview extends GlimmerComponent<Signature> {
   @consume(GetCardsContextName) private declare getCards: getCards;
   @service private declare operatorModeStateService: OperatorModeStateService;
-  @service private declare environmentService: EnvironmentService;
   @service private declare realm: RealmService;
-  @service private declare realmServer: RealmServerService;
-  @service private declare cardService: CardService;
-  @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare loaderService: LoaderService;
   @service private declare recentFilesService: RecentFilesService;
   @service private declare specPanelService: SpecPanelService;
