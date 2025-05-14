@@ -383,4 +383,87 @@ test.describe('Skills', () => {
       '2 of 3 Skills Active',
     );
   });
+
+  test('ensure that the skill card from boxel index is not overwritten by the skill card from matrix store', async ({
+    page,
+  }) => {
+    await login(page, 'user1', 'pass', { url: appURL });
+
+    // create a skill card
+    await page.locator('[data-test-create-new-card-button]').click();
+    await page
+      .locator('[data-test-select="https://cardstack.com/base/cards/skill"]')
+      .click();
+    await page.locator('[data-test-card-catalog-go-button]').click();
+    await page
+      .locator('[data-test-field="instructions"] textarea')
+      .fill(
+        'Here is a command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
+      );
+    await page
+      .locator('[data-test-field="commands"] [data-test-add-new]')
+      .click();
+    await page
+      .locator('[data-test-field="codeRef"] input')
+      .fill('@cardstack/boxel-host/commands/switch-submode/default');
+    await page
+      .locator('[data-test-field="title"] input')
+      .fill('Automatic Switch Command');
+    await page.waitForSelector('[data-test-last-saved]');
+    const cards = await page.locator('[data-test-card]').all();
+    const skillCard =
+      await cards[cards.length - 1].getAttribute('data-test-card');
+
+    // close the Skill card
+    await page.locator('[data-test-close-button]').click();
+
+    // Add the skill card to the assistant
+    await page.locator('[data-test-skill-menu]').hover();
+    await expect(
+      page.locator('[data-test-pill-menu-header-button]'),
+    ).toBeVisible();
+    await page.locator('[data-test-pill-menu-header-button]').click();
+    await page.locator('[data-test-pill-menu-add-button]').click();
+    await page
+      .locator('[data-test-card-catalog-item]', {
+        hasText: 'Automatic Switch Command',
+      })
+      .click();
+    await page.locator('[data-test-card-catalog-go-button]').click();
+
+    // fill in message field with "Switch to code mode"
+    await page
+      .locator('[data-test-boxel-input-id="ai-chat-input"]')
+      .fill('Switch to code mode');
+    await page.locator('[data-test-send-message-btn]').click();
+    await page.locator('[data-test-message-idx="0"]').waitFor();
+
+    // Update the uploaded skill card
+    await page.locator(`[data-cards-grid-item="${skillCard}"]`).click();
+    await page.locator('[data-test-edit-button]').click();
+    await page
+      .locator('[data-test-field="instructions"] textarea')
+      .fill(
+        'Here is an updated command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
+      );
+    await page.waitForSelector('[data-test-last-saved]');
+    await page.locator('[data-test-edit-button]').click();
+    await page.locator('[data-test-close-ai-assistant]').click();
+
+    // after reloading the page, the skill card will be instantiated from boxel index
+    // and then when the ai panel is opened, the skill card from matrix store will be retrieved.
+    // ensure that the skill card from boxel index is used.
+    await page.reload();
+    await expect(
+      page.locator('[data-test-field="instructions"] .content'),
+    ).toHaveText(
+      'Here is an updated command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
+    );
+    await page.locator('[data-test-open-ai-assistant]').click();
+    await expect(
+      page.locator('[data-test-field="instructions"] .content'),
+    ).toHaveText(
+      'Here is an updated command you might find useful: * switch-submode: use this with "code" to go to code mode and "interact" to go to interact mode.',
+    );
+  });
 });
