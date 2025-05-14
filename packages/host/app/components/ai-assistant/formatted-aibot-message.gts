@@ -205,7 +205,6 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   });
 
   <template>
-    {{log 'rendering FormattedAiBotMessage'}}
     <div
       class='message'
       {{HtmlPartsDidUpdate
@@ -366,7 +365,6 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   }
 
   <template>
-    {{log 'rendering HtmlGroupCodeBlock'}}
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
         {{#if this.codeDiffResource.isDataLoaded}}

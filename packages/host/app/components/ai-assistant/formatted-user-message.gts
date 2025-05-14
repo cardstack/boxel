@@ -16,7 +16,6 @@ export default class FormattedUserMessage extends Component<Signature> {
   };
 
   <template>
-    {{log 'rendering FormattedUserMessage'}}
     <div class='message'>
       {{this.sanitizeHTML @html}}
     </div>
