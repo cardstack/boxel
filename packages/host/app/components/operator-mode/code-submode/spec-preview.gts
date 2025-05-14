@@ -101,10 +101,10 @@ interface Signature {
             typeof SpecPreviewContent,
             | 'showCreateSpec'
             | 'canWrite'
-            | 'onSelectCard'
-            | 'spec'
+            | 'onSelectSpec'
+            | 'activeSpec'
             | 'isLoading'
-            | 'cards'
+            | 'allSpecs'
             | 'viewCardInPlayground'
           >
         | WithBoundArgs<typeof SpecPreviewLoading, never>
