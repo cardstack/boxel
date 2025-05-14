@@ -86,7 +86,7 @@ module(basename(__filename), function () {
         @field firstName = contains(StringField);
         @field age = contains(NumberField);
         static embedded = class Embedded extends Component<typeof this> {
-          <template><h1><@fields.firstName/></h1></template>                
+          <template><h1><@fields.firstName/></h1></template>
         }
       }
       `,
@@ -187,7 +187,7 @@ module(basename(__filename), function () {
             @field firstName = contains(StringField);
             @field age = contains(NumberField);
             static embedded = class Embedded extends Component<typeof this> {
-                <template><h1><@fields.firstName/></h1></template>                
+                <template><h1><@fields.firstName/></h1></template>
             }
         }
       `,
@@ -217,7 +217,7 @@ module(basename(__filename), function () {
         export class Person extends CardDef {
           @field age = contains(NumberField);
           static embedded = class Embedded extends Component<typeof this> {
-            <template><h1><@fields.firstName/></h1></template>                
+            <template><h1><@fields.firstName/></h1></template>
           }
         }
       `,
@@ -251,7 +251,7 @@ module(basename(__filename), function () {
         `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
-        export class Person extends CardDef { }
+        export class Person extends CardDef {}
       `,
       );
 
@@ -261,7 +261,7 @@ module(basename(__filename), function () {
         import NumberField from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
-        export class Person extends CardDef { 
+        export class Person extends CardDef {
           @field age = contains(NumberField);
         }
       `,
@@ -315,7 +315,7 @@ module(basename(__filename), function () {
             @field age = contains(NumberField);
             @field firstName = contains(StringField);
             static embedded = class Embedded extends Component<typeof this> {
-                <template><h1><@fields.firstName/></h1></template>                
+                <template><h1><@fields.firstName/></h1></template>
             }
         }
       `,

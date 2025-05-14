@@ -69,7 +69,7 @@ export class ModuleSyntax {
       possibleCardsOrFields: [],
       declarations: [],
     };
-    let preprocessedSrc = preprocessTemplateTags(src);
+    let preprocessedSrc = gjsToPlaceholderJS(src);
     let ast: Babel.types.Node = parse(preprocessedSrc, {
       parser: {
         parse: (source: string) => {
@@ -98,10 +98,7 @@ export class ModuleSyntax {
 
   code(): string {
     let preprocessedSrc: string = print(this.ast).code;
-    return preprocessedSrc.replace(
-      /\[templte\(`([^`].*?)`\)\]/gs,
-      `<template>$1</template>`,
-    );
+    return placeholderJSToGJS(preprocessedSrc);
   }
 
   // A note about incomingRelativeTo and outgoingRelativeTo - path parameters in input (e.g. field module path) and output (e.g. field import path) are
@@ -244,7 +241,7 @@ export class ModuleSyntax {
     // that we don't lose the decorations that recast performs on the AST in
     // order to track Node provenance. basically every babel transform needs to
     // be fed an AST from a recast parse
-    let preprocessedSrc = preprocessTemplateTags(this.code());
+    let preprocessedSrc = gjsToPlaceholderJS(this.code());
     let ast: Babel.types.Node = parse(preprocessedSrc, {
       parser: {
         parse(source: string) {
@@ -342,22 +339,31 @@ export class ModuleSyntax {
   }
 }
 
-function preprocessTemplateTags(src: string): string {
+export function gjsToPlaceholderJS(
+  src: string,
+  params?: { placeholder?: string },
+): string {
+  let placeholder = params?.placeholder ?? 'templatePlaceholder';
   let output = [];
   let offset = 0;
   let matches = new ContentTagGlobal.Preprocessor().parse(src);
   const srcArray = Array.from(src); // to be multi-byte character safe, we need to slice on a string converted to an array
   for (let match of matches) {
     output.push(srcArray.slice(offset, match.range.startChar).join(''));
-    // we are using this name as well as padded spaces at the end so that source
-    // maps are unaffected
-    output.push('[templte(`');
-    output.push(match.contents.replace(/`/g, '\\`'));
-    output.push('`)]        ');
+    output.push(`[${placeholder}(`);
+    output.push(JSON.stringify(match.contents));
+    output.push(')]');
     offset = match.range.endChar;
   }
   output.push(srcArray.slice(offset).join(''));
   return output.join('');
+}
+
+export function placeholderJSToGJS(src: string): string {
+  return src.replace(
+    /\[templatePlaceholder\((".*?")\)\]/g,
+    (_m, group) => `<template>${JSON.parse(group)}</template>`,
+  );
 }
 
 function makeNewField({
