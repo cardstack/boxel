@@ -283,8 +283,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
-  private get specQuery(): Query {
-    return {
+  private makeSearch = () => {
+    let queryForSpecsFromSelectedDefinition: Query = {
       filter: {
         on: specRef,
         eq: {
@@ -298,12 +298,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         },
       ],
     };
-  }
 
-  private makeSearch = () => {
     this.search = this.getCards(
       this,
-      () => this.specQuery,
+      () => queryForSpecsFromSelectedDefinition,
       () => this.realmServer.availableRealmURLs,
       { isLive: true },
     ) as ReturnType<getCards<Spec>>;
