@@ -21,6 +21,7 @@ import { getSearch } from '@cardstack/host/resources/search';
 
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
+import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
 
 class GetCardsContextProvider extends GlimmerComponent<{
   Args: {};
@@ -68,6 +69,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       attachedResources() {
         return undefined;
       },
+      htmlParts: parseHtmlContent(messageContent),
     };
 
     let testScenario = {
