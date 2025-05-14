@@ -812,45 +812,50 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   private async drainAutoSaveQueue(queueName: string) {
-    await this.autoSavePromises.get(queueName);
+    return await this.withTestWaiters(async () => {
+      await this.autoSavePromises.get(queueName);
 
-    let done: () => void;
-    this.autoSavePromises.set(queueName, new Promise<void>((r) => (done = r)));
-    let autoSaves = [...(this.autoSaveQueues.get(queueName) ?? [])];
-    this.autoSaveQueues.set(queueName, []);
-    if (autoSaves && autoSaves.length > 0) {
-      let instance = this.peek(queueName);
-      if (!isCardInstance(instance)) {
-        done!();
-        return;
-      }
-      let autoSaveState = this.initOrGetAutoSaveState(instance);
-      // favor isImmediate saves
-      let isImmediate = Boolean(autoSaves.find((a) => a.isImmediate));
-      try {
-        let maybeError = await this.saveInstance(
-          instance,
-          isImmediate ? { isImmediate } : undefined,
-        );
-        autoSaveState.hasUnsavedChanges = false;
-        autoSaveState.lastSaved = Date.now();
-        autoSaveState.lastSavedErrorMsg = undefined;
-        autoSaveState.lastSaveError =
-          maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
-      } catch (error) {
-        // error will already be logged in CardService
-        if (autoSaveState) {
-          autoSaveState.lastSaveError = error as Error;
+      let done: () => void;
+      this.autoSavePromises.set(
+        queueName,
+        new Promise<void>((r) => (done = r)),
+      );
+      let autoSaves = [...(this.autoSaveQueues.get(queueName) ?? [])];
+      this.autoSaveQueues.set(queueName, []);
+      if (autoSaves && autoSaves.length > 0) {
+        let instance = this.peek(queueName);
+        if (!isCardInstance(instance)) {
+          done!();
+          return;
         }
-      } finally {
-        autoSaveState.isSaving = false;
-        this.calculateLastSavedMsg(autoSaveState);
-        if (isLocalId(queueName) && instance.id) {
-          this.autoSaveStates.set(instance.id, autoSaveState);
+        let autoSaveState = this.initOrGetAutoSaveState(instance);
+        // favor isImmediate saves
+        let isImmediate = Boolean(autoSaves.find((a) => a.isImmediate));
+        try {
+          let maybeError = await this.saveInstance(
+            instance,
+            isImmediate ? { isImmediate } : undefined,
+          );
+          autoSaveState.hasUnsavedChanges = false;
+          autoSaveState.lastSaved = Date.now();
+          autoSaveState.lastSavedErrorMsg = undefined;
+          autoSaveState.lastSaveError =
+            maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
+        } catch (error) {
+          // error will already be logged in CardService
+          if (autoSaveState) {
+            autoSaveState.lastSaveError = error as Error;
+          }
+        } finally {
+          autoSaveState.isSaving = false;
+          this.calculateLastSavedMsg(autoSaveState);
+          if (isLocalId(queueName) && instance.id) {
+            this.autoSaveStates.set(instance.id, autoSaveState);
+          }
         }
       }
-    }
-    done!();
+      done!();
+    });
   }
 
   private initOrGetAutoSaveState(instance: CardDef): AutoSaveState {
