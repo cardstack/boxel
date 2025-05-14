@@ -4,7 +4,7 @@ import { inject as service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
-import { ResolvedCodeRef, isCardInstance } from '@cardstack/runtime-common';
+import { ResolvedCodeRef } from '@cardstack/runtime-common';
 import { CommandRequest } from '@cardstack/runtime-common/commands';
 
 import type CommandService from '@cardstack/host/services/command-service';
@@ -95,14 +95,8 @@ export default class MessageCommand {
   async getCommandResultCard(): Promise<CardDef | undefined> {
     let cardDoc = await this.commandResultCardDoc();
     let card: CardDef | undefined;
-    if (!cardDoc?.data.id) {
-      return undefined;
-    }
-    let maybeCard = await this.store.get(cardDoc.data.id);
-    if (isCardInstance(maybeCard)) {
-      card = maybeCard as CardDef;
-    } else if (cardDoc) {
-      card = await this.store.add<CardDef>(cardDoc);
+    if (cardDoc) {
+      card = (await this.store.add(cardDoc, { doNotPersist: true })) as CardDef;
     }
     return card;
   }
