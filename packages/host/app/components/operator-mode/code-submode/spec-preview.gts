@@ -105,7 +105,7 @@ interface Signature {
             | 'activeSpec'
             | 'isLoading'
             | 'allSpecs'
-            | 'viewCardInPlayground'
+            | 'viewSpecInPlayground'
           >
         | WithBoundArgs<typeof SpecPreviewLoading, never>
       ),
@@ -205,7 +205,7 @@ interface ContentSignature {
     allSpecs: Spec[];
     activeSpec: Spec | undefined;
     isLoading: boolean;
-    viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
+    viewSpecInPlayground: (cardDefOrId: CardDefOrId) => void;
   };
 }
 
@@ -249,16 +249,16 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
       }));
   }
 
-  private getDropdownData = (card: CardDef) => {
-    let realmInfo = this.realm.info(urlForRealmLookup(card));
-    let realmURL = card[realmURLSymbol];
+  private getDropdownData = (spec: CardDef) => {
+    let realmInfo = this.realm.info(urlForRealmLookup(spec));
+    let realmURL = spec[realmURLSymbol];
     if (!realmURL) {
       throw new Error('bug: no realm URL');
     }
     return {
-      id: card.id,
+      id: spec.id,
       realmInfo,
-      localPath: card.id ? getRelativePath(realmURL.href, card.id) : undefined,
+      localPath: spec.id ? getRelativePath(realmURL.href, spec.id) : undefined,
     };
   };
 
@@ -313,10 +313,10 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                   @onChange={{@onSelectSpec}}
                   @matchTriggerWidth={{true}}
                   @disabled={{this.onlyOneInstance}}
-                  as |card|
+                  as |spec|
                 >
-                  {{#if card.id}}
-                    {{#let (this.getDropdownData card) as |data|}}
+                  {{#if spec.id}}
+                    {{#let (this.getDropdownData spec) as |data|}}
                       {{#if data}}
                         <div class='spec-selector-item'>
                           <RealmIcon
@@ -345,7 +345,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             <Overlays
               @overlayClassName='spec-preview-overlay'
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
-              @onSelectCard={{@viewCardInPlayground}}
+              @onSelectCard={{@viewSpecInPlayground}}
             />
             {{#if this.displayIsolated}}
               <CardRenderer
@@ -559,8 +559,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     );
   }
 
-  @action private onSelectCard(card: Spec): void {
-    this.specPanelService.setSelection(card.id);
+  @action private onSelectSpec(spec: Spec): void {
+    this.specPanelService.setSelection(spec.id);
   }
 
   private get canWrite() {
@@ -580,8 +580,8 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return this.args.isLoadingNewModule;
   }
 
-  private viewCardInPlayground = (card: CardDefOrId) => {
-    let id = typeof card === 'string' ? card : card.id;
+  private viewSpecInPlayground = (spec: CardDefOrId) => {
+    let id = typeof spec === 'string' ? spec : spec.id;
     const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
     this.recentFilesService.addRecentFileUrl(fileUrl);
     this.args.updatePlaygroundSelections(id);
@@ -614,11 +614,11 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           SpecPreviewContent
           showCreateSpec=this.showCreateSpec
           canWrite=this.canWrite
-          onSelectSpec=this.onSelectCard
+          onSelectSpec=this.onSelectSpec
           activeSpec=@activeSpec
           isLoading=false
           allSpecs=@specsForSelectedDefinition
-          viewCardInPlayground=this.viewCardInPlayground
+          viewSpecInPlayground=this.viewSpecInPlayground
         )
       }}
     {{/if}}
