@@ -352,7 +352,7 @@ export function gjsToPlaceholderJS(
     output.push(srcArray.slice(offset, match.range.startChar).join(''));
     output.push(`[${placeholder}(`);
     output.push(JSON.stringify(match.contents));
-    output.push(')]');
+    output.push(`,"${placeholder}")]`);
     offset = match.range.endChar;
   }
   output.push(srcArray.slice(offset).join(''));
@@ -361,7 +361,7 @@ export function gjsToPlaceholderJS(
 
 export function placeholderJSToGJS(src: string): string {
   return src.replace(
-    /\[templatePlaceholder\((".*?")\)\]/g,
+    /\[templatePlaceholder\((".*?"),"templatePlaceholder"\)\]/g,
     (_m, group) => `<template>${JSON.parse(group)}</template>`,
   );
 }

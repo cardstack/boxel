@@ -1,5 +1,9 @@
 import { module, test } from 'qunit';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import {
+  ModuleSyntax,
+  gjsToPlaceholderJS,
+  placeholderJSToGJS,
+} from '@cardstack/runtime-common/module-syntax';
 
 import { baseCardRef, baseFieldRef } from '@cardstack/runtime-common';
 import { testRealm } from './helpers';
@@ -1347,5 +1351,22 @@ module(basename(__filename), function () {
         );
       }
     });
+  });
+  module('gjs-to-placeholder', function () {
+    const examples = [
+      `<template>Greetings ")]</template>`,
+      '<template>${{stuff}}</template>',
+      `<template>
+        Hello
+       </template>`,
+    ];
+    for (let example of examples) {
+      test('round-trip gjs placeholders', async function (assert) {
+        assert.strictEqual(
+          placeholderJSToGJS(gjsToPlaceholderJS(example)),
+          example,
+        );
+      });
+    }
   });
 });
