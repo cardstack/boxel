@@ -91,8 +91,9 @@ export default class StoreService extends Service implements StoreInterface {
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
-  private inflightCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
+  private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
+  private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private identityContext = new IdentityContext(this.referenceCount);
 
   // This is used for tests
@@ -128,7 +129,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.referenceCount = new Map();
     this.newReferencePromises = [];
     this.autoSaveStates = new TrackedMap();
-    this.inflightCards = new Map();
+    this.inflightGetCards = new Map();
+    this.inflightCardMutations = new Map();
+    this.autoSaveQueues = new Map();
+    this.autoSavePromises = new Map();
     this.identityContext = new IdentityContext(this.referenceCount);
     this.ready = this.setup();
   }
@@ -403,7 +407,11 @@ export default class StoreService extends Service implements StoreInterface {
   async flush() {
     await this.ready;
     await Promise.allSettled(this.newReferencePromises);
-    await Promise.allSettled(this.autoSavePromises.values());
+    while (
+      [...this.autoSaveQueues.values()].find((queue) => queue.length > 1)
+    ) {
+      await Promise.allSettled(this.autoSavePromises.values());
+    }
   }
 
   getReferenceCount(id: string) {
@@ -698,12 +706,12 @@ export default class StoreService extends Service implements StoreInterface {
     let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
     let id = asURL(idOrDoc);
     if (id) {
-      let working = this.inflightCards.get(id);
+      let working = this.inflightGetCards.get(id);
       if (working) {
         return working as Promise<T>;
       }
       deferred = new Deferred<CardDef | CardErrorJSONAPI>();
-      this.inflightCards.set(id, deferred.promise);
+      this.inflightGetCards.set(id, deferred.promise);
     }
     try {
       if (!id) {
@@ -780,7 +788,7 @@ export default class StoreService extends Service implements StoreInterface {
       return cardError;
     } finally {
       if (id) {
-        this.inflightCards.delete(id);
+        this.inflightGetCards.delete(id);
       }
     }
   }
@@ -815,6 +823,11 @@ export default class StoreService extends Service implements StoreInterface {
     return await this.withTestWaiters(async () => {
       await this.autoSavePromises.get(queueName);
 
+      let instance = this.peek(queueName);
+      if (!isCardInstance(instance)) {
+        return;
+      }
+
       let done: () => void;
       this.autoSavePromises.set(
         queueName,
@@ -823,11 +836,6 @@ export default class StoreService extends Service implements StoreInterface {
       let autoSaves = [...(this.autoSaveQueues.get(queueName) ?? [])];
       this.autoSaveQueues.set(queueName, []);
       if (autoSaves && autoSaves.length > 0) {
-        let instance = this.peek(queueName);
-        if (!isCardInstance(instance)) {
-          done!();
-          return;
-        }
         let autoSaveState = this.initOrGetAutoSaveState(instance);
         // favor isImmediate saves
         let isImmediate = Boolean(autoSaves.find((a) => a.isImmediate));
@@ -954,6 +962,18 @@ export default class StoreService extends Service implements StoreInterface {
       }
       let api: typeof CardAPI | undefined;
       let isNew = !instance.id;
+      let inflightMutation = this.inflightCardMutations.get(
+        instance[localIdSymbol],
+      );
+      if (inflightMutation) {
+        // the local instance is always up-to-date, but things can get messy if
+        // we try to update an instance that is in the process of being created on
+        // the server, because then it still looks like to the client another
+        // POST should be issued when instead we really want to PATCH.
+        await inflightMutation;
+      }
+      let deferred = new Deferred<void>();
+      this.inflightCardMutations.set(instance[localIdSymbol], deferred.promise);
       try {
         api = await this.cardService.getAPI();
         api.subscribeToChanges(instance, onCardChange);
@@ -1021,6 +1041,7 @@ export default class StoreService extends Service implements StoreInterface {
         return cardError;
       } finally {
         api?.unsubscribeFromChanges(instance, onCardChange);
+        deferred.fulfill();
       }
     });
   }
