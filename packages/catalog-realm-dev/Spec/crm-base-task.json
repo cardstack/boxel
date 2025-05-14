@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Task",
+        "module": "../crm-app/base-task"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Base Task",
+      "description": "Spec for Base Task",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

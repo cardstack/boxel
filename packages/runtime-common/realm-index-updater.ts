@@ -106,7 +106,7 @@ export class RealmIndexUpdater {
       let job = await this.#queue.publish<FromScratchResult>({
         jobType: `from-scratch-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: 4 * 60,
+        timeout: 5 * 60,
         priority: systemInitiatedPriority,
         args,
       });
@@ -145,7 +145,7 @@ export class RealmIndexUpdater {
       let job = await this.#queue.publish<IncrementalResult>({
         jobType: `incremental-index`,
         concurrencyGroup: `indexing:${this.#realm.url}`,
-        timeout: 4 * 60,
+        timeout: 60,
         priority: userInitiatedPriority,
         args,
       });

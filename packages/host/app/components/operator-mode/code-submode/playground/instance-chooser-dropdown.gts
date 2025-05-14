@@ -13,14 +13,17 @@ import {
 import { IconPlusThin } from '@cardstack/boxel-ui/icons';
 
 import {
+  baseCardRef,
   cardTypeDisplayName,
   trimJsonExtension,
+  type Format,
   type Query,
 } from '@cardstack/runtime-common';
 
-import Preview from '@cardstack/host/components/preview';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import PrerenderedCardSearch, {
   type PrerenderedCard,
@@ -153,6 +156,7 @@ const AfterOptions: TemplateOnlyComponent<AfterOptionsSignature> = <template>
 interface Signature {
   Args: {
     prerenderedCardQuery?: { query: Query | undefined; realms: string[] };
+    expandedSearchQuery?: { query?: Query; realms: string[] };
     fieldOptions?: FieldOption[];
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCard | FieldOption) => void;
@@ -160,88 +164,59 @@ interface Signature {
     createNew?: () => void;
     createNewIsRunning?: boolean;
     moduleId: string;
+    persistSelections?: (cardId: string, format: Format) => void;
   };
 }
 
-export default class InstanceSelectDropdown extends Component<Signature> {
-  <template>
-    {{#if @prerenderedCardQuery.query}}
-      <PrerenderedCardSearch
-        @query={{@prerenderedCardQuery.query}}
-        @format='fitted'
-        @realms={{@prerenderedCardQuery.realms}}
-      >
-        <:loading>
-          <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
-        </:loading>
-        <:response as |cards|>
-          <BoxelSelect
-            class='instance-chooser'
-            @dropdownClass='instances-dropdown-content'
-            @options={{cards}}
-            @selected={{this.findSelectedCard cards}}
-            @selectedItemComponent={{if
-              this.isCardLoading
-              LoadingIndicator
-              (component SelectedItem title=(getItemTitle @selection))
-            }}
-            @renderInPlace={{true}}
-            @onChange={{@onSelect}}
-            @placeholder='Please Select'
-            @beforeOptionsComponent={{component BeforeOptions}}
-            @afterOptionsComponent={{component
-              AfterOptions
-              chooseCard=@chooseCard
-              createNew=@createNew
-              createNewIsRunning=@createNewIsRunning
-            }}
-            data-playground-instance-chooser
-            data-test-instance-chooser
-            as |card|
-          >
-            <CardContainer class='card' @displayBoundaries={{true}}>
-              <card.component />
-            </CardContainer>
-          </BoxelSelect>
-        </:response>
-      </PrerenderedCardSearch>
-    {{else}}
-      <BoxelSelect
-        class='instance-chooser'
-        @dropdownClass='instances-dropdown-content'
-        @options={{@fieldOptions}}
-        @selected={{this.findSelectedField @fieldOptions}}
-        @selectedItemComponent={{component
-          SelectedItem
-          title=(getItemTitle @selection)
-        }}
-        @renderInPlace={{true}}
-        @onChange={{@onSelect}}
-        @placeholder='Please Select'
-        @beforeOptionsComponent={{component BeforeOptions}}
-        @afterOptionsComponent={{component
-          AfterOptions
-          chooseCard=@chooseCard
-          createNew=@createNew
-          createNewIsRunning=@createNewIsRunning
-        }}
-        data-playground-instance-chooser
-        data-test-instance-chooser
-        as |item|
-      >
-        <CardContainer class='field' @displayBoundaries={{true}}>
-          <Preview @card={{item.field}} @format='atom' />
-        </CardContainer>
-      </BoxelSelect>
-    {{/if}}
+interface OptionsDropdownSignature {
+  Args: {
+    isField?: boolean;
+    options: PrerenderedCard[] | FieldOption[] | undefined;
+    selected?: PrerenderedCard | FieldOption | SelectedInstance;
+    selection: SelectedInstance | undefined;
+    onSelect: (item: PrerenderedCard | FieldOption) => void;
+    chooseCard: () => void;
+    createNew?: () => void;
+    createNewIsRunning?: boolean;
+  };
+}
 
+export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
+  <template>
+    <BoxelSelect
+      class='instance-chooser'
+      @dropdownClass='instances-dropdown-content'
+      @options={{@options}}
+      @selected={{@selected}}
+      @selectedItemComponent={{component
+        SelectedItem
+        title=(getItemTitle @selection)
+      }}
+      @renderInPlace={{true}}
+      @onChange={{@onSelect}}
+      @placeholder='Please Select'
+      @beforeOptionsComponent={{component BeforeOptions}}
+      @afterOptionsComponent={{component
+        AfterOptions
+        chooseCard=@chooseCard
+        createNew=@createNew
+        createNewIsRunning=@createNewIsRunning
+      }}
+      data-playground-instance-chooser
+      data-test-instance-chooser
+      as |item|
+    >
+      {{#if @isField}}
+        <CardContainer class='field' @displayBoundaries={{true}}>
+          <CardRenderer @card={{item.field}} @format='atom' />
+        </CardContainer>
+      {{else}}
+        <CardContainer class='card' @displayBoundaries={{true}}>
+          <item.component />
+        </CardContainer>
+      {{/if}}
+    </BoxelSelect>
     <style scoped>
-      .loading-icon {
-        height: var(--boxel-form-control-height);
-      }
-      .title-loading {
-        --boxel-loading-indicator-size: var(--boxel-icon-xs);
-      }
       .instance-chooser {
         height: 26px;
         border: 1px solid var(--boxel-dark);
@@ -250,6 +225,9 @@ export default class InstanceSelectDropdown extends Component<Signature> {
       .instance-chooser :deep(.boxel-trigger-content) {
         font: var(--boxel-font-xs);
         overflow: hidden;
+      }
+      .instance-chooser :deep(.boxel-loading-indicator) {
+        --boxel-loading-indicator-size: var(--boxel-icon-xs);
       }
       :deep(
         .boxel-select__dropdown .ember-power-select-option[aria-current='true']
@@ -275,38 +253,121 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         text-overflow: ellipsis;
         white-space: nowrap;
       }
-      .instance-chooser :deep(.boxel-loading-indicator) {
-        --boxel-loading-indicator-size: var(--boxel-icon-xs);
+    </style>
+  </template>;
+
+export default class InstanceSelectDropdown extends Component<Signature> {
+  <template>
+    {{#if @prerenderedCardQuery.query}}
+      <PrerenderedCardSearch
+        @query={{@prerenderedCardQuery.query}}
+        @format='fitted'
+        @realms={{@prerenderedCardQuery.realms}}
+      >
+        <:loading>
+          <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />
+        </:loading>
+        <:response as |cards|>
+          {{#if (this.showResults cards)}}
+            <OptionsDropdown
+              @options={{cards}}
+              @selected={{this.findSelectedCard cards}}
+              @selection={{@selection}}
+              @onSelect={{@onSelect}}
+              @chooseCard={{@chooseCard}}
+              @createNew={{@createNew}}
+              @createNewIsRunning={{@createNewIsRunning}}
+            />
+          {{else if @expandedSearchQuery.query}}
+            <PrerenderedCardSearch
+              @query={{@expandedSearchQuery.query}}
+              @format='fitted'
+              @realms={{@expandedSearchQuery.realms}}
+            >
+              <:loading>
+                <LoadingIndicator
+                  class='loading-icon'
+                  @color='var(--boxel-light)'
+                />
+              </:loading>
+              <:response as |results|>
+                {{#let (this.handleResults results) as |items|}}
+                  <OptionsDropdown
+                    @options={{items}}
+                    @selected={{this.findSelectedCard items}}
+                    @selection={{@selection}}
+                    @onSelect={{@onSelect}}
+                    @chooseCard={{@chooseCard}}
+                    @createNew={{@createNew}}
+                    @createNewIsRunning={{@createNewIsRunning}}
+                  />
+                {{/let}}
+              </:response>
+            </PrerenderedCardSearch>
+          {{/if}}
+        </:response>
+      </PrerenderedCardSearch>
+    {{else}}
+      <OptionsDropdown
+        @isField={{true}}
+        @options={{@fieldOptions}}
+        @selected={{this.findSelectedField @fieldOptions}}
+        @selection={{@selection}}
+        @onSelect={{@onSelect}}
+        @chooseCard={{@chooseCard}}
+        @createNew={{@createNew}}
+        @createNewIsRunning={{@createNewIsRunning}}
+      />
+    {{/if}}
+
+    <style scoped>
+      .loading-icon {
+        height: var(--boxel-form-control-height);
       }
     </style>
   </template>
 
   @service private declare playgroundPanelService: PlaygroundPanelService;
+  @service private declare recentFilesService: RecentFilesService;
 
-  private get isCardLoading() {
-    let selection = this.playgroundPanelService.peekSelection(
-      this.args.moduleId,
+  private get isBaseCardModule() {
+    return this.args.moduleId === `${baseCardRef.module}/${baseCardRef.name}`;
+  }
+
+  private showResults = (cards: PrerenderedCard[] | undefined) => {
+    return (
+      cards?.length ||
+      this.persistedCardId ||
+      this.args.createNewIsRunning ||
+      this.isBaseCardModule // means we do not conduct the expanded search for baseCardModule
     );
-    return Boolean(selection) && !this.args.selection?.card;
+  };
+
+  private get persistedCardId() {
+    return this.playgroundPanelService.peekSelection(this.args.moduleId)
+      ?.cardId;
   }
 
   private findSelectedCard = (prerenderedCards?: PrerenderedCard[]) => {
     if (!prerenderedCards?.length) {
-      return;
+      // it is possible that there's a persisted cardId in playground-selections local storage
+      // but that the card is no longer in recent-files local storage
+      // if that is the case, the card title will appear in dropdown menu but
+      // the card will not appear in dropdown options because the card is not in recent-files
+      // there are timing issues with trying to add it to recent-files service,
+      // see CS-8601 for suggested resolution for similar problems
+      return this.args.selection;
     }
 
     if (!this.args.selection?.card) {
-      let s = this.playgroundPanelService.peekSelection(this.args.moduleId);
-      if (!s) {
-        // if there's no selected card, choose the most recent card as selected
-        this.playgroundPanelService.persistSelections(
-          this.args.moduleId,
-          trimJsonExtension(prerenderedCards[0].url),
-          'isolated',
-          undefined,
-        );
+      if (this.persistedCardId || this.isBaseCardModule) {
+        // not displaying card preview for base card module unless user selects it specifically
+        return;
       }
-      return prerenderedCards[0];
+      let recentCard = prerenderedCards[0];
+      // if there's no selected card, choose the most recent card as selected
+      this.args.persistSelections?.(recentCard.url, 'isolated');
+      return recentCard;
     }
 
     let selectedCardId = this.args.selection.card.id;
@@ -322,5 +383,15 @@ export default class InstanceSelectDropdown extends Component<Signature> {
     }
     let selection = this.args.selection;
     return fields.find((f) => f.index === selection.fieldIndex);
+  };
+
+  private handleResults = (results?: PrerenderedCard[]) => {
+    if (!results?.length) {
+      // if expanded search returns no instances, create new instance
+      this.args.createNew?.();
+      return;
+    }
+    let card = results[0];
+    return [card];
   };
 }

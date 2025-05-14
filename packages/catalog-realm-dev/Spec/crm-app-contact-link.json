@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "ContactLink",
+        "module": "../crm-app/fields/contact-link"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "Contact Link",
+      "description": "Spec for Contact Link field",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "TaskPlanner",
+        "module": "../crm-app/components/base-task-planner"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Base Task Planner",
+      "description": "Spec for Base Task Planner component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

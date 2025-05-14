@@ -48,11 +48,14 @@ import { RealmPaths, LocalPath } from '@cardstack/runtime-common/paths';
 import { isIgnored } from '@cardstack/runtime-common/realm-index-updater';
 import { type Reader, type Stats } from '@cardstack/runtime-common/worker';
 
+import ENV from '@cardstack/host/config/environment';
+
 import { CardDef } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
 
 import {
   type RenderCard,
+  type RenderCardParams,
   type Render,
   IdentityContextWithErrors,
 } from '../services/render-service';
@@ -62,6 +65,7 @@ import type NetworkService from '../services/network';
 
 const log = logger('current-run');
 const perfLog = logger('index-perf');
+const { renderTimeoutMs } = ENV;
 
 interface CardType {
   refURL: string;
@@ -546,7 +550,7 @@ export class CurrentRun {
       await api.flushLogs();
       isolatedHtml = unwrap(
         sanitizeHTML(
-          await this.#renderCard({
+          await this.renderCard({
             card,
             format: 'isolated',
             visit: this.visitFile.bind(this),
@@ -557,7 +561,7 @@ export class CurrentRun {
       );
       atomHtml = unwrap(
         sanitizeHTML(
-          await this.#renderCard({
+          await this.renderCard({
             card,
             format: 'atom',
             visit: this.visitFile.bind(this),
@@ -702,6 +706,24 @@ export class CurrentRun {
     deferred.fulfill();
   }
 
+  private async renderCard(args: RenderCardParams) {
+    let maybeHtml = await Promise.race([
+      this.#renderCard(args),
+      new Promise<{ timeout: true }>((r) =>
+        setTimeout(() => {
+          r({ timeout: true });
+        }, renderTimeoutMs),
+      ),
+    ]);
+    if (typeof maybeHtml === 'string') {
+      return maybeHtml;
+    }
+
+    throw new Error(
+      `timed out after ${renderTimeoutMs} ms waiting for ${args.card.id} with format "${args.format}" to render`,
+    );
+  }
+
   private async buildCardHtml(
     card: CardDef,
     types: CardType[],
@@ -712,7 +734,7 @@ export class CurrentRun {
     for (let { codeRef: componentCodeRef, refURL } of types) {
       let html = unwrap(
         sanitizeHTML(
-          await this.#renderCard({
+          await this.renderCard({
             card,
             format,
             visit: this.visitFile.bind(this),

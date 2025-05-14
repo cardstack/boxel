@@ -1,0 +1,39 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Paws Pet Clinic",
+      "industry": "Veterinary Services",
+      "headquartersAddress": {
+        "addressLine1": "234 Veterinary Lane",
+        "addressLine2": null,
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98103",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "phone": 12065559012,
+      "website": "https://pawspetclinic.com",
+      "stockSymbol": null,
+      "description": "Veterinary clinic seeking to improve online appointment booking and pet owner communication systems.",
+      "thumbnailURL": "https://example.com/paws-clinic-logo.png"
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../company",
+        "name": "Company"
+      }
+    }
+  }
+}
