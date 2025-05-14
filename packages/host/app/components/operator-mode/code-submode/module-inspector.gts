@@ -103,7 +103,9 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   @consume(GetCardsContextName) private declare getCards: getCards;
 
-  @tracked private search: ReturnType<getCards<Spec>> | undefined;
+  @tracked private specsForSelectedDefinition:
+    | ReturnType<getCards<Spec>>
+    | undefined;
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
@@ -283,7 +285,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
-  private makeSearch = () => {
+  private findSpecsForSelectedDefinition = () => {
     let queryForSpecsFromSelectedDefinition: Query = {
       filter: {
         on: specRef,
@@ -299,7 +301,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       ],
     };
 
-    this.search = this.getCards(
+    this.specsForSelectedDefinition = this.getCards(
       this,
       () => queryForSpecsFromSelectedDefinition,
       () => this.realmServer.availableRealmURLs,
@@ -316,7 +318,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   get cards() {
-    return this.search?.instances ?? [];
+    return this.specsForSelectedDefinition?.instances ?? [];
   }
 
   private get card() {
@@ -356,7 +358,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         {{this.fileIncompatibilityMessage}}
       </div>
     {{else if @selectedCardOrField.cardOrField}}
-      {{consumeContext this.makeSearch}}
+      {{consumeContext this.findSpecsForSelectedDefinition}}
       <Accordion
         {{! FIXME is this the right place? }}
         {{SpecPreviewModifier spec=this.card onSpecView=this.onSpecView}}
@@ -419,7 +421,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
           @card={{this.card}}
           @cards={{this.cards}}
-          @search={{this.search}}
+          @search={{this.specsForSelectedDefinition}}
           as |SpecPreviewTitle SpecPreviewContent|
         >
           <A.Item
