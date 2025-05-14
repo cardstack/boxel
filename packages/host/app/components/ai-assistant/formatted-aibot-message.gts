@@ -35,6 +35,7 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
+import { isEqual } from 'lodash';
 
 interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
@@ -89,7 +90,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         if (oldPart.content !== htmlParts[index].content) {
           oldPart.content = htmlParts[index].content;
         }
-        if (oldPart.codeData !== htmlParts[index].codeData) {
+        if (!isEqual(oldPart.codeData, htmlParts[index].codeData)) {
           oldPart.codeData = htmlParts[index].codeData;
           if (isHtmlPreTagGroup(oldPart)) {
             oldPart.codePatchAction = this.createCodePatchAction(
