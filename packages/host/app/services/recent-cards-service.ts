@@ -5,13 +5,29 @@ import { tracked, cached } from '@glimmer/tracking';
 import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
+import { isCardInstance, localId, isLocalId } from '@cardstack/runtime-common';
+
+import {
+  type CardDef,
+  type BaseDef,
+} from 'https://cardstack.com/base/card-api';
+import type * as CardAPI from 'https://cardstack.com/base/card-api';
+
 import { RecentCards } from '../utils/local-storage-keys';
 
+import type CardService from './card-service';
+import type RecentFilesService from './recent-files-service';
 import type ResetService from './reset';
+import type StoreService from './store';
 
 export default class RecentCardsService extends Service {
   @service declare private reset: ResetService;
+  @service declare private cardService: CardService;
+  @service declare private recentFilesService: RecentFilesService;
+  @service declare private store: StoreService;
   @tracked private ascendingRecentCardIds = new TrackedArray<string>([]);
+  private cachedAPI?: typeof CardAPI;
+  private addToRecentFiles = new Set<string>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -36,6 +52,12 @@ export default class RecentCardsService extends Service {
   }
 
   add(newId: string) {
+    if (isLocalId(newId)) {
+      let instance = this.store.peek(newId);
+      if (isCardInstance(instance)) {
+        this.addNewCard(instance);
+      }
+    }
     const existingCardIndex = this.ascendingRecentCardIds.findIndex(
       (id) => id === newId,
     );
@@ -52,6 +74,32 @@ export default class RecentCardsService extends Service {
       JSON.stringify(this.ascendingRecentCardIds),
     );
   }
+
+  async addNewCard(instance: CardDef, opts?: { addToRecentFiles?: true }) {
+    if (instance.id) {
+      this.add(instance.id);
+      if (opts?.addToRecentFiles) {
+        this.recentFilesService.addRecentFileUrl(instance.id);
+      }
+    } else {
+      this.cachedAPI = await this.cardService.getAPI();
+      if (opts?.addToRecentFiles) {
+        this.addToRecentFiles.add(instance[localId]);
+      }
+      this.cachedAPI.subscribeToChanges(instance, this.listenForCardId);
+    }
+  }
+
+  private listenForCardId = (instance: BaseDef, field: string) => {
+    if (field === 'id' && isCardInstance(instance) && instance.id) {
+      this.add(instance.id);
+      if (this.addToRecentFiles.has(instance[localId])) {
+        this.recentFilesService.addRecentFileUrl(`${instance.id}.json`);
+        this.addToRecentFiles.delete(instance[localId]);
+      }
+      this.cachedAPI?.unsubscribeFromChanges(instance, this.listenForCardId);
+    }
+  };
 
   remove(idToRemove: string) {
     let index = this.ascendingRecentCardIds.findIndex(

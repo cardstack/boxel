@@ -103,7 +103,6 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post, Person },
@@ -227,7 +226,6 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Family, Person },
@@ -310,7 +308,6 @@ module('Integration | computeds', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Family, Person },
