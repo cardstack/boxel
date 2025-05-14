@@ -458,7 +458,6 @@ const SpecPreviewLoading: TemplateOnlyComponent<SpecPreviewLoadingSignature> =
   </template>;
 
 export default class SpecPreview extends GlimmerComponent<Signature> {
-  @consume(GetCardsContextName) private declare getCards: getCards;
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
   @service private declare loaderService: LoaderService;
