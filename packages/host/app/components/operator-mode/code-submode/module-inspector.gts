@@ -215,6 +215,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private onSpecView = (spec: Spec) => {
+    // console.trace('onSpecView', spec);
     if (!spec.isField) {
       return; // not a field spec
     }
@@ -243,7 +244,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     };
   }
 
-  private updatePlaygroundSelections(id: string, fieldDefOnly = false) {
+  @action private updatePlaygroundSelections(id: string, fieldDefOnly = false) {
     const declaration = this.args.selectedDeclaration;
 
     if (!declaration?.exportName || !isCardOrFieldDeclaration(declaration)) {
