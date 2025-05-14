@@ -839,7 +839,7 @@ module(`Integration | realm indexing and querying`, function (hooks) {
                 name: 'default',
               },
               functionName: 'switch-submode_dd88',
-              requiresApproval: null,
+              requiresApproval: false,
             },
           ],
           description: null,
