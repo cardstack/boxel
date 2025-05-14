@@ -285,8 +285,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
-  private findSpecsForSelectedDefinition = () => {
-    let queryForSpecsFromSelectedDefinition: Query = {
+  private get queryForSpecsFromSelectedDefinition(): Query {
+    return {
       filter: {
         on: specRef,
         eq: {
@@ -300,10 +300,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         },
       ],
     };
+  }
 
+  private findSpecsForSelectedDefinition = () => {
     this.specsForSelectedDefinition = this.getCards(
       this,
-      () => queryForSpecsFromSelectedDefinition,
+      () => this.queryForSpecsFromSelectedDefinition,
       () => this.realmServer.availableRealmURLs,
       { isLive: true },
     ) as ReturnType<getCards<Spec>>;
