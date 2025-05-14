@@ -6,6 +6,8 @@ import { tracked } from '@glimmer/tracking';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type MatrixService from '../../services/matrix-service';
 
@@ -18,6 +20,7 @@ interface Signature {
       title?: string;
     };
     errorType: 'syntax' | 'card';
+    fileToAttach: FileDef;
   };
 }
 
@@ -52,7 +55,9 @@ export default class FixItButton extends Component<Signature> {
       if (this.matrixService.currentRoomId) {
         await this.matrixService.sendMessage(
           this.matrixService.currentRoomId,
-          `I encountered an error that needs fixing:\n\n${this.errorMessage}`,
+          `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
+          [],
+          this.args.fileToAttach ? [this.args.fileToAttach] : [],
         );
       }
     } finally {

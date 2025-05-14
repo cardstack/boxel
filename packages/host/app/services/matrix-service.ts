@@ -857,6 +857,7 @@ export default class MatrixService extends Service {
 
     await this.updateSkillsAndCommandsIfNeeded(roomId);
     let cardFileDefs = await this.uploadCards(attachedCards);
+    let uploadedFileDefs = await this.uploadFiles(attachedFiles);
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -864,7 +865,9 @@ export default class MatrixService extends Service {
       format: 'org.matrix.custom.html',
       clientGeneratedId,
       data: {
-        attachedFiles: attachedFiles.map((file: FileDef) => file.serialize()),
+        attachedFiles: uploadedFileDefs.map((file: FileDef) =>
+          file.serialize(),
+        ),
         attachedCards: cardFileDefs.map((file: FileDef) => file.serialize()),
         context: {
           openCardIds: attachedOpenCards.map((c) => c.id),

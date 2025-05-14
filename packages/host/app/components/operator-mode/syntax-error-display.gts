@@ -1,9 +1,12 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { CopyButton } from '@cardstack/boxel-ui/components';
 
-import FixItButton from './fix-it-button';
+import MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
+import FixItButton from './fix-it-button';
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -12,6 +15,9 @@ interface Signature {
 }
 
 export default class SyntaxErrorDisplay extends Component<Signature> {
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
+
   removeSourceMappingURL(syntaxErrors: string): string {
     return syntaxErrors.replace(/\/\/# sourceMappingURL=.*/g, '');
   }
@@ -20,6 +26,16 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
     return {
       message: this.removeSourceMappingURL(this.args.syntaxErrors),
     };
+  }
+
+  private get fileToAttach() {
+    let codePath = this.operatorModeStateService.state.codePath?.href;
+    if (!codePath) return undefined;
+
+    return this.matrixService.fileAPI.createFileDef({
+      sourceUrl: codePath,
+      name: codePath.split('/').pop(),
+    });
   }
 
   <template>
@@ -77,7 +93,13 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
             <CopyButton
               @textToCopy={{this.removeSourceMappingURL @syntaxErrors}}
             />
-            <FixItButton @error={{this.errorObject}} @errorType='syntax' />
+            {{#if this.fileToAttach}}
+              <FixItButton
+                @error={{this.errorObject}}
+                @errorType='syntax'
+                @fileToAttach={{this.fileToAttach}}
+              />
+            {{/if}}
           </div>
         </div>
 

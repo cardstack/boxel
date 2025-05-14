@@ -11,6 +11,8 @@ import perform from 'ember-concurrency/helpers/perform';
 import { Accordion, Button } from '@cardstack/boxel-ui/components';
 import { ExclamationCircle } from '@cardstack/boxel-ui/icons';
 
+import type { FileDef } from 'https://cardstack.com/base/file-api';
+
 import SwitchSubmodeCommand from '../../commands/switch-submode';
 import { type CardErrorJSONAPI } from '../../services/store';
 
@@ -24,6 +26,7 @@ interface Signature {
     viewInCodeMode?: boolean;
     title?: string;
     headerText?: string;
+    fileToFixWithAi?: FileDef;
   };
   Element: HTMLElement;
 }
@@ -70,7 +73,13 @@ export default class CardErrorDetail extends Component<Signature> {
             <span data-test-error-title>
               {{if @title @title @error.title}}
             </span>
-            <FixItButton @error={{this.errorObject}} @errorType='card' />
+            {{#if @fileToFixWithAi}}
+              <FixItButton
+                @error={{this.errorObject}}
+                @errorType='card'
+                @fileToAttach={{@fileToFixWithAi}}
+              />
+            {{/if}}
           </div>
         </:title>
         <:content>
