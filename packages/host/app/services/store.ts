@@ -827,6 +827,7 @@ export default class StoreService extends Service implements StoreInterface {
       if (!isCardInstance(instance)) {
         return;
       }
+      await this.inflightCardMutations.get(instance[localIdSymbol]);
 
       let done: () => void;
       this.autoSavePromises.set(
