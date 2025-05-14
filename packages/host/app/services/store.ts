@@ -407,11 +407,11 @@ export default class StoreService extends Service implements StoreInterface {
   async flush() {
     await this.ready;
     await Promise.allSettled(this.newReferencePromises);
-    while (
-      [...this.autoSaveQueues.values()].find((queue) => queue.length > 1)
-    ) {
+    do {
       await Promise.allSettled(this.autoSavePromises.values());
-    }
+    } while (
+      [...this.autoSaveQueues.values()].find((queue) => queue.length > 1)
+    );
   }
 
   getReferenceCount(id: string) {
