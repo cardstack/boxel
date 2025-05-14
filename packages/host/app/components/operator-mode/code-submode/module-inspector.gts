@@ -421,8 +421,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
           @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
-          @card={{this.card}}
-          @cards={{this.cards}}
+          @activeSpec={{this.card}}
+          @specsForSelectedDefinition={{this.cards}}
           @search={{this.specsForSelectedDefinition}}
           as |SpecPreviewTitle SpecPreviewContent|
         >

@@ -76,13 +76,13 @@ import type { WithBoundArgs } from '@glint/template';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    card: Spec;
-    cards: Spec[];
+    activeSpec: Spec;
     isLoadingNewModule: boolean;
     isPanelOpen: boolean;
     search: ReturnType<getCards<Spec>> | undefined;
     selectedDeclaration?: ModuleDeclaration;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
+    specsForSelectedDefinition: Spec[];
     toggleAccordionItem: (item: SelectedAccordionItem) => void;
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
@@ -201,9 +201,9 @@ interface ContentSignature {
   Args: {
     showCreateSpec: boolean;
     canWrite: boolean;
-    onSelectCard: (card: Spec) => void;
-    cards: Spec[];
-    spec: Spec | undefined;
+    onSelectSpec: (spec: Spec) => void;
+    allSpecs: Spec[];
+    activeSpec: Spec | undefined;
     isLoading: boolean;
     viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
   };
@@ -227,7 +227,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   private cardTracker = new ElementTracker();
 
   private get onlyOneInstance() {
-    return this.args.cards.length === 1;
+    return this.args.allSpecs.length === 1;
   }
 
   private get cardContext(): SpecPreviewCardContext {
@@ -263,15 +263,15 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   };
 
   private get displayIsolated() {
-    return !this.args.canWrite && this.args.cards.length > 0;
+    return !this.args.canWrite && this.args.allSpecs.length > 0;
   }
 
   private get displayCannotWrite() {
-    return !this.args.canWrite && this.args.cards.length === 0;
+    return !this.args.canWrite && this.args.allSpecs.length === 0;
   }
 
   private get selectedId() {
-    return this.args.spec?.id;
+    return this.args.activeSpec?.id;
   }
 
   @action private viewSpecInstance() {
@@ -302,15 +302,15 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
       {{else}}
 
-        {{#if @spec}}
+        {{#if @activeSpec}}
           <div class='spec-preview'>
 
             <div class='spec-selector-container'>
               <div class='spec-selector' data-test-spec-selector>
                 <BoxelSelect
-                  @options={{@cards}}
-                  @selected={{@spec}}
-                  @onChange={{@onSelectCard}}
+                  @options={{@allSpecs}}
+                  @selected={{@activeSpec}}
+                  @onChange={{@onSelectSpec}}
                   @matchTriggerWidth={{true}}
                   @disabled={{this.onlyOneInstance}}
                   as |card|
@@ -349,13 +349,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
             />
             {{#if this.displayIsolated}}
               <CardRenderer
-                @card={{@spec}}
+                @card={{@activeSpec}}
                 @format='isolated'
                 @cardContext={{this.cardContext}}
               />
             {{else}}
               <CardRenderer
-                @card={{@spec}}
+                @card={{@activeSpec}}
                 @format='edit'
                 @cardContext={{this.cardContext}}
               />
@@ -571,7 +571,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     return (
       Boolean(this.args.selectedDeclaration?.exportName) &&
       !this.args.search?.isLoading &&
-      this.args.cards.length === 0 &&
+      this.args.specsForSelectedDefinition.length === 0 &&
       this.canWrite
     );
   }
@@ -596,7 +596,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           showCreateSpec=false
           createSpec=this.createSpec
           isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-          spec=@card
+          spec=@activeSpec
         )
         (component SpecPreviewLoading)
       }}
@@ -607,17 +607,17 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           showCreateSpec=this.showCreateSpec
           createSpec=this.createSpec
           isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-          spec=@card
-          numberOfInstances=@cards.length
+          spec=@activeSpec
+          numberOfInstances=@specsForSelectedDefinition.length
         )
         (component
           SpecPreviewContent
           showCreateSpec=this.showCreateSpec
           canWrite=this.canWrite
-          onSelectCard=this.onSelectCard
-          spec=@card
+          onSelectSpec=this.onSelectCard
+          activeSpec=@activeSpec
           isLoading=false
-          cards=@cards
+          allSpecs=@specsForSelectedDefinition
           viewCardInPlayground=this.viewCardInPlayground
         )
       }}
