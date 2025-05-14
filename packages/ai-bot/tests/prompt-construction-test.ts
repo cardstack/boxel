@@ -6,6 +6,7 @@ import {
   getPromptParts,
   getRelevantCards,
   getTools,
+  OMIT_CODE_CHANGE_PLACEHOLDER,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '../helpers';
 import {
@@ -2734,10 +2735,10 @@ Attached files:
       'Right, let us make a tic tac toe game.\n' +
         '\n' +
         '// File url: https://test.com/tic-tac.gts\n' +
-        '[Proposed code change]\n' +
+        OMIT_CODE_CHANGE_PLACEHOLDER +
         '\n' +
         '// File url: https://test.com/tac-toe.gts\n' +
-        '[Proposed code change]\n' +
+        OMIT_CODE_CHANGE_PLACEHOLDER +
         '\n' +
         'I can add some more whiz bang if you want. Let me know!',
     );
