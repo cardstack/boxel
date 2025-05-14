@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 0,
+        "label": "Not Started",
+        "color": "#B0BEC5",
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2024-12-01",
+        "end": "2024-12-31"
+      },
+      "priority": {
+        "index": 3,
+        "label": "High"
+      },
+      "name": "Schedule Website Planning Meeting",
+      "details": "Initial consultation for website redesign project",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": null
+        }
+      },
+      "contact": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/c78762d3-9ab5-4f62-9370-d0b6a0261b08"
+        }
+      },
+      "deal": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task",
+        "name": "CRMTask"
+      }
+    }
+  }
+}

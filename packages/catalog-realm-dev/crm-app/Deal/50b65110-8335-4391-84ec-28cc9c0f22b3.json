@@ -1,0 +1,94 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Paws Pet Clinic Website & Booking System",
+      "status": {
+        "index": 2,
+        "label": "Negotiation",
+        "foregroundColor": "#000000",
+        "backgroundColor": "#FFF3E0"
+      },
+      "priority": {
+        "index": 2,
+        "label": "High Priority",
+        "foregroundColor": "#000000",
+        "backgroundColor": "#FFE0B2"
+      },
+      "closeDate": "2024-05-30",
+      "currentValue": {
+        "amount": 45000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "predictedRevenue": {
+        "amount": 120000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "healthScore": 80,
+      "notes": "Veterinary clinic needs modern booking system integration and website redesign. Multiple stakeholders involved in decision making.",
+      "valueBreakdown": [
+        {
+          "name": "Website Redesign",
+          "value": {
+            "amount": 35000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "name": "Booking System Integration",
+          "value": {
+            "amount": 45000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "name": "Mobile App Development",
+          "value": {
+            "amount": 40000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "description": "",
+      "thumbnailURL": "https://picsum.photos/id/169/200/300"
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/c78762d3-9ab5-4f62-9370-d0b6a0261b08"
+        }
+      },
+      "primaryStakeholder": {
+        "links": {
+          "self": "../Lead/1dbcc3e8-fe3c-4c4a-ba66-ff7d637a7358"
+        }
+      },
+      "stakeholders.0": {
+        "links": {
+          "self": "../Lead/9d7b2f20-c7da-4ddc-8e77-b75d88c97b48"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../deal",
+        "name": "Deal"
+      }
+    }
+  }
+}

@@ -170,7 +170,9 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'existing-room-test',
     });
 
-    let initialMessageCount = getRoomEvents(roomId).length;
+    let initialMessageCount = getRoomEvents(roomId).filter(
+      (event) => event.type === 'm.room.message',
+    ).length;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
       commandService.commandContext,
@@ -181,7 +183,9 @@ module('Integration | commands | ai-assistant', function (hooks) {
     });
 
     // Check that a message was sent to the existing room
-    let messages = getRoomEvents(roomId);
+    let messages = getRoomEvents(roomId).filter(
+      (event) => event.type === 'm.room.message',
+    );
     assert.strictEqual(
       messages.length,
       initialMessageCount + 1,
@@ -271,7 +275,9 @@ module('Integration | commands | ai-assistant', function (hooks) {
       name: 'room-with-client-id',
     });
 
-    let initialMessageCount = getRoomEvents(roomId).length;
+    let initialMessageCount = getRoomEvents(roomId).filter(
+      (event) => event.type === 'm.room.message',
+    ).length;
 
     let aiAssistantCommand = new UseAiAssistantCommand(
       commandService.commandContext,
@@ -285,7 +291,9 @@ module('Integration | commands | ai-assistant', function (hooks) {
     });
 
     // Check that a message was sent to the room
-    let messages = getRoomEvents(roomId);
+    let messages = getRoomEvents(roomId).filter(
+      (event) => event.type === 'm.room.message',
+    );
     assert.strictEqual(
       messages.length,
       initialMessageCount + 1,

@@ -1,7 +1,7 @@
 import { waitFor, click, fillIn, settled } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
 
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { baseRealm, skillCardRef } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
@@ -69,7 +69,7 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     })(),
   });
 
-  let { getRoomEvents, getRoomState } = mockMatrixUtils;
+  let { getRoomState } = mockMatrixUtils;
 
   let noop = () => {};
 
@@ -479,8 +479,13 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       'Updated instructions',
     );
     await click('[data-test-edit-button]');
+    await click('[data-test-close-button]');
 
     // skill card will be auto-attached since it is open
+    await fillIn(
+      '[data-test-boxel-input-id="ai-chat-input"]',
+      'This message should trigger uploading the updated',
+    );
     await click('[data-test-send-message-btn]');
 
     const finalRoomStateSkillsJson = getRoomState(
@@ -492,10 +497,40 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
       initialRoomStateSkillsJson,
       'room state has changed',
     );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards[0].contentHash,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].url,
+      initialRoomStateSkillsJson.enabledSkillCards[0].url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards[0].sourceUrl,
+      'skill card source URL has not changed',
+    );
+
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      initialRoomStateSkillsJson.enabledSkillCards[1].contentHash,
+      'skill card instructions have changed',
+    );
+    assert.notStrictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].url,
+      initialRoomStateSkillsJson.enabledSkillCards[1].url,
+      'skill card instructions have changed',
+    );
+    assert.strictEqual(
+      finalRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      initialRoomStateSkillsJson.enabledSkillCards[1].sourceUrl,
+      'skill card source URL has not changed',
+    );
   });
 
-  // CS-8380
-  skip('updated command definition results in new event and updated room state', async function (assert) {
+  test('updated command definition results in new event and updated room state', async function (assert) {
     const roomId = await renderAiAssistantPanel(`${testRealmURL}Skill/example`);
 
     await click('[data-test-skill-menu] [data-test-pill-menu-header-button]');
@@ -522,7 +557,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     );
     await settled();
 
-    console.log(getRoomEvents(roomId));
     const afterCodeModeRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -541,16 +575,61 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     await click('[data-test-send-message-btn]');
     await waitFor('[data-test-message-idx]');
 
-    console.log(getRoomEvents(roomId));
     const finalRoomStateSkillsJson = getRoomState(
       roomId,
       APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
     );
 
     assert.deepEqual(
-      finalRoomStateSkillsJson,
-      afterCodeModeRoomStateSkillsJson,
-      'room state has not changed since the skill card event is unchanged',
+      finalRoomStateSkillsJson.enabledSkillCards,
+      afterCodeModeRoomStateSkillsJson.enabledSkillCards,
+      'enabled skill cards are the same',
+    );
+    assert.deepEqual(
+      finalRoomStateSkillsJson.disabledSkillCards,
+      afterCodeModeRoomStateSkillsJson.disabledSkillCards,
+      'disabled skill cards are the same',
+    );
+    assert.notDeepEqual(
+      finalRoomStateSkillsJson.commandDefinitions,
+      afterCodeModeRoomStateSkillsJson.commandDefinitions,
+      'command definitions are different',
+    );
+
+    let initialUnchangedCommandDefinitions =
+      initialRoomStateSkillsJson.commandDefinitions.filter(
+        (cmd: any) =>
+          cmd.sourceUrl !==
+          `${testRealmURL}search-and-open-card-command/default`,
+      );
+    let initialChangedCommandDefinitions =
+      initialRoomStateSkillsJson.commandDefinitions.filter(
+        (cmd: any) =>
+          cmd.sourceUrl ===
+          `${testRealmURL}search-and-open-card-command/default`,
+      );
+
+    let finalUnchangedCommandDefinitions =
+      finalRoomStateSkillsJson.commandDefinitions.filter(
+        (cmd: any) =>
+          cmd.sourceUrl !==
+          `${testRealmURL}search-and-open-card-command/default`,
+      );
+    let finalChangedCommandDefinitions =
+      finalRoomStateSkillsJson.commandDefinitions.filter(
+        (cmd: any) =>
+          cmd.sourceUrl ===
+          `${testRealmURL}search-and-open-card-command/default`,
+      );
+    assert.deepEqual(
+      finalUnchangedCommandDefinitions,
+      initialUnchangedCommandDefinitions,
+      'unchanged command definitions are the same',
+    );
+    assert.notDeepEqual(
+      finalChangedCommandDefinitions,
+      initialChangedCommandDefinitions,
+      'changed command definitions are different',
     );
   });
 
