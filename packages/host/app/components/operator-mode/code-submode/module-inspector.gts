@@ -1,7 +1,7 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { next } from '@ember/runloop';
 import type Owner from '@ember/owner';
+import { next } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
