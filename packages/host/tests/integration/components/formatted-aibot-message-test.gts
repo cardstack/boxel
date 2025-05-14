@@ -304,9 +304,11 @@ let c = 2;
     // Most of the time, streaming html updates are incremental, meaning the next html is an appended version of the previous one.
     // But not always! For example when the html is replaced with an error message, the new html is not an appended version of the previous one.
     // This is a regression test for this particular case.
-    component!.html =
-      '<p>There was an error processing your request, please try again later.</p>';
+    component!.htmlParts = parseHtmlContent(
+      '<p>There was an error processing your request, please try again later.</p>',
+    );
     await settled();
+
     assert
       .dom('.message')
       .containsText(
