@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "DealStatus",
+        "module": "../crm-app/deal-status"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "Deal Status",
+      "description": "Spec for Deal Status field",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

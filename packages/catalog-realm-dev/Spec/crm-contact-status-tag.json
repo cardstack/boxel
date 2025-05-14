@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "StatusTagField",
+        "module": "../crm-app/contact-status-tag"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "Contact Status Tag",
+      "description": "Spec for Contact Status Tag field",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

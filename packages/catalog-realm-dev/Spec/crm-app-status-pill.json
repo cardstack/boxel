@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "StatusPill",
+        "module": "../crm-app/components/status-pill"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Status Pill",
+      "description": "Spec for Status Pill component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

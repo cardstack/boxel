@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "CurrencyField",
+        "module": "../crm-app/fields/currency"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "Currency",
+      "description": "Spec for Currency field",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

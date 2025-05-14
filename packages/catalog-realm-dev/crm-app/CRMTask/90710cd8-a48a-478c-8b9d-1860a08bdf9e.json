@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 0,
+        "label": "Not Started",
+        "color": null,
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2025-03-01",
+        "end": "2025-03-17"
+      },
+      "priority": {
+        "index": 2,
+        "label": "Medium"
+      },
+      "name": "Paws Clinic Booking System Demo",
+      "details": "Prepare and conduct demo of proposed booking system integration for stakeholders",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": null
+        }
+      },
+      "contact": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": null
+        }
+      },
+      "deal": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task",
+        "name": "CRMTask"
+      }
+    }
+  }
+}
