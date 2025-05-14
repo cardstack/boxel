@@ -11,6 +11,7 @@ import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
 import Modifier from 'ember-modifier';
 
+import { isEqual } from 'lodash';
 import { TrackedArray, TrackedMap, TrackedObject } from 'tracked-built-ins';
 
 import { and, bool } from '@cardstack/boxel-ui/helpers';
@@ -35,7 +36,6 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
-import { isEqual } from 'lodash';
 
 interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;

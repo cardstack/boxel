@@ -6,6 +6,7 @@ import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
+
 import { CodePatchAction } from './code-patch-action';
 
 export function extractCodeData(
