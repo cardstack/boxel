@@ -98,21 +98,13 @@ interface Signature {
     default: [
       WithBoundArgs<
         typeof SpecPreviewTitle,
-        | 'showCreateSpec'
-        | 'createSpec'
-        | 'isCreateSpecInstanceRunning'
-        | 'spec'
-        | 'numberOfInstances'
+        'searchResource' | 'createSpec' | 'isCreateSpecInstanceRunning'
       >,
       (
         | WithBoundArgs<
             typeof SpecPreviewContent,
-            | 'showCreateSpec'
-            | 'canWrite'
+            | 'searchResource'
             | 'onSelectCard'
-            | 'spec'
-            | 'isLoading'
-            | 'cards'
             | 'viewCardInPlayground'
             | 'onSpecView'
           >
@@ -124,28 +116,47 @@ interface Signature {
 
 interface TitleSignature {
   Args: {
-    spec?: Spec;
-    numberOfInstances?: number;
-    showCreateSpec: boolean;
-    createSpec: (event: MouseEvent) => void;
     isCreateSpecInstanceRunning: boolean;
+    createSpec: (event: MouseEvent) => void;
+    searchResource: ReturnType<getCards<Spec>> | undefined;
   };
 }
 
 class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
+  @service private declare specPanelService: SpecPanelService;
+  private get specs() {
+    return this.args.searchResource?.instances ?? [];
+  }
+
+  private get selectedSpec() {
+    let selectedCardId = this.specPanelService.specSelection;
+    if (selectedCardId) {
+      return this.specs?.find((card) => card.id === selectedCardId);
+    }
+    return this.specs?.[0];
+  }
+
+  get showCreateSpec() {
+    return this.specs?.length === 0;
+  }
+
+  get numberOfInstances() {
+    return this.specs?.length;
+  }
+
   private get moreThanOneInstance() {
-    return this.args.numberOfInstances && this.args.numberOfInstances > 1;
+    return this.specs?.length > 1;
   }
 
   private get specType() {
-    return this.args.spec?.specType as SpecType | undefined;
+    return this.selectedSpec?.specType as SpecType | undefined;
   }
 
   <template>
     Boxel Spec
 
     <span class='has-spec' data-test-has-spec>
-      {{#if @showCreateSpec}}
+      {{#if this.showCreateSpec}}
         <BoxelButton
           class='create-spec-button'
           @kind='primary'
@@ -158,12 +169,12 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
         </BoxelButton>
       {{else if this.moreThanOneInstance}}
         <div
-          data-test-number-of-instance={{@numberOfInstances}}
+          data-test-number-of-instance={{this.numberOfInstances}}
           class='number-of-instance'
         >
           <DotIcon class='dot-icon' />
           <div class='number-of-instance-text'>
-            {{@numberOfInstances}}
+            {{this.numberOfInstances}}
             instances
           </div>
         </div>
@@ -208,14 +219,10 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
 interface ContentSignature {
   Element: HTMLDivElement;
   Args: {
-    showCreateSpec: boolean;
-    canWrite: boolean;
     onSelectCard: (card: Spec) => void;
-    cards: Spec[];
-    spec: Spec | undefined;
-    isLoading: boolean;
     viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
     onSpecView: (spec: Spec) => void;
+    searchResource: ReturnType<getCards<Spec>> | undefined;
   };
 }
 
@@ -236,8 +243,20 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
 
   private cardTracker = new ElementTracker();
 
+  private get specs() {
+    return this.args.searchResource?.instances ?? [];
+  }
+
   private get onlyOneInstance() {
-    return this.args.cards.length === 1;
+    return this.specs.length === 1;
+  }
+
+  private get selectedSpec() {
+    let selectedCardId = this.specPanelService.specSelection;
+    if (selectedCardId) {
+      return this.specs?.find((card) => card.id === selectedCardId);
+    }
+    return this.specs?.[0];
   }
 
   private get cardContext(): SpecPreviewCardContext {
@@ -272,16 +291,24 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     };
   };
 
-  private get displayIsolated() {
-    return !this.args.canWrite && this.args.cards.length > 0;
+  private get canWrite() {
+    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  private get displayCannotWrite() {
-    return !this.args.canWrite && this.args.cards.length === 0;
+  get displayCannotWriteMessage() {
+    return !this.canWrite;
+  }
+
+  get showCreateSpec() {
+    return this.specs.length === 0;
+  }
+
+  private get specViewFormat() {
+    return this.canWrite ? 'edit' : 'isolated';
   }
 
   private get selectedId() {
-    return this.args.spec?.id;
+    return this.selectedSpec?.id;
   }
 
   @action private viewSpecInstance() {
@@ -297,29 +324,29 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     <div
       class={{cn
         'container'
-        spec-intent-message=@showCreateSpec
-        cannot-write=this.displayCannotWrite
+        spec-intent-message=this.showCreateSpec
+        cannot-write=this.displayCannotWriteMessage
       }}
     >
-      {{#if @showCreateSpec}}
+      {{#if this.showCreateSpec}}
         <div data-test-create-spec-intent-message>
           Create a Boxel Specification to be able to create new instances
         </div>
-      {{else if this.displayCannotWrite}}
+      {{else if this.displayCannotWriteMessage}}
         <div data-test-cannot-write-intent-message>
           Cannot create new Boxel Specification inside this realm
         </div>
 
       {{else}}
 
-        {{#if @spec}}
+        {{#if this.selectedSpec}}
           <div class='spec-preview'>
 
             <div class='spec-selector-container'>
               <div class='spec-selector' data-test-spec-selector>
                 <BoxelSelect
-                  @options={{@cards}}
-                  @selected={{@spec}}
+                  @options={{this.specs}}
+                  @selected={{this.selectedSpec}}
                   @onChange={{@onSelectCard}}
                   @matchTriggerWidth={{true}}
                   @disabled={{this.onlyOneInstance}}
@@ -357,20 +384,15 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               @renderedCardsForOverlayActions={{this.renderedCardsForOverlayActions}}
               @onSelectCard={{@viewCardInPlayground}}
             />
-            {{#if this.displayIsolated}}
-              <CardRenderer
-                @card={{@spec}}
-                @format='isolated'
-                @cardContext={{this.cardContext}}
-              />
-            {{else}}
-              <CardRenderer
-                @card={{@spec}}
-                @format='edit'
-                @cardContext={{this.cardContext}}
-                {{SpecPreviewModifier spec=@spec onSpecView=@onSpecView}}
-              />
-            {{/if}}
+            <CardRenderer
+              @card={{this.selectedSpec}}
+              @format={{this.specViewFormat}}
+              @cardContext={{this.cardContext}}
+              {{SpecPreviewModifier
+                spec=this.selectedSpec
+                onSpecView=@onSpecView
+              }}
+            />
           </div>
         {{/if}}
       {{/if}}
@@ -617,10 +639,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     this.specPanelService.setSelection(card.id);
   }
 
-  private get canWrite() {
-    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
-  }
-
   private makeSearch = () => {
     this.search = this.getCards(
       this,
@@ -629,34 +647,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       { isLive: true },
     ) as ReturnType<getCards<Spec>>;
   };
-
-  get _selectedCard() {
-    let selectedCardId = this.specPanelService.specSelection;
-    if (selectedCardId) {
-      return this.cards?.find((card) => card.id === selectedCardId);
-    }
-    return this.cards?.[0];
-  }
-
-  get cards() {
-    return this.search?.instances ?? [];
-  }
-
-  private get card() {
-    if (this._selectedCard) {
-      return this._selectedCard;
-    }
-    return this.cards?.[0];
-  }
-
-  get showCreateSpec() {
-    return (
-      Boolean(this.args.selectedDeclaration?.exportName) &&
-      !this.search?.isLoading &&
-      this.cards.length === 0 &&
-      this.canWrite
-    );
-  }
 
   get isLoading() {
     return this.args.isLoadingNewModule;
@@ -729,33 +719,23 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
       {{yield
         (component
           SpecPreviewTitle
-          showCreateSpec=false
           createSpec=this.createSpec
           isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-          spec=this.card
+          searchResource=this.search
         )
         (component SpecPreviewLoading)
       }}
     {{else}}
       {{yield
         (component
-          SpecPreviewTitle
-          showCreateSpec=this.showCreateSpec
-          createSpec=this.createSpec
-          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
-          spec=this.card
-          numberOfInstances=this.cards.length
+          SpecPreviewTitle createSpec=this.createSpec searchResource=this.search
         )
         (component
           SpecPreviewContent
-          showCreateSpec=this.showCreateSpec
-          canWrite=this.canWrite
           onSelectCard=this.onSelectCard
-          spec=this.card
-          isLoading=false
-          cards=this.cards
           onSpecView=this.onSpecView
           viewCardInPlayground=this.viewCardInPlayground
+          searchResource=this.search
         )
       }}
     {{/if}}
