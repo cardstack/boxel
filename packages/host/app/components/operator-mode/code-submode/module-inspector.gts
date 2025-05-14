@@ -417,7 +417,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
           @toggleAccordionItem={{this.toggleAccordionItem}}
           @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
-          @onSpecView={{this.onSpecView}}
           @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
           @card={{this.card}}

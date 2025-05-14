@@ -80,7 +80,6 @@ interface Signature {
     isLoadingNewModule: boolean;
     toggleAccordionItem: (item: SelectedAccordionItem) => void;
     isPanelOpen: boolean;
-    onSpecView: (spec: Spec) => void;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
     card: Spec;
@@ -107,7 +106,6 @@ interface Signature {
             | 'isLoading'
             | 'cards'
             | 'viewCardInPlayground'
-            | 'onSpecView'
           >
         | WithBoundArgs<typeof SpecPreviewLoading, never>
       ),
@@ -208,7 +206,6 @@ interface ContentSignature {
     spec: Spec | undefined;
     isLoading: boolean;
     viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
-    onSpecView: (spec: Spec) => void;
   };
 }
 
@@ -621,7 +618,6 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           spec=@card
           isLoading=false
           cards=@cards
-          onSpecView=@onSpecView
           viewCardInPlayground=this.viewCardInPlayground
         )
       }}
