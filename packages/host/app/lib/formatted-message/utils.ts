@@ -6,6 +6,7 @@ import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
+import { CodePatchAction } from './code-patch-action';
 
 export function extractCodeData(
   preElementString: string,
@@ -133,12 +134,19 @@ export interface HtmlPreTagGroup {
   type: 'pre_tag';
   content: string;
   codeData: CodeData;
+  codePatchAction?: CodePatchAction;
 }
 
 export interface HtmlNonPreTagGroup {
   type: 'non_pre_tag';
   content: string;
   codeData: null;
+}
+
+export function isHtmlPreTagGroup(
+  htmlTagGroup: HtmlTagGroup,
+): htmlTagGroup is HtmlPreTagGroup {
+  return htmlTagGroup.type === 'pre_tag';
 }
 
 export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
@@ -168,10 +176,11 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
       let tagName = element.tagName.toLowerCase();
 
       if (tagName === 'pre') {
+        let codeData = extractCodeData(element.outerHTML, codeBlockIndex++);
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,
-          codeData: extractCodeData(element.outerHTML, codeBlockIndex++),
+          codeData: codeData,
         });
       } else {
         result.push({

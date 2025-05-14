@@ -71,6 +71,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
           type: part.type,
           content: part.content,
           codeData: part.codeData,
+          codePatchAction: this.createCodePatchAction(part),
         }) as HtmlTagGroup;
       }),
     );
@@ -90,6 +91,11 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
         }
         if (oldPart.codeData !== htmlParts[index].codeData) {
           oldPart.codeData = htmlParts[index].codeData;
+          if (isHtmlPreTagGroup(oldPart)) {
+            oldPart.codePatchAction = this.createCodePatchAction(
+              htmlParts[index],
+            );
+          }
         }
       });
       if (htmlParts.length > this.stableHtmlParts.length) {
@@ -99,6 +105,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
               type: part.type,
               content: part.content,
               codeData: part.codeData,
+              codePatchAction: this.createCodePatchAction(part),
             }) as HtmlTagGroup;
           }),
         );
@@ -122,7 +129,18 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     return index === this.stableHtmlParts.length - 1;
   };
 
-  private createCodePatchAction = (codeData: CodeData) => {
+  private createCodePatchAction = (htmlTagGroup: HtmlTagGroup) => {
+    if (!isHtmlPreTagGroup(htmlTagGroup)) {
+      return undefined;
+    }
+    if (
+      !htmlTagGroup.codeData ||
+      !htmlTagGroup.codeData.searchReplaceBlock ||
+      !htmlTagGroup.codeData.fileUrl
+    ) {
+      return undefined;
+    }
+    let codeData = htmlTagGroup.codeData;
     let codePatchAction = new CodePatchAction(getOwner(this)!, codeData);
     this.codePatchActions.set(codeData.codeBlockIndex, codePatchAction);
     console.log(
@@ -211,16 +229,11 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
       }}
       {{#each this.stableHtmlParts as |htmlGroup index|}}
         {{#if (isHtmlPreTagGroup htmlGroup)}}
-          {{#let
-            (this.createCodePatchAction htmlGroup.codeData)
-            as |codePatchAction|
-          }}
-            <HtmlGroupCodeBlock
-              @codeData={{htmlGroup.codeData}}
-              @codePatchAction={{codePatchAction}}
-              @monacoSDK={{@monacoSDK}}
-            />
-          {{/let}}
+          <HtmlGroupCodeBlock
+            @codeData={{htmlGroup.codeData}}
+            @codePatchAction={{htmlGroup.codePatchAction}}
+            @monacoSDK={{@monacoSDK}}
+          />
         {{else}}
           {{#if (and @isStreaming (this.isLastHtmlGroup index))}}
             {{wrapLastTextNodeInStreamingTextSpan (sanitize htmlGroup.content)}}
@@ -326,7 +339,7 @@ interface HtmlGroupCodeBlockSignature {
   Element: HTMLDivElement;
   Args: {
     codeData: CodeData;
-    codePatchAction: CodePatchAction;
+    codePatchAction?: CodePatchAction;
     monacoSDK: MonacoSDK;
   };
 }
@@ -344,6 +357,13 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       : undefined;
   }
 
+  get safeCodePatchAction() {
+    if (!this.args.codePatchAction) {
+      throw new Error('codePatchAction is required');
+    }
+    return this.args.codePatchAction;
+  }
+
   <template>
     {{log 'rendering HtmlGroupCodeBlock'}}
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
@@ -352,7 +372,7 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
           <codeBlock.actions as |actions|>
             <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
             <actions.applyCodePatch
-              @codePatchAction={{@codePatchAction}}
+              @codePatchAction={{this.safeCodePatchAction}}
               @originalCode={{this.codeDiffResource.originalCode}}
               @modifiedCode={{this.codeDiffResource.modifiedCode}}
             />
