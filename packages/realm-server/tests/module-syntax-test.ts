@@ -1368,5 +1368,21 @@ module(basename(__filename), function () {
         );
       });
     }
+
+    test('preserves line numbers', function (assert) {
+      let src = `
+        console.log(
+          <template>
+            Hi
+          </template>
+        );
+        console.log('after');
+      `;
+      assert.strictEqual(
+        gjsToPlaceholderJS(src).split('\n')[6],
+        src.split('\n')[6],
+        `expecting lines to be preserved in:\n${gjsToPlaceholderJS(src)}`,
+      );
+    });
   });
 });
