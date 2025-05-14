@@ -23,8 +23,8 @@ import { ResolvedCodeRef, aiBotUsername } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
-import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { Message } from '../../lib/matrix-classes/message';
 import { isMatrixError } from '../../lib/matrix-utils';

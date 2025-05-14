@@ -1,22 +1,25 @@
+import { action } from '@ember/object';
+import Owner from '@ember/owner';
 import { service } from '@ember/service';
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
+
 import { restartableTask } from 'ember-concurrency';
 import { timeout } from 'ember-concurrency';
-import { action } from '@ember/object';
 
-import type MatrixService from './matrix-service';
-import type OperatorModeStateService from './operator-mode-state-service';
-import type CommandService from './command-service';
-import type { Message } from '../lib/matrix-classes/message';
+import window from 'ember-window-mock';
 
+import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
+import { eventDebounceMs } from '../lib/matrix-utils';
 import {
   CurrentRoomIdPersistenceKey,
   NewSessionIdPersistenceKey,
 } from '../utils/local-storage-keys';
-import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
-import { eventDebounceMs } from '../lib/matrix-utils';
-import window from 'ember-window-mock';
+
+import type CommandService from './command-service';
+import type MatrixService from './matrix-service';
+import type OperatorModeStateService from './operator-mode-state-service';
+import type { Message } from '../lib/matrix-classes/message';
 
 export interface SessionRoomData {
   roomId: string;
@@ -48,7 +51,7 @@ export default class AiAssistantPanelService extends Service {
   @action
   openPanel() {
     this.operatorModeStateService.openAiAssistant();
-    this.loadRoomsTask.perform();
+    return this.loadRoomsTask.perform();
   }
 
   @action

@@ -14,6 +14,8 @@ import { ExclamationCircle } from '@cardstack/boxel-ui/icons';
 import SwitchSubmodeCommand from '../../commands/switch-submode';
 import { type CardErrorJSONAPI } from '../../services/store';
 
+import FixItButton from './fix-it-button';
+
 import type CommandService from '../../services/command-service';
 
 interface Signature {
@@ -42,6 +44,14 @@ export default class CardErrorDetail extends Component<Signature> {
     });
   });
 
+  private get errorObject() {
+    return {
+      message: this.args.error.message,
+      stack: this.args.error.meta.stack ?? undefined,
+      title: this.args.error.title,
+    };
+  }
+
   <template>
     <Accordion
       class='error-detail {{if this.showErrorDetail "open"}}'
@@ -54,22 +64,25 @@ export default class CardErrorDetail extends Component<Signature> {
         @isOpen={{this.showErrorDetail}}
       >
         <:title>
-          <ExclamationCircle class='error-icon' />
-          {{if @headerText @headerText 'An error was encountered: '}}
-          <span data-test-error-title>
-            {{if @title @title @error.title}}
-          </span>
+          <div class='title'>
+            <ExclamationCircle class='error-icon' />
+            {{if @headerText @headerText 'An error was encountered: '}}
+            <span data-test-error-title>
+              {{if @title @title @error.title}}
+            </span>
+            <FixItButton @error={{this.errorObject}} @errorType='card' />
+          </div>
         </:title>
         <:content>
-          {{#if @viewInCodeMode}}
-            <div class='actions'>
+          <div class='actions'>
+            {{#if @viewInCodeMode}}
               <Button
                 data-test-view-in-code-mode-button
                 @kind='primary'
                 {{on 'click' (perform this.viewInCodeMode)}}
               >View in Code Mode</Button>
-            </div>
-          {{/if}}
+            {{/if}}
+          </div>
           <div class='detail'>
             <div class='detail-item'>
               <div class='detail-title'>Details:</div>
@@ -95,6 +108,15 @@ export default class CardErrorDetail extends Component<Signature> {
     </Accordion>
 
     <style scoped>
+      .title {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        gap: var(--boxel-sp-xs);
+      }
+      .title :deep(.fix-it-button) {
+        margin-left: auto;
+      }
       .error-detail {
         flex: 1.5;
         overflow: auto;
@@ -122,6 +144,7 @@ export default class CardErrorDetail extends Component<Signature> {
       .actions {
         display: flex;
         justify-content: center;
+        gap: var(--boxel-sp);
         margin-top: var(--boxel-sp-lg);
       }
       .detail {

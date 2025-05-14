@@ -2,6 +2,8 @@ import Component from '@glimmer/component';
 
 import { CopyButton } from '@cardstack/boxel-ui/components';
 
+import FixItButton from './fix-it-button';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -13,6 +15,13 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
   removeSourceMappingURL(syntaxErrors: string): string {
     return syntaxErrors.replace(/\/\/# sourceMappingURL=.*/g, '');
   }
+
+  private get errorObject() {
+    return {
+      message: this.removeSourceMappingURL(this.args.syntaxErrors),
+    };
+  }
+
   <template>
     <style scoped>
       .syntax-error-container {
@@ -49,6 +58,13 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
         overflow: hidden;
         text-wrap: auto;
       }
+
+      .syntax-error-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        margin-left: auto;
+      }
     </style>
 
     <div class='syntax-error-container' data-test-syntax-error>
@@ -57,9 +73,12 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
           <div class='syntax-error-text'>
             Syntax Error
           </div>
-          <CopyButton
-            @textToCopy={{this.removeSourceMappingURL @syntaxErrors}}
-          />
+          <div class='syntax-error-actions'>
+            <CopyButton
+              @textToCopy={{this.removeSourceMappingURL @syntaxErrors}}
+            />
+            <FixItButton @error={{this.errorObject}} @errorType='syntax' />
+          </div>
         </div>
 
         <hr />

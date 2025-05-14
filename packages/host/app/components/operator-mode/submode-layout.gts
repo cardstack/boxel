@@ -42,11 +42,11 @@ import SubmodeSwitcher, { Submode, Submodes } from '../submode-switcher';
 import AskAiContainer from './ask-ai-container';
 import WorkspaceChooser from './workspace-chooser';
 
+import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type CommandService from '../../services/command-service';
 import type MatrixService from '../../services/matrix-service';
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
 import type StoreService from '../../services/store';
-import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 
 interface Signature {
   Element: HTMLDivElement;
