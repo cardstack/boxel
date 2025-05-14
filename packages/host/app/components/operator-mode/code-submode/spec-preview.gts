@@ -76,15 +76,15 @@ import type { WithBoundArgs } from '@glint/template';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    selectedDeclaration?: ModuleDeclaration;
-    isLoadingNewModule: boolean;
-    toggleAccordionItem: (item: SelectedAccordionItem) => void;
-    isPanelOpen: boolean;
-    selectedDeclarationAsCodeRef: ResolvedCodeRef;
-    updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
     card: Spec;
     cards: Spec[];
+    isLoadingNewModule: boolean;
+    isPanelOpen: boolean;
     search: ReturnType<getCards<Spec>> | undefined;
+    selectedDeclaration?: ModuleDeclaration;
+    selectedDeclarationAsCodeRef: ResolvedCodeRef;
+    toggleAccordionItem: (item: SelectedAccordionItem) => void;
+    updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {
     default: [
