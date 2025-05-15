@@ -586,6 +586,8 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           --boxel-menu-item-content-padding: var(--boxel-sp-xs);
           --boxel-menu-item-gap: var(--boxel-sp-xs);
           min-width: 13rem;
+          max-height: 13rem;
+          overflow-y: scroll;
         }
         .realm-dropdown-menu :deep(.menu-item__icon-url) {
           border-radius: var(--boxel-border-radius-xs);

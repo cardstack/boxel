@@ -391,6 +391,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 </:trigger>
                 <:content as |dd|>
                   <BoxelMenu
+                    class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.useRealmOptions}}
                   />
@@ -415,6 +416,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 </:trigger>
                 <:content as |dd|>
                   <BoxelMenu
+                    class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.installRealmOptions}}
                   />
@@ -584,6 +586,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }
       .action-button {
         flex: 1;
+      }
+      .realm-dropdown-menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        --boxel-menu-item-gap: var(--boxel-sp-xs);
+        min-width: 13rem;
+        max-height: 13rem;
+        overflow-y: scroll;
+      }
+      .realm-dropdown-menu :deep(.menu-item__icon-url) {
+        border-radius: var(--boxel-border-radius-xs);
       }
       .app-listing-embedded
         :deep(.ember-basic-dropdown-content-wormhole-origin) {
