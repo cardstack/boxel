@@ -3,10 +3,7 @@ import { click } from '@ember/test-helpers';
 import window from 'ember-window-mock';
 
 import type { PlaygroundSelection } from '@cardstack/host/services/playground-panel-service';
-import {
-  PlaygroundSelections,
-  RecentFiles,
-} from '@cardstack/host/utils/local-storage-keys';
+import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type { Format } from 'https://cardstack.com/base/card-api';
 
@@ -78,12 +75,13 @@ export const toggleSpecPanel = async () =>
   await click('[data-test-code-mode-panel-item="spec"]');
 
 // PlaygroundSelections
-export function getPlaygroundSelections():
-  | Record<string, PlaygroundSelection>
-  | undefined {
+export function getPlaygroundSelections(): Record<
+  string,
+  PlaygroundSelection
+> | null {
   let selections = window.localStorage.getItem(PlaygroundSelections);
   if (!selections) {
-    return;
+    return null;
   }
   return JSON.parse(selections);
 }
@@ -96,21 +94,4 @@ export function setPlaygroundSelections(
 
 export function removePlaygroundSelections() {
   window.localStorage.removeItem(PlaygroundSelections);
-}
-
-// RecentFiles
-export function getRecentFiles() {
-  let files = window.localStorage.getItem(RecentFiles);
-  if (!files) {
-    return;
-  }
-  return JSON.parse(files);
-}
-
-export function setRecentFiles(files: [string, string][]) {
-  window.localStorage.setItem(RecentFiles, JSON.stringify(files));
-}
-
-export function removeRecentFiles() {
-  window.localStorage.removeItem(RecentFiles);
 }
