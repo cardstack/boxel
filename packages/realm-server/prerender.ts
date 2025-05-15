@@ -5,11 +5,13 @@ import {
 } from '@cardstack/runtime-common';
 import puppeteer, { Page } from 'puppeteer';
 
-export async function prerenderCard(url: string): Promise<{
+export interface RenderResponse {
   iconHTML: string;
   html: Record<Format, string>;
   json: LooseSingleCardDocument;
-}> {
+}
+
+export async function prerenderCard(url: string): Promise<RenderResponse> {
   const browser = await puppeteer.launch({
     headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
   });
