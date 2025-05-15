@@ -54,6 +54,7 @@ import {
   DEFAULT_CODING_LLM,
   DEFAULT_LLM_LIST,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import {
@@ -82,6 +83,7 @@ import type {
 import type * as SkillModule from 'https://cardstack.com/base/skill';
 
 import AddSkillsToRoomCommand from '../commands/add-skills-to-room';
+import { isSkillCard } from '../lib/file-def-manager';
 import { importResource } from '../resources/import';
 
 import { RoomResource, getRoom } from '../resources/room';
@@ -638,17 +640,115 @@ export default class MatrixService extends Service {
     return await this.client.downloadCardFileDef(cardFileDef);
   }
 
-  async uploadCardsAndUpdateSkillCommands(cards: CardDef[], roomId: string) {
-    this.ensureRoomData(roomId);
-    let roomResource = this.roomResources.get(roomId);
-    if (!roomResource) {
-      throw new Error(`Room resource not found for room ${roomId}`);
-    }
-    return await this.client.uploadCardsAndUpdateSkillCommands(
-      cards,
-      roomResource,
-      (roomId, eventType, stateKey, transformContent) =>
-        this.updateStateEvent(roomId, eventType, stateKey, transformContent),
+  // Re-upload skills and commands. FileDefManager's cache will ensure we don't re-upload the same content.
+  // If there are new urls and content hashes for skills or commands, The room state will be updated.
+  async updateSkillsAndCommandsIfNeeded(roomId: string) {
+    this.updateStateEvent(
+      roomId,
+      APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+      '',
+      async (currentSkillsConfig) => {
+        let existingSkillCardFileDefs = [
+          ...(currentSkillsConfig?.enabledSkillCards ?? []),
+          ...(currentSkillsConfig?.disabledSkillCards ?? []),
+        ] as FileAPI.SerializedFile[];
+        let skillCards = (
+          await Promise.all(
+            existingSkillCardFileDefs.map(
+              async (fileDef) =>
+                await this.store.get<SkillModule.Skill>(fileDef.sourceUrl),
+            ),
+          )
+        ).filter((card) => isSkillCard in card) as SkillModule.Skill[];
+
+        let updatedSkillFileDefs = await this.uploadCards(
+          skillCards as CardDef[],
+        );
+        let updatedCommandFileDefs: FileDef[] = [];
+        for (let skillCard of skillCards) {
+          let commandDefinitions = (skillCard as SkillModule.Skill).commands;
+          if (commandDefinitions.length) {
+            let commandDefFileDefs =
+              await this.uploadCommandDefinitions(commandDefinitions);
+            updatedCommandFileDefs.push(...commandDefFileDefs);
+          }
+        }
+
+        const enabledSkillCards = [
+          ...(currentSkillsConfig.enabledSkillCards || []),
+        ];
+        const disabledSkillCards = [
+          ...(currentSkillsConfig.disabledSkillCards || []),
+        ];
+        const commandDefinitions = [
+          ...(currentSkillsConfig.commandDefinitions || []),
+        ];
+
+        // For skill cards, only use updatedSkillFileDefs if they exist in the current enabledSkillCards or disabledSkillCards
+        const updatedEnabledCards = enabledSkillCards.map(
+          (enabledSkillCard) => {
+            const matchingFileDef = updatedSkillFileDefs.find(
+              (fileDef) =>
+                fileDef.sourceUrl === enabledSkillCard.sourceUrl &&
+                fileDef.url !== enabledSkillCard.url &&
+                fileDef.contentHash !== enabledSkillCard.contentHash,
+            );
+            return matchingFileDef
+              ? matchingFileDef.serialize()
+              : enabledSkillCard;
+          },
+        );
+
+        const updatedDisabledCards = disabledSkillCards.map(
+          (disabledSkillCard) => {
+            const matchingFileDef = updatedSkillFileDefs.find(
+              (fileDef) =>
+                fileDef.sourceUrl === disabledSkillCard.sourceUrl &&
+                fileDef.url !== disabledSkillCard.url &&
+                fileDef.contentHash !== disabledSkillCard.contentHash,
+            );
+            return matchingFileDef
+              ? matchingFileDef.serialize()
+              : disabledSkillCard;
+          },
+        );
+
+        // Command definitions might be added or removed, so we use updatedCommandFileDefs
+        // to determine which ones are new or removed
+        const newCommandDefinitions = updatedCommandFileDefs
+          .map((fileDef) => fileDef.serialize())
+          .filter(
+            (commandFileDef) =>
+              !commandDefinitions.some(
+                (commandDefinition) =>
+                  commandDefinition.sourceUrl === commandFileDef.sourceUrl,
+              ),
+          );
+
+        // Only keep commands that exist in updatedCommandFileDefs
+        const updatedCommandDefinitions = [
+          ...commandDefinitions.filter((cmd) =>
+            updatedCommandFileDefs.some(
+              (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
+            ),
+          ),
+          ...newCommandDefinitions,
+        ].map((cmd) => {
+          const matchingFileDef = updatedCommandFileDefs.find(
+            (fileDef) => fileDef.sourceUrl === cmd.sourceUrl,
+          );
+          if (matchingFileDef) {
+            return { ...cmd, url: matchingFileDef.url };
+          }
+          return cmd;
+        });
+
+        return {
+          enabledSkillCards: updatedEnabledCards,
+          disabledSkillCards: updatedDisabledCards,
+          commandDefinitions: updatedCommandDefinitions,
+        };
+      },
     );
   }
 
@@ -755,10 +855,8 @@ export default class MatrixService extends Service {
       }
     }
 
-    let cardFileDefs = await this.uploadCardsAndUpdateSkillCommands(
-      attachedCards,
-      roomId,
-    );
+    await this.updateSkillsAndCommandsIfNeeded(roomId);
+    let cardFileDefs = await this.uploadCards(attachedCards);
 
     await this.sendEvent(roomId, 'm.room.message', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1028,7 +1126,16 @@ export default class MatrixService extends Service {
         eventType,
         stateKey,
       );
+
+      // Store the original content string for comparison
+      let currentContentString = stringify(currentContent ?? {});
       let newContent = await transformContent(currentContent ?? {});
+
+      // Skip sending state event if content hasn't changed
+      if (currentContentString === stringify(newContent)) {
+        return;
+      }
+
       return this.client.sendStateEvent(
         roomId,
         eventType,

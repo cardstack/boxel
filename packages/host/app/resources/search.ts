@@ -76,10 +76,6 @@ export class SearchResource extends Resource<Args> {
     this.#previousQuery = query;
     this.#previousRealms = realms;
 
-    for (let instance of this._instances) {
-      this.store.dropReference(instance.id);
-    }
-
     this.loaded = this.search.perform(query);
 
     if (isLive) {
@@ -152,6 +148,10 @@ export class SearchResource extends Resource<Args> {
   );
 
   private search = restartableTask(async (query: Query) => {
+    for (let instance of this._instances) {
+      this.store.dropReference(instance.id);
+    }
+
     // we cannot use the `waitForPromise` test waiter helper as that will cast
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.

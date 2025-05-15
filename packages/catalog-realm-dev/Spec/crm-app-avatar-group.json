@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "AvatarGroup",
+        "module": "../crm-app/components/avatar-group"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Avatar Group",
+      "description": "Spec for Avatar Group component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

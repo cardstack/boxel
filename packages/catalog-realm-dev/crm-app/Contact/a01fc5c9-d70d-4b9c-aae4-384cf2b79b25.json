@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "David Paul",
+      "lastName": "Jackson",
+      "position": null,
+      "department": "IT",
+      "primaryEmail": "david@gmail.com",
+      "secondaryEmail": "david23232@gmail.com",
+      "phoneMobile": {
+        "phoneNumber": {
+          "number": "1158524828",
+          "countryCode": "60"
+        },
+        "type": {
+          "index": 0,
+          "label": "Mobile"
+        }
+      },
+      "phoneOffice": {
+        "phoneNumber": {
+          "number": null,
+          "countryCode": null
+        },
+        "type": {
+          "index": null,
+          "label": null
+        }
+      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "davidlinkedin.com"
+        },
+        {
+          "label": "X",
+          "value": "x.com"
+        }
+      ],
+      "statusTag": {
+        "lightColor": "#93C5FD",
+        "darkColor": "#3B82F6",
+        "label": "Lead"
+      },
+      "description": null,
+      "thumbnailURL": "https://images.pexels.com/photos/4571943/pexels-photo-4571943.jpeg?auto=compress&cs=tinysrgb&w=300&h=300&dpr=1"
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/141f3e15-cfd5-4b61-bd4c-37ea31dbeeab"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../contact",
+        "name": "Contact"
+      }
+    }
+  }
+}

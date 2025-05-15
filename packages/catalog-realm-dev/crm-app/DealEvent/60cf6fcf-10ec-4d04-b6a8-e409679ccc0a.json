@@ -1,0 +1,28 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "attendees": 1200,
+      "subject": null,
+      "location": "SF Convention Center",
+      "startDateTime": "2025-01-16T04:40:00.000Z",
+      "endDateTime": null,
+      "eventType": "Meeting",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "assignee": {
+        "links": {
+          "self": "../Representative/880c1d41-2563-43da-999d-ef577fa3eac9"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../deal-event",
+        "name": "DealEvent"
+      }
+    }
+  }
+}
