@@ -79,7 +79,7 @@ interface Signature {
     activeSpec: Spec;
     isLoadingNewModule: boolean;
     isPanelOpen: boolean;
-    search: ReturnType<getCards<Spec>> | undefined;
+    searchIsLoading: boolean | undefined;
     selectedDeclaration?: ModuleDeclaration;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
     specsForSelectedDefinition: Spec[];

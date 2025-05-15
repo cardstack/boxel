@@ -423,7 +423,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
           @activeSpec={{this.card}}
           @specsForSelectedDefinition={{this.cards}}
-          @search={{this.specsForSelectedDefinition}}
+          @searchIsLoading={{this.specsForSelectedDefinition.isLoading}}
           as |SpecPreviewTitle SpecPreviewContent|
         >
           <A.Item
