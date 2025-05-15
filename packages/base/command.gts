@@ -18,6 +18,7 @@ import {
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
 } from './commands/search-card-result';
+import { RemixInput, RemixResult } from './commands/remix-input-result';
 
 export type CommandStatus = 'applied' | 'ready' | 'applying';
 
@@ -188,15 +189,6 @@ export class OpenAiAssistantRoomInput extends CardDef {
   @field roomId = contains(StringField);
 }
 
-export class RemixInput extends CardDef {
-  @field realm = contains(StringField);
-  @field listing = linksTo(CardDef);
-}
-
-export class RemixResult extends CardDef {
-  @field success = contains(BooleanField);
-}
-
 export class AddFieldToCardDefinitionInput extends CardDef {
   @field realm = contains(StringField);
   @field path = contains(StringField);
@@ -217,4 +209,6 @@ export {
   SearchCardsByQueryInput,
   SearchCardsByTypeAndTitleInput,
   SearchCardsResult,
+  RemixInput,
+  RemixResult,
 };
