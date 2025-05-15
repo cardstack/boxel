@@ -15,16 +15,16 @@ import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import { CodePatchAction } from '@cardstack/host/lib/formatted-message/code-patch-action';
+import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import ApplyButton from '../ai-assistant/apply-button';
+import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import { CodeData } from './formatted-message';
+import ApplyButton from '../ai-assistant/apply-button';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
@@ -37,7 +37,9 @@ interface CopyCodeButtonSignature {
 
 interface ApplyCodePatchButtonSignature {
   Args: {
-    codePatchAction: CodePatchAction;
+    patchCodeStatus: CodePatchStatus | 'ready' | 'applying';
+    performPatch: () => void;
+    codeData: CodeData;
     originalCode?: string | null;
     modifiedCode?: string | null;
   };
@@ -522,11 +524,8 @@ class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
 
   // This is for debugging purposes only
   logCodePatchAction = () => {
-    console.log('fileUrl \n', this.args.codePatchAction.fileUrl);
-    console.log(
-      'searchReplaceBlock \n',
-      this.args.codePatchAction.searchReplaceBlock,
-    );
+    console.log('fileUrl \n', this.args.codeData.fileUrl);
+    console.log('searchReplaceBlock \n', this.args.codeData.searchReplaceBlock);
     console.log('originalCode \n', this.args.originalCode);
     console.log('modifiedCode \n', this.args.modifiedCode);
   };
@@ -543,8 +542,8 @@ class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
     {{/if}}
     <ApplyButton
       data-test-apply-code-button
-      @state={{@codePatchAction.patchCodeTaskState}}
-      {{on 'click' (perform @codePatchAction.patchCodeTask)}}
+      @state={{@patchCodeStatus}}
+      {{on 'click' @performPatch}}
     >
       Apply
     </ApplyButton>

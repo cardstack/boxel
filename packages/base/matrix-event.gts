@@ -240,6 +240,8 @@ export interface CommandResultWithNoOutputContent {
   commandRequestId: string;
 }
 
+export type CodePatchStatus = 'applied' | 'failed'; // possibly add 'rejected' in the future
+
 export interface RealmServerEvent extends BaseMatrixEvent {
   type: 'm.room.message';
   content: RealmServerEventContent;
