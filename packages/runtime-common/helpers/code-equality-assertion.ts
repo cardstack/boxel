@@ -11,6 +11,7 @@ import classPropertiesPlugin from '@babel/plugin-syntax-class-properties';
 import typescriptPlugin from '@babel/plugin-syntax-typescript';
 
 import * as QUnit from 'qunit';
+import { gjsToPlaceholderJS } from '../module-syntax';
 
 declare global {
   interface Assert {
@@ -33,7 +34,14 @@ function standardizePlugin() {
 }
 
 function standardize(code: string) {
-  code = preprocessTemplateTags(code);
+  // its super important that this not be the same placeholder we use in the
+  // module-syntax ("templatePlaceholder"), so that we can ensure that we are
+  // not inadvertantly comparing precompiled source against an actual template.
+  // rather we want to make sure we compare templates to templates (an apples to
+  // apples comparison).
+  const placeholder = 'testPlaceholder';
+
+  code = gjsToPlaceholderJS(code, { placeholder });
   return transform(code, {
     plugins: [
       typescriptPlugin,
@@ -42,27 +50,6 @@ function standardize(code: string) {
       standardizePlugin,
     ],
   })!.code;
-}
-
-function preprocessTemplateTags(code: string): string {
-  let output = [];
-  let offset = 0;
-  let matches = new ContentTagGlobal.Preprocessor().parse(code);
-  const codeArray = Array.from(code);
-  for (let match of matches) {
-    output.push(codeArray.slice(offset, match.range.startChar).join(''));
-    // its super important that this not be the template function we use in the
-    // module-syntax (templte), so that we can ensure that we are not
-    // inadvertantly comparing precompiled source against an actual template.
-    // rather we want to make sure we compare templates to templates (an apples
-    // to apples comparison).
-    output.push('[template(`');
-    output.push(match.contents.replace(/`/g, '\\`'));
-    output.push('`)]');
-    offset = match.range.endChar;
-  }
-  output.push(codeArray.slice(offset).join(''));
-  return output.join('');
 }
 
 function codeEqual(
