@@ -51,10 +51,6 @@ import SaveCardCommand from '@cardstack/host/commands/save-card';
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import UpdateCodePathWithSelectionCommand from '@cardstack/host/commands/update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from '@cardstack/host/commands/update-playground-selection';
-import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
 
 import config from '@cardstack/host/config/environment';
 import { StackItem } from '@cardstack/host/lib/stack-item';
@@ -69,7 +65,6 @@ import {
   type Format,
 } from 'https://cardstack.com/base/card-api';
 import { type Spec } from 'https://cardstack.com/base/spec';
-import { Skill } from 'https://cardstack.com/base/skill';
 
 import CopyButton from './copy-button';
 import DeleteModal from './delete-modal';
@@ -398,33 +393,6 @@ export default class InteractSubmode extends Component {
       allRealmsInfo: async () => {
         return await here.realm.allRealmsInfo;
       },
-      createAiAssistantRoom: async (name: string) => {
-        return await here._createAiAssistantRoom.perform(name);
-      },
-      openAiAssistantRoom: async (roomId: string) => {
-        await here._openAiAssistantRoom.perform(roomId);
-      },
-      sendAiAssistantMessage: async ({
-        roomId,
-        prompt,
-        openCardIds,
-        attachedCards,
-      }: {
-        roomId: string;
-        prompt: string;
-        openCardIds: string[];
-        attachedCards: CardDef[];
-      }) => {
-        await here._sendAiAssistantMessage.perform({
-          roomId,
-          prompt,
-          openCardIds,
-          attachedCards,
-        });
-      },
-      addSkillsToRoom: async (roomId: string, skills: Skill[]) => {
-        await here._addSkillsToRoom.perform(roomId, skills);
-      },
       fetchCard: async (url: string) => {
         return await here.store.get(url);
       },
@@ -612,50 +580,6 @@ export default class InteractSubmode extends Component {
       });
     },
   );
-
-  private _createAiAssistantRoom = task(async (name: string) => {
-    let { commandContext } = this.commandService;
-    return await new CreateAiAssistantRoomCommand(commandContext).execute({
-      name,
-    });
-  });
-
-  private _openAiAssistantRoom = task(async (roomId: string) => {
-    let { commandContext } = this.commandService;
-    await new OpenAiAssistantRoomCommand(commandContext).execute({
-      roomId,
-    });
-  });
-
-  private _sendAiAssistantMessage = task(
-    async ({
-      roomId,
-      prompt,
-      openCardIds,
-      attachedCards,
-    }: {
-      roomId: string;
-      prompt: string;
-      openCardIds: string[];
-      attachedCards: CardDef[];
-    }) => {
-      let { commandContext } = this.commandService;
-      await new SendAiAssistantMessageCommand(commandContext).execute({
-        roomId,
-        prompt,
-        openCardIds,
-        attachedCards,
-      });
-    },
-  );
-
-  private _addSkillsToRoom = task(async (roomId: string, skills: Skill[]) => {
-    let { commandContext } = this.commandService;
-    await new AddSkillsToRoomCommand(commandContext).execute({
-      roomId,
-      skills,
-    });
-  });
 
   // dropTask will ignore any subsequent copy requests until the one in progress is done
   private copy = dropTask(

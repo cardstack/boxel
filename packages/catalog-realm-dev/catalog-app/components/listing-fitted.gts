@@ -22,6 +22,11 @@ import {
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 
+import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
+import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
+import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -382,12 +387,20 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   }
 
   _remixWithAI = task(async (realmUrl: string) => {
+    let commandContext = this.args.context?.commandContext;
+    if (!commandContext) {
+      throw new Error('Missing commandContext');
+    }
+
     if (!this.roomId) {
       if (!this.roomId && this.args.context?.actions?.createAiAssistantRoom) {
-        const { roomId } =
-          await this.args.context?.actions?.createAiAssistantRoom(
-            this.args.model.name ? `Remix of ${this.args.model.name}` : 'Remix',
-          );
+        const { roomId } = await new CreateAiAssistantRoomCommand(
+          commandContext,
+        ).execute({
+          name: this.args.model.name
+            ? `Remix of ${this.args.model.name}`
+            : 'Remix',
+        });
         this.roomId = roomId;
 
         const remixSkillCardId = `${baseRealm.url}Skill/remix`;
@@ -395,26 +408,27 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           remixSkillCardId,
         )) as Skill;
 
-        if (this.args.context?.actions?.addSkillsToRoom && remixSkillCard) {
-          await this.args.context?.actions?.addSkillsToRoom(this.roomId, [
-            remixSkillCard,
-          ]);
+        if (remixSkillCard) {
+          await new AddSkillsToRoomCommand(commandContext).execute({
+            roomId: this.roomId,
+            skills: [remixSkillCard],
+          });
         }
         this.roomId = roomId;
       }
     }
 
-    if (this.roomId && this.args.context?.actions?.openAiAssistantRoom) {
-      if (this.args.context?.actions?.sendAiAssistantMessage) {
-        await this.args.context?.actions?.sendAiAssistantMessage({
-          roomId: this.roomId,
-          prompt: `I would like to remix this ${this.args.model.name} under the following realm: ${realmUrl}`,
-          openCardIds: [this.args.model.id!],
-          attachedCards: [this.args.model as CardDef],
-        });
-      }
+    if (this.roomId) {
+      await new SendAiAssistantMessageCommand(commandContext).execute({
+        roomId: this.roomId,
+        prompt: `I would like to remix this ${this.args.model.name} under the following realm: ${realmUrl}`,
+        openCardIds: [this.args.model.id!],
+        attachedCards: [this.args.model as CardDef],
+      });
 
-      await this.args.context?.actions?.openAiAssistantRoom(this.roomId);
+      await new OpenAiAssistantRoomCommand(commandContext).execute({
+        roomId: this.roomId,
+      });
     }
   });
 

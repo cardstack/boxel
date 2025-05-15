@@ -477,20 +477,6 @@ export interface CatalogActions {
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;
-  createAiAssistantRoom: (name: string) => Promise<{ roomId: string }>;
-  sendAiAssistantMessage: ({
-    roomId,
-    prompt,
-    openCardIds,
-    attachedCards,
-  }: {
-    roomId: string;
-    prompt: string;
-    openCardIds: string[];
-    attachedCards: CardDef[];
-  }) => Promise<void>;
-  addSkillsToRoom: (roomId: string, skills: Skill[]) => Promise<void>;
-  openAiAssistantRoom: (roomId: string) => Promise<void>;
   fetchCard: (url: string) => Promise<CardDef | CardErrorJSONAPI>;
 }
 
