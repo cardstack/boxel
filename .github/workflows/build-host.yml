@@ -8,8 +8,14 @@ on:
         type: string
 
 jobs:
+  setup-nx-cache:
+    name: Setup Nx Cache
+    uses: ./.github/workflows/nx-cache-config.yml
+    secrets: inherit
+
   build:
     name: Build
+    needs: setup-nx-cache
     runs-on: ubuntu-latest
     concurrency:
       group: build-host-${{ inputs.environment }}-${{ github.head_ref || github.run_id }}

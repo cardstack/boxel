@@ -1,0 +1,16 @@
+name: Nx Cache Configuration
+
+on:
+  workflow_call: {}
+  workflow_dispatch: {}
+
+jobs:
+  setup-cache:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set Cache Environment Variables
+        run: |
+          echo "NX_S3_ACCESS_KEY=${{ secrets.NX_S3_ACCESS_KEY }}" >> $GITHUB_ENV
+          echo "NX_S3_SECRET_KEY=${{ secrets.NX_S3_SECRET_KEY }}" >> $GITHUB_ENV
+          echo "NX_S3_BUCKET=${{ secrets.NX_S3_BUCKET }}" >> $GITHUB_ENV
+          echo "NX_S3_REGION=${{ secrets.NX_S3_REGION }}" >> $GITHUB_ENV

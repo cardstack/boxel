@@ -13,6 +13,11 @@ permissions:
   pull-requests: write
 
 jobs:
+  setup-nx-cache:
+    name: Setup Nx Cache
+    uses: ./.github/workflows/nx-cache-config.yml
+    secrets: inherit
+
   ai-bot-test:
     name: AI bot Tests
     runs-on: ubuntu-latest
@@ -45,6 +50,7 @@ jobs:
   boxel-ui-test:
     name: Boxel UI Tests
     runs-on: ubuntu-latest
+    needs: setup-nx-cache
     concurrency:
       group: boxel-ui-test-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -64,6 +70,7 @@ jobs:
   boxel-ui-raw-icon-changes-only:
     name: Boxel UI ensure raw icon changes only
     runs-on: ubuntu-latest
+    needs: setup-nx-cache
     concurrency:
       group: boxel-ui-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -79,6 +86,7 @@ jobs:
   boxel-icons-raw-icon-changes-only:
     name: Boxel Icons ensure raw icon changes only
     runs-on: ubuntu-latest
+    needs: setup-nx-cache
     concurrency:
       group: boxel-icons-raw-icon-changes-only-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -94,6 +102,7 @@ jobs:
   matrix-client-test:
     name: Matrix Client Tests
     runs-on: ubuntu-latest
+    needs: setup-nx-cache
     strategy:
       fail-fast: false
       matrix:
@@ -235,6 +244,7 @@ jobs:
   realm-server-test:
     name: Realm Server Tests
     runs-on: ubuntu-latest
+    needs: setup-nx-cache
     concurrency:
       group: realm-server-test-${{ matrix.testModule }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true

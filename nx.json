@@ -2,9 +2,13 @@
   "extends": "nx/presets/npm.json",
   "tasksRunnerOptions": {
     "default": {
-      "runner": "nx/tasks-runners/default",
+      "runner": "@nx/s3-cache:s3",
       "options": {
-        "cacheableOperations": ["build"]
+        "cacheableOperations": ["build"],
+        "accessKey": "${NX_S3_ACCESS_KEY}",
+        "secretKey": "${NX_S3_SECRET_KEY}",
+        "bucket": "${NX_S3_BUCKET}",
+        "region": "${NX_S3_REGION}"
       }
     }
   },

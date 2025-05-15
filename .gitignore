@@ -13,3 +13,7 @@ schema_tmp.sql
 .github/instructions/nx.instructions.md
 /.nx/cache
 /.nx/workspace-data
+
+# Local environment variables
+.env
+.env.local

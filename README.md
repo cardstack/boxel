@@ -11,6 +11,7 @@ For a quickstart, see [here](./QUICKSTART.md)
 - this project uses [pnpm](https://pnpm.io/) for package management. run `pnpm install` to install the project dependencies first.
 - this project uses [docker](https://docker.com). Make sure to install docker on your system.
 - Ensure that node_modules/.bin is in your path. e.g. include `export PATH="./node_modules/.bin:$PATH"` in your .zshrc
+- For optimal development speed, the project uses Nx with S3-based remote caching. See [docs/nx-remote-cache.md](./docs/nx-remote-cache.md) for setup instructions.
 
 ## Orientation
 

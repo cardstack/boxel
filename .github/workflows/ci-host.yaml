@@ -13,8 +13,14 @@ permissions:
   pull-requests: write
 
 jobs:
+  setup-nx-cache:
+    name: Setup Nx Cache
+    uses: ./.github/workflows/nx-cache-config.yml
+    secrets: inherit
+
   host-test:
     name: Host Tests
+    needs: setup-nx-cache
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
