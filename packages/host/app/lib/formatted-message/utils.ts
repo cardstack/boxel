@@ -43,80 +43,81 @@ export function extractCodeData(preElementString: string): CodeData {
   // // new code ...
   // <REPLACE BLOCK>
   // The above will only be shown until the search/replace block is complete (while streaming)
-  let adjustedContentForStreamedContentInMonacoEditor = '';
+  let adjustedCodeForStreamingSearchAndReplaceBlock = '';
   if (parsedContent.searchContent) {
     // get count of leading spaces in the first line of searchContent
     let firstLine = parsedContent.searchContent.split('\n')[0];
     let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
     let emptyString = ' '.repeat(leadingSpaces);
-    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${parsedContent.searchContent.replace(
+    adjustedCodeForStreamingSearchAndReplaceBlock = `// existing code ... \n\n${parsedContent.searchContent.replace(
       new RegExp(emptyString, 'g'),
       '',
     )}`;
 
     if (parsedContent.replaceContent) {
-      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
+      adjustedCodeForStreamingSearchAndReplaceBlock += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
         new RegExp(emptyString, 'g'),
         '',
       )}`;
     }
   }
 
-  const lines = content.split('\n');
+  // Before SEARCH/REPLACE block, there will be a line with the file url
+  // (editing a file) or file name (creating a new file).
+  // The code that follows will try to parse the file url or file name, and
+  // hide it from the user as it streams because it's not actually part of
+  // the code block, and it's confusing to show it.
 
-  // Boxel meta line is the first line of the code block, which starts with
-  // __META (our own internal metadata line, as dictated in the source code
-  // editing skill). It is used to identify the file that is being edited, or
-  // provides a file name for a new file. It looks like this:
-  // __META: { "fileUrl": "https://example.com/wedding-invitation.gts" }
-  // or
-  // __META: { "fileName": "wedding-invitation.gts", "isNewFile": true }
-  let codeBlockMetaString: string | null = null;
-  const metaStringStartIndex = lines.findIndex((line) =>
-    line.startsWith('__META: '),
-  );
-  if (metaStringStartIndex !== -1) {
-    codeBlockMetaString = lines[metaStringStartIndex]
-      .substring('__META: '.length)
-      .trim();
-  }
+  let lines = content.split('\n');
 
-  let contentWithoutcodeBlockMetaLine = content;
-  let codeBlockMeta = null;
-  let unfinishedcodeBlockMeta = false;
-  if (codeBlockMetaString) {
-    contentWithoutcodeBlockMetaLine = lines
-      .slice(metaStringStartIndex + 1)
-      .join('\n');
+  let fileUrlOrFileName: string | undefined = undefined;
+  let fileUrl: string | undefined = undefined;
+  let fileName: string | undefined = undefined;
+  let isBeginningOfSearchReplaceBlock =
+    lines.length > 1 && lines[1].startsWith('<');
 
-    try {
-      codeBlockMeta = JSON.parse(codeBlockMetaString);
-    } catch (error) {
-      // Meta line is still streaming in
-      unfinishedcodeBlockMeta = true;
+  if (isBeginningOfSearchReplaceBlock) {
+    fileUrlOrFileName = lines[0];
+    if (fileUrlOrFileName.match(/^https?:\/\//)) {
+      fileUrl = fileUrlOrFileName;
+    } else {
+      fileName = fileUrlOrFileName;
     }
   }
-
-  let hascodeBlockMeta = metaStringStartIndex !== -1;
-  let codeToDisplay;
-
-  if (hascodeBlockMeta && unfinishedcodeBlockMeta) {
-    codeToDisplay = ''; // Don't show anything until the boxel meta line is complete while streaming
+  debugger;
+  let codeToDisplay = '';
+  if (!fileUrlOrFileName) {
+    // Does first line of content look like a file url, or file name with extension?
+    // It's likely the search/replace block will start after that, so don't confuse
+    // the user by showing the file url or file name.
+    if (
+      (lines.length == 1 &&
+        (lines[0].startsWith('http') || lines[0].match(/\.[a-zA-Z0-9]+$/))) ||
+      isBeginningOfSearchReplaceBlock
+    ) {
+      codeToDisplay = '';
+    } else {
+      codeToDisplay = content;
+    }
   } else {
     codeToDisplay =
-      adjustedContentForStreamedContentInMonacoEditor ||
+      adjustedCodeForStreamingSearchAndReplaceBlock ||
       parsedContent.replaceContent ||
-      contentWithoutcodeBlockMetaLine;
+      content;
   }
+
+  let contentWithoutFirstLine = content.slice(lines[0].length).trimStart();
 
   return {
     language: language ?? '',
     code: codeToDisplay,
-    codeBlockMeta,
-    searchReplaceBlock: isCompleteSearchReplaceBlock(
-      contentWithoutcodeBlockMetaLine,
-    )
-      ? contentWithoutcodeBlockMetaLine
+    codeBlockMeta: {
+      fileUrl: fileUrl ?? null,
+      fileName: fileName ?? null,
+      isNewFile: Boolean(fileName && !fileUrl),
+    },
+    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFirstLine)
+      ? contentWithoutFirstLine
       : null,
   };
 }

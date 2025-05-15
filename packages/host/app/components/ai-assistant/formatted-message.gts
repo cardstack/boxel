@@ -38,7 +38,7 @@ import CodeBlock from './code-block';
 
 export interface CodeBlockMeta {
   fileUrl: string | null;
-  fileName: string;
+  fileName: string | null;
   isNewFile: boolean;
 }
 

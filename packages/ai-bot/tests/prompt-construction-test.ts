@@ -2735,12 +2735,12 @@ Attached files:
       'Right, let us make a tic tac toe game.\n' +
         '\n' +
         '```gts\n' +
-        '__META: { "fileUrl": "https://test.com/tic-tac.gts" }\n' +
+        'https://test.com/tic-tac.gts\n' +
         `${OMIT_CODE_CHANGE_PLACEHOLDER}\n` +
         '```\n' +
         '\n' +
         '```gts\n' +
-        '__META: { "fileUrl": "https://test.com/tac-toe.gts" }\n' +
+        'https://test.com/tac-toe.gts\n' +
         `${OMIT_CODE_CHANGE_PLACEHOLDER}\n` +
         '```\n' +
         '\n' +

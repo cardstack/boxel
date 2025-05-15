@@ -741,7 +741,7 @@ module('Acceptance | Commands tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
 
     let codeBlock = `\`\`\`
-__META: { "fileUrl": "http://test-realm/test/hello.txt" }
+http://test-realm/test/hello.txt
 <<<<<<< SEARCH
 Hello, world!
 =======
@@ -772,7 +772,7 @@ Hi, world!
     // 3. hi.txt: How are you? -> We are one!
 
     let codeBlock = `\`\`\`
-__META: { "fileUrl": "http://test-realm/test/hello.txt" }
+http://test-realm/test/hello.txt
 <<<<<<< SEARCH
 Hello, world!
 =======
@@ -781,7 +781,7 @@ Hi, world!
 \`\`\`
 
  \`\`\`
-__META: { "fileUrl": "http://test-realm/test/hi.txt" }
+http://test-realm/test/hi.txt
 <<<<<<< SEARCH
 Hi, world!
 =======
@@ -790,7 +790,7 @@ Greetings, world!
 \`\`\`
 
 \`\`\`
-__META: { "fileUrl": "http://test-realm/test/hi.txt" }
+http://test-realm/test/hi.txt
 <<<<<<< SEARCH
 How are you?
 =======
@@ -839,10 +839,10 @@ We are one!
     // there are 3 patches in the message
     // 1. file1.gts -> I am a newly created file1
     // 2. file2.gts -> I am a newly created file2
-    // 3. hi.txt -> I am a newly created hi.txt file but I will get a suffix because hi.txt already exists!
+    // 3. hi.txt -> I am a newly created hi.txt file but I will get a number suffix because hi.txt already exists!
 
     let codeBlock = `\`\`\`
-__META: { "fileUrl": "http://test-realm/test/file1.gts" }
+http://test-realm/test/file1.gts
 <<<<<<< SEARCH
 =======
 I am a newly created file1
@@ -850,7 +850,7 @@ I am a newly created file1
 \`\`\`
 
  \`\`\`
-__META: { "fileUrl": "http://test-realm/test/file2.gts" }
+http://test-realm/test/file2.gts
 <<<<<<< SEARCH
 =======
 I am a newly created file2
@@ -858,7 +858,7 @@ I am a newly created file2
 \`\`\`
 
 \`\`\`
-__META: { "fileName": "hi.txt", "isNewFile": true }
+hi.txt
 <<<<<<< SEARCH
 =======
 I am a newly created hi.txt file but I will get a suffix because hi.txt already exists!
@@ -899,13 +899,8 @@ I am a newly created hi.txt file but I will get a suffix because hi.txt already 
     assert.dom('[data-test-file="file2.gts"]').exists();
     assert.dom('[data-test-file="hi.txt"]').exists();
 
-    // assert that a file exists with this pattern: hi-XXX.txt where XXX is a random string that can be anything
-    let files = findAll('[data-test-file]');
-    let newlyCreatedFileWhosePropodedNameAlreadyExisted = files.find((file) =>
-      /^hi-[A-Za-z0-9]{3}\.txt$/.test(file.getAttribute('data-test-file')!),
-    );
-
-    assert.ok(newlyCreatedFileWhosePropodedNameAlreadyExisted);
+    // hi-1.txt got created because hi.txt already exists
+    assert.dom('[data-test-file="hi-1.txt"]').exists();
   });
 
   test('a command sent via SendAiAssistantMessageCommand without autoExecute flag is not automatically executed by the bot', async function (assert) {
