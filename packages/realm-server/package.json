@@ -7,9 +7,9 @@
     "@cardstack/billing": "workspace:*",
     "@cardstack/boxel-icons": "workspace:*",
     "@cardstack/boxel-ui": "workspace:*",
+    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
-    "@cardstack/eslint-plugin-boxel": "workspace:*",
     "@koa/cors": "catalog:",
     "@koa/router": "catalog:",
     "@sentry/node": "catalog:",
@@ -34,8 +34,8 @@
     "@types/tmp": "catalog:",
     "@types/uuid": "catalog:",
     "@types/yargs": "catalog:",
-    "content-tag": "catalog:",
     "concurrently": "catalog:",
+    "content-tag": "catalog:",
     "date-fns": "catalog:",
     "decorator-transforms": "catalog:",
     "ember-eslint-parser": "0.5.9",
@@ -116,5 +116,8 @@
   },
   "volta": {
     "extends": "../../package.json"
+  },
+  "dependencies": {
+    "puppeteer": "^24.8.2"
   }
 }
