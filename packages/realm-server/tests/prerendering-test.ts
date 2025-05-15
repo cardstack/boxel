@@ -1,6 +1,6 @@
 import { module, test } from 'qunit';
 import { basename } from 'path';
-import { prerenderCard, RenderResponse } from '../prerender';
+import { prerenderCard, type RenderResponse } from '../prerender';
 
 module.only(basename(__filename), function () {
   module('prerender', function () {
@@ -16,15 +16,26 @@ module.only(basename(__filename), function () {
 
       test('embedded HTML', function (assert) {
         assert.ok(
-          /Maple\s+says\s+Meow/.test(result.html.embedded),
-          `failed to match embedded html:${result.html.embedded}`,
+          /Maple\s+says\s+Meow/.test(
+            result.embeddedHTML['http://localhost:4201/user/a/cat/Cat'],
+          ),
+          `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
+        );
+      });
+
+      test('parent embedded HTML', function (assert) {
+        assert.ok(
+          /data-test-card-thumbnail-placeholder/.test(
+            result.embeddedHTML['https://cardstack.com/base/card-api/CardDef'],
+          ),
+          `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
         );
       });
 
       test('isolated HTML', function (assert) {
         assert.ok(
-          /data-test-field="description"/.test(result.html.isolated),
-          `failed to match isolated html:${result.html.isolated}`,
+          /data-test-field="description"/.test(result.isolatedHTML),
+          `failed to match isolated html:${result.isolatedHTML}`,
         );
       });
 

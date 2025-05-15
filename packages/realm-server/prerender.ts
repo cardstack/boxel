@@ -1,9 +1,12 @@
-import { Format, formats, PrerenderMeta } from '@cardstack/runtime-common';
-import puppeteer, { Page } from 'puppeteer';
+import type { PrerenderMeta } from '@cardstack/runtime-common';
+import puppeteer, { type Page } from 'puppeteer';
 
 export interface RenderResponse extends PrerenderMeta {
+  isolatedHTML: string;
+  atomHTML: string;
+  embeddedHTML: Record<string, string>;
+  fittedHTML: Record<string, string>;
   iconHTML: string;
-  html: Record<Format, string>;
 }
 
 export async function prerenderCard(url: string): Promise<RenderResponse> {
@@ -20,8 +23,6 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
     localStorage.setItem('boxel-session', auth);
   }, auth);
 
-  const html: Map<Format, string> = new Map();
-
   await page.goto(
     `http://localhost:4200/render/${encodeURIComponent(url)}/meta`,
   );
@@ -32,30 +33,21 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
     );
   });
 
-  for (let format of formats) {
-    await transitionTo(page, 'render.html', format, '0');
-    await page.waitForSelector('[data-render-output="ready"]');
-    html.set(
-      format,
-      await page.evaluate(() => {
-        return document.querySelector('[data-render-output="ready"]')!
-          .innerHTML;
-      }),
-    );
-  }
-
-  await transitionTo(page, 'render.icon');
-  await page.waitForSelector('[data-render-output="ready"]');
-  const iconHTML = await page.evaluate(() => {
-    return document.querySelector('[data-render-output="ready"]')!.outerHTML;
-  });
+  const isolatedHTML = await renderHTML(page, 'isolated', 0);
+  const atomHTML = await renderHTML(page, 'atom', 0);
+  const embeddedHTML = await renderAncestors(page, 'embedded', meta.types);
+  const fittedHTML = await renderAncestors(page, 'embedded', meta.types);
+  const iconHTML = await renderIcon(page);
 
   await context.close();
   await browser.close();
   return {
     ...meta,
     iconHTML,
-    html: Object.fromEntries(html) as Record<Format, string>,
+    isolatedHTML,
+    atomHTML,
+    embeddedHTML,
+    fittedHTML,
   };
 }
 
@@ -71,4 +63,32 @@ async function transitionTo(
     routeName,
     params,
   );
+}
+
+async function renderAncestors(page: Page, format: string, types: string[]) {
+  let html: Record<string, string> = {};
+  for (let ancestorLevel = 0; ancestorLevel < types.length; ancestorLevel++) {
+    html[types[ancestorLevel]] = await renderHTML(page, format, ancestorLevel);
+  }
+  return html;
+}
+
+async function renderHTML(
+  page: Page,
+  format: string,
+  ancestorLevel: number,
+): Promise<string> {
+  await transitionTo(page, 'render.html', format, String(ancestorLevel));
+  await page.waitForSelector('[data-render-output="ready"]');
+  return await page.evaluate(() => {
+    return document.querySelector('[data-render-output="ready"]')!.innerHTML;
+  });
+}
+
+async function renderIcon(page: Page): Promise<string> {
+  await transitionTo(page, 'render.icon');
+  await page.waitForSelector('[data-render-output="ready"]');
+  return await page.evaluate(() => {
+    return document.querySelector('[data-render-output="ready"]')!.outerHTML;
+  });
 }
