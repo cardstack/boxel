@@ -1,12 +1,5 @@
 import { module, test } from 'qunit';
-import {
-  click,
-  fillIn,
-  find,
-  render,
-  settled,
-  typeIn,
-} from '@ember/test-helpers';
+import { render } from '@ember/test-helpers';
 import { setupRenderingTest } from 'test-app/tests/helpers';
 import { currencyFormat } from '@cardstack/boxel-ui/helpers';
 
