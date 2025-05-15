@@ -64,7 +64,13 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   };
 
   private get isApplyAllButtonDisplayed() {
-    return this.codeDataItems.length > 1 && !this.args.isStreaming;
+    if (this.args.isStreaming) {
+      return false;
+    }
+    return (
+      this.codeDataItems.filter((codeData) => !!codeData.searchReplaceBlock)
+        .length > 1
+    );
   }
 
   private get codeDataItems() {
