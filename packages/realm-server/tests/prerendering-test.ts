@@ -11,7 +11,7 @@ module.only(basename(__filename), function () {
         'embedded',
       );
       assert.ok(
-        /Maple says Meow/.test(result.html),
+        /Maple\s+says\s+Meow/.test(result.html),
         `failed to match in ${result.html}`,
       );
     });
