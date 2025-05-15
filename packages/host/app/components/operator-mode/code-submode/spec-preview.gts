@@ -570,7 +570,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
   get showCreateSpec() {
     return (
       Boolean(this.args.selectedDeclaration?.exportName) &&
-      !this.args.search?.isLoading &&
+      !this.args.searchIsLoading? &&
       this.args.specsForSelectedDefinition.length === 0 &&
       this.canWrite
     );
