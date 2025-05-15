@@ -235,6 +235,7 @@ interface ContentSignature {
     viewCardInPlayground: (cardDefOrId: CardDefOrId) => void;
     onSpecView: (spec: Spec) => void;
     searchResource: ReturnType<getCards<Spec>> | undefined;
+    isExported: boolean;
   };
 }
 
