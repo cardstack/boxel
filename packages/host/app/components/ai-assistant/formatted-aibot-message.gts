@@ -5,12 +5,10 @@ import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
-import { cached, tracked } from '@glimmer/tracking';
+import { tracked } from '@glimmer/tracking';
 
 import { dropTask } from 'ember-concurrency';
 import perform from 'ember-concurrency/helpers/perform';
-
-import { TrackedArray } from 'tracked-built-ins';
 
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
@@ -23,7 +21,10 @@ import {
   HtmlPreTagGroup,
 } from '@cardstack/host/lib/formatted-message/utils';
 
-import { getCodeDiffResultResource } from '@cardstack/host/resources/code-diff';
+import {
+  type CodeDiffResource,
+  getCodeDiffResultResource,
+} from '@cardstack/host/resources/code-diff';
 import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 import LoaderService from '@cardstack/host/services/loader-service';
@@ -51,7 +52,6 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
   @service private declare cardService: CardService;
   @service private declare loaderService: LoaderService;
   @service private declare commandService: CommandService;
-  @tracked stableHtmlParts: TrackedArray<HtmlTagGroup> = new TrackedArray([]);
 
   @tracked applyAllCodePatchTasksState:
     | 'ready'
@@ -60,7 +60,7 @@ export default class FormattedAiBotMessage extends Component<FormattedAiBotMessa
     | 'failed' = 'ready';
 
   private isLastHtmlGroup = (index: number) => {
-    return index === this.stableHtmlParts.length - 1;
+    return index === (this.args.htmlParts?.length ?? 0) - 1;
   };
 
   private get isApplyAllButtonDisplayed() {
@@ -243,16 +243,30 @@ interface HtmlGroupCodeBlockSignature {
 }
 
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
-  @cached
+  _codeDiffResource: CodeDiffResource | undefined;
+  _searchReplaceBlock: string | null | undefined = null;
+  _fileUrl: string | null | undefined = null;
+
   get codeDiffResource() {
-    console.log('codeDiffResource getter');
-    return this.args.codeData.searchReplaceBlock
+    if (this._codeDiffResource) {
+      if (
+        this._fileUrl === this.args.codeData.fileUrl &&
+        this._searchReplaceBlock === this.args.codeData.searchReplaceBlock
+      ) {
+        return this._codeDiffResource;
+      }
+    }
+
+    this._fileUrl = this.args.codeData.fileUrl;
+    this._searchReplaceBlock = this.args.codeData.searchReplaceBlock;
+    this._codeDiffResource = this.args.codeData.searchReplaceBlock
       ? getCodeDiffResultResource(
           this,
           this.args.codeData.fileUrl,
           this.args.codeData.searchReplaceBlock,
         )
       : undefined;
+    return this._codeDiffResource;
   }
 
   <template>
