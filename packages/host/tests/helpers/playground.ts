@@ -72,10 +72,10 @@ export const selectFormat = async (format: Format) =>
   await click(`[data-test-format-chooser="${format}"]`);
 
 export const togglePlaygroundPanel = async () =>
-  await click('[data-test-accordion-item="playground"] button');
+  await click('[data-test-code-mode-panel-item="preview"]');
 
 export const toggleSpecPanel = async () =>
-  await click('[data-test-accordion-item="spec-preview"] button');
+  await click('[data-test-code-mode-panel-item="spec"]');
 
 // PlaygroundSelections
 export function getPlaygroundSelections():
