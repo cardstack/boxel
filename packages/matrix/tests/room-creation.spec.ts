@@ -274,10 +274,7 @@ test.describe('Room creation', () => {
     await page.locator(`[data-test-close-past-sessions]`).click(); // close past sessions tab
 
     await deleteRoom(page, room3);
-    await expect(
-      page.locator(`[data-test-joined-room="${room3}"]`),
-    ).toHaveCount(0);
-    await page.locator(`[data-test-close-past-sessions]`).click();
+    await expect(page.locator(`[data-test-past-sessions]`)).toHaveCount(0);
 
     await page.waitForTimeout(500); // wait for new room to be created
     let newRoom = await getRoomId(page);

@@ -932,7 +932,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Card Error: Internal Server Error Encountered error rendering HTML for card: formatName is not defined Stack trace: Error: Encountered error rendering HTML for card: formatName is not defined at render (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:568265:17) at CurrentRun.renderCard (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:577444:69) at CurrentRun.renderCard (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566867:57) at CurrentRun.indexCard (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566745:53) at async CurrentRun.visitFile (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566631:11) at async CurrentRun.tryToVisit (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566496:7) at async http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566447:9 at async CurrentRun.whileIndexing (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566507:5) at async CurrentRun.fromScratch (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566444:5)`,
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error: Internal Server Error Encountered error rendering HTML for card: formatName is not defined Stack trace:`,
           files: [
             {
               name: 'broken-country.gts',

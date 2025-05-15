@@ -46,20 +46,18 @@ export default class FixItButton extends Component<Signature> {
 
     this.isSending = true;
     try {
-      // Open AI assistant panel if it's not already open and wait for it to be ready
-      if (!this.aiAssistantPanelService.isOpen) {
-        await this.aiAssistantPanelService.openPanel();
+      await this.aiAssistantPanelService.openPanel();
+
+      if (!this.matrixService.currentRoomId) {
+        throw new Error('No room found');
       }
 
-      // Send the error message to the current room
-      if (this.matrixService.currentRoomId) {
-        await this.matrixService.sendMessage(
-          this.matrixService.currentRoomId,
-          `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
-          [],
-          this.args.fileToAttach ? [this.args.fileToAttach] : [],
-        );
-      }
+      await this.matrixService.sendMessage(
+        this.matrixService.currentRoomId,
+        `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
+        [],
+        this.args.fileToAttach ? [this.args.fileToAttach] : [],
+      );
     } finally {
       this.isSending = false;
     }

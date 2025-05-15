@@ -325,10 +325,6 @@ export default class MatrixService extends Service {
   }
 
   get flushAll() {
-    // If there are no rooms, we can resolve immediately
-    if (this.roomResourcesCache.size === 0) {
-      return Promise.resolve();
-    }
     return Promise.all([
       this.flushMembership ?? Promise.resolve(),
       this.flushTimeline ?? Promise.resolve(),
@@ -1326,6 +1322,7 @@ export default class MatrixService extends Service {
         event.type === 'm.room.member' &&
         room.getMyMembership() === 'invite'
       ) {
+        console.log('event', event);
         if (event.content.membership === 'invite') {
           let stateEvents = room
             .getLiveTimeline()

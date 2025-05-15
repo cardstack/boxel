@@ -4,13 +4,14 @@ import { service } from '@ember/service';
 import Service from '@ember/service';
 import { tracked } from '@glimmer/tracking';
 
-import { restartableTask } from 'ember-concurrency';
+import { allSettled, restartableTask } from 'ember-concurrency';
 import { timeout } from 'ember-concurrency';
 
 import window from 'ember-window-mock';
 
 import CreateAiAssistantRoomCommand from '../commands/create-ai-assistant-room';
-import { eventDebounceMs } from '../lib/matrix-utils';
+import { Submodes } from '../components/submode-switcher';
+import { eventDebounceMs, isMatrixError } from '../lib/matrix-utils';
 import {
   CurrentRoomIdPersistenceKey,
   NewSessionIdPersistenceKey,
@@ -35,7 +36,10 @@ export default class AiAssistantPanelService extends Service {
   @service declare private commandService: CommandService;
 
   @tracked displayRoomError = false;
-  @tracked private currentRoomId: string | undefined;
+  @tracked isShowingPastSessions = false;
+  @tracked roomToRename: SessionRoomData | undefined = undefined;
+  @tracked roomToDelete: { id: string; name: string } | undefined = undefined;
+  @tracked roomDeleteError: string | undefined = undefined;
 
   constructor(owner: Owner) {
     super(owner);
@@ -60,20 +64,35 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  enterRoom(roomId: string) {
-    this.currentRoomId = roomId;
-    this.matrixService.currentRoomId = roomId;
-    window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
+  displayPastSessions() {
+    this.isShowingPastSessions = true;
   }
 
   @action
-  async createNewSession(name: string = 'New AI Assistant Chat') {
+  hidePastSessions() {
+    this.isShowingPastSessions = false;
+  }
+
+  @action
+  enterRoom(roomId: string, hidePastSessionsList = true) {
+    this.matrixService.currentRoomId = roomId;
+    if (this.operatorModeStateService.state.submode === Submodes.Code) {
+      this.matrixService.setLLMForCodeMode();
+    }
+    window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
+    if (hidePastSessionsList) {
+      this.hidePastSessions();
+    }
+  }
+
+  @action
+  async createNewSession() {
     this.displayRoomError = false;
     if (this.newSessionId) {
       this.enterRoom(this.newSessionId);
       return;
     }
-    await this.doCreateRoom.perform(name);
+    await this.doCreateRoom.perform();
   }
 
   private get newSessionId() {
@@ -92,24 +111,30 @@ export default class AiAssistantPanelService extends Service {
     return this.doCreateRoom.isIdle;
   }
 
-  private doCreateRoom = restartableTask(async (name: string) => {
-    try {
-      const defaultSkills = await this.matrixService.loadDefaultSkills(
-        this.operatorModeStateService.state.submode,
-      );
-      let createRoomCommand = new CreateAiAssistantRoomCommand(
-        this.commandService.commandContext,
-      );
-      let { roomId } = await createRoomCommand.execute({ name, defaultSkills });
+  private doCreateRoom = restartableTask(
+    async (name: string = 'New AI Assistant Chat') => {
+      try {
+        const defaultSkills = await this.matrixService.loadDefaultSkills(
+          this.operatorModeStateService.state.submode,
+        );
+        let createRoomCommand = new CreateAiAssistantRoomCommand(
+          this.commandService.commandContext,
+        );
+        let { roomId } = await createRoomCommand.execute({
+          name,
+          defaultSkills,
+        });
 
-      window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
-      this.enterRoom(roomId);
-    } catch (e) {
-      console.log(e);
-      this.displayRoomError = true;
-      this.currentRoomId = undefined;
-    }
-  });
+        window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
+        this.enterRoom(roomId);
+      } catch (e) {
+        console.log(e);
+        this.displayRoomError = true;
+      }
+
+      return undefined;
+    },
+  );
 
   get loadingRooms() {
     return this.loadRoomsTask.isRunning;
@@ -117,10 +142,12 @@ export default class AiAssistantPanelService extends Service {
 
   private loadRoomsTask = restartableTask(async () => {
     await this.matrixService.flushAll;
+    await allSettled(
+      [...this.matrixService.roomResources.values()].map((r) => r.processing),
+    );
     await this.enterRoomInitially();
   });
 
-  @action
   private async enterRoomInitially() {
     let persistedRoomId = window.localStorage.getItem(
       CurrentRoomIdPersistenceKey,
@@ -214,7 +241,38 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  async leaveRoom(roomId: string) {
+  setRoomToRename(room: SessionRoomData) {
+    this.roomToRename = room;
+    this.hidePastSessions();
+  }
+
+  @action
+  onCloseRename() {
+    this.roomToRename = undefined;
+    this.displayPastSessions();
+  }
+
+  @action
+  setRoomToDelete(room: SessionRoomData | undefined) {
+    this.roomDeleteError = undefined;
+
+    if (!room) {
+      this.roomToDelete = undefined;
+      return;
+    }
+
+    this.roomToDelete = {
+      id: room.roomId,
+      name: room.name || room.roomId,
+    };
+  }
+
+  @action
+  leaveRoom(roomId: string) {
+    this.doLeaveRoom.perform(roomId);
+  }
+
+  private doLeaveRoom = restartableTask(async (roomId: string) => {
     try {
       await this.matrixService.leave(roomId);
       await this.matrixService.forget(roomId);
@@ -225,17 +283,23 @@ export default class AiAssistantPanelService extends Service {
         window.localStorage.removeItem(NewSessionIdPersistenceKey);
       }
 
-      if (this.currentRoomId === roomId) {
+      if (this.matrixService.currentRoomId === roomId) {
         window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
         if (this.latestRoom) {
-          this.enterRoom(this.latestRoom.roomId);
+          this.enterRoom(this.latestRoom.roomId, false);
         } else {
-          await this.createNewSession();
+          this.createNewSession();
         }
       }
+      this.roomToDelete = undefined;
     } catch (e) {
       console.error(e);
-      throw e;
+      this.roomDeleteError = 'Error deleting room';
+      if (isMatrixError(e)) {
+        this.roomDeleteError += `: ${e.data.error}`;
+      } else if (e instanceof Error) {
+        this.roomDeleteError += `: ${e.message}`;
+      }
     }
-  }
+  });
 }

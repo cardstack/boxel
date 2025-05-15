@@ -1,6 +1,5 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
@@ -26,8 +25,6 @@ import ENV from '@cardstack/host/config/environment';
 import AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import { Message } from '../../lib/matrix-classes/message';
-import { isMatrixError } from '../../lib/matrix-utils';
 import CommandService from '../../services/command-service';
 import { type MonacoSDK } from '../../services/monaco-service';
 import NewSession from '../ai-assistant/new-session';
@@ -35,8 +32,6 @@ import AiAssistantPastSessionsList from '../ai-assistant/past-sessions';
 import RenameSession from '../ai-assistant/rename-session';
 import Room from '../matrix/room';
 import DeleteModal from '../operator-mode/delete-modal';
-
-import { Submodes } from '../submode-switcher';
 
 import assistantIcon from './ai-assist-icon.webp';
 
@@ -53,19 +48,6 @@ interface Signature {
     resizeHandle: ResizeHandle;
     selectedCardRef?: ResolvedCodeRef;
   };
-}
-
-interface RoomToDelete {
-  id: string;
-  name: string;
-}
-
-export interface SessionRoomData {
-  roomId: string;
-  name: string;
-  lastMessage: Message | undefined;
-  created: Date;
-  lastActiveTimestamp: number;
 }
 
 export default class AiAssistantPanel extends Component<Signature> {
@@ -132,7 +114,10 @@ export default class AiAssistantPanel extends Component<Signature> {
               @kind='secondary-dark'
               @size='small'
               @disabled={{not this.roomResource.messages.length}}
-              {{on 'click' this.createNewSession}}
+              {{on
+                'click'
+                (fn this.aiAssistantPanelService.createNewSession false)
+              }}
               data-test-create-room-btn
             >
               New Session
@@ -150,7 +135,7 @@ export default class AiAssistantPanel extends Component<Signature> {
                 @kind='secondary-dark'
                 @size='small'
                 @disabled={{this.aiAssistantPanelService.displayRoomError}}
-                {{on 'click' this.displayPastSessions}}
+                {{on 'click' this.aiAssistantPanelService.displayPastSessions}}
                 data-test-past-sessions-button
                 data-test-has-active-sessions={{this.hasOtherActiveSessions}}
               >
@@ -162,24 +147,26 @@ export default class AiAssistantPanel extends Component<Signature> {
           </div>
         </header>
 
-        {{#if this.isShowingPastSessions}}
+        {{#if this.aiAssistantPanelService.isShowingPastSessions}}
           <AiAssistantPastSessionsList
             @sessions={{this.aiAssistantPanelService.aiSessionRooms}}
             @roomActions={{this.roomActions}}
-            @onClose={{this.hidePastSessions}}
+            @onClose={{this.aiAssistantPanelService.hidePastSessions}}
             {{popoverVelcro.loop}}
           />
-        {{else if this.roomToRename}}
+        {{else if this.aiAssistantPanelService.roomToRename}}
           <RenameSession
-            @room={{this.roomToRename}}
-            @onClose={{this.onCloseRename}}
+            @room={{this.aiAssistantPanelService.roomToRename}}
+            @onClose={{this.aiAssistantPanelService.onCloseRename}}
             {{popoverVelcro.loop}}
           />
         {{/if}}
 
         {{#if this.aiAssistantPanelService.displayRoomError}}
           <div class='session-error'>
-            <NewSession @errorAction={{this.createNewSession}} />
+            <NewSession
+              @errorAction={{this.aiAssistantPanelService.createNewSession}}
+            />
           </div>
         {{else if this.isReady}}
           {{! below if statement is covered in 'isReady' check above but added due to glint not realizing it }}
@@ -202,16 +189,19 @@ export default class AiAssistantPanel extends Component<Signature> {
       </div>
     </Velcro>
 
-    {{#if this.roomToDelete}}
+    {{#if this.aiAssistantPanelService.roomToDelete}}
       <DeleteModal
-        @itemToDelete={{this.roomToDelete}}
-        @onConfirm={{fn this.leaveRoom this.roomToDelete.id}}
-        @onCancel={{fn this.setRoomToDelete undefined}}
-        @error={{this.roomDeleteError}}
+        @itemToDelete={{this.aiAssistantPanelService.roomToDelete}}
+        @onConfirm={{fn
+          this.aiAssistantPanelService.leaveRoom
+          this.aiAssistantPanelService.roomToDelete.id
+        }}
+        @onCancel={{fn this.aiAssistantPanelService.setRoomToDelete undefined}}
+        @error={{this.aiAssistantPanelService.roomDeleteError}}
       >
         <:content>
           Delete the room
-          <strong>{{this.roomToDelete.name}}</strong>?
+          <strong>{{this.aiAssistantPanelService.roomToDelete.name}}</strong>?
         </:content>
       </DeleteModal>
     {{/if}}
@@ -374,10 +364,6 @@ export default class AiAssistantPanel extends Component<Signature> {
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
 
-  @tracked private isShowingPastSessions = false;
-  @tracked private roomToRename: SessionRoomData | undefined = undefined;
-  @tracked private roomToDelete: RoomToDelete | undefined = undefined;
-  @tracked private roomDeleteError: string | undefined = undefined;
   @tracked private maybeMonacoSDK: MonacoSDK | undefined;
 
   constructor(owner: Owner, args: Signature['Args']) {
@@ -396,83 +382,13 @@ export default class AiAssistantPanel extends Component<Signature> {
       : undefined;
   }
 
-  @action
-  private createNewSession() {
-    this.aiAssistantPanelService.createNewSession();
-  }
-
-  @action
-  private displayPastSessions() {
-    this.isShowingPastSessions = true;
-  }
-
-  @action
-  private hidePastSessions() {
-    this.isShowingPastSessions = false;
-  }
-
-  @action
-  private enterRoom(roomId: string, hidePastSessionsList = true) {
-    this.aiAssistantPanelService.enterRoom(roomId);
-    if (this.operatorModeStateService.state.submode === Submodes.Code) {
-      this.matrixService.setLLMForCodeMode();
-    }
-    if (hidePastSessionsList) {
-      this.hidePastSessions();
-    }
-  }
-
-  @action private setRoomToRename(room: SessionRoomData) {
-    this.roomToRename = room;
-    this.hidePastSessions();
-  }
-
-  @action private onCloseRename() {
-    this.roomToRename = undefined;
-    this.displayPastSessions();
-  }
-
-  @action private setRoomToDelete(room: SessionRoomData | undefined) {
-    this.roomDeleteError = undefined;
-
-    if (!room) {
-      this.roomToDelete = undefined;
-      return;
-    }
-
-    this.roomToDelete = {
-      id: room.roomId,
-      name: room.name || room.roomId,
-    };
-  }
-
   private get roomActions() {
     return {
-      open: this.enterRoom,
-      rename: this.setRoomToRename,
-      delete: this.setRoomToDelete,
+      open: this.aiAssistantPanelService.enterRoom,
+      rename: this.aiAssistantPanelService.setRoomToRename,
+      delete: this.aiAssistantPanelService.setRoomToDelete,
     };
   }
-
-  @action
-  private leaveRoom(roomId: string) {
-    this.doLeaveRoom.perform(roomId);
-  }
-
-  private doLeaveRoom = restartableTask(async (roomId: string) => {
-    try {
-      await this.aiAssistantPanelService.leaveRoom(roomId);
-      this.roomToDelete = undefined;
-    } catch (e) {
-      console.error(e);
-      this.roomDeleteError = 'Error deleting room';
-      if (isMatrixError(e)) {
-        this.roomDeleteError += `: ${e.data.error}`;
-      } else if (e instanceof Error) {
-        this.roomDeleteError += `: ${e.message}`;
-      }
-    }
-  });
 
   private loadMonaco = restartableTask(async () => {
     this.maybeMonacoSDK = await this.monacoService.getMonacoContext();
@@ -489,6 +405,7 @@ export default class AiAssistantPanel extends Component<Signature> {
     return Boolean(
       this.matrixService.currentRoomId &&
         this.maybeMonacoSDK &&
+        !this.aiAssistantPanelService.loadingRooms &&
         this.aiAssistantPanelService.isCreateRoomIdle,
     );
   }

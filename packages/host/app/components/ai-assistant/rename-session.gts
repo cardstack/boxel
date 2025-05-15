@@ -14,9 +14,9 @@ import {
 } from '@cardstack/boxel-ui/components';
 
 import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
+import { SessionRoomData } from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
-import { SessionRoomData } from './panel';
 import AiAssistantPanelPopover from './panel-popover';
 
 interface Signature {

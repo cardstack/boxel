@@ -7,7 +7,8 @@ import { modifier } from 'ember-modifier';
 import { IconButton, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { DropdownArrowFilled } from '@cardstack/boxel-ui/icons';
 
-import { SessionRoomData } from './panel';
+import { SessionRoomData } from '../../services/ai-assistant-panel-service';
+
 import AiAssistantPanelPopover from './panel-popover';
 import PastSessionItem, { type RoomActions } from './past-session-item';
 
