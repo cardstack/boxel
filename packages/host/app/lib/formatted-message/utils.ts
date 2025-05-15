@@ -7,10 +7,10 @@ import {
   parseSearchReplace,
 } from '../search-replace-block-parsing';
 
-import { CodePatchAction } from './code-patch-action';
-
 export function extractCodeData(
   preElementString: string,
+  roomId: string,
+  eventId: string,
   codeBlockIndex: number,
 ): CodeData {
   console.log('extractCodeData', preElementString);
@@ -29,6 +29,8 @@ export function extractCodeData(
       code: null,
       language: null,
       searchReplaceBlock: null,
+      roomId: '',
+      eventId: '',
       codeBlockIndex: -1,
     };
   }
@@ -88,6 +90,8 @@ export function extractCodeData(
     searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
       ? contentWithoutFileUrl
       : null,
+    roomId,
+    eventId,
     codeBlockIndex,
   };
 }
@@ -126,6 +130,8 @@ export interface CodeData {
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
+  roomId: string;
+  eventId: string;
   codeBlockIndex: number;
 }
 
@@ -135,7 +141,6 @@ export interface HtmlPreTagGroup {
   type: 'pre_tag';
   content: string;
   codeData: CodeData;
-  codePatchAction?: CodePatchAction;
 }
 
 export interface HtmlNonPreTagGroup {
@@ -150,7 +155,11 @@ export function isHtmlPreTagGroup(
   return htmlTagGroup.type === 'pre_tag';
 }
 
-export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
+export function parseHtmlContent(
+  htmlString: string,
+  roomId: string,
+  eventId: string,
+): HtmlTagGroup[] {
   let result: HtmlTagGroup[] = [];
 
   // Create a temporary DOM element to parse the HTML string.
@@ -177,7 +186,12 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
       let tagName = element.tagName.toLowerCase();
 
       if (tagName === 'pre') {
-        let codeData = extractCodeData(element.outerHTML, codeBlockIndex++);
+        let codeData = extractCodeData(
+          element.outerHTML,
+          roomId,
+          eventId,
+          codeBlockIndex++,
+        );
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,

@@ -69,7 +69,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       attachedResources() {
         return undefined;
       },
-      htmlParts: parseHtmlContent(messageContent),
+      htmlParts: parseHtmlContent(messageContent, '!abcd', '1234'),
     };
 
     let testScenario = {

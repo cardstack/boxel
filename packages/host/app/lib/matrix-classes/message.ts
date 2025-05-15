@@ -122,6 +122,6 @@ export class Message implements RoomMessageInterface {
   */
   @cached
   get htmlParts(): HtmlTagGroup[] {
-    return parseHtmlContent(this.bodyHTML);
+    return parseHtmlContent(this.bodyHTML, this.roomId, this.eventId);
   }
 }

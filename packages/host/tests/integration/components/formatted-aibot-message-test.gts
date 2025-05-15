@@ -28,6 +28,8 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
   let monacoService: MonacoService;
   let cardService: CardService;
+  let roomId = '!abcd';
+  let eventId = '1234';
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
     monacoService = this.owner.lookup(
@@ -55,7 +57,8 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
 
   test('it renders content with monaco editor in place of pre tags', async function (assert) {
     await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(`
+      htmlParts: parseHtmlContent(
+        `
 <p>Hey there, for Valentine's day I made you a code block!</p>
 <pre data-code-language="c">
 print("🖤")
@@ -65,7 +68,10 @@ print("🖤")
 puts "💎"
 </pre>
 <p>I hope you like this one too!</p>
-`),
+`,
+        roomId,
+        eventId,
+      ),
       isStreaming: false,
     });
 
@@ -99,10 +105,14 @@ puts "💎"
 
   test('it will not render apply code button when code patch block is detected but no file url is provided', async function (assert) {
     await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(`
+      htmlParts: parseHtmlContent(
+        `
 <pre data-code-language="css">
           background: #ff7f24;
-</pre>`),
+</pre>`,
+        roomId,
+        eventId,
+      ),
       isStreaming: false,
     });
 
@@ -111,13 +121,17 @@ puts "💎"
 
   test('it will render an incomplete code patch block in human readable format when search part is not complete', async function (assert) {
     await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(`
+      htmlParts: parseHtmlContent(
+        `
 <pre data-code-language="typescript">
 <<<<<<< SEARCH
           let a = 1;
           let b = 2;
           let c = 3;
-</pre>`),
+</pre>`,
+        roomId,
+        eventId,
+      ),
       isStreaming: false,
     });
     await waitUntil(() => document.querySelectorAll('.view-line').length > 3);
@@ -133,14 +147,18 @@ puts "💎"
 
   test('it will render an incomplete code patch block in human readable format when replace part is not complete', async function (assert) {
     await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(`
+      htmlParts: parseHtmlContent(
+        `
 <pre data-code-language="typescript">
 <<<<<<< SEARCH
           let a = 1;
           let c = 3;
 =======
           let a = 2;
-</pre>`),
+</pre>`,
+        roomId,
+        eventId,
+      ),
       isStreaming: false,
     });
 
@@ -157,7 +175,8 @@ puts "💎"
 
   test('it will render a diff editor when search and replace block is complete', async function (assert) {
     await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(`
+      htmlParts: parseHtmlContent(
+        `
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
@@ -166,7 +185,10 @@ let b = 2;
 =======
 let a = 3;
 >>>>>>> REPLACE
-</pre>`),
+</pre>`,
+        roomId,
+        eventId,
+      ),
       isStreaming: false,
     });
 
@@ -188,7 +210,8 @@ let a = 3;
 
   test('it will render one diff editor and one standard code block if one search replace block is complete and another is not', async function (assert) {
     await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(`
+      htmlParts: parseHtmlContent(
+        `
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
@@ -205,7 +228,10 @@ let a = 3;
 let a = 1;
 let c = 3;
 </pre>
-`),
+`,
+        roomId,
+        eventId,
+      ),
       isStreaming: false,
     });
 
@@ -219,7 +245,8 @@ let c = 3;
 
   test('it will render "Accept All" button when there are code patch actions and it is not streaming', async function (assert) {
     await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(`<p>We need to fix this:</p>
+      htmlParts: parseHtmlContent(
+        `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
@@ -237,7 +264,10 @@ let c = 1;
 let c = 2;
 >>>>>>> REPLACE
 </pre>
-`),
+`,
+        roomId,
+        eventId,
+      ),
       isStreaming: false,
     });
 
@@ -246,7 +276,8 @@ let c = 2;
 
   test('it will not render "Accept All" button when there are code patch actions and it is streaming', async function (assert) {
     await renderFormattedAiBotMessage({
-      htmlParts: parseHtmlContent(`<p>We need to fix this:</p>
+      htmlParts: parseHtmlContent(
+        `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
@@ -264,7 +295,10 @@ let c = 1;
 let c = 2;
 >>>>>>> REPLACE
 </pre>
-`),
+`,
+        roomId,
+        eventId,
+      ),
       isStreaming: true,
     });
 
@@ -279,6 +313,8 @@ let c = 2;
     class TestComponent extends Component {
       @tracked htmlParts = parseHtmlContent(
         '<p>Howdy!</p> <p>How are you today?</p>',
+        roomId,
+        eventId,
       );
 
       constructor(owner: Owner, args: any) {
@@ -306,6 +342,8 @@ let c = 2;
     // This is a regression test for this particular case.
     component!.htmlParts = parseHtmlContent(
       '<p>There was an error processing your request, please try again later.</p>',
+      roomId,
+      eventId,
     );
     await settled();
 
@@ -347,13 +385,16 @@ let c = 2;
     // By assigning html to the component, we are simulating streaming html updates
 
     component.isStreaming = true;
-    component.htmlParts =
-      parseHtmlContent(`<pre data-code-language="typescript">
+    component.htmlParts = parseHtmlContent(
+      `<pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======
-let a = 2;`); // incomplete code block - the ending >>>>>> REPLACE is missing
+let a = 2;`,
+      roomId,
+      eventId,
+    ); // incomplete code block - the ending >>>>>> REPLACE is missing
 
     await settled();
     assert.dom('.code-block').exists();
@@ -364,8 +405,8 @@ let a = 2;`); // incomplete code block - the ending >>>>>> REPLACE is missing
           .innerText ==
         '// existing code ... \nlet a = 1;\n// new code ... \nlet a = 2;',
     );
-    component.htmlParts =
-      parseHtmlContent(`<pre data-code-language="typescript">
+    component.htmlParts = parseHtmlContent(
+      `<pre data-code-language="typescript">
 // File url: https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
@@ -373,7 +414,10 @@ let a = 1;
 let a = 2;
 >>>>>>> REPLACE
 </pre>
-`); // complete code block
+`,
+      roomId,
+      eventId,
+    ); // complete code block
 
     component.isStreaming = false;
 
