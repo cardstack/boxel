@@ -98,7 +98,10 @@ interface Signature {
     default: [
       WithBoundArgs<
         typeof SpecPreviewTitle,
-        'searchResource' | 'createSpec' | 'isCreateSpecInstanceRunning'
+        | 'searchResource'
+        | 'createSpec'
+        | 'isCreateSpecInstanceRunning'
+        | 'isExported'
       >,
       (
         | WithBoundArgs<
@@ -107,6 +110,7 @@ interface Signature {
             | 'onSelectCard'
             | 'viewCardInPlayground'
             | 'onSpecView'
+            | 'isExported'
           >
         | WithBoundArgs<typeof SpecPreviewLoading, never>
       ),
@@ -116,6 +120,7 @@ interface Signature {
 
 interface TitleSignature {
   Args: {
+    isExported: boolean;
     isCreateSpecInstanceRunning: boolean;
     createSpec: (event: MouseEvent) => void;
     searchResource: ReturnType<getCards<Spec>> | undefined;
@@ -124,6 +129,9 @@ interface TitleSignature {
 
 class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
   @service private declare specPanelService: SpecPanelService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare realm: RealmService;
+
   private get specs() {
     return this.args.searchResource?.instances ?? [];
   }
@@ -136,11 +144,15 @@ class SpecPreviewTitle extends GlimmerComponent<TitleSignature> {
     return this.specs?.[0];
   }
 
-  get showCreateSpec() {
-    return this.specs?.length === 0;
+  private get canWrite() {
+    return this.realm.canWrite(this.operatorModeStateService.realmURL.href);
   }
 
-  get numberOfInstances() {
+  private get showCreateSpec() {
+    return this.args.isExported && this.specs?.length === 0 && this.canWrite;
+  }
+
+  private get numberOfInstances() {
     return this.specs?.length;
   }
 
@@ -296,11 +308,11 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
   }
 
   get displayCannotWriteMessage() {
-    return !this.canWrite;
+    return !this.canWrite && this.specs.length === 0;
   }
 
   get showCreateSpec() {
-    return this.specs.length === 0;
+    return this.args.isExported && this.specs.length === 0 && this.canWrite;
   }
 
   private get specViewFormat() {
@@ -713,6 +725,10 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     this.args.toggleAccordionItem('playground');
   };
 
+  get isExported() {
+    return Boolean(this.args.selectedDeclaration?.exportName);
+  }
+
   <template>
     {{consumeContext this.makeSearch}}
     {{#if this.isLoading}}
@@ -722,13 +738,18 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           createSpec=this.createSpec
           isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
           searchResource=this.search
+          isExported=this.isExported
         )
         (component SpecPreviewLoading)
       }}
     {{else}}
       {{yield
         (component
-          SpecPreviewTitle createSpec=this.createSpec searchResource=this.search
+          SpecPreviewTitle
+          createSpec=this.createSpec
+          isCreateSpecInstanceRunning=this.createSpecInstance.isRunning
+          searchResource=this.search
+          isExported=this.isExported
         )
         (component
           SpecPreviewContent
@@ -736,6 +757,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
           onSpecView=this.onSpecView
           viewCardInPlayground=this.viewCardInPlayground
           searchResource=this.search
+          isExported=this.isExported
         )
       }}
     {{/if}}
