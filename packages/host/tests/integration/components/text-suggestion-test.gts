@@ -66,7 +66,6 @@ module('Integration | text-suggestion | card-chooser-title', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'article.gts': { Article },

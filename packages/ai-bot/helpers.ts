@@ -772,9 +772,9 @@ export function isCommandResultEvent(
   );
 }
 
+export const OMIT_CODE_CHANGE_PLACEHOLDER: string =
+  '[Omitting previously suggested code change]';
 function elideCodeBlocks(content: string) {
-  const PLACEHOLDER: string = '[Proposed code change]';
-
   while (
     content.includes(SEARCH_MARKER) &&
     content.includes(SEPARATOR_MARKER) &&
@@ -793,7 +793,7 @@ function elideCodeBlocks(content: string) {
     // replace the content between the markers with a placeholder
     content =
       content.substring(0, searchStartIndex) +
-      PLACEHOLDER +
+      OMIT_CODE_CHANGE_PLACEHOLDER +
       content.substring(replaceEndIndex + REPLACE_MARKER.length);
   }
   return content;

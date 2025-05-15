@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "CRMProgressBar",
+        "module": "../crm-app/components/crm-progress-bar"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "CRM Progress Bar",
+      "description": "Spec for CRM Progress Bar component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

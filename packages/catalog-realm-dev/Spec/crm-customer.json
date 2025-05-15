@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "Customer",
+        "module": "../crm-app/customer"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Customer",
+      "description": "Spec for Customer",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
