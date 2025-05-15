@@ -1,14 +1,9 @@
-import {
-  Format,
-  formats,
-  LooseSingleCardDocument,
-} from '@cardstack/runtime-common';
+import { Format, formats, PrerenderMeta } from '@cardstack/runtime-common';
 import puppeteer, { Page } from 'puppeteer';
 
-export interface RenderResponse {
+export interface RenderResponse extends PrerenderMeta {
   iconHTML: string;
   html: Record<Format, string>;
-  json: LooseSingleCardDocument;
 }
 
 export async function prerenderCard(url: string): Promise<RenderResponse> {
@@ -27,10 +22,18 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
 
   const html: Map<Format, string> = new Map();
 
-  await page.goto(`http://localhost:4200/render/${encodeURIComponent(url)}`);
+  await page.goto(
+    `http://localhost:4200/render/${encodeURIComponent(url)}/meta`,
+  );
+  await page.waitForSelector('[data-render-output="ready"]');
+  const meta: PrerenderMeta = await page.evaluate(() => {
+    return JSON.parse(
+      document.querySelector('[data-render-output="ready"]')!.textContent!,
+    );
+  });
 
   for (let format of formats) {
-    await transitionTo(page, 'render.html', format);
+    await transitionTo(page, 'render.html', format, '0');
     await page.waitForSelector('[data-render-output="ready"]');
     html.set(
       format,
@@ -47,20 +50,12 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
     return document.querySelector('[data-render-output="ready"]')!.outerHTML;
   });
 
-  await transitionTo(page, 'render.json');
-  await page.waitForSelector('[data-render-output="ready"]');
-  const json: LooseSingleCardDocument = await page.evaluate(() => {
-    return JSON.parse(
-      document.querySelector('[data-render-output="ready"]')!.textContent!,
-    );
-  });
-
   await context.close();
   await browser.close();
   return {
+    ...meta,
     iconHTML,
     html: Object.fromEntries(html) as Record<Format, string>,
-    json,
   };
 }
 

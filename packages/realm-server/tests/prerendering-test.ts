@@ -35,8 +35,24 @@ module.only(basename(__filename), function () {
         );
       });
 
-      test('json', function (assert) {
-        assert.strictEqual(result.json.data.attributes?.name, 'Maple');
+      test('serialized', function (assert) {
+        assert.strictEqual(result.serialized.data.attributes?.name, 'Maple');
+      });
+
+      test('displayName', function (assert) {
+        assert.strictEqual(result.displayName, 'Cat');
+      });
+
+      test('types', function (assert) {
+        assert.deepEqual(result.types, [
+          'http://localhost:4201/user/a/cat/Cat',
+          'https://cardstack.com/base/card-api/CardDef',
+        ]);
+      });
+
+      test('searchDoc', function (assert) {
+        assert.strictEqual(result.searchDoc.name, 'Maple');
+        assert.strictEqual(result.searchDoc._cardType, 'Cat');
       });
     });
   });
