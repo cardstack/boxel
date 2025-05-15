@@ -22,6 +22,8 @@ import {
   setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
+  lookupLoaderService,
+  withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
 } from '../../helpers';
@@ -594,7 +596,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       ]);
     });
 
-    test('can create new instance', async function (assert) {
+    test<TestContextWithSave>('can create new instance', async function (assert) {
       removeRecentFiles();
       await visitOperatorMode({
         submode: 'code',
@@ -612,7 +614,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Mad As a Hatter', 'card instance found in realm');
       assertCardExists(assert, `${testRealmURL}BlogPost/mad-hatter`);
 
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
       await createNewInstance();
+      await waitUntil(() => id);
 
       let recentFiles = getRecentFiles();
       assert.strictEqual(
@@ -620,16 +627,12 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         2,
         'recent file count is correct',
       );
-      let newCardId = `${recentFiles?.[0][0]}${recentFiles?.[0][1]}`.replace(
-        '.json',
-        '',
-      );
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
         .hasText('Untitled Blog Post', 'created instance is selected');
       assertCardExists(
         assert,
-        newCardId,
+        id!,
         'edit',
         'new card is rendered in edit format',
       );
@@ -641,13 +644,18 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index]').containsText('Blog Post');
     });
 
-    test('can create new instance with CodeRef field', async function (assert) {
+    test<TestContextWithSave>('can create new instance with CodeRef field', async function (assert) {
       await openFileInPlayground(
         'code-ref-driver.gts',
         testRealmURL,
         'CodeRefDriver',
       );
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
       await createNewInstance();
+      await waitUntil(() => id);
 
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
@@ -1290,12 +1298,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasText('Untitled Boom Person');
       assert
         .dom('[data-test-card-error]')
-        .exists('auto-generated card has error in it');
+        .doesNotExist('auto-generated card has not error in edit format');
 
       await createNewInstance();
+      // switch to isolated mode to see the current server state
+      await click('[data-test-format-chooser="isolated"]');
+
       assert
         .dom('[data-test-playground-panel] [data-test-card]')
         .doesNotExist();
@@ -1306,11 +1319,46 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').containsText('fn is not defined');
+
+      await withoutLoaderMonitoring(async () => {
+        // The loader service is shared between the realm server and the host.
+        // need to reset the loader to pick up the changed module in the indexer
+        lookupLoaderService().resetLoader();
+        // fix error
+        await realm.write(
+          'boom-person.gts',
+          `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+          export class BoomPerson extends CardDef {
+            static displayName = 'Boom Person';
+            @field firstName = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                Hello <@fields.firstName />!
+              </template>
+              boom = () => fn();
+            }
+          }
+        `,
+        );
+      });
+      await waitFor(`[data-test-error-container]`, {
+        count: 0,
+        timeout: 5_000,
+      });
+      assert.dom('[data-test-error-container]').doesNotExist();
     });
 
     test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasText('Untitled Boom Person');
+      assert.dom('[data-test-error-container]').doesNotExist();
+
+      await createNewInstance();
+      // switch to isolated mode to see the current server state
+      await click('[data-test-format-chooser="isolated"]');
+
       assert
         .dom('[data-test-error-container]')
         .containsText(

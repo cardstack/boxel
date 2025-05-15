@@ -11,7 +11,6 @@ import { waitUntil } from '@ember/test-helpers';
 import { module, test } from 'qunit';
 
 import {
-  Loader,
   Query,
   baseRealm,
   type Realm,
@@ -22,11 +21,9 @@ import CardPrerender from '@cardstack/host/components/card-prerender';
 import PrerenderedCardSearch from '@cardstack/host/components/prerendered-card-search';
 
 import type CardService from '@cardstack/host/services/card-service';
-import LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   CardDocFiles,
-  lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -44,16 +41,9 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
 module(`Integration | prerendered-card-search`, function (hooks) {
-  let loader: Loader;
-  let loaderService: LoaderService;
   let testRealm: Realm;
 
   setupRenderingTest(hooks);
-  hooks.beforeEach(function () {
-    loaderService = lookupLoaderService();
-    loader = loaderService.loader;
-  });
-
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks, {
@@ -301,7 +291,6 @@ module(`Integration | prerendered-card-search`, function (hooks) {
     };
 
     ({ realm: testRealm } = await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'article.gts': { Article },

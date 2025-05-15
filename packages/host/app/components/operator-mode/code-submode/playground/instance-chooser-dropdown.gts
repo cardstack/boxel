@@ -263,6 +263,7 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         @query={{@prerenderedCardQuery.query}}
         @format='fitted'
         @realms={{@prerenderedCardQuery.realms}}
+        @isLive={{true}}
       >
         <:loading>
           <LoadingIndicator class='loading-icon' @color='var(--boxel-light)' />

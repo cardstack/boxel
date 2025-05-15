@@ -318,7 +318,6 @@ export async function setupIntegrationTestRealm({
   realmURL,
   mockMatrixUtils,
 }: {
-  loader: Loader;
   contents: RealmContents;
   realmURL?: string;
   mockMatrixUtils: MockUtils;
@@ -344,6 +343,15 @@ export function lookupService<T extends Service>(name: string): T {
 export function lookupNetworkService(): NetworkService {
   let owner = (getContext() as TestContext).owner;
   return owner.lookup('service:network') as NetworkService;
+}
+
+export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
+  (globalThis as any).__disableLoaderMonitoring = true;
+  try {
+    return (await cb()) as T;
+  } finally {
+    (globalThis as any).__disableLoaderMonitoring = undefined;
+  }
 }
 
 export const testRealmSecretSeed = "shhh! it's a secret";

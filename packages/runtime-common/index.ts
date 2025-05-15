@@ -584,3 +584,7 @@ export function uint8ArrayToHex(uint8: Uint8Array) {
 export function unixTime(epochTimeMs: number) {
   return Math.floor(epochTimeMs / 1000);
 }
+
+export function isLocalId(id: string) {
+  return !id.startsWith('http');
+}

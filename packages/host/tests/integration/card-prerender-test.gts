@@ -57,7 +57,6 @@ module('Integration | card-prerender', function (hooks) {
     }
 
     ({ realm } = await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },
