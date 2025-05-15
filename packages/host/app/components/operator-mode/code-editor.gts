@@ -395,25 +395,22 @@ export default class CodeEditor extends Component<Signature> {
 
     <style scoped>
       .monaco-container {
+        --monaco-background: var(--boxel-600);
+        --monaco-readonly-background: #606060;
         height: 100%;
         min-height: 100%;
         width: 100%;
         min-width: 100%;
-        padding: var(--boxel-sp) 0;
+        padding-block: var(--boxel-sp);
+        background-color: var(--monaco-background);
       }
-
-      :global(.monaco-container.readonly) {
-        background-color: #ebeaed;
+      .monaco-container:not(.readonly) {
+        filter: contrast(1.05) brightness(1.05);
       }
-
-      :global(.monaco-container.readonly .margin) {
-        background-color: #ebeaed;
+      .monaco-container.readonly {
+        background-color: var(--monaco-readonly-background);
+        filter: contrast(1.1) saturate(1.1);
       }
-
-      :global(.monaco-container.readonly .monaco-editor-background) {
-        background-color: #ebeaed;
-      }
-
       .loading {
         margin: 40vh auto;
       }
