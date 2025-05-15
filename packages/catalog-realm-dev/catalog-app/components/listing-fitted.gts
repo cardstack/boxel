@@ -339,7 +339,8 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
   @tracked installedListing = false;
-  @tracked writableRealms: string[] = [];
+  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
+    [];
 
   roomId: string | null = null;
 
@@ -353,11 +354,12 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
   });
 
   get remixRealmOptions() {
-    return this.writableRealms.map((realmUrl) => {
-      return new MenuItem(realmUrl, 'action', {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.remix(realmUrl);
+          this.remix(realm.url);
         },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
     });
   }
@@ -531,8 +533,10 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
             </:trigger>
             <:content as |dd|>
               <BoxelMenu
+                class='realm-dropdown-menu'
                 @closeMenu={{dd.close}}
                 @items={{this.remixRealmOptions}}
+                data-test-catalog-listing-remix-dropdown
               />
             </:content>
           </BoxelDropdown>
@@ -613,6 +617,16 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           --boxel-button-font: 600 var(--boxel-font-sm);
           margin-left: auto;
           flex: 0 0 auto;
+        }
+        .realm-dropdown-menu {
+          --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+          --boxel-menu-item-gap: var(--boxel-sp-xs);
+          min-width: 13rem;
+          max-height: 13rem;
+          overflow-y: scroll;
+        }
+        .realm-dropdown-menu :deep(.menu-item__icon-url) {
+          border-radius: var(--boxel-border-radius-xs);
         }
       }
 

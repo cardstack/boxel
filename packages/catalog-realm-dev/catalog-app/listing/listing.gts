@@ -175,11 +175,15 @@ export async function installListing(args: any, realm: string) {
 export async function setupAllRealmsInfo(args: any) {
   let allRealmsInfo =
     (await (args.context?.actions as Actions)?.allRealmsInfo?.()) ?? {};
-  let writableRealms: string[] = [];
+  let writableRealms: { name: string; url: string; iconURL?: string }[] = [];
   if (allRealmsInfo) {
     Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
       if (realmInfo.canWrite) {
-        writableRealms.push(realmUrl);
+        writableRealms.push({
+          name: realmInfo.info.name,
+          url: realmUrl,
+          iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
+        });
       }
     });
   }
@@ -190,7 +194,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
   @tracked createdInstances = false;
   @tracked installedListing = false;
-  @tracked writableRealms: string[] = [];
+  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
+    [];
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -198,21 +203,23 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   get useRealmOptions() {
-    return this.writableRealms.map((realmUrl) => {
-      return new MenuItem(realmUrl, 'action', {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.use(realmUrl);
+          this.use(realm.url);
         },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
     });
   }
 
   get installRealmOptions() {
-    return this.writableRealms.map((realmUrl) => {
-      return new MenuItem(realmUrl, 'action', {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.install(realmUrl);
+          this.install(realm.url);
         },
+        iconURL: realm.iconURL ?? '/default-realm-icon.png',
       });
     });
   }
@@ -395,8 +402,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 </:trigger>
                 <:content as |dd|>
                   <BoxelMenu
+                    class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.useRealmOptions}}
+                    data-test-catalog-listing-use-dropdown
                   />
                 </:content>
               </BoxelDropdown>
@@ -419,8 +428,10 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                 </:trigger>
                 <:content as |dd|>
                   <BoxelMenu
+                    class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.installRealmOptions}}
+                    data-test-catalog-listing-install-dropdown
                   />
                 </:content>
               </BoxelDropdown>
@@ -588,6 +599,16 @@ class EmbeddedTemplate extends Component<typeof Listing> {
       }
       .action-button {
         flex: 1;
+      }
+      .realm-dropdown-menu {
+        --boxel-menu-item-content-padding: var(--boxel-sp-xs);
+        --boxel-menu-item-gap: var(--boxel-sp-xs);
+        min-width: 13rem;
+        max-height: 13rem;
+        overflow-y: scroll;
+      }
+      .realm-dropdown-menu :deep(.menu-item__icon-url) {
+        border-radius: var(--boxel-border-radius-xs);
       }
       .app-listing-embedded
         :deep(.ember-basic-dropdown-content-wormhole-origin) {
