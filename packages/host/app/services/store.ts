@@ -6,7 +6,7 @@ import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 
 import { formatDistanceToNow } from 'date-fns';
-import { task, timeout } from 'ember-concurrency';
+import { task } from 'ember-concurrency';
 
 import mergeWith from 'lodash/mergeWith';
 
@@ -91,12 +91,15 @@ export default class StoreService extends Service implements StoreInterface {
   private cardApiCache?: typeof CardAPI;
   private gcInterval: number | undefined;
   private ready: Promise<void>;
-  private inflightCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
+  private inflightGetCards: Map<string, Promise<CardDef | CardErrorJSONAPI>> =
     new Map();
+  private inflightCardMutations: Map<string, Promise<void>> = new Map();
   private identityContext = new IdentityContext(this.referenceCount);
 
   // This is used for tests
   private onSaveSubscriber: CardSaveSubscriber | undefined;
+  private autoSaveQueues = new Map<string, { isImmediate?: true }[]>();
+  private autoSavePromises = new Map<string, Promise<void>>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -126,7 +129,10 @@ export default class StoreService extends Service implements StoreInterface {
     this.referenceCount = new Map();
     this.newReferencePromises = [];
     this.autoSaveStates = new TrackedMap();
-    this.inflightCards = new Map();
+    this.inflightGetCards = new Map();
+    this.inflightCardMutations = new Map();
+    this.autoSaveQueues = new Map();
+    this.autoSavePromises = new Map();
     this.identityContext = new IdentityContext(this.referenceCount);
     this.ready = this.setup();
   }
@@ -207,7 +213,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   save(id: string) {
-    this.initiateAutoSaveTask.perform(id, { isImmediate: true });
+    this.doAutoSave(id, { isImmediate: true });
   }
 
   async add<T extends CardDef>(
@@ -400,7 +406,12 @@ export default class StoreService extends Service implements StoreInterface {
 
   async flush() {
     await this.ready;
-    return await Promise.allSettled(this.newReferencePromises);
+    await Promise.allSettled(this.newReferencePromises);
+    do {
+      await Promise.allSettled(this.autoSavePromises.values());
+    } while (
+      [...this.autoSaveQueues.values()].find((queue) => queue.length > 1)
+    );
   }
 
   getReferenceCount(id: string) {
@@ -639,7 +650,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (isCardInstance(instance)) {
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
-      this.initiateAutoSaveTask.perform(instance);
+      this.doAutoSave(instance);
     }
   };
 
@@ -695,12 +706,12 @@ export default class StoreService extends Service implements StoreInterface {
     let deferred: Deferred<CardDef | CardErrorJSONAPI> | undefined;
     let id = asURL(idOrDoc);
     if (id) {
-      let working = this.inflightCards.get(id);
+      let working = this.inflightGetCards.get(id);
       if (working) {
         return working as Promise<T>;
       }
       deferred = new Deferred<CardDef | CardErrorJSONAPI>();
-      this.inflightCards.set(id, deferred.promise);
+      this.inflightGetCards.set(id, deferred.promise);
     }
     try {
       if (!id) {
@@ -777,51 +788,84 @@ export default class StoreService extends Service implements StoreInterface {
       return cardError;
     } finally {
       if (id) {
-        this.inflightCards.delete(id);
+        this.inflightGetCards.delete(id);
       }
     }
   }
 
-  private initiateAutoSaveTask = task(
-    async (idOrInstance: string | CardDef, opts?: { isImmediate?: true }) => {
-      let instance: CardDef | undefined;
-      if (typeof idOrInstance === 'string') {
-        instance = this.identityContext.get(idOrInstance);
-        if (!instance) {
-          return;
-        }
-      } else {
-        instance = idOrInstance;
+  private doAutoSave(
+    idOrInstance: string | CardDef,
+    opts?: { isImmediate?: true },
+  ) {
+    let instance: CardDef | undefined;
+    if (typeof idOrInstance === 'string') {
+      instance = this.identityContext.get(idOrInstance);
+      if (!instance) {
+        return;
       }
-      let isNew = !instance.id;
-      let autoSaveState = this.initOrGetAutoSaveState(instance);
-      try {
-        autoSaveState.isSaving = true;
-        autoSaveState.lastSaveError = undefined;
-        if (!opts?.isImmediate) {
-          await timeout(this.environmentService.autoSaveDelayMs);
-        }
-        if (!opts?.isImmediate) {
-          await timeout(25);
-        }
-        let maybeError = await this.saveInstance(instance, opts);
-        autoSaveState.hasUnsavedChanges = false;
-        autoSaveState.lastSaved = Date.now();
-        autoSaveState.lastSavedErrorMsg = undefined;
-        autoSaveState.lastSaveError =
-          maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
-      } catch (error) {
-        // error will already be logged in CardService
-        autoSaveState.lastSaveError = error as Error;
-      } finally {
-        autoSaveState.isSaving = false;
-        this.calculateLastSavedMsg(autoSaveState);
-        if (isNew && instance.id) {
-          this.autoSaveStates.set(instance.id, autoSaveState);
+    } else {
+      instance = idOrInstance;
+    }
+    let autoSaveState = this.initOrGetAutoSaveState(instance);
+    let queueName = instance.id ?? instance[localIdSymbol];
+    let autoSaveQueue = this.autoSaveQueues.get(queueName);
+    if (!autoSaveQueue) {
+      autoSaveQueue = [];
+      this.autoSaveQueues.set(queueName, autoSaveQueue);
+    }
+    autoSaveQueue.push({ ...opts });
+    autoSaveState.isSaving = true;
+    autoSaveState.lastSaveError = undefined;
+    this.drainAutoSaveQueue(queueName);
+  }
+
+  private async drainAutoSaveQueue(queueName: string) {
+    return await this.withTestWaiters(async () => {
+      await this.autoSavePromises.get(queueName);
+
+      let instance = this.peek(queueName);
+      if (!isCardInstance(instance)) {
+        return;
+      }
+      await this.inflightCardMutations.get(instance[localIdSymbol]);
+
+      let done: () => void;
+      this.autoSavePromises.set(
+        queueName,
+        new Promise<void>((r) => (done = r)),
+      );
+      let autoSaves = [...(this.autoSaveQueues.get(queueName) ?? [])];
+      this.autoSaveQueues.set(queueName, []);
+      if (autoSaves && autoSaves.length > 0) {
+        let autoSaveState = this.initOrGetAutoSaveState(instance);
+        // favor isImmediate saves
+        let isImmediate = Boolean(autoSaves.find((a) => a.isImmediate));
+        try {
+          let maybeError = await this.saveInstance(
+            instance,
+            isImmediate ? { isImmediate } : undefined,
+          );
+          autoSaveState.hasUnsavedChanges = false;
+          autoSaveState.lastSaved = Date.now();
+          autoSaveState.lastSavedErrorMsg = undefined;
+          autoSaveState.lastSaveError =
+            maybeError && !isCardInstance(maybeError) ? maybeError : undefined;
+        } catch (error) {
+          // error will already be logged in CardService
+          if (autoSaveState) {
+            autoSaveState.lastSaveError = error as Error;
+          }
+        } finally {
+          autoSaveState.isSaving = false;
+          this.calculateLastSavedMsg(autoSaveState);
+          if (isLocalId(queueName) && instance.id) {
+            this.autoSaveStates.set(instance.id, autoSaveState);
+          }
         }
       }
-    },
-  );
+      done!();
+    });
+  }
 
   private initOrGetAutoSaveState(instance: CardDef): AutoSaveState {
     let autoSaveState = this.autoSaveStates.get(
@@ -919,6 +963,18 @@ export default class StoreService extends Service implements StoreInterface {
       }
       let api: typeof CardAPI | undefined;
       let isNew = !instance.id;
+      let inflightMutation = this.inflightCardMutations.get(
+        instance[localIdSymbol],
+      );
+      if (inflightMutation) {
+        // the local instance is always up-to-date, but things can get messy if
+        // we try to update an instance that is in the process of being created on
+        // the server, because then it still looks like to the client another
+        // POST should be issued when instead we really want to PATCH.
+        await inflightMutation;
+      }
+      let deferred = new Deferred<void>();
+      this.inflightCardMutations.set(instance[localIdSymbol], deferred.promise);
       try {
         api = await this.cardService.getAPI();
         api.subscribeToChanges(instance, onCardChange);
@@ -986,6 +1042,7 @@ export default class StoreService extends Service implements StoreInterface {
         return cardError;
       } finally {
         api?.unsubscribeFromChanges(instance, onCardChange);
+        deferred.fulfill();
       }
     });
   }
