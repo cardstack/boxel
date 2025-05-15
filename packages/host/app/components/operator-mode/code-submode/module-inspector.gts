@@ -315,7 +315,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return this.specsForSelectedDefinition?.instances ?? [];
   }
 
-  private get card() {
+  private get activeSpec() {
     let selectedSpecId = this.specPanelService.specSelection;
 
     if (selectedSpecId) {
@@ -364,7 +364,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       {{consumeContext this.findSpecsForSelectedDefinition}}
       <Accordion
         {{! FIXME is this the right place? }}
-        {{SpecPreviewModifier spec=this.card onSpecView=this.onSpecView}}
+        {{SpecPreviewModifier spec=this.activeSpec onSpecView=this.onSpecView}}
         data-test-module-inspector='card-or-field'
         data-test-selected-accordion-item={{this.selectedAccordionItem}}
         as |A|
@@ -422,7 +422,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
           @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
-          @activeSpec={{this.card}}
+          @activeSpec={{this.activeSpec}}
           @specsForSelectedDefinition={{this.specInstancesForSelectedDefinition}}
           @searchIsLoading={{this.specsForSelectedDefinition.isLoading}}
           as |SpecPreviewTitle SpecPreviewContent|
