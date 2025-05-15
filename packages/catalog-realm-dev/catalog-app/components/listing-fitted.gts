@@ -14,11 +14,7 @@ import { on } from '@ember/modifier';
 import { add, eq, MenuItem } from '@cardstack/boxel-ui/helpers';
 import { fn } from '@ember/helper';
 
-import {
-  type Listing,
-  setupAllRealmsInfo,
-  installListing,
-} from '../listing/listing';
+import { type Listing, setupAllRealmsInfo } from '../listing/listing';
 
 import {
   BoxelDropdown,
@@ -383,59 +379,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     return this.args.model.tags?.[0]?.name;
   }
 
-  _remix = task(async (realmUrl: string) => {
-    const {
-      selectedCodeRef,
-      shouldPersistPlaygroundSelection,
-      firstExampleCardId,
-    } = await installListing(this.args, realmUrl);
-    if (
-      selectedCodeRef &&
-      shouldPersistPlaygroundSelection &&
-      firstExampleCardId
-    ) {
-      const codePath = selectedCodeRef.module.concat('.gts');
-      const moduleId = [selectedCodeRef.module, selectedCodeRef.name].join('/');
-      await this.args.context?.actions?.updatePlaygroundSelection(
-        moduleId,
-        firstExampleCardId,
-        'isolated',
-      );
-
-      await window.localStorage.setItem(
-        'code-mode-panel-selections',
-        JSON.stringify({
-          [codePath]: 'playground',
-        }),
-      );
-    }
-
-    this.installedListing = true;
-
-    if (selectedCodeRef) {
-      const codePath = selectedCodeRef.module.concat('.gts');
-      await this.args.context?.actions?.updateCodePathWithSelection(
-        selectedCodeRef,
-        selectedCodeRef.name,
-        undefined,
-      );
-
-      if (!this.roomId && this.args.context?.actions?.createAiAssistantRoom) {
-        const { roomId } =
-          await this.args.context?.actions?.createAiAssistantRoom(
-            this.args.model.name ? `Remix of ${this.args.model.name}` : 'Remix',
-          );
-        this.roomId = roomId;
-      }
-
-      if (this.roomId && this.args.context?.actions?.openAiAssistantRoom) {
-        await this.args.context?.actions?.openAiAssistantRoom(this.roomId);
-      }
-
-      await this.args.context?.actions?.switchSubmode('code', codePath);
-    }
-  });
-
   _remixWithAI = task(async (realmUrl: string) => {
     if (!this.roomId) {
       if (!this.roomId && this.args.context?.actions?.createAiAssistantRoom) {
@@ -520,13 +463,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 {{on 'click' (fn this._stopPropagation)}}
                 {{bindings}}
               >
-                {{#if this._remix.isRunning}}
-                  Installing...
-                {{else if this.installedListing}}
-                  Installed
-                {{else}}
-                  Remix
-                {{/if}}
+                Remix
               </BoxelButton>
             </:trigger>
             <:content as |dd|>
