@@ -44,7 +44,7 @@ import {
 } from '@cardstack/runtime-common/code-ref';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
-import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
+import type { ActiveModuleInspectorView } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import {
@@ -83,7 +83,7 @@ interface Signature {
     selectedDeclaration?: ModuleDeclaration;
     selectedDeclarationAsCodeRef: ResolvedCodeRef;
     specsForSelectedDefinition: Spec[];
-    toggleAccordionItem: (item: SelectedAccordionItem) => void;
+    toggleAccordionItem: (item: ActiveModuleInspectorView) => void;
     updatePlaygroundSelections(id: string, fieldDefOnly?: boolean): void;
   };
   Blocks: {
@@ -483,7 +483,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
         if (card.id) {
           this.specPanelService.setSelection(card.id);
           if (!this.args.isPanelOpen) {
-            this.args.toggleAccordionItem('spec-preview');
+            this.args.toggleAccordionItem('spec');
           }
         }
       } catch (e: any) {
@@ -585,7 +585,7 @@ export default class SpecPreview extends GlimmerComponent<Signature> {
     const fileUrl = id.endsWith('.json') ? id : `${id}.json`;
     this.recentFilesService.addRecentFileUrl(fileUrl);
     this.args.updatePlaygroundSelections(id);
-    this.args.toggleAccordionItem('playground');
+    this.args.toggleAccordionItem('preview');
   };
 
   <template>

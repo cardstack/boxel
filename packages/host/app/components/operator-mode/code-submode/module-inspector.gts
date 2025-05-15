@@ -1,7 +1,9 @@
 import { fn } from '@ember/helper';
+import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
+import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
@@ -36,8 +38,8 @@ import SchemaEditor, {
   SchemaEditorTitle,
 } from '@cardstack/host/components/operator-mode/code-submode/schema-editor';
 import SpecPreview from '@cardstack/host/components/operator-mode/code-submode/spec-preview';
+import ToggleButton from '@cardstack/host/components/operator-mode/code-submode/toggle-button';
 import SyntaxErrorDisplay from '@cardstack/host/components/operator-mode/syntax-error-display';
-
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { type Ready } from '@cardstack/host/resources/file';
@@ -60,15 +62,12 @@ import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 import type { CardDef, Format } from 'https://cardstack.com/base/card-api';
 import { Spec } from 'https://cardstack.com/base/spec';
 
-export type SelectedAccordionItem =
-  | 'schema-editor'
-  | 'spec-preview'
-  | 'playground';
+export type ActiveModuleInspectorView = 'schema' | 'spec' | 'preview';
 
-const accordionItems: SelectedAccordionItem[] = [
-  'schema-editor',
-  'playground',
-  'spec-preview',
+const accordionItems: ActiveModuleInspectorView[] = [
+  'schema',
+  'preview',
+  'spec',
 ];
 
 interface ModuleInspectorSignature {
@@ -105,7 +104,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
 
-  private panelSelections: Record<string, SelectedAccordionItem>;
+  private panelSelections: Record<string, ActiveModuleInspectorView>;
 
   constructor(owner: Owner, args: ModuleInspectorSignature['Args']) {
     super(owner, args);
@@ -190,12 +189,12 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return null;
   }
 
-  private get selectedAccordionItem(): SelectedAccordionItem {
+  private get selectedAccordionItem(): ActiveModuleInspectorView {
     let selection = this.panelSelections[this.args.readyFile.url];
-    return selection ?? 'schema-editor';
+    return selection ?? 'schema';
   }
 
-  @action private toggleAccordionItem(item: SelectedAccordionItem) {
+  @action private toggleAccordionItem(item: ActiveModuleInspectorView) {
     if (this.selectedAccordionItem === item) {
       let index = accordionItems.indexOf(item);
       if (index !== -1 && index === accordionItems.length - 1) {
@@ -328,115 +327,109 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return this.specsForSelectedDefinition?.[0];
   }
 
-  <template>
-    {{#if this.isCardPreviewError}}
-      {{! this is here to make TS happy, this is always true }}
-      {{#if @cardError}}
-        <CardError @error={{@cardError}} @hideHeader={{true}} />
-      {{/if}}
-    {{else if this.isEmptyFile}}
-      <Accordion as |A|>
-        <A.Item
-          class='accordion-item'
-          @contentClass='accordion-item-content'
-          @isOpen={{true}}
-        >
-          <:title>
-            <SchemaEditorTitle @hasModuleError={{true}} />
-          </:title>
-          <:content>
-            <SyntaxErrorDisplay @syntaxErrors='File is empty' />
-          </:content>
-        </A.Item>
-      </Accordion>
-    {{else if this.fileIncompatibilityMessage}}
+  private get selectedView(): ActiveModuleInspectorView {
+    let selection = this.panelSelections[this.args.readyFile.url];
+    return selection ?? 'schema';
+  }
 
-      <div
-        class='file-incompatible-message'
-        data-test-file-incompatibility-message
-      >
-        {{this.fileIncompatibilityMessage}}
-      </div>
-    {{else if @selectedCardOrField.cardOrField}}
-      {{consumeContext this.findSpecsForSelectedDefinition}}
-      <Accordion
-        {{SpecUpdatedModifier
-          spec=this.activeSpec
-          onSpecUpdated=this.updatePlaygroundSelectionsFromSpec
-        }}
-        data-test-module-inspector='card-or-field'
-        data-test-selected-accordion-item={{this.selectedAccordionItem}}
-        as |A|
-      >
-        <SchemaEditor
-          @file={{@readyFile}}
-          @moduleContentsResource={{@moduleContentsResource}}
-          @card={{@selectedCardOrField.cardOrField}}
-          @cardTypeResource={{@selectedCardOrField.cardType}}
-          @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
-          @isReadOnly={{@isReadOnly}}
-          as |SchemaEditorTitle SchemaEditorPanel|
-        >
+  <template>
+    <section class='module-inspector'>
+      {{#if this.isCardPreviewError}}
+        {{! this is here to make TS happy, this is always true }}
+        {{#if @cardError}}
+          <CardError @error={{@cardError}} @hideHeader={{true}} />
+        {{/if}}
+      {{else if this.isEmptyFile}}
+        <Accordion as |A|>
           <A.Item
             class='accordion-item'
             @contentClass='accordion-item-content'
-            @onClick={{fn this.toggleAccordionItem 'schema-editor'}}
-            @isOpen={{eq this.selectedAccordionItem 'schema-editor'}}
-            data-test-accordion-item='schema-editor'
+            @isOpen={{true}}
           >
             <:title>
-              <SchemaEditorTitle />
+              <SchemaEditorTitle @hasModuleError={{true}} />
             </:title>
             <:content>
-              <SchemaEditorPanel class='accordion-content' />
+              <SyntaxErrorDisplay @syntaxErrors='File is empty' />
             </:content>
           </A.Item>
-        </SchemaEditor>
-        <Playground
-          @isOpen={{eq this.selectedAccordionItem 'playground'}}
-          @codeRef={{@selectedCodeRef}}
-          @isUpdating={{@moduleContentsResource.isLoading}}
-          @cardOrField={{@selectedCardOrField.cardOrField}}
-          as |PlaygroundTitle PlaygroundContent|
+        </Accordion>
+      {{else if this.fileIncompatibilityMessage}}
+
+        <div
+          class='file-incompatible-message'
+          data-test-file-incompatibility-message
         >
-          <A.Item
-            class='accordion-item playground-accordion-item'
-            @contentClass='accordion-item-content'
-            @onClick={{fn this.toggleAccordionItem 'playground'}}
-            @isOpen={{eq this.selectedAccordionItem 'playground'}}
-            data-test-accordion-item='playground'
-          >
-            <:title><PlaygroundTitle /></:title>
-            <:content>
-              {{#if (eq this.selectedAccordionItem 'playground')}}
+          {{this.fileIncompatibilityMessage}}
+        </div>
+      {{else if @selectedCardOrField.cardOrField}}
+        {{consumeContext this.findSpecsForSelectedDefinition}}
+
+        <header
+          class='module-inspector-header'
+          aria-label='FIXME'
+          {{SpecUpdatedModifier
+            spec=this.activeSpec
+            onSpecUpdated=this.updatePlaygroundSelectionsFromSpec
+          }}
+          data-test-preview-panel-header
+        >
+          {{#each accordionItems as |moduleInspectorView|}}
+            <ToggleButton
+              @isActive={{eq this.selectedView moduleInspectorView}}
+              {{on 'click' (fn this.toggleAccordionItem moduleInspectorView)}}
+              data-test-code-mode-panel-item={{moduleInspectorView}}
+            >
+              {{capitalize moduleInspectorView}}
+            </ToggleButton>
+          {{/each}}
+        </header>
+
+        <section
+          class='preview-panel-content'
+          data-test-code-mode-panel-item={{this.selectedView}}
+        >
+          {{#if (eq this.selectedView 'schema')}}
+            <SchemaEditor
+              @file={{@readyFile}}
+              @moduleContentsResource={{@moduleContentsResource}}
+              @card={{@selectedCardOrField.cardOrField}}
+              @cardTypeResource={{@selectedCardOrField.cardType}}
+              @goToDefinition={{@goToDefinitionAndResetCursorPosition}}
+              @isReadOnly={{@isReadOnly}}
+              as |SchemaEditorTitle SchemaEditorPanel|
+            >
+              <SchemaEditorTitle />
+              <SchemaEditorPanel class='accordion-content' />
+            </SchemaEditor>
+          {{else if (eq this.selectedView 'preview')}}
+            <Playground
+              @isOpen={{eq this.selectedAccordionItem 'preview'}}
+              @codeRef={{@selectedCodeRef}}
+              @isUpdating={{@moduleContentsResource.isLoading}}
+              @cardOrField={{@selectedCardOrField.cardOrField}}
+              as |PlaygroundTitle PlaygroundContent|
+            >
+              <PlaygroundTitle />
+              {{#if (eq this.selectedAccordionItem 'preview')}}
                 <PlaygroundContent />
               {{/if}}
-            </:content>
-          </A.Item>
-        </Playground>
-        <SpecPreview
-          @selectedDeclaration={{@selectedDeclaration}}
-          @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
-          @toggleAccordionItem={{this.toggleAccordionItem}}
-          @isPanelOpen={{eq this.selectedAccordionItem 'spec-preview'}}
-          @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
-          @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
-          @activeSpec={{this.activeSpec}}
-          @specsForSelectedDefinition={{this.specsForSelectedDefinition}}
-          @searchIsLoading={{this.specSearch.isLoading}}
-          as |SpecPreviewTitle SpecPreviewContent|
-        >
-          <A.Item
-            class='accordion-item'
-            @contentClass='accordion-item-content'
-            @onClick={{fn this.toggleAccordionItem 'spec-preview'}}
-            @isOpen={{eq this.selectedAccordionItem 'spec-preview'}}
-            data-test-accordion-item='spec-preview'
-          >
-            <:title>
+            </Playground>
+          {{else if (eq this.selectedView 'spec')}}
+
+            <SpecPreview
+              @selectedDeclaration={{@selectedDeclaration}}
+              @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
+              @toggleAccordionItem={{this.toggleAccordionItem}}
+              @isPanelOpen={{eq this.selectedAccordionItem 'spec'}}
+              @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
+              @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
+              @activeSpec={{this.activeSpec}}
+              @specsForSelectedDefinition={{this.specsForSelectedDefinition}}
+              @searchIsLoading={{this.specSearch.isLoading}}
+              as |SpecPreviewTitle SpecPreviewContent|
+            >
               <SpecPreviewTitle />
-            </:title>
-            <:content>
               {{#if this.showSpecPreview}}
                 <SpecPreviewContent class='accordion-content' />
               {{else}}
@@ -448,39 +441,55 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
                     definitions that are not exported.</span>
                 </p>
               {{/if}}
+            </SpecPreview>
+          {{/if}}
+        </section>
+      {{else if @moduleContentsResource.moduleError}}
+        <Accordion as |A|>
+          <A.Item
+            class='accordion-item'
+            @contentClass='accordion-item-content'
+            @isOpen={{true}}
+            data-test-module-error-panel
+          >
+            <:title>
+              <SchemaEditorTitle @hasModuleError={{true}} />
+            </:title>
+            <:content>
+              <SyntaxErrorDisplay
+                @syntaxErrors={{@moduleContentsResource.moduleError.message}}
+              />
             </:content>
           </A.Item>
-        </SpecPreview>
-      </Accordion>
-    {{else if @moduleContentsResource.moduleError}}
-      <Accordion as |A|>
-        <A.Item
-          class='accordion-item'
-          @contentClass='accordion-item-content'
-          @isOpen={{true}}
-          data-test-module-error-panel
-        >
-          <:title>
-            <SchemaEditorTitle @hasModuleError={{true}} />
-          </:title>
-          <:content>
-            <SyntaxErrorDisplay
-              @syntaxErrors={{@moduleContentsResource.moduleError.message}}
-            />
-          </:content>
-        </A.Item>
-      </Accordion>
-    {{else if @card}}
-      <CardRendererPanel
-        @card={{@card}}
-        @realmURL={{this.operatorModeStateService.realmURL}}
-        @format={{@previewFormat}}
-        @setFormat={{@setPreviewFormat}}
-        data-test-card-resource-loaded
-      />
-    {{/if}}
+        </Accordion>
+      {{else if @card}}
+        <CardRendererPanel
+          @card={{@card}}
+          @realmURL={{this.operatorModeStateService.realmURL}}
+          @format={{@previewFormat}}
+          @setFormat={{@setPreviewFormat}}
+          data-test-card-resource-loaded
+        />
+      {{/if}}
+    </section>
 
     <style scoped>
+      .module-inspector {
+        background-color: var(--code-mode-panel-background-color);
+      }
+
+      .module-inspector-header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-xs);
+        border-bottom: var(--boxel-border);
+      }
+
+      .module-inspector-content {
+        overflow: scroll;
+      }
+
       .file-incompatible-message {
         display: flex;
         flex-wrap: wrap;
