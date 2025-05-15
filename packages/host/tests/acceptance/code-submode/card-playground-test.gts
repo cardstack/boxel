@@ -358,7 +358,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .dom('[data-test-playground-panel]')
         .exists('playground panel exists for Category (exported card def)');
 
-      await click('[data-test-accordion-item="schema-editor"] > button');
+      await click('[data-test-code-mode-panel-item="schema"]');
       await selectDeclaration('LocalCategoryCard');
       assert.dom('[data-test-incompatible-nonexports]').doesNotExist();
       await togglePlaygroundPanel();
@@ -371,7 +371,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await selectDeclaration('RandomClass');
       assert
-        .dom('[data-test-accordion-item="playground"]')
+        .dom('[data-test-code-mode-panel-item="preview"]')
         .doesNotExist(
           'does not exist for RandomClass (not a card or field def)',
         );
@@ -575,7 +575,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           `[data-test-code-mode-card-renderer-header="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
-      assert.dom('[data-test-accordion-item="playground"]').doesNotExist();
+      assert.dom('[data-test-code-mode-panel-item="preview"]').doesNotExist();
     });
 
     test('can use the header context menu to open instance in interact mode', async function (assert) {
@@ -1074,7 +1074,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="blog-post.gts"]');
-      await click('[data-test-accordion-item="playground"] button');
+      await click('[data-test-code-mode-panel-item="preview"]');
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]');
       assert
@@ -1117,7 +1117,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
     test<TestContextWithSave>('instance chooser only appears when panel is opened', async function (assert) {
       await openFileInPlayground('author.gts', testRealmURL, 'Author');
       assert.dom('[data-test-instance-chooser]').exists();
-      await click('[data-test-accordion-item="playground"] button');
+      await click('[data-test-code-mode-panel-item="preview"]');
       assert.dom('[data-test-instance-chooser]').doesNotExist();
     });
 
