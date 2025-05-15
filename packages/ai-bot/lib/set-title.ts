@@ -10,7 +10,7 @@ import {
   attachedCardsToMessage,
   getRelevantCards,
 } from '../helpers';
-import { MatrixClient } from './matrix';
+import type { MatrixClient } from './matrix/util';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,

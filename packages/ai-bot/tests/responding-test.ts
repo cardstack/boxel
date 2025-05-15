@@ -1,5 +1,6 @@
 import { module, test, assert } from 'qunit';
 import { Responder } from '../lib/responder';
+import { DEFAULT_EVENT_SIZE_MAX } from '../lib/matrix/response-publisher';
 import FakeTimers from '@sinonjs/fake-timers';
 import { thinkingMessage } from '../constants';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
@@ -7,9 +8,12 @@ import { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
+  APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
+  APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client';
+import { OpenAIError } from 'openai';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -100,6 +104,7 @@ module('Responding', (hooks) => {
     clock.uninstall();
     responder.finalize();
     fakeMatrixClient.resetSentEvents();
+    responder.matrixResponsePublisher.eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
   });
 
   test('Sends thinking message', async () => {
@@ -218,9 +223,7 @@ module('Responding', (hooks) => {
       'The first content should replace the original thinking message',
     );
 
-    // Advance the clock 250ms
-    clock.tick(250);
-
+    await responder.flush();
     sentEvents = fakeMatrixClient.getSentEvents();
 
     assert.equal(
@@ -357,7 +360,7 @@ module('Responding', (hooks) => {
     let sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(
       sentEvents.length,
-      5,
+      4,
       'Thinking message, and event with content, event with partial tool call, and event with full tool call should be sent',
     );
     assert.equal(
@@ -423,13 +426,8 @@ module('Responding', (hooks) => {
     );
     assert.deepEqual(
       sentEvents[3].content.isStreamingFinished,
-      false,
-      'The tool call event should not be sent with isStreamingFinished set to true',
-    );
-    assert.deepEqual(
-      sentEvents[4].content.isStreamingFinished,
       true,
-      'The final event should be sent with isStreamingFinished set to true',
+      'The tool call event should be sent together with isStreamingFinished set to true',
     );
   });
 
@@ -564,7 +562,7 @@ module('Responding', (hooks) => {
 
     // Second reasoning update
     await responder.onChunk(chunkWithReasoning(' and 2'), {} as any);
-    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.flush();
     sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(sentEvents.length, 3, 'Second reasoning update sent');
     assert.equal(
@@ -576,6 +574,7 @@ module('Responding', (hooks) => {
 
     // First content update
     await responder.onChunk({} as any, snapshotWithContent('content step 1'));
+    await responder.flush();
     sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(sentEvents.length, 4, 'First content update sent');
     assert.equal(
@@ -591,7 +590,7 @@ module('Responding', (hooks) => {
 
     // Second content update
     await responder.onChunk({} as any, snapshotWithContent('content step 2'));
-    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.finalize();
     sentEvents = fakeMatrixClient.getSentEvents();
     assert.equal(sentEvents.length, 5, 'Second content update sent');
     assert.equal(
@@ -619,10 +618,10 @@ module('Responding', (hooks) => {
   });
 
   test('Chunk processing will result in an error if matrix sending fails', async () => {
+    await responder.ensureThinkingMessageSent();
     fakeMatrixClient.sendEvent = async () => {
       throw new Error('MatrixError: [413] event too large');
     };
-
     let result = await responder.onChunk(
       {} as any,
       snapshotWithContent('super long content that is too large'),
@@ -631,6 +630,465 @@ module('Responding', (hooks) => {
     assert.equal(
       (result[0] as { errorMessage: string }).errorMessage,
       'MatrixError: [413] event too large',
+    );
+  });
+
+  test('When content exceeds max event size threshold, it will be split into a new event', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024 * 2.5; // 2.5KB max event size
+
+    let longContentPart1 = 'a'.repeat(1024); // 1KB of content
+    let longContentPart2 = 'b'.repeat(2048); // 2KB of content
+    let longContentPart3 = 'ccccc'; // a smidge more
+
+    await responder.ensureThinkingMessageSent();
+
+    await responder.onChunk({} as any, snapshotWithContent(longContentPart1));
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 2, 'Two events should be sent');
+    assert.equal(
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      thinkingMessage,
+      'First event is the initial thinking message',
+    );
+    assert.equal(
+      sentEvents[1].content.body,
+      longContentPart1,
+      'Initial message content',
+    );
+    assert.equal(
+      sentEvents[1].content.isStreamingFinished,
+      false,
+      'isStreamingFinished should be false',
+    );
+
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(longContentPart1 + longContentPart2),
+    );
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(
+        longContentPart1 + longContentPart2 + longContentPart3,
+      ),
+    );
+    await responder.finalize();
+
+    sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 6, 'Five events should be sent');
+
+    // verify 3rd event is an update to the first event that sets hasContinuation to true
+    // console.log(JSON.stringify(sentEvents, null, 2));
+    assert.deepEqual(sentEvents[2].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[0].eventId,
+    });
+    assert.ok(
+      sentEvents[2].content.body.startsWith('a'),
+      'Continuation message content starts with a',
+    );
+    assert.ok(
+      sentEvents[2].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+    assert.equal(
+      sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      true,
+    );
+    assert.equal(sentEvents[2].content.isStreamingFinished, true);
+
+    // verify 4th event has continuationOf pointing to 1st event and isStreamingFinished to false
+    assert.equal(
+      sentEvents[3].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.equal(sentEvents[3].content.isStreamingFinished, false);
+    assert.ok(
+      sentEvents[3].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[3].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+
+    // verify 5th event has continuationOf pointing to 1st event, replaces 4th event and has isStreamingFinished == false
+    assert.equal(
+      sentEvents[4].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.ok(
+      sentEvents[4].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[4].content.body.endsWith('bccccc'),
+      'Continuation message content ends with bccccc',
+    );
+    assert.equal(
+      sentEvents[4].content.isStreamingFinished,
+      false,
+      'expected the fifth event to have isStreamingFinished set to false',
+    );
+    assert.deepEqual(sentEvents[4].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[3].eventId,
+    });
+
+    // verify 5th event has continuationOf pointing to 1st event, replaces 4th event and has isStreamingFinished == true
+    assert.equal(
+      sentEvents[5].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.ok(
+      sentEvents[5].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[5].content.body.endsWith('bccccc'),
+      'Continuation message content ends with bccccc',
+    );
+    assert.equal(
+      sentEvents[5].content.isStreamingFinished,
+      true,
+      'expected the sixth event to have isStreamingFinished set to true',
+    );
+    assert.deepEqual(sentEvents[5].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[3].eventId,
+    });
+  });
+
+  test('When new content is too large to fit in eventMaxSize, it will be split into multiple events', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024; // 1KB max event size
+
+    let longContentPart1 = 'a'.repeat(512); // 0.5KB of content
+    let longContentPart2 = 'b'.repeat(1024) + 'c'.repeat(1024); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithContent(longContentPart1));
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(longContentPart1 + longContentPart2),
+    );
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    // console.log(JSON.stringify(sentEvents, null, 2));
+    assert.equal(sentEvents.length, 5, 'Five events should be sent');
+
+    assert.true(sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.true(
+      sentEvents[2].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.true(sentEvents[2].content.body.startsWith('a'));
+    assert.true(sentEvents[2].content.body.endsWith('b'));
+
+    assert.true(sentEvents[3].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.true(
+      sentEvents[3].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.equal(
+      sentEvents[3].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.true(sentEvents[3].content.body.startsWith('b'));
+    assert.true(sentEvents[3].content.body.endsWith('c'));
+
+    assert.strictEqual(
+      sentEvents[4].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.true(
+      sentEvents[4].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.equal(
+      sentEvents[4].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[3].eventId,
+    );
+    assert.true(sentEvents[4].content.body.startsWith('c'));
+    assert.true(sentEvents[4].content.body.endsWith('c'));
+  });
+
+  test('When reasoning is too large to fit in eventMaxSize, it will be split into multiple events', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024; // 1KB max event size
+    let longReasoningPart1 = 'a'.repeat(512); // 0.5KB of reasoning
+    let longReasoningPart2 = 'b'.repeat(1024) + 'c'.repeat(1024); // 2KB of reasoning
+
+    await responder.ensureThinkingMessageSent();
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.onChunk(chunkWithReasoning(longReasoningPart1), {} as any);
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.onChunk(chunkWithReasoning(longReasoningPart2), {} as any);
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.onChunk({} as any, snapshotWithContent('my content'));
+    clock.tick(250); // Advance clock to trigger throttled update
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    // console.log(JSON.stringify(sentEvents, null, 2));
+    assert.equal(sentEvents.length, 7, 'Seven events should be sent');
+
+    assert.true(sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.true(
+      sentEvents[2].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.true(
+      sentEvents[2].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('a'),
+    );
+    assert.true(
+      sentEvents[2].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('b'),
+    );
+
+    assert.true(sentEvents[3].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.true(
+      sentEvents[3].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.equal(
+      sentEvents[3].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.true(
+      sentEvents[3].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('b'),
+    );
+    assert.true(
+      sentEvents[3].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('c'),
+    );
+
+    assert.strictEqual(
+      sentEvents[4].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.false(
+      sentEvents[4].content.isStreamingFinished,
+      'isStreamingFinished should be false',
+    );
+    assert.equal(
+      sentEvents[4].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[3].eventId,
+    );
+    assert.true(
+      sentEvents[4].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('c'),
+    );
+    assert.true(
+      sentEvents[4].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('c'),
+    );
+    assert.strictEqual(sentEvents[4].content.body, '');
+
+    assert.strictEqual(
+      sentEvents[5].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.false(
+      sentEvents[5].content.isStreamingFinished,
+      'isStreamingFinished should be false',
+    );
+    assert.equal(
+      sentEvents[5].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[3].eventId,
+    );
+    assert.true(
+      sentEvents[5].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('c'),
+    );
+    assert.true(
+      sentEvents[5].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('c'),
+    );
+
+    assert.strictEqual(
+      sentEvents[6].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.true(
+      sentEvents[6].content.isStreamingFinished,
+      'isStreamingFinished should be true',
+    );
+    assert.equal(
+      sentEvents[6].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[3].eventId,
+    );
+    assert.true(
+      sentEvents[6].content.body.startsWith('my content'),
+      'Content message body starts with my content',
+    );
+    assert.true(
+      sentEvents[6].content[APP_BOXEL_REASONING_CONTENT_KEY].startsWith('c'),
+    );
+    assert.true(
+      sentEvents[6].content[APP_BOXEL_REASONING_CONTENT_KEY].endsWith('c'),
+    );
+    assert.deepEqual(sentEvents[6].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[4].eventId,
+    });
+  });
+
+  test('when reasoning plus content is too large to fit in eventMaxSize, it will be split into a new event', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024 * 1.5; // 1.5KB max event size
+
+    let longReasoning = 'a'.repeat(1024); // 1KB of content
+    let longContent = 'b'.repeat(2048); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+    clock.tick(250);
+    await responder.onChunk(chunkWithReasoning(longReasoning), {} as any);
+    clock.tick(250);
+    await responder.onChunk({} as any, snapshotWithContent(longContent));
+    clock.tick(250);
+    await responder.finalize();
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    assert.equal(sentEvents.length, 5, 'Five events should be sent');
+    assert.equal(
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      thinkingMessage,
+      'First event is the initial thinking message',
+    );
+    assert.equal(
+      sentEvents[1].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      longReasoning,
+      'Initial reasoning content',
+    );
+    assert.equal(
+      sentEvents[1].content.isStreamingFinished,
+      false,
+      'isStreamingFinished should be false',
+    );
+
+    // console.log(JSON.stringify(sentEvents, null, 2));
+    assert.deepEqual(sentEvents[2].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[0].eventId,
+    });
+    assert.ok(
+      sentEvents[2].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[2].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+    assert.equal(
+      sentEvents[2].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      true,
+    );
+    assert.equal(sentEvents[2].content.isStreamingFinished, true);
+
+    assert.equal(
+      sentEvents[3].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.equal(sentEvents[3].content.isStreamingFinished, false);
+    assert.ok(
+      sentEvents[3].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[3].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+
+    assert.strictEqual(
+      sentEvents[4].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY],
+      undefined,
+    );
+    assert.equal(
+      sentEvents[4].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.equal(sentEvents[4].content.isStreamingFinished, true);
+    assert.ok(
+      sentEvents[4].content.body.startsWith('b'),
+      'Continuation message content starts with b',
+    );
+    assert.ok(
+      sentEvents[4].content.body.endsWith('b'),
+      'Continuation message content ends with b',
+    );
+  });
+
+  test('onChunk returns error if matrix sending fails during continuation', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024 * 2.5; // 2.5KB max event size
+
+    let longContentPart1 = 'a'.repeat(1024); // 1KB of content
+    let longContentPart2 = 'b'.repeat(2048); // 2KB of content
+    let longContentPart3 = 'c'.repeat(2048); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+    clock.tick(250);
+    await responder.onChunk({} as any, snapshotWithContent(longContentPart1));
+    clock.tick(250);
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(longContentPart1 + longContentPart2),
+    );
+    clock.tick(250);
+
+    fakeMatrixClient.sendEvent = async () => {
+      throw new Error('MatrixError: something went wrong');
+    };
+    let result = await responder.onChunk(
+      {} as any,
+      snapshotWithContent(
+        longContentPart1 + longContentPart2 + longContentPart3,
+      ),
+    );
+    assert.equal(
+      (result[result.length - 1] as { errorMessage: string }).errorMessage,
+      'MatrixError: something went wrong',
+    );
+  });
+
+  test('onChunk returns error if matrix sending fails during continuation', async () => {
+    responder.matrixResponsePublisher.eventSizeMax = 1024 * 1.5; // 2.5KB max event size
+
+    let longContentPart1 = 'a'.repeat(1024); // 1KB of content
+    let longContentPart2 = 'b'.repeat(2048); // 2KB of content
+
+    await responder.ensureThinkingMessageSent();
+    clock.tick(250);
+    await responder.onChunk(
+      {} as any,
+      snapshotWithContent(longContentPart1 + longContentPart2),
+    );
+    clock.tick(250);
+    await responder.onError(new OpenAIError('All your base are belong to us'));
+    clock.tick(250);
+
+    let sentEvents = fakeMatrixClient.getSentEvents();
+    // console.log(JSON.stringify(sentEvents, null, 2));
+    assert.equal(sentEvents.length, 4, 'Four events should be sent');
+    assert.equal(
+      sentEvents[0].content[APP_BOXEL_REASONING_CONTENT_KEY],
+      thinkingMessage,
+      'First event is the initial thinking message',
+    );
+    assert.true(sentEvents[1].content.body.startsWith('a'));
+    assert.true(sentEvents[1].content.body.endsWith('b'));
+    assert.true(sentEvents[1].content[APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY]);
+    assert.deepEqual(sentEvents[1].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[0].eventId,
+    });
+    assert.true(sentEvents[2].content.body.startsWith('b'));
+    assert.true(sentEvents[2].content.body.endsWith('b'));
+    assert.strictEqual(
+      sentEvents[2].content[APP_BOXEL_CONTINUATION_OF_CONTENT_KEY],
+      sentEvents[0].eventId,
+    );
+    assert.deepEqual(sentEvents[3].content['m.relates_to'], {
+      rel_type: 'm.replace',
+      event_id: sentEvents[0].eventId,
+    });
+    assert.strictEqual(
+      sentEvents[3].content.errorMessage,
+      'OpenAI error: Error - All your base are belong to us',
+      'Error message should be sent, replacing the original message',
     );
   });
 });
