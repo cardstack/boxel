@@ -885,6 +885,57 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test('can patch an unsaved instance', async function (assert) {
+    let instance = new PersonDef({ name: 'Andrea' });
+    await store.add(instance, { doNotPersist: true });
+
+    await store.patch(instance[localId], {
+      attributes: {
+        name: 'Andrea Updated',
+      },
+      relationships: {
+        bestFriend: {
+          links: { self: `${testRealmURL}Person/queenzy` },
+        },
+        'friends.0': {
+          links: { self: `${testRealmURL}Person/germaine` },
+        },
+      },
+    });
+
+    let peekedInstance = store.peek(instance[localId]);
+    let queenzy = store.peek(`${testRealmURL}Person/queenzy`);
+    let germaine = store.peek(`${testRealmURL}Person/germaine`);
+    assert.strictEqual(
+      peekedInstance,
+      instance,
+      'the patched instance is in the store',
+    );
+    assert.ok(isCardInstance(queenzy), 'queenzy is in the store');
+    assert.ok(isCardInstance(germaine), 'germaine is in the store');
+
+    assert.strictEqual(
+      (instance as any).name,
+      'Andrea Updated',
+      'the contains field was patched',
+    );
+    assert.strictEqual(
+      (instance as any).bestFriend,
+      queenzy,
+      'the linksTo field was patched',
+    );
+    assert.deepEqual(
+      (instance as any).friends,
+      [germaine],
+      'the linksToMany field was patched',
+    );
+
+    await waitUntil(() => instance.id, {
+      timeoutMessage: 'waiting for instance to get assigned an id',
+    });
+    assert.ok(instance.id, 'instance was assigned a remote id');
+  });
+
   test('can search', async function (assert) {
     let results = await store.search(
       {
