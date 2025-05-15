@@ -72,7 +72,7 @@ export default class ViewSelector extends Component<Signature> {
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 0 var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xxs) var(--boxel-sp-sm);
         text-wrap: nowrap;
       }
       .view-options {
@@ -84,6 +84,7 @@ export default class ViewSelector extends Component<Signature> {
         color: var(--boxel-450);
         box-shadow: none;
         transition: none;
+        flex-shrink: 0;
       }
       .view-options > :deep(div),
       .view-option > :deep(div) {
