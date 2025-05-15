@@ -1790,39 +1790,35 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
 
       assert
-        .dom('[data-test-selected-code-mode-panel-item="schema"]')
+        .dom('[data-test-active-module-inspector-view="schema"]')
         .exists('defaults to schema-editor view');
-      await click('[data-test-code-mode-panel-item="preview"] > button');
-      assert
-        .dom('[data-test-selected-code-mode-panel-item="preview"]')
-        .exists();
+      await click('[data-test-code-mode-panel-item="preview"]');
+      assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
 
       await click('[data-test-file-browser-toggle]');
       await click('[data-test-file="address.gts"]');
-      assert.dom('[data-test-selected-code-mode-panel-item="spec"]').exists();
+      assert.dom('[data-test-active-module-inspector-view="spec"]').exists();
       assert.dom('[data-test-code-mode-panel-item="spec"]').hasClass('open');
-      await click('[data-test-code-mode-panel-item="spec"] > button');
+      await click('[data-test-code-mode-panel-item="spec"]');
       assert
-        .dom('[data-test-selected-code-mode-panel-item="preview"]')
+        .dom('[data-test-active-module-inspector-view="preview"]')
         .exists('closing the final panel opens the previous panel');
 
       await click('[data-test-file="country.gts"]');
       assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
-      assert.dom('[data-test-selected-code-mode-panel-item="schema"]').exists();
-      await click('[data-test-code-mode-panel-item="spec"] > button'); // open spec preview
-      assert.dom('[data-test-selected-code-mode-panel-item="spec"]').exists();
+      assert.dom('[data-test-active-module-inspector-view="schema"]').exists();
+      await click('[data-test-code-mode-panel-item="spec"]'); // open spec preview
+      assert.dom('[data-test-active-module-inspector-view="spec"]').exists();
 
       await click('[data-test-file="person.gts"]');
-      assert.dom('[data-test-selected-code-mode-panel-item="schema"]').exists();
+      assert.dom('[data-test-active-module-inspector-view="schema"]').exists();
 
       await click('[data-test-file="pet-person.gts"]');
-      assert
-        .dom('[data-test-selected-code-mode-panel-item="preview"]')
-        .exists();
-      await click('[data-test-code-mode-panel-item="preview"] > button'); // toggle playground closed
+      assert.dom('[data-test-active-module-inspector-view="preview"]').exists();
+      await click('[data-test-code-mode-panel-item="preview"]'); // toggle playground closed
       assert.dom('[data-test-rhs-panel="card-or-field"]').exists();
       assert
-        .dom('[data-test-selected-code-mode-panel-item="spec"]')
+        .dom('[data-test-active-module-inspector-view="spec"]')
         .exists('closing panel toggles next panel open');
 
       let currentSelections = window.localStorage.getItem(
