@@ -394,6 +394,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                     class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.useRealmOptions}}
+                    data-test-catalog-listing-use-dropdown
                   />
                 </:content>
               </BoxelDropdown>
@@ -419,6 +420,7 @@ class EmbeddedTemplate extends Component<typeof Listing> {
                     class='realm-dropdown-menu'
                     @closeMenu={{dd.close}}
                     @items={{this.installRealmOptions}}
+                    data-test-catalog-listing-install-dropdown
                   />
                 </:content>
               </BoxelDropdown>
