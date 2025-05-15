@@ -314,12 +314,14 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   get _selectedCard() {
     let selectedCardId = this.specPanelService.specSelection;
     if (selectedCardId) {
-      return this.cards?.find((card) => card.id === selectedCardId);
+      return this.specInstancesForSelectedDefinition?.find(
+        (card) => card.id === selectedCardId,
+      );
     }
-    return this.cards?.[0];
+    return this.specInstancesForSelectedDefinition?.[0];
   }
 
-  get cards() {
+  get specInstancesForSelectedDefinition() {
     return this.specsForSelectedDefinition?.instances ?? [];
   }
 
@@ -327,7 +329,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     if (this._selectedCard) {
       return this._selectedCard;
     }
-    return this.cards?.[0];
+    return this.specInstancesForSelectedDefinition?.[0];
   }
 
   <template>
@@ -422,7 +424,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
           @activeSpec={{this.card}}
-          @specsForSelectedDefinition={{this.cards}}
+          @specsForSelectedDefinition={{this.specInstancesForSelectedDefinition}}
           @searchIsLoading={{this.specsForSelectedDefinition.isLoading}}
           as |SpecPreviewTitle SpecPreviewContent|
         >
