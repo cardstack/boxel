@@ -18,15 +18,11 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
   // TODO value created by hand from an existing browser session via:
-  // console.log(`export TODO_SESSION="${btoa(JSON.stringify(Object.fromEntries(['boxel-realm-server-session', 'auth', 'boxel-session'].map(k => [k,localStorage.getItem(k)]))))}"`)
-  const auth: Record<string, string> = JSON.parse(
-    atob(process.env.TODO_SESSION!),
-  );
+  // console.log(`export TODO_SESSION="${btoa(localStorage.getItem("boxel-session"))}"`)
+  const auth: string = atob(process.env.TODO_SESSION!);
 
   page.evaluateOnNewDocument((auth) => {
-    for (let [k, v] of Object.entries(auth)) {
-      localStorage.setItem(k, v);
-    }
+    localStorage.setItem('boxel-session', auth);
   }, auth);
 
   const html: Map<Format, string> = new Map();
