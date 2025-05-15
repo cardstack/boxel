@@ -1,34 +1,29 @@
 import Route from '@ember/routing/route';
+import RouterService from '@ember/routing/router-service';
 import { service } from '@ember/service';
 
-import { isCardInstance, isValidFormat } from '@cardstack/runtime-common';
+import { isCardInstance } from '@cardstack/runtime-common';
 
-import type {
-  BoxComponent,
-  CardDef,
-  Format,
-} from 'https://cardstack.com/base/card-api.gts';
+import type { CardDef } from 'https://cardstack.com/base/card-api.gts';
 
 import StoreService from '../services/store';
 
-export interface Model {
-  instance: CardDef;
-  format: Format;
-  Component: BoxComponent;
-}
+export type Model = CardDef;
 
 export default class RenderRoute extends Route<Model> {
   @service declare store: StoreService;
+  @service declare router: RouterService;
 
-  async model({ id, format }: { id: string; format: string }) {
+  async model({ id }: { id: string }) {
+    (globalThis as any).boxelTransitionTo = (
+      ...args: Parameters<RouterService['transitionTo']>
+    ) => {
+      this.router.transitionTo(...args);
+    };
     let instance = await this.store.get(id);
     if (!isCardInstance(instance)) {
       throw new Error('todo: failed to load');
     }
-    if (!isValidFormat(format)) {
-      throw new Error('todo: invalid format');
-    }
-    let Component = instance.constructor.getComponent(instance);
-    return { format, instance, Component };
+    return instance;
   }
 }

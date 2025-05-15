@@ -1,9 +1,15 @@
-import puppeteer from 'puppeteer';
+import {
+  Format,
+  formats,
+  LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
+import puppeteer, { Page } from 'puppeteer';
 
-export async function prerenderCard(
-  url: string,
-  format: string,
-): Promise<{ html: string }> {
+export async function prerenderCard(url: string): Promise<{
+  iconHTML: string;
+  html: Record<Format, string>;
+  json: LooseSingleCardDocument;
+}> {
   const browser = await puppeteer.launch({
     headless: process.env.BOXEL_SHOW_PRERENDER !== 'true',
   });
@@ -20,14 +26,56 @@ export async function prerenderCard(
       localStorage.setItem(k, v);
     }
   }, auth);
-  await page.goto(
-    `http://localhost:4200/render/${format}/${encodeURIComponent(url)}`,
-  );
+
+  const html: Map<Format, string> = new Map();
+
+  await page.goto(`http://localhost:4200/render/${encodeURIComponent(url)}`);
+
+  for (let format of formats) {
+    await transitionTo(page, 'render.html', format);
+    await page.waitForSelector('[data-render-output="ready"]');
+    html.set(
+      format,
+      await page.evaluate(() => {
+        return document.querySelector('[data-render-output="ready"]')!
+          .innerHTML;
+      }),
+    );
+  }
+
+  await transitionTo(page, 'render.icon');
   await page.waitForSelector('[data-render-output="ready"]');
-  const html = await page.evaluate(() => {
-    return document.querySelector('[data-render-output="ready"]')!.innerHTML;
+  const iconHTML = await page.evaluate(() => {
+    return document.querySelector('[data-render-output="ready"]')!.outerHTML;
+  });
+
+  await transitionTo(page, 'render.json');
+  await page.waitForSelector('[data-render-output="ready"]');
+  const json: LooseSingleCardDocument = await page.evaluate(() => {
+    return JSON.parse(
+      document.querySelector('[data-render-output="ready"]')!.textContent!,
+    );
   });
 
   await context.close();
-  return { html };
+  await browser.close();
+  return {
+    iconHTML,
+    html: Object.fromEntries(html) as Record<Format, string>,
+    json,
+  };
+}
+
+async function transitionTo(
+  page: Page,
+  routeName: string,
+  ...params: string[]
+): Promise<void> {
+  await page.evaluate(
+    (routeName, params) => {
+      (globalThis as any).boxelTransitionTo(routeName, ...params);
+    },
+    routeName,
+    params,
+  );
 }

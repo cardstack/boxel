@@ -1,8 +1,10 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import RouteTemplate from 'ember-route-template';
-import { Model } from '../routes/render';
+import { Model } from '../../routes/render/json';
+
+const { stringify } = JSON;
 
 export default RouteTemplate(<template>
-  <@model.Component @format={{@model.format}} data-render-output='ready' />
+  <pre data-render-output='ready'>{{stringify @model.payload}}</pre>
 </template> satisfies TemplateOnlyComponent<{ Args: { model: Model } }>);
