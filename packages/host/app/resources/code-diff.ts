@@ -8,16 +8,17 @@ import type CardService from '@cardstack/host/services/card-service';
 import CommandService from '@cardstack/host/services/command-service';
 
 import ApplySearchReplaceBlockCommand from '../commands/apply-search-replace-block';
+import { CodeBlockMeta } from '../components/ai-assistant/formatted-message';
 
 interface CodeDiffResourceArgs {
   named: {
-    fileUrl?: string | null;
     searchReplaceBlock?: string | null;
+    codeBlockMeta: CodeBlockMeta;
   };
 }
 
 export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
-  @tracked fileUrl: string | undefined | null;
+  @tracked codeBlockMeta: CodeBlockMeta | undefined | null;
   @tracked originalCode: string | undefined | null;
   @tracked modifiedCode: string | undefined | null;
   @tracked searchReplaceBlock: string | undefined | null;
@@ -26,10 +27,9 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   @service declare private commandService: CommandService;
 
   modify(_positional: never[], named: CodeDiffResourceArgs['named']) {
-    let { fileUrl, searchReplaceBlock } = named;
-    this.fileUrl = fileUrl;
+    let { codeBlockMeta, searchReplaceBlock } = named;
+    this.codeBlockMeta = codeBlockMeta;
     this.searchReplaceBlock = searchReplaceBlock;
-
     this.load.perform();
   }
 
@@ -38,12 +38,22 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
   }
 
   private load = restartableTask(async () => {
-    let { fileUrl, searchReplaceBlock } = this;
-    if (!fileUrl || !searchReplaceBlock) {
+    let { codeBlockMeta, searchReplaceBlock } = this;
+    if (!codeBlockMeta || !searchReplaceBlock) {
       return;
     }
-    let result = await this.cardService.getSource(new URL(fileUrl));
-    this.originalCode = result;
+
+    if (codeBlockMeta.isNewFile) {
+      this.originalCode = '';
+    } else {
+      if (!codeBlockMeta.fileUrl) {
+        throw new Error('codeBlockMeta.fileUrl is required');
+      }
+      this.originalCode = (
+        await this.cardService.getSource(new URL(codeBlockMeta.fileUrl))
+      ).content;
+    }
+
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
       this.commandService.commandContext,
     );
@@ -59,15 +69,15 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
 
 export function getCodeDiffResultResource(
   parent: object,
-  fileUrl?: string | null,
   searchReplaceBlock?: string | null,
+  codeBlockMeta?: CodeBlockMeta | null,
 ) {
-  if (!fileUrl || !searchReplaceBlock) {
-    throw new Error('fileUrl and searchReplaceBlock are required');
+  if (!codeBlockMeta || !searchReplaceBlock) {
+    throw new Error('codeBlockMeta and searchReplaceBlock are required');
   }
   return CodeDiffResource.from(parent, () => ({
     named: {
-      fileUrl,
+      codeBlockMeta,
       searchReplaceBlock,
     },
   }));

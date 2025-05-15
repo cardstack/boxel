@@ -36,8 +36,14 @@ import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
 
-export interface CodeData {
+export interface CodeBlockMeta {
   fileUrl: string | null;
+  fileName: string | null;
+  isNewFile: boolean;
+}
+
+export interface CodeData {
+  codeBlockMeta: CodeBlockMeta | null;
   code: string | null;
   language: string | null;
   searchReplaceBlock?: string | null;
@@ -153,15 +159,22 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
       codePatchAction.patchCodeTaskState = 'applying';
     });
 
-    let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions.reduce(
-      (acc, codePatchAction) => {
-        acc[codePatchAction.fileUrl] = [
-          ...(acc[codePatchAction.fileUrl] || []),
-          codePatchAction,
-        ];
-        return acc;
-      },
-      {} as Record<string, CodePatchAction[]>,
+    let codePatchActionsGroupedByFileUrl = unappliedCodePatchActions
+      .filter((codePatchAction) => codePatchAction.codeBlockMeta?.fileUrl)
+      .reduce(
+        (acc, codePatchAction) => {
+          let fileUrl = codePatchAction.codeBlockMeta?.fileUrl;
+          if (!fileUrl) {
+            throw new Error('fileUrl is required');
+          }
+          acc[fileUrl] = [...(acc[fileUrl] || []), codePatchAction];
+          return acc;
+        },
+        {} as Record<string, CodePatchAction[]>,
+      );
+
+    let codePatchActionsResultingInNewFiles = unappliedCodePatchActions.filter(
+      (codePatchAction) => !codePatchAction.codeBlockMeta?.fileUrl,
     );
 
     let patchCodeCommand = new PatchCodeCommand(
@@ -173,6 +186,8 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     for (let fileUrl in codePatchActionsGroupedByFileUrl) {
       await patchCodeCommand.execute({
         fileUrl,
+        isNewFile:
+          codePatchActionsGroupedByFileUrl[fileUrl][0].codeBlockMeta.isNewFile,
         codeBlocks: codePatchActionsGroupedByFileUrl[fileUrl].map(
           (codePatchAction) => codePatchAction.searchReplaceBlock,
         ),
@@ -181,6 +196,15 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
         codePatchAction.patchCodeTaskState = 'applied';
       });
     }
+
+    codePatchActionsResultingInNewFiles.forEach(async (codePatchAction) => {
+      await patchCodeCommand.execute({
+        isNewFile: true,
+        fileName: codePatchAction.codeBlockMeta?.fileName || undefined,
+        codeBlocks: [codePatchAction.searchReplaceBlock],
+      });
+      codePatchAction.patchCodeTaskState = 'applied';
+    });
 
     this.applyAllCodePatchTasksState = 'applied';
   });
@@ -335,11 +359,17 @@ interface HtmlGroupCodeBlockSignature {
 class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   @cached
   get codeDiffResource() {
+    if (!this.args.codeData.codeBlockMeta) {
+      console.error(
+        'code diff error: was not able to extract metadata from the code block',
+      );
+      return null;
+    }
     return this.args.codeData.searchReplaceBlock
       ? getCodeDiffResultResource(
           this,
-          this.args.codeData.fileUrl,
           this.args.codeData.searchReplaceBlock,
+          this.args.codeData.codeBlockMeta,
         )
       : undefined;
   }

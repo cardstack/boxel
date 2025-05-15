@@ -37,7 +37,10 @@ module('Integration | Component | FormattedMessage', function (hooks) {
     cardService = this.owner.lookup('service:card-service') as CardService;
 
     cardService.getSource = async () => {
-      return Promise.resolve('let a = 1;\nlet b = 2;');
+      return {
+        status: 200,
+        content: 'let a = 1;\nlet b = 2;',
+      };
     };
   });
 
@@ -128,7 +131,7 @@ puts "💎"
     assert.dom('pre').doesNotExist();
   });
 
-  test('it will not render apply code button when code patch block is detected but no file url is provided', async function (assert) {
+  test('it will not render apply code button when code patch block is detected but no boxel meta is provided (this should normally not happen)', async function (assert) {
     await renderFormattedMessage({
       renderCodeBlocks: true,
       html: `
@@ -146,6 +149,7 @@ puts "💎"
       renderCodeBlocks: true,
       html: `
 <pre data-code-language="typescript">
+http://test-realm/test/file.ts
 <<<<<<< SEARCH
           let a = 1;
           let b = 2;
@@ -169,6 +173,7 @@ puts "💎"
       renderCodeBlocks: true,
       html: `
 <pre data-code-language="typescript">
+http://test-realm/test/file.ts
 <<<<<<< SEARCH
           let a = 1;
           let c = 3;
@@ -194,7 +199,7 @@ puts "💎"
       renderCodeBlocks: true,
       html: `
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 let b = 2;
@@ -226,7 +231,7 @@ let a = 3;
       renderCodeBlocks: true,
       html: `
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts"
 <<<<<<< SEARCH
 let a = 1;
 let b = 2;
@@ -236,7 +241,7 @@ let a = 3;
 </pre>
 <p>the above block is now complete, now I am sending you another one:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 let c = 3;
@@ -258,7 +263,7 @@ let c = 3;
       renderCodeBlocks: true,
       html: `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======
@@ -267,7 +272,7 @@ let a = 2;
 </pre>
 <p>We need to fix this too:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let c = 1;
 =======
@@ -286,7 +291,7 @@ let c = 2;
       renderCodeBlocks: true,
       html: `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======
@@ -295,7 +300,7 @@ let a = 2;
 </pre>
 <p>We need to fix this too:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let c = 1;
 =======
@@ -307,6 +312,52 @@ let c = 2;
     });
 
     assert.dom('[data-test-apply-all-code-patches-button]').doesNotExist();
+  });
+
+  test('it will render search/replace in a more human readable format when streaming', async function (assert) {
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `
+<pre data-code-language="typescript">
+https://example.com/file.ts
+<<<<<<< SEARCH
+let a = 1;
+let b = 2;
+=======
+let a = 3;
+</pre>
+`, // note the missing >>>>>> REPLACE (this is intentional because streaming is in progress)
+      isStreaming: true,
+    });
+
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+          .innerText ==
+        '// existing code ... \nlet a = 1;\nlet b = 2;\n// new code ... \nlet a = 3;',
+    );
+
+    await renderFormattedMessage({
+      renderCodeBlocks: true,
+      html: `
+<pre data-code-language="typescript">
+https://example.com/file.ts"
+<<<<<<< SEARCH
+=======
+let a = 3;
+</pre>
+`, // note the missing search block - this is a case when we are creating a new file
+      isStreaming: true,
+    });
+
+    // in this case where search block is empty, we omit the "existing code" and "new code" lines
+    await waitUntil(
+      () =>
+        (document.getElementsByClassName('view-lines')[0] as HTMLElement)
+          .innerText == 'let a = 3;',
+    );
+
+    assert.dom('.code-block').exists();
   });
 
   test('unincremental updates are handled gracefully', async function (assert) {
@@ -384,7 +435,7 @@ let c = 2;
 
     component.isStreaming = true;
     component.html = `<pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======
@@ -400,7 +451,7 @@ let a = 2;`; // incomplete code block - the ending >>>>>> REPLACE is missing
         '// existing code ... \nlet a = 1;\n// new code ... \nlet a = 2;',
     );
     component.html = `<pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======

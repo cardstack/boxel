@@ -2734,12 +2734,16 @@ Attached files:
       messages![2].content,
       'Right, let us make a tic tac toe game.\n' +
         '\n' +
-        '// File url: https://test.com/tic-tac.gts\n' +
-        OMIT_CODE_CHANGE_PLACEHOLDER +
-        '\n\n' +
-        '// File url: https://test.com/tac-toe.gts\n' +
-        OMIT_CODE_CHANGE_PLACEHOLDER +
-        '\n\n' +
+        '```gts\n' +
+        'https://test.com/tic-tac.gts\n' +
+        `${OMIT_CODE_CHANGE_PLACEHOLDER}\n` +
+        '```\n' +
+        '\n' +
+        '```gts\n' +
+        'https://test.com/tac-toe.gts\n' +
+        `${OMIT_CODE_CHANGE_PLACEHOLDER}\n` +
+        '```\n' +
+        '\n' +
         'I can add some more whiz bang if you want. Let me know!',
     );
   });

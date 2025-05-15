@@ -80,7 +80,7 @@ module(
         new URL('person.gts', testRealmURL),
       );
       assert.strictEqual(
-        response,
+        response.content,
         `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
@@ -128,7 +128,7 @@ module(
         new URL('person.gts', testRealmURL),
       );
       assert.strictEqual(
-        response,
+        response.content,
         `
           import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
           import StringField from "https://cardstack.com/base/string";
