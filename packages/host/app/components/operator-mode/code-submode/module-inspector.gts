@@ -103,9 +103,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
   @consume(GetCardsContextName) private declare getCards: getCards;
 
-  @tracked private specsForSelectedDefinition:
-    | ReturnType<getCards<Spec>>
-    | undefined;
+  @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
@@ -302,7 +300,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private findSpecsForSelectedDefinition = () => {
-    this.specsForSelectedDefinition = this.getCards(
+    this.specSearch = this.getCards(
       this,
       () => this.queryForSpecsForSelectedDefinition,
       () => this.realmServer.availableRealmURLs,
@@ -310,15 +308,15 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     ) as ReturnType<getCards<Spec>>;
   };
 
-  get specInstancesForSelectedDefinition() {
-    return this.specsForSelectedDefinition?.instances ?? [];
+  get specsForSelectedDefinition() {
+    return this.specSearch?.instances ?? [];
   }
 
   private get activeSpec() {
     let selectedSpecId = this.specPanelService.specSelection;
 
     if (selectedSpecId) {
-      let selectedSpec = this.specInstancesForSelectedDefinition?.find(
+      let selectedSpec = this.specsForSelectedDefinition?.find(
         (spec) => spec.id === selectedSpecId,
       );
 
@@ -327,7 +325,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
       }
     }
 
-    return this.specInstancesForSelectedDefinition?.[0];
+    return this.specsForSelectedDefinition?.[0];
   }
 
   <template>
@@ -424,8 +422,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
           @selectedDeclarationAsCodeRef={{this.selectedDeclarationAsCodeRef}}
           @updatePlaygroundSelections={{this.updatePlaygroundSelections}}
           @activeSpec={{this.activeSpec}}
-          @specsForSelectedDefinition={{this.specInstancesForSelectedDefinition}}
-          @searchIsLoading={{this.specsForSelectedDefinition.isLoading}}
+          @specsForSelectedDefinition={{this.specsForSelectedDefinition}}
+          @searchIsLoading={{this.specSearch.isLoading}}
           as |SpecPreviewTitle SpecPreviewContent|
         >
           <A.Item
