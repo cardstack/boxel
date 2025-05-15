@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "FilterDropdownItem",
+        "module": "../crm-app/components/filter/filter-dropdown-item"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Filter Dropdown Item",
+      "description": "Spec for Filter Dropdown Item component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

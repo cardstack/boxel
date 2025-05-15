@@ -7,7 +7,7 @@ import { module, test } from 'qunit';
 import { baseRealm } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
-import Preview from '@cardstack/host/components/preview';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 
 import { lookupLoaderService, testRealmURL } from '../../helpers';
 import { renderComponent } from '../../helpers/render-component';
@@ -47,7 +47,7 @@ module('Integration | preview', function (hooks) {
     await renderComponent(
       class TestDriver extends GlimmerComponent {
         <template>
-          <Preview @card={{card}} />
+          <CardRenderer @card={{card}} />
         </template>
       },
     );

@@ -133,7 +133,6 @@ module('Integration | card-delete', function (hooks) {
       };
     }
     ({ realm, adapter } = await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },

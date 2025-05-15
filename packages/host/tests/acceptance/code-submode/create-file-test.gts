@@ -358,7 +358,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       await click('[data-test-create-card-instance]');
       await waitFor('[data-test-create-file-modal]', { count: 0 });
-      await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
+      await waitFor(`[data-test-code-mode-card-renderer-header="${fileID}"]`);
       assert.dom('[data-test-card-resource-loaded]').containsText('Person');
       assert.dom('[data-test-field="firstName"] input').hasValue('');
       assert.dom('[data-test-card-url-bar-input]').hasValue(`${fileID}.json`);
@@ -439,11 +439,11 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await waitFor('[data-test-create-file-modal]', { count: 0 });
       await waitFor('[data-test-code-mode][data-test-save-idle]');
       await waitFor(
-        '[data-test-code-mode-card-preview-header][data-test-card-resource-loaded]',
+        '[data-test-code-mode-card-renderer-header][data-test-card-resource-loaded]',
       );
       assert
         .dom(
-          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+          '[data-test-code-mode-card-renderer-header] [data-test-realm-icon-url]',
         )
         .hasAttribute('aria-label', 'Test Workspace A');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
@@ -499,10 +499,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       await click('[data-test-create-card-instance]');
       await waitFor('[data-test-create-file-modal]', { count: 0 });
-      await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
+      await waitFor(`[data-test-code-mode-card-renderer-header="${fileID}"]`);
       assert
         .dom(
-          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+          '[data-test-code-mode-card-renderer-header] [data-test-realm-icon-url]',
         )
         .hasAttribute('aria-label', 'Test Workspace B');
       assert.dom('[data-test-card-resource-loaded]').containsText('Card');
@@ -565,10 +565,10 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
 
       await click('[data-test-create-card-instance]');
       await waitFor('[data-test-create-file-modal]', { count: 0 });
-      await waitFor(`[data-test-code-mode-card-preview-header="${fileID}"]`);
+      await waitFor(`[data-test-code-mode-card-renderer-header="${fileID}"]`);
       assert
         .dom(
-          '[data-test-code-mode-card-preview-header] [data-test-realm-icon-url]',
+          '[data-test-code-mode-card-renderer-header] [data-test-realm-icon-url]',
         )
         .hasAttribute('aria-label', 'Test Workspace B');
       assert.dom('[data-test-card-resource-loaded]').containsText('Person');

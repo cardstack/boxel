@@ -140,15 +140,14 @@ module('Integration | Store', function (hooks) {
     loaderService = lookupLoaderService();
     loader = loaderService.loader;
     api = await loader.import(`${baseRealm.url}card-api`);
-    store = this.owner.lookup('service:store') as StoreService;
-    operatorModeStateService = this.owner.lookup(
-      'service:operator-mode-state-service',
-    ) as OperatorModeStateService;
+    store = lookupService<StoreService>('store');
+    operatorModeStateService = lookupService<OperatorModeStateService>(
+      'operator-mode-state-service',
+    );
     identityContext = (store as any).identityContext as IdentityContext;
 
     ({ adapter: testRealmAdapter, realm: testRealm } =
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'person.gts': { Person },

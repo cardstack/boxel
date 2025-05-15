@@ -1,5 +1,9 @@
 import { module, test } from 'qunit';
-import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
+import {
+  ModuleSyntax,
+  gjsToPlaceholderJS,
+  placeholderJSToGJS,
+} from '@cardstack/runtime-common/module-syntax';
 
 import { baseCardRef, baseFieldRef } from '@cardstack/runtime-common';
 import { testRealm } from './helpers';
@@ -86,7 +90,7 @@ module(basename(__filename), function () {
         @field firstName = contains(StringField);
         @field age = contains(NumberField);
         static embedded = class Embedded extends Component<typeof this> {
-          <template><h1><@fields.firstName/></h1></template>                
+          <template><h1><@fields.firstName/></h1></template>
         }
       }
       `,
@@ -187,7 +191,7 @@ module(basename(__filename), function () {
             @field firstName = contains(StringField);
             @field age = contains(NumberField);
             static embedded = class Embedded extends Component<typeof this> {
-                <template><h1><@fields.firstName/></h1></template>                
+                <template><h1><@fields.firstName/></h1></template>
             }
         }
       `,
@@ -217,7 +221,7 @@ module(basename(__filename), function () {
         export class Person extends CardDef {
           @field age = contains(NumberField);
           static embedded = class Embedded extends Component<typeof this> {
-            <template><h1><@fields.firstName/></h1></template>                
+            <template><h1><@fields.firstName/></h1></template>
           }
         }
       `,
@@ -251,7 +255,7 @@ module(basename(__filename), function () {
         `
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
-        export class Person extends CardDef { }
+        export class Person extends CardDef {}
       `,
       );
 
@@ -261,7 +265,7 @@ module(basename(__filename), function () {
         import NumberField from "https://cardstack.com/base/number";
         import { contains, field, Component, CardDef } from "https://cardstack.com/base/card-api";
         import StringField from "https://cardstack.com/base/string";
-        export class Person extends CardDef { 
+        export class Person extends CardDef {
           @field age = contains(NumberField);
         }
       `,
@@ -315,7 +319,7 @@ module(basename(__filename), function () {
             @field age = contains(NumberField);
             @field firstName = contains(StringField);
             static embedded = class Embedded extends Component<typeof this> {
-                <template><h1><@fields.firstName/></h1></template>                
+                <template><h1><@fields.firstName/></h1></template>
             }
         }
       `,
@@ -1346,6 +1350,39 @@ module(basename(__filename), function () {
           'expected error was thrown',
         );
       }
+    });
+  });
+  module('gjs-to-placeholder', function () {
+    const examples = [
+      `<template>Greetings ")]</template>`,
+      '<template>${{stuff}}</template>',
+      `<template>
+        Hello
+       </template>`,
+    ];
+    for (let example of examples) {
+      test('round-trip gjs placeholders', async function (assert) {
+        assert.strictEqual(
+          placeholderJSToGJS(gjsToPlaceholderJS(example)),
+          example,
+        );
+      });
+    }
+
+    test('preserves line numbers', function (assert) {
+      let src = `
+        console.log(
+          <template>
+            Hi
+          </template>
+        );
+        console.log('after');
+      `;
+      assert.strictEqual(
+        gjsToPlaceholderJS(src).split('\n')[6],
+        src.split('\n')[6],
+        `expecting lines to be preserved in:\n${gjsToPlaceholderJS(src)}`,
+      );
     });
   });
 });

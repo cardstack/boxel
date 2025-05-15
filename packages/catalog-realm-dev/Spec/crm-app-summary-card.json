@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "SummaryCard",
+        "module": "../crm-app/components/summary-card"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Summary Card",
+      "description": "Spec for Summary Card component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

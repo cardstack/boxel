@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "AccountHeader",
+        "module": "../crm-app/components/account-header"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Account Header",
+      "description": "Spec for Account Header component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

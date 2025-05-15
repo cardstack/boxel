@@ -49,7 +49,8 @@ import {
   isResolvedCodeRef,
 } from '@cardstack/runtime-common/code-ref';
 
-import Preview from '@cardstack/host/components/preview';
+import CardRenderer from '@cardstack/host/components/card-renderer';
+import type { SelectedAccordionItem } from '@cardstack/host/components/operator-mode/code-submode/module-inspector';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
@@ -82,7 +83,6 @@ import ElementTracker, {
 } from '../../../resources/element-tracker';
 import Overlays from '../overlays';
 
-import type { SelectedAccordionItem } from '../code-submode';
 import type { CardDefOrId } from '../stack-item';
 import type { WithBoundArgs } from '@glint/template';
 
@@ -358,13 +358,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
               @onSelectCard={{@viewCardInPlayground}}
             />
             {{#if this.displayIsolated}}
-              <Preview
+              <CardRenderer
                 @card={{@spec}}
                 @format='isolated'
                 @cardContext={{this.cardContext}}
               />
             {{else}}
-              <Preview
+              <CardRenderer
                 @card={{@spec}}
                 @format='edit'
                 @cardContext={{this.cardContext}}

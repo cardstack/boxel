@@ -898,11 +898,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await deferred.promise;
 
     await waitForCodeEditor();
-    await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
+    await waitFor(`[data-test-code-mode-card-renderer-header="${id}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
       .dom(
-        `[data-test-code-mode-card-preview-header="${id}"] [data-test-realm-icon-url]`,
+        `[data-test-code-mode-card-renderer-header="${id}"] [data-test-realm-icon-url]`,
       )
       .hasAttribute('aria-label', 'Test Workspace B');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
@@ -959,11 +959,11 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     await deferred.promise;
 
     await waitForCodeEditor();
-    await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
+    await waitFor(`[data-test-code-mode-card-renderer-header="${id}"]`);
     assert.dom('[data-test-card-resource-loaded]').containsText('Pet');
     assert
       .dom(
-        `[data-test-code-mode-card-preview-header="${id}"] [data-test-realm-icon-url]`,
+        `[data-test-code-mode-card-renderer-header="${id}"] [data-test-realm-icon-url]`,
       )
       .hasAttribute('aria-label', 'Test Workspace A');
     assert.dom('[data-test-field="name"] input').hasValue('Van Gogh');
@@ -1322,7 +1322,7 @@ module('Acceptance | code submode | inspector tests', function (hooks) {
     assert.dom('[data-test-boxel-selector-item-selected]').hasText(selected);
   });
 
-  test('After opening definition from card type and fields on RHS, "in-this-file" highlights selected definition', async function (assert) {
+  test('After opening definition from card type and fields in module inspector, "in-this-file" highlights selected definition', async function (assert) {
     let operatorModeState = {
       submode: Submodes.Code,
       codePath: `${testRealmURL}imports.gts`,
@@ -2045,7 +2045,7 @@ export class ExportedCard extends ExportedCardParent {
       assert.ok(false, 'card instance ID does not exist');
     }
     await waitFor('[data-test-create-file-modal]', { count: 0 });
-    await waitFor(`[data-test-code-mode-card-preview-header="${id}"]`);
+    await waitFor(`[data-test-code-mode-card-renderer-header="${id}"]`);
     assert
       .dom('[data-test-card-resource-loaded]')
       .containsText('exported card');

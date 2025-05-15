@@ -6,6 +6,7 @@ import {
   getPromptParts,
   getRelevantCards,
   getTools,
+  OMIT_CODE_CHANGE_PLACEHOLDER,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '../helpers';
 import {
@@ -2735,12 +2736,12 @@ Attached files:
         '\n' +
         '```gts\n' +
         '__META: { "fileUrl": "https://test.com/tic-tac.gts" }\n' +
-        '[Proposed code change]\n' +
+        `${OMIT_CODE_CHANGE_PLACEHOLDER}\n` +
         '```\n' +
         '\n' +
         '```gts\n' +
         '__META: { "fileUrl": "https://test.com/tac-toe.gts" }\n' +
-        '[Proposed code change]\n' +
+        `${OMIT_CODE_CHANGE_PLACEHOLDER}\n` +
         '```\n' +
         '\n' +
         'I can add some more whiz bang if you want. Let me know!',

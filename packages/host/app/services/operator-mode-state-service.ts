@@ -18,6 +18,7 @@ import {
   isCardInstance,
   type ResolvedCodeRef,
   internalKeyFor,
+  isLocalId,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -41,7 +42,6 @@ import { Format } from 'https://cardstack.com/base/card-api';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
-import { isLocalId } from '../lib/gc-identity-context';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';

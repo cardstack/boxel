@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "CrmApp",
+        "module": "../crm-app/crm-app"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "CRM App",
+      "description": "Spec for CRM App",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Sarah",
+      "lastName": "Baker",
+      "position": "Owner",
+      "department": "Management",
+      "primaryEmail": "sarah@sweettoothseattle.com",
+      "secondaryEmail": "sarahbaker.personal@gmail.com",
+      "phoneMobile": {
+        "phoneNumber": {
+          "number": "2065557890",
+          "countryCode": "1"
+        },
+        "type": {
+          "index": 0,
+          "label": "Mobile"
+        }
+      },
+      "phoneOffice": {
+        "phoneNumber": {
+          "number": "2065551234",
+          "countryCode": "1"
+        },
+        "type": {
+          "index": 1,
+          "label": "Office"
+        }
+      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "linkedin.com"
+        },
+        {
+          "label": "X",
+          "value": "x.com"
+        }
+      ],
+      "description": "Owner and head pastry chef at Sweet Tooth Bakery",
+      "thumbnailURL": "https://images.pexels.com/photos/415829/pexels-photo-415829.jpeg"
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/141f3e15-cfd5-4b61-bd4c-37ea31dbeeab"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../customer",
+        "name": "Customer"
+      }
+    }
+  }
+}

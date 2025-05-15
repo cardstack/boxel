@@ -1,0 +1,63 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "firstName": "Mike",
+      "lastName": "Johnson",
+      "position": "General Manager",
+      "department": "Operations",
+      "primaryEmail": "mike.j@fitnessfirstgym.com",
+      "secondaryEmail": "mikej.fitness@gmail.com",
+      "phoneMobile": {
+        "phoneNumber": {
+          "number": "2065559876",
+          "countryCode": "1"
+        },
+        "type": {
+          "index": 0,
+          "label": "Mobile"
+        }
+      },
+      "phoneOffice": {
+        "phoneNumber": {
+          "number": "2065555678",
+          "countryCode": "1"
+        },
+        "type": {
+          "index": 1,
+          "label": "Office"
+        }
+      },
+      "socialLinks": [
+        {
+          "label": "LinkedIn",
+          "value": "linkedin.com/in/mike-johnson-fitness"
+        },
+        {
+          "label": "X",
+          "value": "x.com"
+        }
+      ],
+      "description": "Manages all three Fitness First locations",
+      "thumbnailURL": "https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg"
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../customer",
+        "name": "Customer"
+      }
+    }
+  }
+}

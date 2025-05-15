@@ -39,7 +39,7 @@ interface Signature {
   };
 }
 
-export default class Preview extends Component<Signature> {
+export default class CardRenderer extends Component<Signature> {
   @consume(GetCardContextName) private declare getCard: getCard;
   @consume(GetCardsContextName) private declare getCards: getCards;
   @consume(GetCardCollectionContextName)

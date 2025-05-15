@@ -149,7 +149,6 @@ export default class MyComponent extends Component {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'address.gts': { Address },

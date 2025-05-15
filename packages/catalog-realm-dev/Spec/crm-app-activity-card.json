@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "ActivityCard",
+        "module": "../crm-app/components/activity-card"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Activity Card",
+      "description": "Spec for Activity Card component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

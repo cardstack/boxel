@@ -1,5 +1,6 @@
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
+import { isTesting } from '@embroider/macros';
 import { tracked } from '@glimmer/tracking';
 
 import { task } from 'ember-concurrency';
@@ -26,6 +27,14 @@ export class ImportResource extends Resource<Args> {
 
   modify(_positional: never[], named: Args['named']) {
     let { url, loader } = named;
+    // The loader service is shared between the realm server and the host. this
+    // resource can interfere with indexing in the browser by caching modules in
+    // the loader that we are trying to change in our index. you can use the
+    // `withoutLoaderMonitoring()` test helper to temporarily disable this
+    // resource in scenarios that it is interfering with the tests.
+    if (isTesting() && (globalThis as any).__disableLoaderMonitoring) {
+      return;
+    }
     this.#loaded = this.load.perform(url, loader);
   }
 

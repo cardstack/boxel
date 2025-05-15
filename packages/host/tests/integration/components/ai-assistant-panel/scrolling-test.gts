@@ -101,7 +101,6 @@ module('Integration | ai-assistant-panel | scrolling', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },

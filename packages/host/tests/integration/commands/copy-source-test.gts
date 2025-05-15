@@ -3,8 +3,6 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Loader } from '@cardstack/runtime-common';
-
 import CopySourceCommand from '@cardstack/host/commands/copy-source';
 import type CommandService from '@cardstack/host/services/command-service';
 import type NetworkService from '@cardstack/host/services/network';
@@ -14,7 +12,6 @@ import RealmService from '@cardstack/host/services/realm';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupLoaderService,
   lookupNetworkService,
   lookupService,
   testRealmURL,
@@ -23,7 +20,6 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let loader: Loader;
 let fetch: NetworkService['fetch'];
 
 class StubRealmService extends RealmService {
@@ -43,15 +39,11 @@ module('Integration | commands | copy-source', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    loader = lookupLoaderService().loader;
     fetch = lookupNetworkService().fetch;
   });
 
   hooks.beforeEach(async function () {
-    loader = lookupLoaderService().loader;
-
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       realmURL: testRealmURL,
       contents: {

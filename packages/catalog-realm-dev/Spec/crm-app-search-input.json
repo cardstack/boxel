@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "SearchInput",
+        "module": "../crm-app/components/search-input"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Search Input",
+      "description": "Spec for Search Input component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

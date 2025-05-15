@@ -453,7 +453,6 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     });
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'currency.gts': { CurrencyCard },
@@ -548,7 +547,6 @@ module('Integration | CardDef-FieldDef relationships test', function (hooks) {
     });
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'country.gts': { Country },

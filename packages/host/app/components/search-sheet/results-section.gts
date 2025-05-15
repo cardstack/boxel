@@ -13,7 +13,7 @@ import type RealmService from '@cardstack/host/services/realm';
 
 import { type CardDef } from 'https://cardstack.com/base/card-api';
 
-import Preview from '../preview';
+import CardRenderer from '../card-renderer';
 
 import { removeFileExtension } from './utils';
 
@@ -55,7 +55,7 @@ class SearchResult extends Component<SearchResultSignature> {
         </CardContainer>
 
       {{else if @card}}
-        <Preview
+        <CardRenderer
           @card={{@card}}
           @format='fitted'
           @codeRef={{resultsCardRef}}

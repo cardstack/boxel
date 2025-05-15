@@ -3,8 +3,6 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Loader } from '@cardstack/runtime-common';
-
 import AddFieldToCardDefinitionCommand from '@cardstack/host/commands/add-field-to-card-definition';
 import CardService from '@cardstack/host/services/card-service';
 import type CommandService from '@cardstack/host/services/command-service';
@@ -14,15 +12,12 @@ import RealmService from '@cardstack/host/services/realm';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupLoaderService,
   lookupService,
   testRealmURL,
   testRealmInfo,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
-
-let loader: Loader;
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -42,12 +37,10 @@ module(
 
     hooks.beforeEach(function (this: RenderingTestContext) {
       getOwner(this)!.register('service:realm', StubRealmService);
-      loader = lookupLoaderService().loader;
     });
 
     hooks.beforeEach(async function () {
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'person.gts': `
