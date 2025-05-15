@@ -522,7 +522,7 @@ class ApplyCodePatchButton extends Component<ApplyCodePatchButtonSignature> {
 
   // This is for debugging purposes only
   logCodePatchAction = () => {
-    console.log('fileUrl \n', this.args.codePatchAction.codeBlockMeta.fileUrl);
+    console.log('code block meta \n', this.args.codePatchAction.codeBlockMeta);
     console.log(
       'searchReplaceBlock \n',
       this.args.codePatchAction.searchReplaceBlock,
