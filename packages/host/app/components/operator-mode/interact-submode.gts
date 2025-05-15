@@ -425,6 +425,9 @@ export default class InteractSubmode extends Component {
       addSkillsToRoom: async (roomId: string, skills: Skill[]) => {
         await here._addSkillsToRoom.perform(roomId, skills);
       },
+      fetchCard: async (url: string) => {
+        return await here.store.get(url);
+      },
     };
     return { ...actions, ...catalogActions };
   }

@@ -4,10 +4,8 @@ import {
   CardContext,
 } from 'https://cardstack.com/base/card-api';
 import GlimmerComponent from '@glimmer/component';
-// @ts-ignore
-import type { ComponentLike } from '@glint/template';
-// @ts-ignore
-import cssUrl from 'ember-css-url';
+import { Skill } from 'https://cardstack.com/base/skill';
+import { baseRealm } from '@cardstack/runtime-common';
 
 import { action } from '@ember/object';
 import { tracked } from '@glimmer/tracking';
@@ -342,12 +340,6 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 export class ListingFittedTemplate extends Component<typeof Listing> {
   @tracked installedListing = false;
   @tracked writableRealms: string[] = [];
-  @tracked remixSkill = this.args.context
-    ? this.args.context.getCard(
-        this,
-        () => 'http://localhost:4201/catalog/Skill/remix',
-      )
-    : undefined;
 
   roomId: string | null = null;
 
@@ -389,10 +381,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
 
   get firstTagName() {
     return this.args.model.tags?.[0]?.name;
-  }
-
-  get remixSkillCard() {
-    return this.remixSkill?.card;
   }
 
   _remix = task(async (realmUrl: string) => {
@@ -457,12 +445,14 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
           );
         this.roomId = roomId;
 
-        if (
-          this.args.context?.actions?.addSkillsToRoom &&
-          this.remixSkillCard
-        ) {
+        const remixSkillCardId = `${baseRealm.url}Skill/remix`;
+        const remixSkillCard = (await this.args.context?.actions?.fetchCard(
+          remixSkillCardId,
+        )) as Skill;
+
+        if (this.args.context?.actions?.addSkillsToRoom && remixSkillCard) {
           await this.args.context?.actions?.addSkillsToRoom(this.roomId, [
-            this.remixSkill?.card as any,
+            remixSkillCard,
           ]);
         }
         this.roomId = roomId;

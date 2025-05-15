@@ -491,6 +491,7 @@ export interface CatalogActions {
   }) => Promise<void>;
   addSkillsToRoom: (roomId: string, skills: Skill[]) => Promise<void>;
   openAiAssistantRoom: (roomId: string) => Promise<void>;
+  fetchCard: (url: string) => Promise<CardDef | CardErrorJSONAPI>;
 }
 
 export type Actions = CardActions & CatalogActions;
