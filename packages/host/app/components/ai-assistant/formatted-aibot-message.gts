@@ -263,8 +263,11 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
       }
     }
 
+    /* eslint-disable-next-line ember/no-side-effects */
     this._fileUrl = this.args.codeData.fileUrl;
+    /* eslint-disable-next-line ember/no-side-effects */
     this._searchReplaceBlock = this.args.codeData.searchReplaceBlock;
+    /* eslint-disable-next-line ember/no-side-effects */
     this._codeDiffResource = this.args.codeData.searchReplaceBlock
       ? getCodeDiffResultResource(
           this,
