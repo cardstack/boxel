@@ -215,7 +215,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
-  private onSpecView = (spec: Spec) => {
+  private updatePlaygroundSelectionsFromSpec = (spec: Spec) => {
     // console.trace('onSpecView', spec);
     if (!spec.isField) {
       return; // not a field spec
@@ -363,8 +363,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     {{else if @selectedCardOrField.cardOrField}}
       {{consumeContext this.findSpecsForSelectedDefinition}}
       <Accordion
-        {{! FIXME is this the right place? }}
-        {{SpecPreviewModifier spec=this.activeSpec onSpecView=this.onSpecView}}
+        {{SpecUpdatedModifier
+          spec=this.activeSpec
+          onSpecUpdated=this.updatePlaygroundSelectionsFromSpec
+        }}
         data-test-module-inspector='card-or-field'
         data-test-selected-accordion-item={{this.selectedAccordionItem}}
         as |A|
@@ -556,27 +558,25 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   </template>
 }
 
-interface ModifierSignature {
+interface SpecUpdatedModifierSignature {
   Args: {
     Named: {
       spec?: Spec;
-      onSpecView?: (spec: Spec) => void;
+      onSpecUpdated?: (spec: Spec) => void;
     };
   };
 }
 
-// FIXME this is copied from spec-preview, but is it just an on-render, next?
-export class SpecPreviewModifier extends Modifier<ModifierSignature> {
+export class SpecUpdatedModifier extends Modifier<SpecUpdatedModifierSignature> {
   modify(
     _element: HTMLElement,
     _positional: [],
-    { spec, onSpecView }: ModifierSignature['Args']['Named'],
+    { spec, onSpecUpdated }: SpecUpdatedModifierSignature['Args']['Named'],
   ) {
-    if (!spec || !onSpecView) {
-      // throw new Error('bug: no spec or onSpecView hook');
+    if (!spec || !onSpecUpdated) {
       return;
     }
 
-    onSpecView(spec);
+    onSpecUpdated(spec);
   }
 }
