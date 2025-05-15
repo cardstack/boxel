@@ -2,23 +2,66 @@ import { module, test } from 'qunit';
 import { basename } from 'path';
 import { prerenderCard, type RenderResponse } from '../prerender';
 
+import {
+  setupBaseRealmServer,
+  setupPermissionedRealm,
+  createVirtualNetworkAndLoader,
+  matrixURL,
+} from './helpers';
+import '@cardstack/runtime-common/helpers/code-equality-assertion';
+
 module.only(basename(__filename), function () {
-  module('prerender', function () {
+  module('prerender', function (hooks) {
+    let { virtualNetwork } = createVirtualNetworkAndLoader();
+    let realmURL: string;
+
+    setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
+
+    setupPermissionedRealm(hooks, {
+      onRealmSetup: ({ testRealm }) => {
+        realmURL = testRealm.url;
+      },
+      permissions: {
+        '*': ['read'],
+      },
+      subscribeToRealmEvents: true,
+      fileSystem: {
+        'cat.gts': `
+          import { CardDef, field, contains, StringField } from 'https://cardstack.com/base/card-api';
+          import { Component } from 'https://cardstack.com/base/card-api';
+          export class Cat extends CardDef {
+            @field name = contains(StringField);
+            static displayName = "Cat";
+            static embedded = <template>{{@fields.name}} says Meow</template>
+          }
+        `,
+        '1.json': {
+          data: {
+            attributes: {
+              name: 'Maple',
+            },
+            meta: {
+              adoptsFrom: {
+                module: './cat',
+                name: 'Cat',
+              },
+            },
+          },
+        },
+      },
+    });
+
     module('basics', function (hooks) {
       let result: RenderResponse;
 
-      hooks.before(async () => {
-        // TODO: This is created by hand in my local environment
-        const testCardURL =
-          'http://localhost:4201/user/a/Cat/95d63274-8052-49c1-bd9a-29cbf0bd1b09';
+      hooks.beforeEach(async () => {
+        const testCardURL = `${realmURL}1`;
         result = await prerenderCard(testCardURL);
       });
 
       test('embedded HTML', function (assert) {
         assert.ok(
-          /Maple\s+says\s+Meow/.test(
-            result.embeddedHTML['http://localhost:4201/user/a/cat/Cat'],
-          ),
+          /Maple\s+says\s+Meow/.test(result.embeddedHTML[`${realmURL}cat/Cat`]),
           `failed to match embedded html:${JSON.stringify(result.embeddedHTML)}`,
         );
       });
@@ -56,7 +99,7 @@ module.only(basename(__filename), function () {
 
       test('types', function (assert) {
         assert.deepEqual(result.types, [
-          'http://localhost:4201/user/a/cat/Cat',
+          `${realmURL}cat/Cat`,
           'https://cardstack.com/base/card-api/CardDef',
         ]);
       });
