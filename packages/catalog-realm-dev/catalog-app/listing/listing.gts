@@ -170,14 +170,19 @@ export async function installListing(args: any, realmUrl: string) {
 export async function setupAllRealmsInfo(args: any) {
   let allRealmsInfo =
     (await (args.context?.actions as Actions)?.allRealmsInfo?.()) ?? {};
-  let writableRealms: string[] = [];
+  let writableRealms: { name: string; url: string; iconURL?: string }[] = [];
   if (allRealmsInfo) {
     Object.entries(allRealmsInfo).forEach(([realmUrl, realmInfo]) => {
       if (realmInfo.canWrite) {
-        writableRealms.push(realmUrl);
+        writableRealms.push({
+          name: realmInfo.info.name,
+          url: realmUrl,
+          iconURL: realmInfo.info.iconURL ?? '/default-realm-icon.png',
+        });
       }
     });
   }
+  writableRealms.sort((a, b) => a.name.localeCompare(b.name));
   return writableRealms;
 }
 
@@ -185,7 +190,8 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   @tracked selectedAccordionItem: string | undefined;
   @tracked createdInstances = false;
   @tracked installedListing = false;
-  @tracked writableRealms: string[] = [];
+  @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
+    [];
 
   constructor(owner: any, args: any) {
     super(owner, args);
@@ -193,21 +199,23 @@ class EmbeddedTemplate extends Component<typeof Listing> {
   }
 
   get useRealmOptions() {
-    return this.writableRealms.map((realmUrl) => {
-      return new MenuItem(realmUrl, 'action', {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.use(realmUrl);
+          this.use(realm.url);
         },
+        iconURL: realm.iconURL ?? undefined,
       });
     });
   }
 
   get installRealmOptions() {
-    return this.writableRealms.map((realmUrl) => {
-      return new MenuItem(realmUrl, 'action', {
+    return this.writableRealms.map((realm) => {
+      return new MenuItem(realm.name, 'action', {
         action: () => {
-          this.install(realmUrl);
+          this.install(realm.url);
         },
+        iconURL: realm.iconURL ?? undefined,
       });
     });
   }
