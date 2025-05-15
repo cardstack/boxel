@@ -1,7 +1,6 @@
 import { CardResource } from './card-document';
 import type { ResolvedCodeRef } from './code-ref';
 
-import type { Skill } from 'https://cardstack.com/base/skill';
 import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 // a card resource but with optional "id" and "type" props
@@ -460,20 +459,6 @@ export interface CatalogActions {
     localDir?: LocalPath,
   ) => Promise<CardDef[]>;
   copySource: (fromUrl: string, toUrl: string) => Promise<void>;
-  updateCodePathWithSelection: (
-    codeRef?: CodeRef,
-    localName?: string,
-    fieldName?: string,
-  ) => Promise<void>;
-  updatePlaygroundSelection: (
-    moduleId: string,
-    cardId: string,
-    format: Format,
-  ) => Promise<void>;
-  switchSubmode: (
-    submode: 'interact' | 'code',
-    codePath: string,
-  ) => Promise<void>;
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;

@@ -507,10 +507,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let invalidations = event.invalidations as string[];
 
-    if (
-      invalidations.find((i) => hasExecutableExtension(i)) &&
-      !event.clientRequestId?.startsWith('copy:')
-    ) {
+    if (invalidations.find((i) => hasExecutableExtension(i))) {
       // the invalidation included code changes too. in this case we
       // need to flush the loader so that we can pick up any updated
       // code before re-running the card
