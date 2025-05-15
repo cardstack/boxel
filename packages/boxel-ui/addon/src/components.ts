@@ -7,6 +7,7 @@ import BoxelButton from './components/button/index.gts';
 import CardContainer from './components/card-container/index.gts';
 import CardContentContainer from './components/card-content-container/index.gts';
 import CardHeader from './components/card-header/index.gts';
+import CardList from './components/card-list/index.gts';
 import CircleSpinner from './components/circle-spinner/index.gts';
 import ColorPalette from './components/color-palette/index.gts';
 import ColorPicker from './components/color-picker/index.gts';
@@ -35,6 +36,7 @@ import BoxelInput, {
 } from './components/input/index.gts';
 import BoxelInputGroup from './components/input-group/index.gts';
 import Label from './components/label/index.gts';
+import BoxelLayout from './components/layout/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import Menu from './components/menu/index.gts';
 import BoxelMessage from './components/message/index.gts';
@@ -55,6 +57,9 @@ import ResizablePanelGroup, {
 } from './components/resizable-panel-group/index.gts';
 import BoxelSelect from './components/select/index.gts';
 import SkeletonPlaceholder from './components/skeleton-placeholder/index.gts';
+import SortDropdown, {
+  type SortOption,
+} from './components/sort-dropdown/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import Tooltip from './components/tooltip/index.gts';
@@ -63,6 +68,8 @@ import ViewSelector, {
 } from './components/view-selector/index.gts';
 
 export {
+  type SortOption,
+  type ViewItem,
   Accordion,
   AddButton,
   Avatar,
@@ -77,6 +84,7 @@ export {
   BoxelInputGroup,
   BoxelInputValidationState,
   BoxelInputValidationStates,
+  BoxelLayout,
   BoxelMessage,
   BoxelMultiSelect,
   BoxelMultiSelectBasic,
@@ -85,6 +93,7 @@ export {
   CardContainer,
   CardContentContainer,
   CardHeader,
+  CardList,
   CircleSpinner,
   ColorPalette,
   ColorPicker,
@@ -116,9 +125,9 @@ export {
   ResizablePanelGroup,
   ResizeHandle,
   SkeletonPlaceholder,
+  SortDropdown,
   Switch,
   TabbedHeader,
   Tooltip,
-  ViewItem,
   ViewSelector,
 };

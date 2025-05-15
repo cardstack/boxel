@@ -17,6 +17,7 @@ import { cn, eq } from '../../helpers.ts';
 export type Filter = {
   displayName: string;
   icon: FilterListIcon | string;
+  query?: any; // TODO: import type Query
 };
 
 interface Signature {
