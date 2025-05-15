@@ -1,10 +1,9 @@
 import { service } from '@ember/service';
 
+import { Format } from 'https://cardstack.com/base/card-api';
 import type * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
-
-import { Format } from 'https://cardstack.com/base/card-api';
 
 import type PlaygroundPanelService from '../services/playground-panel-service';
 

@@ -22,10 +22,10 @@ import {
   Menu as BoxelMenu,
 } from '@cardstack/boxel-ui/components';
 
-import CreateAiAssistantRoomCommand from '@cardstack/host/commands/create-ai-assistant-room';
-import OpenAiAssistantRoomCommand from '@cardstack/host/commands/open-ai-assistant-room';
-import SendAiAssistantMessageCommand from '@cardstack/host/commands/send-ai-assistant-message';
-import AddSkillsToRoomCommand from '@cardstack/host/commands/add-skills-to-room';
+import CreateAiAssistantRoomCommand from '@cardstack/boxel-host/commands/create-ai-assistant-room';
+import OpenAiAssistantRoomCommand from '@cardstack/boxel-host/commands/open-ai-assistant-room';
+import SendAiAssistantMessageCommand from '@cardstack/boxel-host/commands/send-ai-assistant-message';
+import AddSkillsToRoomCommand from '@cardstack/boxel-host/commands/add-skills-to-room';
 
 interface Signature {
   Element: HTMLElement;
@@ -393,7 +393,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     }
 
     if (!this.roomId) {
-      if (!this.roomId && this.args.context?.actions?.createAiAssistantRoom) {
+      if (!this.roomId) {
         const { roomId } = await new CreateAiAssistantRoomCommand(
           commandContext,
         ).execute({
@@ -476,7 +476,7 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 @size='extra-small'
                 class='card-remix-button'
                 @disabled={{this.remixButtonDisabled}}
-                {{on 'click' (fn this._stopPropagation)}}
+                {{on 'click' this._stopPropagation}}
                 {{bindings}}
               >
                 Remix

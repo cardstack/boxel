@@ -10,6 +10,7 @@ import * as GetBoxelUiStateModule from './get-boxel-ui-state';
 import * as OpenAiAssistantRoomCommandModule from './open-ai-assistant-room';
 import * as PatchCardInstanceCommandModule from './patch-card-instance';
 import * as PatchCodeCommandModule from './patch-code';
+import * as RemixCommandModule from './remix';
 import * as SaveCardCommandModule from './save-card';
 import * as SearchCardsCommandModule from './search-cards';
 import * as SendAiAssistantMessageModule from './send-ai-assistant-message';
@@ -20,7 +21,6 @@ import * as UpdateCodePathWithSelectionCommandModule from './update-code-path-wi
 import * as UpdatePlaygroundSelectionCommandModule from './update-playground-selection';
 import * as UpdateSkillActivationCommandModule from './update-skill-activation';
 import * as WriteTextFileCommandModule from './write-text-file';
-import * as RemixCommandModule from './remix';
 
 export function shimHostCommands(virtualNetwork: VirtualNetwork) {
   virtualNetwork.shimModule(

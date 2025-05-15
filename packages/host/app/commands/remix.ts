@@ -1,7 +1,8 @@
 import { service } from '@ember/service';
 
-import { v4 as uuidv4 } from 'uuid';
+import { timeout } from 'ember-concurrency';
 import deburr from 'lodash/deburr';
+import { v4 as uuidv4 } from 'uuid';
 
 import {
   type ResolvedCodeRef,
@@ -9,18 +10,18 @@ import {
   isResolvedCodeRef,
   type CopyCardsWithCodeRef,
 } from '@cardstack/runtime-common';
-import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import * as CardAPI from 'https://cardstack.com/base/card-api';
-
-import { timeout } from 'ember-concurrency';
+import * as BaseCommandModule from 'https://cardstack.com/base/command';
 
 import HostBaseCommand from '../lib/host-base-command';
+
 import CopyCardCommand from './copy-card';
 import CopySourceCommand from './copy-source';
 import SwitchSubmodeCommand from './switch-submode';
 import UpdateCodePathWithSelectionCommand from './update-code-path-with-selection';
 import UpdatePlaygroundSelectionCommand from './update-playground-selection';
+
 import type RealmServerService from '../services/realm-server';
 
 interface CopyMeta {
