@@ -57,6 +57,7 @@ export default class RecentCardsService extends Service {
       if (isCardInstance(instance)) {
         this.addNewCard(instance);
       }
+      return;
     }
     const existingCardIndex = this.ascendingRecentCardIds.findIndex(
       (id) => id === newId,
