@@ -216,7 +216,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private updatePlaygroundSelectionsFromSpec = (spec: Spec) => {
-    // console.trace('onSpecView', spec);
     if (!spec.isField) {
       return; // not a field spec
     }
