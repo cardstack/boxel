@@ -1,4 +1,5 @@
 export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
+export const APP_BOXEL_DEBUG_MESSAGE_MSGTYPE = 'app.boxel.debug-message';
 export const APP_BOXEL_CARD_FORMAT = 'app.boxel.card';
 export const APP_BOXEL_COMMAND_REQUESTS_KEY = 'app.boxel.commandRequests';
 export const APP_BOXEL_COMMAND_RESULT_EVENT_TYPE = 'app.boxel.commandResult';

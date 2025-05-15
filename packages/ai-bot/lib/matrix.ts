@@ -10,16 +10,28 @@ import {
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+import { PromptParts, mxcUrlToHttp } from '../helpers';
 
 let log = logger('ai-bot');
 
 export interface MatrixClient {
+  baseUrl: string;
+
   sendEvent(
     roomId: string,
     eventType: string,
     content: IContent,
   ): Promise<{ event_id: string }>;
+
+  uploadContent(
+    content: string,
+    opts: {
+      type: string;
+    },
+  ): Promise<{ content_uri: string }>;
 
   sendStateEvent(
     roomId: string,
@@ -119,6 +131,36 @@ export async function sendErrorEvent(
     log.error(`Error sending error message back to user: ${e}`);
     Sentry.captureException(e);
   }
+}
+
+export async function sendPromptAndEventList(
+  client: MatrixClient,
+  roomId: string,
+  promptParts: PromptParts,
+  eventList: DiscreteMatrixEvent[],
+) {
+  let stringContent = JSON.stringify({
+    promptParts,
+    eventList,
+  });
+  let sharedFile = await client.uploadContent(stringContent, {
+    type: 'text/plain',
+  });
+  await client.sendEvent(roomId, 'm.room.message', {
+    body: 'Debug: attached the prompt sent to the AI and the raw event list',
+    msgtype: APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
+    isStreamingFinished: true,
+    data: JSON.stringify({
+      attachedFiles: [
+        {
+          sourceUrl: '',
+          url: mxcUrlToHttp(sharedFile.content_uri, client.baseUrl),
+          name: 'debug-event.json',
+          contentType: 'text/plain',
+        },
+      ],
+    }),
+  });
 }
 
 function getErrorMessage(error: any): string {

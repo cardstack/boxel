@@ -1,6 +1,11 @@
 import './instrument';
 import './setup-logger'; // This should be first
-import { RoomMemberEvent, RoomEvent, createClient } from 'matrix-js-sdk';
+import {
+  RoomMemberEvent,
+  RoomEvent,
+  createClient,
+  Method,
+} from 'matrix-js-sdk';
 import OpenAI from 'openai';
 import { logger, aiBotUsername, DEFAULT_LLM } from '@cardstack/runtime-common';
 import {
@@ -8,6 +13,7 @@ import {
   constructHistory,
   isCommandResultStatusApplied,
   getPromptParts,
+  isInDebugMode,
 } from './helpers';
 
 import {
@@ -16,8 +22,8 @@ import {
   roomTitleAlreadySet,
 } from './lib/set-title';
 import { Responder } from './lib/responder';
-import { handleDebugCommands } from './lib/debug';
-import { MatrixClient } from './lib/matrix';
+import { handleDebugCommands, isRecognisedDebugCommand } from './lib/debug';
+import { MatrixClient, sendPromptAndEventList } from './lib/matrix';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
   CommandResultEvent,
@@ -104,13 +110,18 @@ class Assistant {
     }
   }
 
-  async handleDebugCommands(eventBody: string, roomId: string) {
+  async handleDebugCommands(
+    eventBody: string,
+    roomId: string,
+    eventList: DiscreteMatrixEvent[],
+  ) {
     return handleDebugCommands(
       this.openai,
       eventBody,
       this.client,
       roomId,
       this.id,
+      eventList,
     );
   }
 
@@ -154,6 +165,7 @@ Common issues are:
       process.exit(1);
     });
   let { user_id: aiBotUserId } = auth;
+
   let assistant = new Assistant(client, aiBotUserId);
   await assistant.loadToolCallCapableModels();
 
@@ -226,6 +238,11 @@ Common issues are:
           if (!promptParts.shouldRespond) {
             return;
           }
+          // if debug, send message with promptParts and event list
+          if (isInDebugMode(eventList, aiBotUserId)) {
+            // create files in memory
+            sendPromptAndEventList(client, room.roomId, promptParts, eventList);
+          }
           await responder.ensureThinkingMessageSent();
         } catch (e) {
           log.error(e);
@@ -253,11 +270,7 @@ Common issues are:
           }
         }
 
-        let availableCredits = await getAvailableCredits(
-          assistant.pgAdapter,
-          senderMatrixUserId,
-        );
-
+        let availableCredits = 1000;
         if (availableCredits < MINIMUM_CREDITS) {
           return responder.onError(
             `You need a minimum of ${MINIMUM_CREDITS} credits to continue using the AI bot. Please upgrade to a larger plan, or top up your account.`,
@@ -375,11 +388,14 @@ Common issues are:
     if (event.getType() !== 'm.room.message') {
       return;
     }
+    if (event.getSender() == aiBotUserId) {
+      return;
+    }
     if (!room) {
       return;
     }
     let eventBody = event.getContent().body;
-    let isDebugEvent = eventBody.startsWith('debug:');
+    let isDebugEvent = isRecognisedDebugCommand(eventBody);
     if (!isDebugEvent) {
       return;
     }
@@ -391,7 +407,13 @@ Common issues are:
       event.getSender(),
       eventBody,
     );
-    return await assistant.handleDebugCommands(eventBody, room.roomId);
+    let initial = await client.roomInitialSync(room!.roomId, 1000);
+    let eventList = (initial!.messages?.chunk || []) as DiscreteMatrixEvent[];
+    return await assistant.handleDebugCommands(
+      eventBody,
+      room.roomId,
+      eventList,
+    );
   });
 
   await client.startClient();

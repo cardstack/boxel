@@ -30,9 +30,11 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
+import { isRecognisedDebugCommand } from './lib/debug';
 
 let log = logger('ai-bot');
 
@@ -240,6 +242,15 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
   if (!lastEventExcludingCommandResults) {
     return false;
   }
+
+  // if the last event is a debug command from the user, we should not respond
+  if (
+    lastEventExcludingCommandResults.type == 'm.room.message' &&
+    isRecognisedDebugCommand(lastEventExcludingCommandResults.content.body)
+  ) {
+    return false;
+  }
+
   let commandRequests = (
     lastEventExcludingCommandResults.content as CardMessageContent
   )[APP_BOXEL_COMMAND_REQUESTS_KEY];
@@ -496,13 +507,18 @@ export async function getTools(
   );
 }
 
+export function getLastUserMessage(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): DiscreteMatrixEvent | undefined {
+  return history.findLast((event) => event.sender !== aiBotUserId);
+}
+
 export function getToolChoice(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): ToolChoice {
-  const lastUserMessage = history.findLast(
-    (event) => event.sender !== aiBotUserId,
-  );
+  const lastUserMessage = getLastUserMessage(history, aiBotUserId);
 
   if (
     !lastUserMessage ||
@@ -617,16 +633,26 @@ export async function getModifyPrompt(
     if (event.type !== 'm.room.message') {
       continue;
     }
+    if (event.content.msgtype === APP_BOXEL_DEBUG_MESSAGE_MSGTYPE) {
+      continue;
+    }
     if (isCommandResultEvent(event)) {
       continue; // we'll include these with the tool calls
     }
+    let content;
+    if (event.unsigned?.['m.relations']?.['m.replace']) {
+      content = event.unsigned['m.relations']['m.replace'].content;
+    } else {
+      content = event.content;
+    }
     if (
-      'isStreamingFinished' in event.content &&
-      event.content.isStreamingFinished === false
+      'isStreamingFinished' in content &&
+      content.isStreamingFinished === false
     ) {
       continue;
     }
-    let body = event.content.body;
+    let body = content.body;
+
     if (event.sender === aiBotUserId) {
       let toolCalls = toToolCalls(event as CardMessageEvent);
       let historicalMessage: OpenAIPromptMessage = {
@@ -646,12 +672,12 @@ export async function getModifyPrompt(
     }
     if (body && event.sender !== aiBotUserId) {
       if (
-        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-        event.content.data?.context?.openCardIds
+        content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
+        content.data?.context?.openCardIds
       ) {
         body = `User message: ${body}
           Context: the user has the following cards open: ${JSON.stringify(
-            event.content.data.context.openCardIds,
+            content.data.context.openCardIds,
           )}`;
       } else {
         body = `User message: ${body}
@@ -797,4 +823,35 @@ function elideCodeBlocks(content: string) {
       content.substring(replaceEndIndex + REPLACE_MARKER.length);
   }
   return content;
+}
+
+export function mxcUrlToHttp(mxc: string, baseUrl: string): string {
+  if (mxc.indexOf('mxc://') !== 0) {
+    throw new Error('Invalid MXC URL ' + mxc);
+  }
+  let serverAndMediaId = mxc.slice(6); // strips mxc://
+  let prefix = '/_matrix/client/v1/media/download/';
+
+  return baseUrl + prefix + serverAndMediaId;
+}
+
+export function isInDebugMode(
+  eventList: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): boolean {
+  let lastUserMessage = getLastUserMessage(eventList, aiBotUserId);
+  console.log('lastUserMessage', lastUserMessage);
+  console.log('lastUserMessage.content', lastUserMessage?.content);
+  console.log(
+    'lastUserMessage.content.context',
+    lastUserMessage?.content?.context,
+  );
+  if (
+    !lastUserMessage ||
+    !lastUserMessage.content ||
+    typeof lastUserMessage.content !== 'object'
+  ) {
+    return false;
+  }
+  return (lastUserMessage.content as any).data?.context?.debug ?? false;
 }

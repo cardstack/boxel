@@ -1,8 +1,24 @@
 import { setTitle } from './set-title';
-import { sendErrorEvent, sendMessageEvent, MatrixClient } from './matrix';
+import {
+  sendErrorEvent,
+  sendMessageEvent,
+  sendPromptAndEventList,
+  MatrixClient,
+} from './matrix';
 import OpenAI from 'openai';
 
 import * as Sentry from '@sentry/node';
+import { getPromptParts } from '../helpers';
+import type { MatrixEvent as DiscreteMatrixEvent } from 'https://cardstack.com/base/matrix-event';
+
+export function isRecognisedDebugCommand(eventBody: string) {
+  return (
+    eventBody.startsWith('debug:promptandevents') ||
+    eventBody.startsWith('debug:title:') ||
+    eventBody.startsWith('debug:boom') ||
+    eventBody.startsWith('debug:patch:')
+  );
+}
 
 export async function handleDebugCommands(
   openai: OpenAI,
@@ -10,7 +26,16 @@ export async function handleDebugCommands(
   client: MatrixClient,
   roomId: string,
   userId: string,
+  eventList: DiscreteMatrixEvent[],
 ) {
+  if (eventBody.startsWith('debug:promptandevents')) {
+    let promptParts = await getPromptParts(
+      eventList.slice(0, -1),
+      userId,
+      client,
+    );
+    sendPromptAndEventList(client, roomId, promptParts, eventList);
+  }
   // Explicitly set the room name
   if (eventBody.startsWith('debug:title:set:')) {
     return await client.setRoomName(
