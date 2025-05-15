@@ -311,24 +311,23 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     ) as ReturnType<getCards<Spec>>;
   };
 
-  get _selectedCard() {
-    let selectedCardId = this.specPanelService.specSelection;
-    if (selectedCardId) {
-      return this.specInstancesForSelectedDefinition?.find(
-        (card) => card.id === selectedCardId,
-      );
-    }
-    return this.specInstancesForSelectedDefinition?.[0];
-  }
-
   get specInstancesForSelectedDefinition() {
     return this.specsForSelectedDefinition?.instances ?? [];
   }
 
   private get card() {
-    if (this._selectedCard) {
-      return this._selectedCard;
+    let selectedSpecId = this.specPanelService.specSelection;
+
+    if (selectedSpecId) {
+      let selectedSpec = this.specInstancesForSelectedDefinition?.find(
+        (spec) => spec.id === selectedSpecId,
+      );
+
+      if (selectedSpec) {
+        return selectedSpec;
+      }
     }
+
     return this.specInstancesForSelectedDefinition?.[0];
   }
 
