@@ -74,7 +74,7 @@ export function extractCodeData(preElementString: string): CodeData {
   let fileUrl: string | undefined = undefined;
   let fileName: string | undefined = undefined;
   let isBeginningOfSearchReplaceBlock =
-    lines.length > 1 && lines[1].startsWith('<');
+    lines.length > 1 && lines[1].startsWith('<<<<<<<');
 
   if (isBeginningOfSearchReplaceBlock) {
     fileUrlOrFileName = lines[0];
