@@ -387,7 +387,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
         <section
           class='preview-panel-content'
-          data-test-code-mode-panel-item={{this.selectedView}}
+          data-test-active-module-inspector-view={{this.selectedView}}
         >
           {{#if (eq this.selectedView 'schema')}}
             <SchemaEditor
