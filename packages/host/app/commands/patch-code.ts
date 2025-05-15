@@ -63,11 +63,24 @@ export default class PatchCodeCommand extends HostBaseCommand<
         (await this.cardService.getSource(new URL(fileName, realmURL)))
           .status === 404;
       if (!isFileUrlAvailable) {
-        // add a 3-character suffix to the file name (before the extension) to make it unique
-        fileName = fileName.replace(
-          /\.([^.]+)$/,
-          `-${Math.random().toString(36).substring(2, 5)}.$1`,
-        );
+        // Try sequential numbering to find an available filename
+        let counter = 1;
+        let baseFileName = fileName.replace(/\.([^.]+)$/, '');
+        let extension = fileName.match(/\.([^.]+)$/)?.[0] || '';
+
+        while (!isFileUrlAvailable && counter < 100) {
+          // Limit to prevent infinite loop
+          let newFileName = `${baseFileName}-${counter}${extension}`;
+          isFileUrlAvailable =
+            (await this.cardService.getSource(new URL(newFileName, realmURL)))
+              .status === 404;
+
+          if (isFileUrlAvailable) {
+            fileName = newFileName;
+          } else {
+            counter++;
+          }
+        }
       }
       fileUrl = new URL(fileName, realmURL).href;
     }
