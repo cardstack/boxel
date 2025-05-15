@@ -18,6 +18,7 @@ module.only(basename(__filename), function () {
     setupBaseRealmServer(hooks, virtualNetwork, matrixURL);
 
     setupPermissionedRealm(hooks, {
+      mode: 'before',
       onRealmSetup: ({ testRealm }) => {
         realmURL = testRealm.url;
       },
@@ -54,7 +55,7 @@ module.only(basename(__filename), function () {
     module('basics', function (hooks) {
       let result: RenderResponse;
 
-      hooks.beforeEach(async () => {
+      hooks.before(async () => {
         const testCardURL = `${realmURL}1`;
         result = await prerenderCard(testCardURL);
       });

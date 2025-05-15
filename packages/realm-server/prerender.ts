@@ -15,13 +15,15 @@ export async function prerenderCard(url: string): Promise<RenderResponse> {
   });
   const context = await browser.createBrowserContext();
   const page = await context.newPage();
-  // TODO value created by hand from an existing browser session via:
-  // console.log(`export TODO_SESSION="${btoa(localStorage.getItem("boxel-session"))}"`)
-  const auth: string = atob(process.env.TODO_SESSION!);
 
-  page.evaluateOnNewDocument((auth) => {
-    localStorage.setItem('boxel-session', auth);
-  }, auth);
+  if (process.env.BOXEL_SESSION) {
+    // Run this in browser to copy your own session into here:
+    // console.log(`export BOXEL_SESSION="${btoa(localStorage.getItem("boxel-session"))}"`)
+    const auth = atob(process.env.BOXEL_SESSION!);
+    page.evaluateOnNewDocument((auth) => {
+      localStorage.setItem('boxel-session', auth);
+    }, auth);
+  }
 
   await page.goto(
     `http://localhost:4200/render/${encodeURIComponent(url)}/meta`,
