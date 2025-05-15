@@ -254,6 +254,7 @@ jobs:
             "loader-test.ts",
             "module-syntax-test.ts",
             "permissions/permission-checker-test.ts",
+            "prerendering-test.ts",
             "queue-test.ts",
             "realm-endpoints/directory-test.ts",
             "realm-endpoints/info-test.ts",
