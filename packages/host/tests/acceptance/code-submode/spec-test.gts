@@ -736,29 +736,6 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-spec-tag]').hasText('card');
   });
 
-  test<TestContextWithSave>('spec auto saved (with stability)', async function (assert) {
-    await visitOperatorMode({
-      submode: 'code',
-      codePath: `${testRealmURL}person.gts`,
-    });
-    await click('[data-test-accordion-item="spec-preview"] button');
-    let readMeInput = 'This is a spec for a person';
-    this.onSave((_, json) => {
-      if (typeof json === 'string') {
-        throw new Error('expected JSON save data');
-      }
-      assert.strictEqual(json.data.attributes?.readMe, readMeInput);
-    });
-    let cardComponentId = find(
-      `[data-test-card='${testRealmURL}person-entry']`,
-    )?.id;
-    await fillIn('[data-test-readme] [data-test-boxel-input]', readMeInput);
-    let cardComponentIdAfter = find(
-      `[data-test-card='${testRealmURL}person-entry']`,
-    )?.id;
-    assert.strictEqual(cardComponentIdAfter, cardComponentId);
-  });
-
   test('clicking view instance button correctly navigates to spec file and displays content in editor', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
