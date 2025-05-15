@@ -84,21 +84,17 @@ export function extractCodeData(preElementString: string): CodeData {
       fileName = fileUrlOrFileName;
     }
   }
-  debugger;
+
+  let firstLineIsUrlOrFileName =
+    lines.length == 1 &&
+    (lines[0].startsWith('http') || lines[0].match(/\.[a-zA-Z0-9]+$/));
+
   let codeToDisplay = '';
-  if (!fileUrlOrFileName) {
-    // Does first line of content look like a file url, or file name with extension?
-    // It's likely the search/replace block will start after that, so don't confuse
-    // the user by showing the file url or file name.
-    if (
-      (lines.length == 1 &&
-        (lines[0].startsWith('http') || lines[0].match(/\.[a-zA-Z0-9]+$/))) ||
-      isBeginningOfSearchReplaceBlock
-    ) {
-      codeToDisplay = '';
-    } else {
-      codeToDisplay = content;
-    }
+  if (
+    firstLineIsUrlOrFileName ||
+    (isBeginningOfSearchReplaceBlock && !parsedContent.searchContent)
+  ) {
+    codeToDisplay = parsedContent.replaceContent || '';
   } else {
     codeToDisplay =
       adjustedCodeForStreamingSearchAndReplaceBlock ||

@@ -43,7 +43,7 @@ export class CodePatchAction {
       );
       await patchCodeCommand.execute({
         fileUrl: this.codeBlockMeta.fileUrl || undefined,
-        fileName: this.codeBlockMeta.fileName,
+        fileName: this.codeBlockMeta.fileName || undefined,
         isNewFile: this.codeBlockMeta.isNewFile,
         codeBlocks: [this.searchReplaceBlock],
       });

@@ -200,7 +200,7 @@ export default class FormattedMessage extends Component<FormattedMessageSignatur
     codePatchActionsResultingInNewFiles.forEach(async (codePatchAction) => {
       await patchCodeCommand.execute({
         isNewFile: true,
-        fileName: codePatchAction.codeBlockMeta?.fileName,
+        fileName: codePatchAction.codeBlockMeta?.fileName || undefined,
         codeBlocks: [codePatchAction.searchReplaceBlock],
       });
       codePatchAction.patchCodeTaskState = 'applied';
