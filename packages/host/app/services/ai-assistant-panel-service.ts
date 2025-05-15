@@ -60,7 +60,7 @@ export default class AiAssistantPanelService extends Service {
   }
 
   @action
-  async enterRoom(roomId: string) {
+  enterRoom(roomId: string) {
     this.currentRoomId = roomId;
     this.matrixService.currentRoomId = roomId;
     window.localStorage.setItem(CurrentRoomIdPersistenceKey, roomId);
@@ -70,7 +70,7 @@ export default class AiAssistantPanelService extends Service {
   async createNewSession(name: string = 'New AI Assistant Chat') {
     this.displayRoomError = false;
     if (this.newSessionId) {
-      await this.enterRoom(this.newSessionId);
+      this.enterRoom(this.newSessionId);
       return;
     }
     await this.doCreateRoom.perform(name);
@@ -103,7 +103,7 @@ export default class AiAssistantPanelService extends Service {
       let { roomId } = await createRoomCommand.execute({ name, defaultSkills });
 
       window.localStorage.setItem(NewSessionIdPersistenceKey, roomId);
-      await this.enterRoom(roomId);
+      this.enterRoom(roomId);
     } catch (e) {
       console.log(e);
       this.displayRoomError = true;
@@ -148,14 +148,14 @@ export default class AiAssistantPanelService extends Service {
         ]);
       }
       if (roomToEnter) {
-        await this.enterRoom(roomToEnter.roomId);
+        this.enterRoom(roomToEnter.roomId);
         return;
       }
     }
 
     let latestRoom = this.latestRoom;
     if (latestRoom) {
-      await this.enterRoom(latestRoom.roomId);
+      this.enterRoom(latestRoom.roomId);
       return;
     }
 
@@ -228,7 +228,7 @@ export default class AiAssistantPanelService extends Service {
       if (this.currentRoomId === roomId) {
         window.localStorage.removeItem(CurrentRoomIdPersistenceKey);
         if (this.latestRoom) {
-          await this.enterRoom(this.latestRoom.roomId);
+          this.enterRoom(this.latestRoom.roomId);
         } else {
           await this.createNewSession();
         }

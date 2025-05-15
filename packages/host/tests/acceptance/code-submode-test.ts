@@ -37,6 +37,7 @@ import {
   visitOperatorMode,
   waitForCodeEditor,
   setupUserSubscription,
+  assertMessages,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupApplicationTest } from '../helpers/setup';
@@ -860,11 +861,24 @@ module('Acceptance | code submode tests', function (_hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await waitFor('[data-test-syntax-error]');
+      await waitFor('[data-test-syntax-errors]');
       assert
-        .dom('[data-test-syntax-error]')
-        .includesText('Syntax Error Parse Error at broken.gts:1:6: 1:10');
+        .dom('[data-test-syntax-errors]')
+        .includesText('Parse Error at broken.gts:1:6: 1:10');
       assert.dom('[data-test-module-error-panel] > button').isDisabled();
+
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+      await click('[data-test-fix-it-button]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Parse Error at broken.gts:1:6: 1:10. broken.gts`,
+          files: [
+            { name: 'broken.gts', sourceUrl: `${testRealmURL}broken.gts` },
+          ],
+        },
+      ]);
     });
 
     test('it shows card preview errors', async function (assert) {
@@ -895,6 +909,38 @@ module('Acceptance | code submode tests', function (_hooks) {
         );
 
       await percySnapshot(assert);
+    });
+
+    test('it shows card preview errors and fix it button in playground panel', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}broken-country.gts`,
+      });
+
+      await click('[data-test-accordion-item="playground"] button');
+      await waitFor('[data-test-card-error]');
+      await click('[data-test-error-detail-toggle] button');
+      assert
+        .dom('[data-test-error-detail]')
+        .includesText(
+          `Encountered error rendering HTML for card: formatName is not defined`,
+        );
+
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+      await click('[data-test-fix-it-button]');
+      assert.dom('[data-test-ai-assistant-panel]').exists();
+      assertMessages(assert, [
+        {
+          from: 'testuser',
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error: Internal Server Error Encountered error rendering HTML for card: formatName is not defined Stack trace: Error: Encountered error rendering HTML for card: formatName is not defined at render (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:568265:17) at CurrentRun.renderCard (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:577444:69) at CurrentRun.renderCard (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566867:57) at CurrentRun.indexCard (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566745:53) at async CurrentRun.visitFile (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566631:11) at async CurrentRun.tryToVisit (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566496:7) at async http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566447:9 at async CurrentRun.whileIndexing (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566507:5) at async CurrentRun.fromScratch (http://localhost:4200/assets/chunk.f8fb933fa4df0081bd02.js:566444:5)`,
+          files: [
+            {
+              name: 'broken-country.gts',
+              sourceUrl: `${testRealmURL}broken-country.gts`,
+            },
+          ],
+        },
+      ]);
     });
 
     test('empty state displays default realm info', async function (assert) {

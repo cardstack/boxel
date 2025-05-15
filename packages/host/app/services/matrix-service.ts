@@ -183,7 +183,7 @@ export default class MatrixService extends Service {
   }
 
   private setLoggerLevelFromEnvironment() {
-    // This will pick up the level if it’s in LOG_LEVELS
+    // This will pick up the level if it's in LOG_LEVELS
     logger('matrix');
   }
 
@@ -325,6 +325,10 @@ export default class MatrixService extends Service {
   }
 
   get flushAll() {
+    // If there are no rooms, we can resolve immediately
+    if (this.roomResourcesCache.size === 0) {
+      return Promise.resolve();
+    }
     return Promise.all([
       this.flushMembership ?? Promise.resolve(),
       this.flushTimeline ?? Promise.resolve(),
