@@ -8,3 +8,8 @@ node_modules
 /playwright-report
 .eslintcache
 schema_tmp.sql
+
+.cursor/rules/nx-rules.mdc
+.github/instructions/nx.instructions.md
+/.nx/cache
+/.nx/workspace-data

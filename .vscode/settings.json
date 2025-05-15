@@ -10,5 +10,6 @@
     "editor.formatOnSave": true
   },
   "prettier.documentSelectors": ["**/*.gjs", "**/*.gts"],
-  "search.followSymlinks": false
+  "search.followSymlinks": false,
+  "nxConsole.generateAiAgentRules": true
 }

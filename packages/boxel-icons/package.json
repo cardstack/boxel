@@ -13,7 +13,7 @@
     "test": "tests"
   },
   "scripts": {
-    "build": "concurrently \"pnpm:build:*\" --names \"build:\"",
+    "build": "nx build",
     "build:js": "rollup --config",
     "build:types": "glint --declaration",
     "deploy:s3": "aws s3 sync dist s3://cardstack-boxel-icons-production --region us-east-1",
