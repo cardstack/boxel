@@ -285,7 +285,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     );
   }
 
-  private get queryForSpecsFromSelectedDefinition(): Query {
+  private get queryForSpecsForSelectedDefinition(): Query {
     return {
       filter: {
         on: specRef,
@@ -305,7 +305,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   private findSpecsForSelectedDefinition = () => {
     this.specsForSelectedDefinition = this.getCards(
       this,
-      () => this.queryForSpecsFromSelectedDefinition,
+      () => this.queryForSpecsForSelectedDefinition,
       () => this.realmServer.availableRealmURLs,
       { isLive: true },
     ) as ReturnType<getCards<Spec>>;
