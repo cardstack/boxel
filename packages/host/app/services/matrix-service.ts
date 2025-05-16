@@ -78,6 +78,7 @@ import type {
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
   CodePatchResultContent,
+  CodePatchStatus,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
   RealmEventContent,
@@ -830,7 +831,7 @@ export default class MatrixService extends Service {
     roomId: string,
     eventId: string,
     codeBlockIndex: number,
-    resultKey: 'applied' | 'rejected' | 'failed',
+    resultKey: CodePatchStatus,
   ) {
     let content: CodePatchResultContent = {
       msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,

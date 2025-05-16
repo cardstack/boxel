@@ -15,6 +15,7 @@ import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
+import { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -27,7 +28,6 @@ import ApplyButton from '../ai-assistant/apply-button';
 
 import type { ComponentLike } from '@glint/template';
 import type * as _MonacoSDK from 'monaco-editor';
-import { CodeData } from './formatted-message';
 
 interface CopyCodeButtonSignature {
   Args: {
@@ -450,7 +450,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
             ApplyCodePatchButton
             codePatch=@codeData.searchReplaceBlock
             fileUrl=@codeData.fileUrl
-            index=@codeData.index
+            index=@codeData.codeBlockIndex
           )
         )
       }}

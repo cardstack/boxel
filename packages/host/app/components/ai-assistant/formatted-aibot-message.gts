@@ -18,6 +18,7 @@ import {
   type HtmlTagGroup,
   wrapLastTextNodeInStreamingTextSpan,
   HtmlPreTagGroup,
+  CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import {

@@ -57,37 +57,6 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
     </template>);
   }
 
-  test('it renders content without monaco editor when renderCodeBlocks is false', async function (assert) {
-    await renderFormattedMessage({
-      renderCodeBlocks: false,
-      html: `
-<p>Hey there, for Valentine's day I made you a code block!</p>
-<pre data-code-language="haskell">
-import Data.List (intercalate)
-main :: IO ()
-main = putStrLn "🖤"
-</pre>
-<p>I hope you like it!</p>
-`,
-      roomId,
-      eventId,
-      isStreaming: false,
-    });
-
-    let messageElement = (this as RenderingTestContext).element.querySelector(
-      '.message',
-    );
-
-    assert.ok(
-      messageElement?.innerHTML.includes(
-        `<p>Hey there, for Valentine's day I made you a code block!</p>\n<pre data-code-language="haskell">import Data.List (intercalate)\nmain :: IO ()\nmain = putStrLn "🖤"\n</pre>\n<p>I hope you like it!</p>`,
-      ),
-      'message should render html without monaco editor',
-    );
-
-    assert.dom('.monaco-editor').doesNotExist();
-  });
-
   test('it renders content with monaco editor in place of pre tags', async function (assert) {
     await renderFormattedAiBotMessage({
       htmlParts: parseHtmlContent(
