@@ -2623,9 +2623,6 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
     resource: doc.data,
     doc,
     identityContext,
-    // invalidate all computed fields because we don't know which
-    // ones depend on the fields that were changed
-    initializeComputedsWithSerializedData: false,
   });
 }
 
@@ -2682,13 +2679,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
   resource,
   doc,
   identityContext,
-  initializeComputedsWithSerializedData = true,
 }: {
   instance: BaseInstanceType<T>;
   resource: LooseCardResource;
   doc: LooseSingleCardDocument | CardDocument;
   identityContext: IdentityContext;
-  initializeComputedsWithSerializedData?: boolean;
 }): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
@@ -2767,10 +2762,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
     }
     let deserialized = getDataBucket(instance);
 
-    if (initializeComputedsWithSerializedData) {
-      markAllComputedsStale(instance);
-    }
-
     for (let [field, value] of values) {
       if (!field) {
         continue;
@@ -2796,9 +2787,14 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       deserialized.set(field.name as string, value);
     }
 
-    if (!initializeComputedsWithSerializedData) {
-      markAllComputedsStale(instance);
+    // assign the realm meta before we compute as computeds may be relying on this
+    if (isCardInstance(instance) && resource.id != null) {
+      (instance as any)[meta] = resource.meta;
     }
+
+    // invalidate all computed fields because we don't know which
+    // ones depend on the fields that were changed
+    markAllComputedsStale(instance);
     await recompute(instance);
 
     if (isCardInstance(instance) && resource.id != null) {
@@ -2806,7 +2802,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       // fields, such that subsequent assignment of the id field when the model is
       // saved will throw
       instance[isSavedInstance] = true;
-      (instance as any)[meta] = resource.meta;
     }
   }
 

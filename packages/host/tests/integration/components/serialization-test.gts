@@ -2375,46 +2375,7 @@ module('Integration | serialization', function (hooks) {
     );
   });
 
-  test('cannot stomp on top of computed field with serialized data when updating', async function (assert) {
-    class Person extends CardDef {
-      @field birthdate = contains(DateField);
-      @field firstBirthday = contains(DateField, {
-        computeVia: function (this: Person) {
-          return new Date(
-            this.birthdate.getFullYear() + 1,
-            this.birthdate.getMonth(),
-            this.birthdate.getDate(),
-          );
-        },
-      });
-    }
-    await setupIntegrationTestRealm({
-      mockMatrixUtils,
-      contents: {
-        'test-cards.gts': { Person },
-      },
-    });
-    let doc: LooseSingleCardDocument = {
-      data: {
-        type: 'card',
-        attributes: { firstBirthday: '1984-01-01' },
-        meta: {
-          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
-        },
-      },
-    };
-    let instance = new Person({ birthdate: p('2019-10-30') });
-    await updateFromSerialized<typeof Person>(instance, doc, undefined);
-
-    assert.ok(instance instanceof Person, 'card is an instance of person');
-    assert.strictEqual(
-      formatISO(instance.firstBirthday).split('T').shift()!,
-      '2020-10-30',
-      'the computed value is correct',
-    );
-  });
-
-  test('can initialize computed fields with serialized data', async function (assert) {
+  test('cannot stomp on top of computed field with serialized data', async function (assert) {
     class Person extends CardDef {
       @field birthdate = contains(DateField);
       @field firstBirthday = contains(DateField, {
@@ -2451,7 +2412,7 @@ module('Integration | serialization', function (hooks) {
     assert.ok(instance instanceof Person, 'card is an instance of person');
     assert.strictEqual(
       formatISO(instance.firstBirthday).split('T').shift()!,
-      '1984-01-01',
+      '2020-10-30',
       'the computed value is correct',
     );
   });
