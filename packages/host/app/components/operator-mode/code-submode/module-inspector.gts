@@ -215,15 +215,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   @action private toggleAccordionItem(item: ActiveModuleInspectorView) {
-    if (this.selectedAccordionItem === item) {
-      let index = accordionItems.indexOf(item);
-      if (index !== -1 && index === accordionItems.length - 1) {
-        index--;
-      } else if (index !== -1) {
-        index++;
-      }
-      item = accordionItems[index];
-    }
     this.panelSelections[this.args.readyFile.url] = item;
     // persist in local storage
     window.localStorage.setItem(
@@ -533,6 +524,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
 
         <section
           class='preview-panel-content'
+          data-test-module-inspector='card-or-field'
           data-test-active-module-inspector-view={{this.selectedView}}
         >
           {{#if (eq this.selectedView 'schema')}}
