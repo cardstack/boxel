@@ -64,9 +64,8 @@ interface TitleSignature {
 }
 
 const SchemaEditorTitle: TemplateOnlyComponent<TitleSignature> = <template>
-  Schema Editor
-
   {{#if @hasModuleError}}
+    {{! Exclamation point maybe? }}
     <span class='syntax-error'>Fail to parse</span>
   {{else}}
     <span class='total-fields' data-test-total-fields>
