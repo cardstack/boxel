@@ -181,7 +181,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
           <div data-test-editable-meta>
             {{#if @canEdit}}
-              address is editable.git
+              address is editable
             {{else}}
               address is NOT editable.
             {{/if}}
