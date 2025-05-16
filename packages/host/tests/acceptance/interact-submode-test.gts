@@ -31,6 +31,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
 
+import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
+
 import type {
   IncrementalIndexEventContent,
   RealmEventContent,
@@ -178,7 +180,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
           <div data-test-editable-meta>
             {{#if @canEdit}}
-              address is editable.
+              address is editable.git
             {{else}}
               address is NOT editable.
             {{/if}}
