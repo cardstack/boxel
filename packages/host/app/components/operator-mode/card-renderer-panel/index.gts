@@ -168,7 +168,6 @@ export default class CardRendererPanel extends Component<Signature> {
       </div>
     </div>
     <div class='card-renderer-footer' data-test-code-mode-card-renderer-footer>
-      <div class='card-renderer-footer-title'>Preview as</div>
       <FormatChooser @format={{this.format}} @setFormat={{@setFormat}} />
     </div>
 

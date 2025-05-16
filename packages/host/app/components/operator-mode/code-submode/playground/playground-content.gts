@@ -146,9 +146,7 @@ export default class PlaygroundContent extends Component<Signature> {
         bottom: 0;
         margin-top: auto;
 
-        --boxel-format-chooser-button-bg-color: var(--boxel-light);
-        --boxel-format-chooser-button-width: 85px;
-        --boxel-format-chooser-button-min-width: 85px;
+        --boxel-format-chooser-button-bg-color: var(--boxel-dark);
       }
       .playground-panel {
         position: relative;
@@ -158,7 +156,6 @@ export default class PlaygroundContent extends Component<Signature> {
         background-size: 22.5px;
         height: 100%;
         width: 100%;
-        padding: var(--boxel-sp);
         background-color: var(--boxel-dark);
         font: var(--boxel-font-sm);
         letter-spacing: var(--boxel-lsp-xs);
