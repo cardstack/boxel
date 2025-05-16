@@ -6,6 +6,9 @@ import type {
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -208,6 +211,18 @@ export interface CommandResultEvent extends BaseMatrixEvent {
     prev_sender?: string;
   };
 }
+
+export interface CodePatchResultEvent extends BaseMatrixEvent {
+  type: typeof APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE;
+  content: CodePatchResultContent;
+  unsigned: {
+    age: number;
+    transaction_id: string;
+    prev_content?: any;
+    prev_sender?: string;
+  };
+}
+
 export interface CommandDefinitionSchema {
   codeRef: {
     module: string;
@@ -241,6 +256,16 @@ export interface CommandResultWithNoOutputContent {
 }
 
 export type CodePatchStatus = 'applied' | 'failed'; // possibly add 'rejected' in the future
+
+export interface CodePatchResultContent {
+  'm.relates_to': {
+    rel_type: typeof APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE;
+    key: CodePatchStatus;
+    event_id: string;
+  };
+  msgtype: typeof APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE;
+  codeBlockIndex: number;
+}
 
 export interface RealmServerEvent extends BaseMatrixEvent {
   type: 'm.room.message';
@@ -312,18 +337,19 @@ export interface FileRemovedEventContent {
 }
 
 export type MatrixEvent =
-  | RoomCreateEvent
-  | RoomJoinRules
-  | RoomPowerLevels
-  | MessageEvent
-  | CommandResultEvent
+  | ActiveLLMEvent
   | CardMessageEvent
-  | RealmServerEvent
-  | RealmEvent
-  | RoomNameEvent
-  | RoomTopicEvent
+  | CodePatchResultEvent
+  | CommandResultEvent
   | InviteEvent
   | JoinEvent
   | LeaveEvent
-  | SkillsConfigEvent
-  | ActiveLLMEvent;
+  | MessageEvent
+  | RealmEvent
+  | RealmServerEvent
+  | RoomCreateEvent
+  | RoomJoinRules
+  | RoomNameEvent
+  | RoomPowerLevels
+  | RoomTopicEvent
+  | SkillsConfigEvent;

@@ -3311,6 +3311,32 @@ module('Integration | card-basics', function (hooks) {
         .dom('[data-test-field="readOnlyField"] input')
         .exists({ count: 0 });
     });
+
+    test('default value of BooleanField must be false', async function (assert) {
+      class Attendance extends FieldDef {
+        @field name = contains(StringField);
+        @field isPresent = contains(BooleanField);
+      }
+
+      class AttendanceRecord extends CardDef {
+        @field attandances = containsMany(Attendance);
+      }
+
+      let attendanceRecord = new AttendanceRecord();
+      await renderCard(loader, attendanceRecord, 'edit');
+      await click('[data-test-add-new]');
+      assert.dom('[data-test-field="name"] input').hasValue('');
+      assert
+        .dom(
+          '[data-test-field="isPresent"] [data-test-boxel-radio-option-id="false"] input',
+        )
+        .isChecked();
+      assert
+        .dom(
+          '[data-test-field="isPresent"] [data-test-boxel-radio-option-id="true"] input',
+        )
+        .isNotChecked();
+    });
   });
 });
 

@@ -86,6 +86,7 @@ export const queryableValue = Symbol.for('cardstack-queryable-value');
 export const formatQuery = Symbol.for('cardstack-format-query');
 export const relativeTo = Symbol.for('cardstack-relative-to');
 export const realmInfo = Symbol.for('cardstack-realm-info');
+export const emptyValue = Symbol.for('cardstack-empty-value');
 // intentionally not exporting this so that the outside world
 // cannot mark a card as being saved
 const isSavedInstance = Symbol.for('cardstack-is-saved-instance');
@@ -818,7 +819,7 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
 
   emptyValue(_instance: BaseDef) {
     if (primitive in this.card) {
-      return undefined;
+      return this.card[emptyValue];
     } else {
       return new this.card();
     }
@@ -1761,6 +1762,10 @@ export class BaseDef {
   }
   static getIconComponent(instance: BaseDef) {
     return instance.constructor.icon;
+  }
+
+  static get [emptyValue](): any {
+    return undefined;
   }
 
   static [serialize](

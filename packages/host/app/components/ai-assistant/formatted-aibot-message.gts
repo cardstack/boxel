@@ -17,8 +17,8 @@ import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 import {
   type HtmlTagGroup,
   wrapLastTextNodeInStreamingTextSpan,
-  CodeData,
   HtmlPreTagGroup,
+  CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import {
@@ -39,6 +39,8 @@ interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
   Args: {
     htmlParts?: HtmlTagGroup[];
+    roomId: string;
+    eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
   };
