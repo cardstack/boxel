@@ -445,12 +445,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   get showCreateSpec() {
-    console.log('showCreateSpec', {
-      selectedDeclaration: this.args.selectedDeclaration,
-      isLoading: this.specSearch?.isLoading,
-      specsForSelectedDefinition: this.specsForSelectedDefinition,
-      canWrite: this.canWrite,
-    });
     return (
       Boolean(this.args.selectedDeclaration?.exportName) &&
       !this.specSearch?.isLoading &&
