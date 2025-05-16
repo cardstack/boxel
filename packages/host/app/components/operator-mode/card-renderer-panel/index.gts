@@ -222,14 +222,14 @@ export default class CardRendererPanel extends Component<Signature> {
         letter-spacing: 0.6px;
       }
 
-      :deep(.format-chooser__buttons) {
+      .format-chooser__buttons {
         --boxel-format-chooser-border-color: var(--boxel-400);
         margin: auto var(--boxel-sp-sm);
         width: 100%;
         box-shadow: none;
       }
 
-      :deep(.format-chooser__button) {
+      .format-chooser__button {
         padding: var(--boxel-sp-xxxs) 0;
         flex-grow: 1;
         flex-basis: 0;
