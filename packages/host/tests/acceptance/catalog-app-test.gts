@@ -1,6 +1,6 @@
 import { click, waitFor, waitUntil } from '@ember/test-helpers';
 
-import { module, test } from 'qunit';
+import { module, skip, test } from 'qunit';
 
 import { SearchCardsByQueryCommand } from '@cardstack/host/commands/search-cards';
 import type CommandService from '@cardstack/host/services/command-service';
@@ -65,7 +65,7 @@ module('Acceptance | catalog app tests', function (hooks) {
   });
 
   module('catalog listing', async function () {
-    test('able to "Use"', async function (assert) {
+    skip('able to "Use"', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [

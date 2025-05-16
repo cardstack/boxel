@@ -149,7 +149,6 @@ module('Integration | ai-assistant-panel | skills', function (hooks) {
     let petMango = new Pet({ name: 'Mango' });
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'pet.gts': { Pet },

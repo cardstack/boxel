@@ -68,7 +68,6 @@ module('Integration | ask-ai', function (hooks) {
     }`;
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'pet.gts': petCard,

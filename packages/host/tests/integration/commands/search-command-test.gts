@@ -63,7 +63,6 @@ module('Integration | commands | search', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'author.gts': { Author },

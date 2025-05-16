@@ -223,7 +223,7 @@ test.describe('Live Cards', () => {
     await page.locator('[data-test-format-chooser="edit"]').click();
 
     // give monaco a moment to load
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 5000));
     let content = await getMonacoContent(page);
 
     await page

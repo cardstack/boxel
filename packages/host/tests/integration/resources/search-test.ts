@@ -288,7 +288,6 @@ module(`Integration | search resource`, function (hooks) {
     };
 
     ({ realm } = await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'article.gts': { Article },
