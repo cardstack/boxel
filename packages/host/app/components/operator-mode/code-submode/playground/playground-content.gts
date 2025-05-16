@@ -26,6 +26,7 @@ import consumeContext from '@cardstack/host/helpers/consume-context';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
+import MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 
@@ -85,6 +86,7 @@ export default class PlaygroundContent extends Component<Signature> {
                 <CardError
                   @error={{@cardError}}
                   @cardCreationError={{@cardError.meta.isCreationError}}
+                  @fileToFixWithAi={{this.fileToFixWithAi}}
                 />
               </CardContainer>
             {{/if}}
@@ -176,6 +178,7 @@ export default class PlaygroundContent extends Component<Signature> {
 
   @service private declare operatorModeStateService: OperatorModeStateService;
   @service private declare realm: RealmService;
+  @service private declare matrixService: MatrixService;
 
   private fieldFormats: Format[] = ['embedded', 'fitted', 'atom', 'edit'];
 
@@ -280,5 +283,15 @@ export default class PlaygroundContent extends Component<Signature> {
     const maxWidth =
       this.args.format !== 'isolated' || this.isWideFormat ? '100%' : '50rem';
     return htmlSafe(`max-width: ${maxWidth};`);
+  }
+
+  private get fileToFixWithAi() {
+    let codePath = this.operatorModeStateService.state.codePath?.href;
+    if (!codePath) return undefined;
+
+    return this.matrixService.fileAPI.createFileDef({
+      sourceUrl: codePath,
+      name: codePath.split('/').pop(),
+    });
   }
 }

@@ -1,7 +1,12 @@
+import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
 import { CopyButton } from '@cardstack/boxel-ui/components';
 
+import MatrixService from '@cardstack/host/services/matrix-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
+
+import FixItButton from './fix-it-button';
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -10,9 +15,29 @@ interface Signature {
 }
 
 export default class SyntaxErrorDisplay extends Component<Signature> {
+  @service private declare operatorModeStateService: OperatorModeStateService;
+  @service private declare matrixService: MatrixService;
+
   removeSourceMappingURL(syntaxErrors: string): string {
     return syntaxErrors.replace(/\/\/# sourceMappingURL=.*/g, '');
   }
+
+  private get errorObject() {
+    return {
+      message: this.removeSourceMappingURL(this.args.syntaxErrors),
+    };
+  }
+
+  private get fileToAttach() {
+    let codePath = this.operatorModeStateService.state.codePath?.href;
+    if (!codePath) return undefined;
+
+    return this.matrixService.fileAPI.createFileDef({
+      sourceUrl: codePath,
+      name: codePath.split('/').pop(),
+    });
+  }
+
   <template>
     <style scoped>
       .syntax-error-container {
@@ -49,6 +74,13 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
         overflow: hidden;
         text-wrap: auto;
       }
+
+      .syntax-error-actions {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xxs);
+        margin-left: auto;
+      }
     </style>
 
     <div class='syntax-error-container' data-test-syntax-error>
@@ -57,9 +89,18 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
           <div class='syntax-error-text'>
             Syntax Error
           </div>
-          <CopyButton
-            @textToCopy={{this.removeSourceMappingURL @syntaxErrors}}
-          />
+          <div class='syntax-error-actions'>
+            <CopyButton
+              @textToCopy={{this.removeSourceMappingURL @syntaxErrors}}
+            />
+            {{#if this.fileToAttach}}
+              <FixItButton
+                @error={{this.errorObject}}
+                @errorType='syntax'
+                @fileToAttach={{this.fileToAttach}}
+              />
+            {{/if}}
+          </div>
         </div>
 
         <hr />
