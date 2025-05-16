@@ -433,6 +433,9 @@ function getter<CardT extends BaseDefConstructor>(
       value = value.staleValue;
     } else if (!deserialized.has(field.name)) {
       value = field.computeVia.bind(instance)();
+      if (value === undefined) {
+        value = field.emptyValue(instance);
+      }
       deserialized.set(field.name, value);
     }
     return value;
@@ -487,11 +490,17 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   }
 
   serialize(
-    values: BaseInstanceType<FieldT>[],
+    values: BaseInstanceType<FieldT>[] | NotLoadedValue,
     doc: JSONAPISingleResourceDocument,
     _visited: Set<string>,
     opts?: SerializeOpts,
   ): JSONAPIResource {
+    // this can be a not loaded value happen when the containsMany is a
+    // computed that consumes a linkTo field that is not loaded
+    if (isNotLoadedValue(values)) {
+      return { attributes: {} };
+    }
+
     if (primitive in this.card) {
       return {
         attributes: {
@@ -729,11 +738,17 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 
   serialize(
-    value: InstanceType<CardT>,
+    value: InstanceType<CardT> | NotLoadedValue,
     doc: JSONAPISingleResourceDocument,
     _visited: Set<string>,
     opts?: SerializeOpts,
   ): JSONAPIResource {
+    // this can be a not loaded value happen when the contains is a
+    // computed that consumes a linkTo field that is not loaded
+    if (isNotLoadedValue(value)) {
+      return { attributes: {} };
+    }
+
     if (primitive in this.card) {
       let serialized: JSONAPISingleResourceDocument['data'] & {
         meta: Record<string, any>;
@@ -885,7 +900,7 @@ class LinksTo<CardT extends CardDefConstructor> implements Field<CardT> {
   }
 
   serialize(
-    value: InstanceType<CardT>,
+    value: InstanceType<CardT> | NotLoadedValue,
     doc: JSONAPISingleResourceDocument,
     visited: Set<string>,
     opts?: SerializeOpts,
@@ -1214,6 +1229,10 @@ class LinksToMany<FieldT extends CardDefConstructor>
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     if (maybeNotLoaded) {
+      if (isNotLoadedValue(maybeNotLoaded)) {
+        throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      }
+
       let notLoadedRefs: string[] = [];
       for (let entry of maybeNotLoaded) {
         if (isNotLoadedValue(entry)) {
@@ -1260,11 +1279,17 @@ class LinksToMany<FieldT extends CardDefConstructor>
   }
 
   serialize(
-    values: BaseInstanceType<FieldT>[] | null | undefined,
+    values: BaseInstanceType<FieldT>[] | null | NotLoadedValue | undefined,
     doc: JSONAPISingleResourceDocument,
     visited: Set<string>,
     opts?: SerializeOpts,
   ) {
+    // this can be a not loaded value happen when the linksToMany is a
+    // computed that consumes a linkTo field that is not loaded
+    if (isNotLoadedValue(values)) {
+      return { relationships: {} };
+    }
+
     if (values == null || values.length === 0) {
       return {
         relationships: {
@@ -1512,7 +1537,8 @@ class LinksToMany<FieldT extends CardDefConstructor>
     let identityContext =
       identityContexts.get(instance) ?? new SimpleIdentityContext();
 
-    for (let ref of e.reference) {
+    let references = !Array.isArray(e.reference) ? [e.reference] : e.reference;
+    for (let ref of references) {
       // taking advantage of the identityMap regardless of whether loadFields is set
       let value = identityContext.get(ref);
       if (value !== undefined) {
@@ -1529,7 +1555,7 @@ class LinksToMany<FieldT extends CardDefConstructor>
       );
     }
 
-    if (fieldValues.length === e.reference.length) {
+    if (fieldValues.length === references.length) {
       let values: T[] = [];
       let deserialized = getDataBucket(instance);
 
@@ -1561,7 +1587,11 @@ class LinksToMany<FieldT extends CardDefConstructor>
     identityContext: IdentityContext,
     relativeTo: URL | undefined,
   ): Promise<CardDef[]> {
-    let refs = (notLoaded.reference as string[]).map(
+    let refs = (
+      !Array.isArray(notLoaded.reference)
+        ? [notLoaded.reference]
+        : notLoaded.reference
+    ).map(
       (ref) => new URL(ref, instance.id ?? relativeTo).href, // new instances may not yet have an ID, in that case fallback to the relativeTo
     );
     let errors = [];
@@ -2326,7 +2356,16 @@ function peekAtField(instance: BaseDef, fieldName: string): any {
       `the card ${instance.constructor.name} does not have a field '${fieldName}'`,
     );
   }
-  return getter(instance, field);
+  try {
+    return getter(instance, field);
+  } catch (e) {
+    // we peek specifically so that we can see the raw values
+    // without worrying about encountering NotLoaded errors
+    if (isNotLoadedError(e)) {
+      return { type: 'not-loaded', reference: e.reference } as NotLoadedValue;
+    }
+    throw e;
+  }
 }
 
 type RelationshipMeta = NotLoadedRelationship | LoadedRelationship;
@@ -2357,8 +2396,12 @@ export function relationshipMeta(
   if (!(field.fieldType === 'linksTo' || field.fieldType === 'linksToMany')) {
     return undefined;
   }
-  let related = getter(instance, field) as CardDef; // only compound cards can be linksTo fields
+  let related = peekAtField(instance, field.name) as CardDef;
   if (field.fieldType === 'linksToMany') {
+    // this is the scenario where the linksToMany is a computed that consumes a link that is not loaded
+    if (isNotLoadedValue(related)) {
+      return { type: 'not-loaded', reference: related.reference };
+    }
     if (!Array.isArray(related)) {
       throw new Error(
         `expected ${fieldName} to be an array but was ${typeof related}`,
@@ -2672,6 +2715,10 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
+      if (field.computeVia) {
+        // we will re-compute the computed fields at the end
+        return [];
+      }
       let relativeToVal =
         'id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
@@ -2731,17 +2778,15 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
     // invalidate all computed fields because we don't know which
     // ones depend on the fields that were changed
     for (let computedFieldName of Object.keys(getComputedFields(instance))) {
-      if (deserialized.has(computedFieldName)) {
-        let currentValue = deserialized.get(computedFieldName);
-        if (!isStaleValue(currentValue)) {
-          deserialized.set(computedFieldName, {
-            type: 'stale',
-            staleValue: currentValue,
-          } as StaleValue);
-        }
+      let currentValue = deserialized.get(computedFieldName);
+      if (!isStaleValue(currentValue)) {
+        deserialized.set(computedFieldName, {
+          type: 'stale',
+          staleValue: currentValue,
+        } as StaleValue);
       }
     }
-    logger.log(recompute(instance));
+    await recompute(instance);
 
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
@@ -2870,6 +2915,7 @@ function setField(instance: BaseDef, field: Field, value: any) {
   deserialized.set(field.name, value);
   // invalidate all computed fields because we don't know which ones depend on this one
   for (let computedFieldName of Object.keys(getComputedFields(instance))) {
+    // TODO i don't think we want this guard...
     if (deserialized.has(computedFieldName)) {
       let currentValue = deserialized.get(computedFieldName);
       if (!isStaleValue(currentValue)) {
@@ -3074,10 +3120,17 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
       let card = Reflect.getPrototypeOf(instance)!
         .constructor as typeof BaseDef;
       let field: Field = getField(card, fieldName as string)!;
-      return (await field.handleNotLoadedError(instance, e, {
+      let result = (await field.handleNotLoadedError(instance, e, {
         ...(field.isUsed ? { loadFields: true } : {}),
         ...opts,
       })) as T[K] | T[K][] | undefined;
+      if (result === undefined && isStaleValue(maybeStale)) {
+        deserialized.set(
+          fieldName as string,
+          { type: 'not-loaded', reference: e.reference } as NotLoadedValue,
+        );
+      }
+      return result;
     } else {
       throw e;
     }
@@ -3085,6 +3138,9 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
 
   //Only update the value of computed field.
   if (field?.computeVia) {
+    if (result === undefined) {
+      result = field.emptyValue(instance);
+    }
     deserialized.set(fieldName as string, result);
   }
   return result;
