@@ -7,7 +7,10 @@ import { Resource } from 'ember-resources';
 
 import { TrackedMap } from 'tracked-built-ins';
 
-import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
+import {
+  isCardInstance,
+  type LooseSingleCardDocument,
+} from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
@@ -364,9 +367,13 @@ export class RoomResource extends Resource<Args> {
       return this._skillCardsCache.get(cardId);
     }
 
-    let skillCard = await this.store.add<Skill>(cardDoc, {
-      doNotPersist: true,
-    });
+    let skillCard: Skill;
+    let maybeSkillCard = await this.store.get(cardId);
+    if (isCardInstance(maybeSkillCard)) {
+      skillCard = maybeSkillCard as Skill;
+    } else {
+      skillCard = await this.store.add<Skill>(cardDoc);
+    }
     this._skillCardsCache.set(cardId, skillCard);
     return skillCard;
   }

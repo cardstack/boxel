@@ -9,6 +9,7 @@ import {
   BaseDefConstructor,
   BaseInstanceType,
   deserialize,
+  emptyValue,
 } from './card-api';
 import { fn } from '@ember/helper';
 import { RadioInput } from '@cardstack/boxel-ui/components';
@@ -39,6 +40,10 @@ export default class BooleanField extends FieldDef {
   static [useIndexBasedKey]: never;
   static [serialize](val: any) {
     return Boolean(val);
+  }
+
+  static get [emptyValue]() {
+    return false;
   }
 
   static async [deserialize]<T extends BaseDefConstructor>(
