@@ -69,7 +69,7 @@ export default class CardErrorDetail extends Component<Signature> {
         <:title>
           <div class='title'>
             <ExclamationCircle class='error-icon' />
-            {{if @headerText @headerText 'An error was encountered: '}}
+            {{unless @headerText  'An error was encountered: '}}
             <span data-test-error-title>
               {{if @title @title @error.title}}
             </span>
