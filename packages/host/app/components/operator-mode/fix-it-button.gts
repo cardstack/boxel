@@ -1,8 +1,8 @@
 import { on } from '@ember/modifier';
-import { action } from '@ember/object';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+
+import { restartableTask } from 'ember-concurrency';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
@@ -28,8 +28,6 @@ export default class FixItButton extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
 
-  @tracked private isSending = false;
-
   private get errorMessage() {
     let { error, errorType } = this.args;
     let prefix = errorType === 'syntax' ? 'Syntax Error' : 'Card Error';
@@ -40,39 +38,31 @@ export default class FixItButton extends Component<Signature> {
     return `${prefix}${title}\n\n${message}${stack}`;
   }
 
-  @action
-  private async sendToAiAssistant() {
-    if (this.isSending) return;
+  private sendToAiAssistant = restartableTask(async () => {
+    await this.aiAssistantPanelService.openPanel();
 
-    this.isSending = true;
-    try {
-      await this.aiAssistantPanelService.openPanel();
-
-      if (!this.matrixService.currentRoomId) {
-        throw new Error('No room found');
-      }
-
-      await this.matrixService.sendMessage(
-        this.matrixService.currentRoomId,
-        `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
-        [],
-        this.args.fileToAttach ? [this.args.fileToAttach] : [],
-      );
-    } finally {
-      this.isSending = false;
+    if (!this.matrixService.currentRoomId) {
+      throw new Error('No room found');
     }
-  }
+
+    await this.matrixService.sendMessage(
+      this.matrixService.currentRoomId,
+      `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
+      [],
+      this.args.fileToAttach ? [this.args.fileToAttach] : [],
+    );
+  });
 
   <template>
     <Button
       class='fix-it-button'
       @kind='primary'
       @size='small'
-      @disabled={{this.isSending}}
-      {{on 'click' this.sendToAiAssistant}}
+      @disabled={{this.sendToAiAssistant.isRunning}}
+      {{on 'click' this.sendToAiAssistant.perform}}
       data-test-fix-it-button
     >
-      {{if this.isSending 'Sending...' 'Fix it with AI'}}
+      {{if this.sendToAiAssistant.isRunning 'Sending...' 'Fix it'}}
     </Button>
 
     <style scoped>
@@ -80,7 +70,6 @@ export default class FixItButton extends Component<Signature> {
         --boxel-button-color: var(--boxel-error-300);
         --boxel-button-border: 1px solid var(--boxel-error-300);
         --boxel-button-text-color: var(--boxel-light);
-        border-radius: 4px;
         padding: 6px 12px;
         font-size: 12px;
         font-weight: 500;
