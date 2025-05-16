@@ -127,6 +127,7 @@ const realmEventsLogger = logger('realm:events');
 export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
+  realmUrl: string;
 };
 
 export default class MatrixService extends Service {
@@ -871,7 +872,7 @@ export default class MatrixService extends Service {
   ): Promise<void> {
     let tools: Tool[] = [];
     let attachedOpenCards: CardDef[] = [];
-    let submode = context?.submode;
+    let { submode, realmUrl } = context ?? {};
     let mappings = await basicMappings(this.loaderService.loader);
     // Open cards are attached automatically
     // If they are not attached, the user is not allowing us to
@@ -906,6 +907,8 @@ export default class MatrixService extends Service {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           submode,
+          realmUrl,
+          functions: [],
         },
       },
     } as CardMessageContent);
