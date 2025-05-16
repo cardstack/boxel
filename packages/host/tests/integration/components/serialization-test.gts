@@ -314,6 +314,14 @@ module('Integration | serialization', function (hooks) {
   test('can update an instance from serialized data', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
+      @field nickName = contains(StringField, {
+        computeVia: function (this: Person) {
+          if (!this.firstName) {
+            return;
+          }
+          return this.firstName + '-poo';
+        },
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -353,6 +361,11 @@ module('Integration | serialization', function (hooks) {
       'ID can be updated for unsaved instance',
     );
     assert.strictEqual(card.firstName, 'Van Gogh', 'the field can be updated');
+    assert.strictEqual(
+      card.nickName,
+      'Van Gogh-poo',
+      'the computed field is recomputed',
+    );
   });
 
   test('throws when updating the id of a saved instance from serialized data', async function (assert) {

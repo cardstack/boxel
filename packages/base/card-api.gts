@@ -2697,6 +2697,7 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       originalId = (instance as CardDef).id; // the instance is a composite card
       instance[isSavedInstance] = false;
     }
+    let deserialized = getDataBucket(instance);
     for (let [field, value] of values) {
       if (!field) {
         continue;
@@ -2706,7 +2707,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
           `cannot change the id for saved instance ${originalId}`,
         );
       }
-      let deserialized = getDataBucket(instance);
       field.validate(instance, value);
 
       // Before updating field's value, we also have to make sure
@@ -2721,8 +2721,23 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         applySubscribersToInstanceValue(instance, field, existingValue, value);
       }
       deserialized.set(field.name as string, value);
-      logger.log(recompute(instance));
     }
+
+    // invalidate all computed fields because we don't know which
+    // ones depend on the fields that were changed
+    for (let computedFieldName of Object.keys(getComputedFields(instance))) {
+      if (deserialized.has(computedFieldName)) {
+        let currentValue = deserialized.get(computedFieldName);
+        if (!isStaleValue(currentValue)) {
+          deserialized.set(computedFieldName, {
+            type: 'stale',
+            staleValue: currentValue,
+          } as StaleValue);
+        }
+      }
+    }
+    logger.log(recompute(instance));
+
     if (isCardInstance(instance) && resource.id != null) {
       // importantly, we place this synchronously after the assignment of the model's
       // fields, such that subsequent assignment of the id field when the model is
