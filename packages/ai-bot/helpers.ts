@@ -835,11 +835,12 @@ function elideCodeBlocks(
   content: string,
   codePatchResults: CodePatchResultEvent[],
 ) {
-  const DEFAULT_PLACEHOLDER: string = '[Proposed code change]';
+  const DEFAULT_PLACEHOLDER: string =
+    '[Omitting previously suggested code change]';
   const PLACEHOLDERS = {
-    applied: '[Proposed code change: applied]',
-    rejected: '[Proposed code change: rejected]',
-    failed: '[Proposed code change: failed]',
+    applied: '[Omitting previously suggested and applied code change]',
+    rejected: '[Omitting previously suggested and rejected code change]',
+    failed: '[Omitting previously suggested code change that failed to apply]',
   };
 
   function getPlaceholder(codeBlockIndex: number) {
@@ -856,6 +857,7 @@ function elideCodeBlocks(
   }
 
   let codeBlockIndex = 0;
+
   while (
     content.includes(SEARCH_MARKER) &&
     content.includes(SEPARATOR_MARKER) &&

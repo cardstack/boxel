@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 1,
+        "label": "In Progress",
+        "color": null,
+        "completed": false
+      },
+      "dateRange": {
+        "start": "2025-02-01",
+        "end": "2025-02-28"
+      },
+      "priority": {
+        "index": 3,
+        "label": "High"
+      },
+      "name": "Digital Transformation Implementation Plan",
+      "details": "Create detailed rollout schedule for new systems",
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": null
+        }
+      },
+      "contact": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
+        }
+      },
+      "deal": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task",
+        "name": "CRMTask"
+      }
+    }
+  }
+}

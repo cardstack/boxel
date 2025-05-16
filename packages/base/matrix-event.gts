@@ -255,7 +255,7 @@ export interface CommandResultWithNoOutputContent {
   commandRequestId: string;
 }
 
-export type CodePatchStatus = 'rejected' | 'applied' | 'failed';
+export type CodePatchStatus = 'applied' | 'failed'; // possibly add 'rejected' in the future
 
 export interface CodePatchResultContent {
   'm.relates_to': {

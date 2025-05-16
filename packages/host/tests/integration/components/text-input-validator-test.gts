@@ -11,7 +11,6 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import {
-  lookupLoaderService,
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -44,7 +43,6 @@ module('Integration | text-input-validator', function (hooks) {
   });
 
   hooks.beforeEach(async function () {
-    let loader = lookupLoaderService().loader;
     let operatorModeStateService = this.owner.lookup(
       'service:operator-mode-state-service',
     ) as OperatorModeStateService;
@@ -57,7 +55,6 @@ module('Integration | text-input-validator', function (hooks) {
     }
 
     ({ realm } = await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'sample.gts': { Sample },

@@ -10,9 +10,10 @@ import { triggerEvent } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import type { Realm } from '@cardstack/runtime-common';
+import { trimJsonExtension, type Realm } from '@cardstack/runtime-common';
 
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 
 import {
   percySnapshot,
@@ -22,6 +23,8 @@ import {
   setupUserSubscription,
   testRealmURL,
   visitOperatorMode,
+  lookupLoaderService,
+  withoutLoaderMonitoring,
   type TestContextWithSave,
   assertMessages,
 } from '../../helpers';
@@ -31,16 +34,21 @@ import {
   chooseAnotherInstance,
   createNewInstance,
   getPlaygroundSelections,
-  getRecentFiles,
   openFileInPlayground,
   removePlaygroundSelections,
-  removeRecentFiles,
   selectDeclaration,
   selectFormat,
   setPlaygroundSelections,
-  setRecentFiles,
   togglePlaygroundPanel,
 } from '../../helpers/playground';
+import {
+  getRecentFiles,
+  removeRecentFiles,
+  setRecentFiles,
+  setRecentCards,
+  removeRecentCards,
+  assertRecentFileURLs,
+} from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const codeRefDriverCard = `import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
@@ -267,6 +275,39 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
               },
             },
           },
+          'Category/interior-design.json': {
+            data: {
+              attributes: { title: 'Interior Design' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}blog-post`,
+                  name: 'Category',
+                },
+              },
+            },
+          },
+          'Category/landscaping.json': {
+            data: {
+              attributes: { title: 'Landscaping' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}blog-post`,
+                  name: 'Category',
+                },
+              },
+            },
+          },
+          'Category/home-gym.json': {
+            data: {
+              attributes: { title: 'Home Gym' },
+              meta: {
+                adoptsFrom: {
+                  module: `${testRealmURL}blog-post`,
+                  name: 'Category',
+                },
+              },
+            },
+          },
           'Person/pet-mango.json': {
             data: {
               attributes: { title: 'Mango' },
@@ -346,8 +387,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       removeRecentFiles();
       setRecentFiles([
         [testRealmURL, 'BlogPost/mad-hatter.json'],
-        [testRealmURL, 'Category/future-tech.json'],
         [testRealmURL, 'Category/city-design.json'],
+        [testRealmURL, 'Category/future-tech.json'],
         [testRealmURL, 'BlogPost/remote-work.json'],
         [testRealmURL, 'BlogPost/urban-living.json'],
         [testRealmURL, 'Author/jane-doe.json'],
@@ -407,6 +448,88 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await percySnapshot(assert);
     });
 
+    test('can populate instance chooser options from recent-files and recent-cards, ordered by last viewed timestamp', async function (assert) {
+      removePlaygroundSelections();
+      removeRecentFiles();
+      removeRecentCards();
+
+      let ts = Date.now();
+      setRecentFiles([
+        [testRealmURL, 'Category/home-gym.json', null, ts],
+        [testRealmURL, 'BlogPost/remote-work.json', null, ts],
+        [testRealmURL, 'Category/future-tech.json', null, ts - 2],
+        [testRealmURL, 'Category/city-design.json', null, ts - 5], // duplicate
+      ]);
+      setRecentCards([
+        [`${testRealmURL}Category/landscaping.json`, ts - 1],
+        [`${testRealmURL}BlogPost/mad-hatter.json`, ts - 1],
+        [`${testRealmURL}Category/city-design.json`, ts - 3],
+        [`${testRealmURL}Category/future-tech.json`, ts - 4], // duplicate
+      ]);
+
+      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      assert
+        .dom('[data-test-selected-item]')
+        .hasText('Home Gym', 'most recent category instance is pre-selected');
+      assertCardExists(assert, `${testRealmURL}Category/home-gym`);
+
+      await click('[data-test-instance-chooser]');
+      assert.dom('[data-option-index]').exists({ count: 4 });
+      assert.dom('[data-option-index="0"]').containsText('Home Gym');
+      assert.dom('[data-option-index="1"]').containsText('Landscaping');
+      assert.dom('[data-option-index="2"]').containsText('Future Tech');
+      assert.dom('[data-option-index="3"]').containsText('City Design');
+
+      await click(
+        `[data-test-recent-file="${testRealmURL}Category/future-tech.json"]`,
+      );
+      await click('[data-test-clickable-definition-container]');
+      // opened future-tech in code mode and then came back to playground
+
+      assert
+        .dom('[data-test-selected-item]')
+        .hasText('Home Gym', 'selected card has not changed');
+      assertCardExists(assert, `${testRealmURL}Category/home-gym`);
+
+      await click('[data-test-instance-chooser]');
+      assert.dom('[data-option-index]').exists({ count: 4 });
+      assert
+        .dom('[data-option-index="0"]')
+        .containsText('Future Tech', 'recent card order is updated');
+      assert.dom('[data-option-index="1"]').containsText('Home Gym');
+      assert.dom('[data-option-index="2"]').containsText('Landscaping');
+      assert.dom('[data-option-index="3"]').containsText('City Design');
+
+      await click('[data-test-more-options-button]');
+      await click('[data-test-boxel-menu-item-text="Open in Interact Mode"]');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Category/home-gym"]`)
+        .exists();
+
+      await click('[data-test-search-field]');
+      await click('[data-test-search-result-index="4"]');
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Category/landscaping"]`)
+        .exists();
+      // opened home-gym and landscaping in interact-mode and back to playground
+
+      await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
+      await togglePlaygroundPanel();
+      assert
+        .dom('[data-test-selected-item]')
+        .hasText('Home Gym', 'selected card has not changed');
+      assertCardExists(assert, `${testRealmURL}Category/home-gym`);
+
+      await click('[data-test-instance-chooser]');
+      assert.dom('[data-option-index]').exists({ count: 4 });
+      assert
+        .dom('[data-option-index="0"]')
+        .containsText('Landscaping', 'recent card order is updated');
+      assert.dom('[data-option-index="1"]').containsText('Home Gym');
+      assert.dom('[data-option-index="2"]').containsText('Future Tech');
+      assert.dom('[data-option-index="3"]').containsText('City Design');
+    });
+
     test('can update the instance chooser when selected card def changes (same file)', async function (assert) {
       await openFileInPlayground('blog-post.gts', testRealmURL, 'Category');
       assert.dom('[data-test-selected-item]').containsText('City Design');
@@ -449,7 +572,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       await click('[data-test-boxel-menu-item-text="Open in Code Mode"]');
       assert
         .dom(
-          `[data-test-code-mode-card-preview-header="${testRealmURL}Author/jane-doe"]`,
+          `[data-test-code-mode-card-renderer-header="${testRealmURL}Author/jane-doe"]`,
         )
         .exists();
       assert.dom('[data-test-accordion-item="playground"]').doesNotExist();
@@ -558,6 +681,11 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('can choose another instance to be opened in playground panel', async function (assert) {
       removeRecentFiles();
+      let recentFilesService = this.owner.lookup(
+        'service:recent-files-service',
+      ) as RecentFilesService;
+      assert.strictEqual(recentFilesService.recentFiles?.length, 0);
+
       await openFileInPlayground('blog-post.gts', testRealmURL, 'BlogPost');
       await chooseAnotherInstance();
       assert.dom('[data-test-card-catalog-modal]').exists();
@@ -587,24 +715,27 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         `${testRealmURL}BlogPost/mad-hatter`,
         'isolated',
       );
-      assert.deepEqual(getRecentFiles()?.[0], [
-        testRealmURL,
-        'BlogPost/mad-hatter.json',
-        null,
+      assertRecentFileURLs(assert, recentFilesService.recentFiles, [
+        `${testRealmURL}BlogPost/mad-hatter.json`,
+        `${testRealmURL}blog-post.gts`,
       ]);
     });
 
-    test('can create new instance', async function (assert) {
+    test<TestContextWithSave>('can create new instance', async function (assert) {
       removeRecentFiles();
+      let recentFilesService = this.owner.lookup(
+        'service:recent-files-service',
+      ) as RecentFilesService;
+      assert.strictEqual(recentFilesService.recentFiles?.length, 0);
+
       await visitOperatorMode({
         submode: 'code',
         codePath: `${testRealmURL}blog-post.gts`,
       });
-      assert.deepEqual(getRecentFiles()?.[0], [
-        testRealmURL,
-        'blog-post.gts',
-        { line: 6, column: 40 },
+      assertRecentFileURLs(assert, recentFilesService.recentFiles, [
+        `${testRealmURL}blog-post.gts`,
       ]);
+
       await click('[data-boxel-selector-item-text="BlogPost"]');
       await togglePlaygroundPanel();
       assert
@@ -612,24 +743,24 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         .containsText('Mad As a Hatter', 'card instance found in realm');
       assertCardExists(assert, `${testRealmURL}BlogPost/mad-hatter`);
 
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
       await createNewInstance();
+      await waitUntil(() => id);
 
-      let recentFiles = getRecentFiles();
       assert.strictEqual(
-        recentFiles?.length,
+        recentFilesService.recentFiles?.length,
         2,
         'recent file count is correct',
-      );
-      let newCardId = `${recentFiles?.[0][0]}${recentFiles?.[0][1]}`.replace(
-        '.json',
-        '',
       );
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
         .hasText('Untitled Blog Post', 'created instance is selected');
       assertCardExists(
         assert,
-        newCardId,
+        id!,
         'edit',
         'new card is rendered in edit format',
       );
@@ -641,13 +772,18 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-option-index]').containsText('Blog Post');
     });
 
-    test('can create new instance with CodeRef field', async function (assert) {
+    test<TestContextWithSave>('can create new instance with CodeRef field', async function (assert) {
       await openFileInPlayground(
         'code-ref-driver.gts',
         testRealmURL,
         'CodeRefDriver',
       );
+      let id: string | undefined;
+      this.onSave((url) => {
+        id = url.href;
+      });
       await createNewInstance();
+      await waitUntil(() => id);
 
       assert
         .dom('[data-test-instance-chooser] [data-test-selected-item]')
@@ -1009,9 +1145,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         2,
         'new card is added to recent files',
       );
-      let newCardId = `${testRealmURL}${recentFiles[0][1]}`.replace(
-        '.json',
-        '',
+      let newCardId = trimJsonExtension(
+        `${testRealmURL}${recentFiles?.[0][1]}`,
       );
       assertCardExists(assert, newCardId, 'edit');
 
@@ -1133,7 +1268,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         additionalRealmURL,
         'realm is correct',
       );
-      assert.strictEqual(recentFiles.length, 2);
+      assert.strictEqual(recentFiles?.length, 2);
 
       await createNewInstance();
 
@@ -1149,9 +1284,8 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.ok(newCardId?.startsWith(additionalRealmURL));
       assert.notOk(newCardId?.startsWith(personalRealmURL));
 
-      let recentCardId = `${recentFiles?.[0][0]}${recentFiles?.[0][1]}`.replace(
-        '.json',
-        '',
+      let recentCardId = trimJsonExtension(
+        `${recentFiles?.[0][0]}${recentFiles?.[0][1]}`,
       );
       assert.strictEqual(newCardId, recentCardId);
       assertCardExists(
@@ -1290,12 +1424,17 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasText('Untitled Boom Person');
       assert
         .dom('[data-test-card-error]')
-        .exists('auto-generated card has error in it');
+        .doesNotExist('auto-generated card has not error in edit format');
 
       await createNewInstance();
+      // switch to isolated mode to see the current server state
+      await click('[data-test-format-chooser="isolated"]');
+
       assert
         .dom('[data-test-playground-panel] [data-test-card]')
         .doesNotExist();
@@ -1306,11 +1445,46 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
 
       await click('[data-test-error-detail-toggle] button');
       assert.dom('[data-test-error-detail]').containsText('fn is not defined');
+
+      await withoutLoaderMonitoring(async () => {
+        // The loader service is shared between the realm server and the host.
+        // need to reset the loader to pick up the changed module in the indexer
+        lookupLoaderService().resetLoader();
+        // fix error
+        await realm.write(
+          'boom-person.gts',
+          `import { field, contains, CardDef, Component, StringField } from 'https://cardstack.com/base/card-api';
+          export class BoomPerson extends CardDef {
+            static displayName = 'Boom Person';
+            @field firstName = contains(StringField);
+            static isolated = class Isolated extends Component<typeof this> {
+              <template>
+                Hello <@fields.firstName />!
+              </template>
+              boom = () => fn();
+            }
+          }
+        `,
+        );
+      });
+      await waitFor(`[data-test-error-container]`, {
+        count: 0,
+        timeout: 5_000,
+      });
+      assert.dom('[data-test-error-container]').doesNotExist();
     });
 
     test('it can clear card-creation error (that resulted in new file in the realm) when different card-def is selected', async function (assert) {
       await openFileInPlayground('boom-person.gts', testRealmURL, 'BoomPerson');
-      assert.dom('[data-test-instance-chooser]').hasText('Please Select');
+      assert
+        .dom('[data-test-instance-chooser]')
+        .hasText('Untitled Boom Person');
+      assert.dom('[data-test-error-container]').doesNotExist();
+
+      await createNewInstance();
+      // switch to isolated mode to see the current server state
+      await click('[data-test-format-chooser="isolated"]');
+
       assert
         .dom('[data-test-error-container]')
         .containsText(

@@ -26,12 +26,12 @@ import {
   selectDeclaration,
   selectFormat,
   setPlaygroundSelections,
-  setRecentFiles,
   togglePlaygroundPanel,
   toggleSpecPanel,
   type PlaygroundSelection,
   type Format,
 } from '../../helpers/playground';
+import { setRecentFiles } from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const authorCard = `import { contains, field, CardDef, Component, FieldDef } from "https://cardstack.com/base/card-api";

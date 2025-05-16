@@ -2734,11 +2734,11 @@ Attached files:
       'Right, let us make a tic tac toe game.\n' +
         '\n' +
         '// File url: https://test.com/tic-tac.gts\n' +
-        '[Proposed code change]\n' +
-        '\n' +
+        '[Omitting previously suggested code change]' +
+        '\n\n' +
         '// File url: https://test.com/tac-toe.gts\n' +
-        '[Proposed code change]\n' +
-        '\n' +
+        '[Omitting previously suggested code change]' +
+        '\n\n' +
         'I can add some more whiz bang if you want. Let me know!',
     );
   });
@@ -2770,12 +2770,12 @@ Attached files:
       messages![2].content,
       'Updating the file...\n' +
         '// File url: http://test.com/spaghetti-recipe.gts\n' +
-        '[Proposed code change: applied]\n' +
+        '[Omitting previously suggested and applied code change]\n' +
         '\n' +
         'I will also create a file for rigatoni:\n' +
         '\n' +
         '// File url: http://test.com/rigatoni-recipe.gts\n' +
-        '[Proposed code change: rejected]\n',
+        '[Omitting previously suggested and rejected code change]\n',
     );
   });
 });

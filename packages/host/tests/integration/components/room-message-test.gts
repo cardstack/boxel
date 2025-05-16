@@ -14,6 +14,7 @@ import {
 
 import RoomMessage from '@cardstack/host/components/matrix/room-message';
 
+import { parseHtmlContent } from '@cardstack/host/lib/formatted-message/utils';
 import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { type RoomResource } from '@cardstack/host/resources/room';
@@ -68,6 +69,7 @@ module('Integration | Component | RoomMessage', function (hooks) {
       attachedResources() {
         return undefined;
       },
+      htmlParts: parseHtmlContent(messageContent, '!abcd', '1234'),
     };
 
     let testScenario = {

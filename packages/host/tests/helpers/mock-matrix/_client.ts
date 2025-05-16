@@ -26,7 +26,6 @@ import {
 
 import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
-import { RoomResource } from '@cardstack/host/resources/room';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -663,25 +662,6 @@ export class MockClient implements ExtendedClient {
   ): Promise<FileDef[]> {
     return await this.fileDefManager.uploadCommandDefinitions(
       commandDefinitions,
-    );
-  }
-
-  async uploadCardsAndUpdateSkillCommands(
-    cards: CardDef[],
-    roomResource: RoomResource,
-    updateStateEvent: (
-      roomId: string,
-      eventType: string,
-      stateKey: string,
-      transformContent: (
-        content: Record<string, any>,
-      ) => Promise<Record<string, any>>,
-    ) => Promise<void>,
-  ): Promise<FileDef[]> {
-    return await this.fileDefManager.uploadCardsAndUpdateSkillCommands(
-      cards,
-      roomResource,
-      updateStateEvent,
     );
   }
 
