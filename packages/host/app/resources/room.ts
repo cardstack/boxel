@@ -11,6 +11,7 @@ import { type LooseSingleCardDocument } from '@cardstack/runtime-common';
 
 import type { CommandRequest } from '@cardstack/runtime-common/commands';
 import {
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -30,6 +31,7 @@ import type {
   MessageEvent,
   CommandResultEvent,
   RealmServerEvent,
+  CodePatchResultEvent,
 } from 'https://cardstack.com/base/matrix-event';
 
 import type { Skill } from 'https://cardstack.com/base/skill';
@@ -135,6 +137,13 @@ export class RoomResource extends Resource<Args> {
             break;
           case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
             this.updateMessageCommandResult({ roomId, event, index });
+            break;
+          case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
+            this.updateMessageCodePatchResult({
+              roomId,
+              codePatchResultEvent: event,
+              index,
+            });
             break;
           case 'm.room.create':
             await this.loadRoomCreateEvent(event);
@@ -450,8 +459,47 @@ export class RoomResource extends Resource<Args> {
     messageBuilder.updateMessageCommandResult(message);
   }
 
+  private updateMessageCodePatchResult({
+    roomId,
+    codePatchResultEvent,
+    index,
+  }: {
+    roomId: string;
+    codePatchResultEvent: CodePatchResultEvent;
+    index: number;
+  }) {
+    let codePatchEventId =
+      codePatchResultEvent.content['m.relates_to']?.event_id;
+    let message = this._messageCache.get(codePatchEventId);
+    if (!message) {
+      return;
+    }
+    let codePatchEvent = this.events.find(
+      (e: any) => e.event_i === codePatchEventId,
+    ) as CardMessageEvent;
+    let author = this.upsertRoomMember({
+      roomId,
+      userId: codePatchResultEvent.sender,
+    });
+    let messageBuilder = new MessageBuilder(codePatchEvent, getOwner(this)!, {
+      roomId,
+      effectiveEventId: codePatchEventId,
+      author,
+      index,
+      events: this.events,
+      skills: this.skills,
+      skillCardsCache: this._skillCardsCache,
+      codePatchResultEvent,
+    });
+    messageBuilder.updateMessageCodePatchResult(message);
+  }
+
   private getEffectiveEventId(
-    event: MessageEvent | CardMessageEvent | CommandResultEvent,
+    event:
+      | MessageEvent
+      | CardMessageEvent
+      | CommandResultEvent
+      | CodePatchResultEvent,
   ) {
     if (!('m.relates_to' in event.content)) {
       return event.event_id;

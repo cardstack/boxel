@@ -49,6 +49,8 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
     await render(<template>
       <FormattedAiBotMessage
         @monacoSDK={{monacoSDK}}
+        @roomId={{testScenario.roomId}}
+        @eventId={{testScenario.eventId}}
         @htmlParts={{testScenario.htmlParts}}
         @isStreaming={{testScenario.isStreaming}}
       />
@@ -326,6 +328,8 @@ let c = 2;
         <FormattedAiBotMessage
           @monacoSDK={{monacoSDK}}
           @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
           @isStreaming={{true}}
         />
       </template>
@@ -371,6 +375,8 @@ let c = 2;
         <FormattedAiBotMessage
           @monacoSDK={{monacoSDK}}
           @htmlParts={{this.htmlParts}}
+          @roomId='!abcd'
+          @eventId='1234'
           @isStreaming={{this.isStreaming}}
         />
       </template>

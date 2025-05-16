@@ -6,7 +6,6 @@ import {
   getPromptParts,
   getRelevantCards,
   getTools,
-  OMIT_CODE_CHANGE_PLACEHOLDER,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '../helpers';
 import {
@@ -2735,12 +2734,48 @@ Attached files:
       'Right, let us make a tic tac toe game.\n' +
         '\n' +
         '// File url: https://test.com/tic-tac.gts\n' +
-        OMIT_CODE_CHANGE_PLACEHOLDER +
+        '[Omitting previously suggested code change]' +
         '\n\n' +
         '// File url: https://test.com/tac-toe.gts\n' +
-        OMIT_CODE_CHANGE_PLACEHOLDER +
+        '[Omitting previously suggested code change]' +
         '\n\n' +
         'I can add some more whiz bang if you want. Let me know!',
+    );
+  });
+
+  test('Elided code blocks reflect their results', async () => {
+    // Set up mock responses for file downloads
+    mockResponses.set('http://test.com/spaghetti-recipe.gts', {
+      ok: true,
+      text: 'this is the riveting content of the spaghetti-recipe.gts file',
+    });
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/connect-code-blocks-to-results.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages!.length, 3);
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(
+      messages![2].content,
+      'Updating the file...\n' +
+        '// File url: http://test.com/spaghetti-recipe.gts\n' +
+        '[Omitting previously suggested and applied code change]\n' +
+        '\n' +
+        'I will also create a file for rigatoni:\n' +
+        '\n' +
+        '// File url: http://test.com/rigatoni-recipe.gts\n' +
+        '[Omitting previously suggested and rejected code change]\n',
     );
   });
 });
