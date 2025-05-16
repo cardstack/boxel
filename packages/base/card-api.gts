@@ -2792,8 +2792,13 @@ async function _updateFromSerialized<T extends BaseDefConstructor>({
       (instance as any)[meta] = resource.meta;
     }
 
-    // invalidate all computed fields because we don't know which
-    // ones depend on the fields that were changed
+    // TODO we might want to take a more nuanced approach in the future
+    // where we initialize the instance with the server provided computed
+    // values (by simply moving this before we write out the data in the
+    // for loop above). Although keep in mind that for updateFromSerialized()
+    // we always want this to run after we set values as we're not sure which
+    // values we set that depend on computeds. Currently we do the thing that
+    // is always correct.
     markAllComputedsStale(instance);
     await recompute(instance);
 
