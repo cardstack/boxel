@@ -21,6 +21,7 @@ import {
   Deferred,
   SingleCardDocument,
   type LooseSingleCardDocument,
+  isLocalId,
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -828,12 +829,13 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(5);
+      assert.expect(7);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
       let deferred = new Deferred<void>();
-      this.onSave((_, json) => {
+      let id: string | undefined;
+      this.onSave((url, json) => {
         if (typeof json === 'string') {
           throw new Error('expected JSON save data');
         }
@@ -841,6 +843,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           // Because we create an empty card, upon choosing a catalog item, we must skip the scenario where attributes null
           return;
         }
+        id = url.href;
         assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
         assert.strictEqual(json.data.meta.realmURL, testRealmURL);
         deferred.fulfill();
@@ -861,6 +864,22 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       await deferred.promise;
+      await waitUntil(() => id, {
+        timeoutMessage: 'waiting for id to be assigned to new card',
+      });
+      id = id!;
+
+      let recentCards: string[] = JSON.parse(
+        window.localStorage.getItem(RecentCards) ?? '[]',
+      );
+      assert.ok(
+        recentCards.find((i) => i === id),
+        `the newly created card's remote id is in recent cards`,
+      );
+      assert.notOk(
+        recentCards.find((i) => isLocalId(i)),
+        `no local ID's are in recent cards`,
+      );
     });
 
     // TODO we don't yet support viewing an unsaved card in code mode since it has no URL
