@@ -656,7 +656,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-button]').exists();
     await click('[data-test-create-spec-button]');
     //spec is opened
-    assert.dom('[data-test-code-mode-panel-item="spec"]').hasClass('open');
+    assert.dom('[data-test-code-mode-panel-item="spec"]').hasClass('active');
     assert.dom('[data-test-title] [data-test-boxel-input]').hasValue('Person1');
     assert.dom('[data-test-exported-type]').hasText('card');
     assert.dom('[data-test-exported-name]').hasText('Person1');
