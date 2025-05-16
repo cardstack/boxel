@@ -7,18 +7,18 @@ import { capitalize } from '@ember/string';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import AppsIcon from '@cardstack/boxel-icons/apps';
+import Brain from '@cardstack/boxel-icons/brain';
+import DotIcon from '@cardstack/boxel-icons/dot';
+import LayoutList from '@cardstack/boxel-icons/layout-list';
+import StackIcon from '@cardstack/boxel-icons/stack';
+
 import { task } from 'ember-concurrency';
 import Modifier from 'ember-modifier';
 import { consume } from 'ember-provide-consume-context';
 import window from 'ember-window-mock';
 
 import { TrackedObject } from 'tracked-built-ins';
-
-import AppsIcon from '@cardstack/boxel-icons/apps';
-import Brain from '@cardstack/boxel-icons/brain';
-import DotIcon from '@cardstack/boxel-icons/dot';
-import LayoutList from '@cardstack/boxel-icons/layout-list';
-import StackIcon from '@cardstack/boxel-icons/stack';
 
 import { Accordion, BoxelButton, Pill } from '@cardstack/boxel-ui/components';
 
