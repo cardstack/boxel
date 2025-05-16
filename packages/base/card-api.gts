@@ -2618,7 +2618,15 @@ export async function updateFromSerialized<T extends BaseDefConstructor>(
       instance[meta] = doc.data.meta;
     }
   }
-  return await _updateFromSerialized(instance, doc.data, doc, identityContext);
+  return await _updateFromSerialized({
+    instance,
+    resource: doc.data,
+    doc,
+    identityContext,
+    // invalidate all computed fields because we don't know which
+    // ones depend on the fields that were changed
+    initializeComputedsWithSerializedData: false,
+  });
 }
 
 // The typescript `is` type here refuses to work unless it's in this file.
@@ -2661,15 +2669,27 @@ async function _createFromSerialized<T extends BaseDefConstructor>(
     instance[relativeTo] = _relativeTo;
   }
   identityContexts.set(instance, identityContext);
-  return await _updateFromSerialized(instance, resource, doc, identityContext);
+  return await _updateFromSerialized({
+    instance,
+    resource,
+    doc,
+    identityContext,
+  });
 }
 
-async function _updateFromSerialized<T extends BaseDefConstructor>(
-  instance: BaseInstanceType<T>,
-  resource: LooseCardResource,
-  doc: LooseSingleCardDocument | CardDocument,
-  identityContext: IdentityContext,
-): Promise<BaseInstanceType<T>> {
+async function _updateFromSerialized<T extends BaseDefConstructor>({
+  instance,
+  resource,
+  doc,
+  identityContext,
+  initializeComputedsWithSerializedData = true,
+}: {
+  instance: BaseInstanceType<T>;
+  resource: LooseCardResource;
+  doc: LooseSingleCardDocument | CardDocument;
+  identityContext: IdentityContext;
+  initializeComputedsWithSerializedData?: boolean;
+}): Promise<BaseInstanceType<T>> {
   // because our store uses a tracked map for its identity map all the assembly
   // work that we are doing to deserialize the instance below is "live". so we
   // add the actual instance silently in a non-tracked way and only track it at
@@ -2715,10 +2735,6 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
         // and have a chance to fix it so that it adheres to the definition
         return [];
       }
-      if (field.computeVia) {
-        // we will re-compute the computed fields at the end
-        return [];
-      }
       let relativeToVal =
         'id' in instance && typeof instance.id === 'string'
           ? new URL(instance.id)
@@ -2750,6 +2766,11 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       instance[isSavedInstance] = false;
     }
     let deserialized = getDataBucket(instance);
+
+    if (initializeComputedsWithSerializedData) {
+      markAllComputedsStale(instance);
+    }
+
     for (let [field, value] of values) {
       if (!field) {
         continue;
@@ -2775,16 +2796,8 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
       deserialized.set(field.name as string, value);
     }
 
-    // invalidate all computed fields because we don't know which
-    // ones depend on the fields that were changed
-    for (let computedFieldName of Object.keys(getComputedFields(instance))) {
-      let currentValue = deserialized.get(computedFieldName);
-      if (!isStaleValue(currentValue)) {
-        deserialized.set(computedFieldName, {
-          type: 'stale',
-          staleValue: currentValue,
-        } as StaleValue);
-      }
+    if (!initializeComputedsWithSerializedData) {
+      markAllComputedsStale(instance);
     }
     await recompute(instance);
 
@@ -2804,6 +2817,19 @@ async function _updateFromSerialized<T extends BaseDefConstructor>(
 
   deferred.fulfill(instance);
   return instance;
+}
+
+function markAllComputedsStale(instance: BaseDef) {
+  let deserialized = getDataBucket(instance);
+  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
+    let currentValue = deserialized.get(computedFieldName);
+    if (!isStaleValue(currentValue)) {
+      deserialized.set(computedFieldName, {
+        type: 'stale',
+        staleValue: currentValue,
+      } as StaleValue);
+    }
+  }
 }
 
 export function setCardAsSavedForTest(instance: CardDef, id?: string): void {
@@ -2914,18 +2940,7 @@ function setField(instance: BaseDef, field: Field, value: any) {
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
   // invalidate all computed fields because we don't know which ones depend on this one
-  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
-    // TODO i don't think we want this guard...
-    if (deserialized.has(computedFieldName)) {
-      let currentValue = deserialized.get(computedFieldName);
-      if (!isStaleValue(currentValue)) {
-        deserialized.set(computedFieldName, {
-          type: 'stale',
-          staleValue: currentValue,
-        } as StaleValue);
-      }
-    }
-  }
+  markAllComputedsStale(instance);
   notifySubscribers(instance, field.name, value);
   logger.log(recompute(instance));
 }

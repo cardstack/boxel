@@ -890,9 +890,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-error-detail-toggle] button');
       assert
         .dom('[data-test-error-detail]')
-        .includesText(
-          'Encountered error rendering HTML for card: intentionalError is not defined',
-        );
+        .includesText('intentionalError is not defined');
 
       await percySnapshot(assert);
     });
