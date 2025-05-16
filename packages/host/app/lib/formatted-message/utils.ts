@@ -13,7 +13,6 @@ export function extractCodeData(
   eventId: string,
   codeBlockIndex: number,
 ): CodeData {
-  console.log('extractCodeData', preElementString);
   // We are creating a new element in the dom
   // so that we can easily parse the content of the top level <pre> tags.
   // Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that
@@ -195,7 +194,7 @@ export function parseHtmlContent(
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,
-          codeData: codeData,
+          codeData,
         });
       } else {
         result.push({

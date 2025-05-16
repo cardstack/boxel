@@ -28,12 +28,13 @@ import type Realm from '@cardstack/host/services/realm';
 import type { CardDef } from 'https://cardstack.com/base/card-api';
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
 
-import MessageCommand from '../lib/matrix-classes/message-command';
 import { shortenUuid } from '../utils/uuid';
 
 import type LoaderService from './loader-service';
 import type RealmServerService from './realm-server';
 import type StoreService from './store';
+import type MessageCodePatchResult from '../lib/matrix-classes/message-code-patch-result';
+import type MessageCommand from '../lib/matrix-classes/message-command';
 
 const DELAY_FOR_APPLYING_UI = isTesting() ? 50 : 500;
 
@@ -226,7 +227,7 @@ export default class CommandService extends Service {
         );
       }
       this.executedCommandRequestIds.add(commandRequestId!);
-      await this.matrixService.sendCommandResultEvent(
+      await this.matrixService.sendToolCallCommandResultEvent(
         command.message.roomId,
         eventId,
         commandRequestId!,
@@ -283,7 +284,7 @@ export default class CommandService extends Service {
   }
 
   patchCode = async (
-    _roomId: string,
+    roomId: string,
     fileUrl: string | null,
     codeDataItems: {
       searchReplaceBlock?: string | null;
@@ -312,18 +313,16 @@ export default class CommandService extends Service {
           `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
         );
       }
-      let resultSends: Promise<void>[] = [];
-
-      for (const _codeBlock of codeDataItems) {
-        // TODO: Uncomment this when we have the code patch result event
-        // resultSends.push(
-        //   this.matrixService.sendCodePatchResultEvent(
-        //     roomId,
-        //     codeBlock.eventId,
-        //     codeBlock.index,
-        //     'applied',
-        //   ),
-        // );
+      let resultSends: Promise<unknown>[] = [];
+      for (const codeData of codeDataItems) {
+        resultSends.push(
+          this.matrixService.sendCodePatchResultEvent(
+            roomId,
+            codeData.eventId,
+            codeData.codeBlockIndex,
+            'applied',
+          ),
+        );
       }
       await Promise.all(resultSends);
     } finally {
@@ -336,12 +335,12 @@ export default class CommandService extends Service {
     }
   };
 
-  private isCodeBlockApplying(codeBlock: {
+  private isCodeBlockApplying(codeData: {
     eventId: string;
     codeBlockIndex: number;
   }) {
     return this.currentlyExecutingCommandRequestIds.has(
-      `${codeBlock.eventId}:${codeBlock.codeBlockIndex}`,
+      `${codeData.eventId}:${codeData.codeBlockIndex}`,
     );
   }
 
@@ -354,19 +353,35 @@ export default class CommandService extends Service {
     );
   }
 
-  getCodePatchStatus = (codeBlock: {
+  private getCodePatchResult(codeData: {
+    roomId: string;
+    eventId: string;
+    codeBlockIndex: number;
+  }): MessageCodePatchResult | undefined {
+    let roomResource = this.matrixService.roomResources.get(codeData.roomId);
+    if (!roomResource) {
+      return undefined;
+    }
+    let message = roomResource.messages.find(
+      (m) => m.eventId === codeData.eventId,
+    );
+    return message?.codePatchResults?.find(
+      (c) => c.index === codeData.codeBlockIndex,
+    );
+  }
+
+  getCodePatchStatus = (codeData: {
     roomId: string;
     eventId: string;
     codeBlockIndex: number;
   }): CodePatchStatus | 'applying' | 'ready' => {
-    if (this.isCodeBlockApplying(codeBlock)) {
+    if (this.isCodeBlockApplying(codeData)) {
       return 'applying';
     }
-    if (this.isCodeBlockRecentlyApplied(codeBlock)) {
+    if (this.isCodeBlockRecentlyApplied(codeData)) {
       return 'applied';
     }
-    return 'ready';
-    // return this.getCodePatchResult(codeBlock)?.status ?? 'ready';
+    return this.getCodePatchResult(codeData)?.status ?? 'ready';
   };
 }
 
