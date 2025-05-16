@@ -120,6 +120,7 @@ const realmEventsLogger = logger('realm:events');
 export type OperatorModeContext = {
   submode: Submode;
   openCardIds: string[];
+  debug?: boolean;
 };
 
 export default class MatrixService extends Service {
@@ -652,6 +653,10 @@ export default class MatrixService extends Service {
     );
   }
 
+  async downloadContentAsBlob(serializedFile: FileAPI.SerializedFile) {
+    return await this.client.downloadContentAsBlob(serializedFile);
+  }
+
   async uploadCards(cards: CardDef[]) {
     let cardFileDefs = await this.client.uploadCards(cards);
     return cardFileDefs;
@@ -772,6 +777,7 @@ export default class MatrixService extends Service {
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           submode,
+          debug: context?.debug,
         },
       },
     } as CardMessageContent);

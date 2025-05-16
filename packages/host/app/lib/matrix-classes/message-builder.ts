@@ -19,6 +19,7 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_DEBUG_MESSAGE_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
@@ -139,6 +140,8 @@ export default class MessageBuilder {
       }
     } else if (event.content.msgtype === 'm.text') {
       message.isStreamingFinished = !!event.content.isStreamingFinished; // Indicates whether streaming (message updating while AI bot is sending more content into the message) has finished
+    } else if (event.content.msgtype === APP_BOXEL_DEBUG_MESSAGE_MSGTYPE) {
+      message.isDebugMessage = true;
     }
     return message;
   }

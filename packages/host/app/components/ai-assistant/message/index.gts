@@ -1,6 +1,7 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { registerDestructor } from '@ember/destroyable';
 import { on } from '@ember/modifier';
+import { action } from '@ember/object';
 import { service } from '@ember/service';
 import type { SafeString } from '@ember/template';
 import { htmlSafe } from '@ember/template';
@@ -21,11 +22,13 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+import downloadAsFileInBrowser from '@cardstack/host/helpers/download-file';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -53,6 +56,7 @@ interface Signature {
       scrollTo: Element['scrollIntoView'];
     }) => void;
     errorMessage?: string;
+    isDebugMessage?: boolean;
     isPending?: boolean;
     retryAction?: () => void;
   };
@@ -172,6 +176,8 @@ function isPresent(val: SafeString | string | null | undefined) {
 export default class AiAssistantMessage extends Component<Signature> {
   @service private declare cardService: CardService;
   @service private declare matrixService: MatrixService;
+  @service private declare operatorModeStateService: OperatorModeStateService;
+
   get isReasoningExpandedByDefault() {
     let result =
       this.args.isStreaming &&
@@ -193,6 +199,28 @@ export default class AiAssistantMessage extends Component<Signature> {
       !this.isReasoningExpanded,
     );
   };
+
+  get shouldShowDownloadFile() {
+    // Show the download file button
+    if (this.operatorModeStateService.operatorModeController.debug) {
+      return true;
+    }
+    // Show the download button if this event is a debug event
+    if (this.args.isDebugMessage) {
+      return true;
+    }
+    return false;
+  }
+
+  @action
+  private async downloadFile(file: FileDef) {
+    try {
+      const blob = await this.matrixService.downloadContentAsBlob(file);
+      await downloadAsFileInBrowser(blob, file.name);
+    } catch (error) {
+      console.error('Error downloading file:', error);
+    }
+  }
 
   <template>
     <div
@@ -278,7 +306,13 @@ export default class AiAssistantMessage extends Component<Signature> {
                     />
                   {{/each}}
                 {{else}}
-                  <FilePill @file={{item}} />
+                  <FilePill
+                    @file={{item}}
+                    @downloadFile={{if
+                      this.shouldShowDownloadFile
+                      this.downloadFile
+                    }}
+                  />
                 {{/if}}
               {{/each}}
             </div>

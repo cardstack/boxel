@@ -46,6 +46,7 @@ import type Room from '../lib/matrix-classes/room';
 
 import type CommandService from '../services/command-service';
 import type MatrixService from '../services/matrix-service';
+import type OperatorModeStateService from '../services/operator-mode-state';
 import type RealmService from '../services/realm';
 import type StoreService from '../services/store';
 
@@ -80,6 +81,7 @@ export class RoomResource extends Resource<Args> {
   // that updates immediately after the user selects the LLM.
   @tracked private llmBeingActivated: string | undefined;
   @service declare private matrixService: MatrixService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private commandService: CommandService;
   @service declare private store: StoreService;
   @service declare private realm: RealmService;

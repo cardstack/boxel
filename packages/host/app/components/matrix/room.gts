@@ -762,6 +762,7 @@ export default class Room extends Component<Signature> {
       ]);
       let context = {
         submode: this.operatorModeStateService.state.submode,
+        debug: this.operatorModeStateService.operatorModeController.debug,
         openCardIds: this.makeRemoteIdsList([...openCardIds]),
       };
       try {

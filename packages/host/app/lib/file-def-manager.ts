@@ -94,6 +94,12 @@ export interface FileDefManager {
   ): Promise<LooseSingleCardDocument>;
 
   cacheContentHashIfNeeded(event: MatrixEvent): Promise<void>;
+  /**
+   * Downloads content from a file definition as a Blob
+   * @param serializedFile File definition to download from
+   * @returns Promise resolving to the downloaded Blob
+   */
+  downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob>;
 }
 
 export default class FileDefManagerImpl implements FileDefManager {
@@ -439,6 +445,18 @@ export default class FileDefManagerImpl implements FileDefManager {
     );
 
     return uploadedFiles;
+  }
+
+  async downloadContentAsBlob(serializedFile: SerializedFile): Promise<Blob> {
+    const response = await fetch(serializedFile.url, {
+      headers: {
+        Authorization: `Bearer ${this.client.getAccessToken()}`,
+      },
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error. Status: ${response.status}`);
+    }
+    return await response.blob();
   }
 
   /**
