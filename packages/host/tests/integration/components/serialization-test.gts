@@ -1,7 +1,7 @@
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 
-import parseISO from 'date-fns/parseISO';
 import formatISO from 'date-fns/formatISO';
+import parseISO from 'date-fns/parseISO';
 
 import { isAddress } from 'ethers';
 import { module, test } from 'qunit';
