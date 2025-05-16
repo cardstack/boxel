@@ -339,7 +339,6 @@ class CarouselComponent extends GlimmerComponent<Signature> {
 }
 
 export class ListingFittedTemplate extends Component<typeof Listing> {
-  @tracked installedListing = false;
   @tracked writableRealms: { name: string; url: string; iconURL?: string }[] =
     [];
 
@@ -365,10 +364,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
     });
   }
 
-  get remixButtonDisabled() {
-    return this.installedListing || !this.args.context?.actions?.copySource;
-  }
-
   get firstImage() {
     return this.args.model.images?.[0];
   }
@@ -392,30 +387,23 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
       throw new Error('Missing commandContext');
     }
 
-    if (!this.roomId) {
-      if (!this.roomId) {
-        const { roomId } = await new CreateAiAssistantRoomCommand(
-          commandContext,
-        ).execute({
-          name: this.args.model.name
-            ? `Remix of ${this.args.model.name}`
-            : 'Remix',
-        });
-        this.roomId = roomId;
+    const { roomId } = await new CreateAiAssistantRoomCommand(
+      commandContext,
+    ).execute({
+      name: this.args.model.name ? `Remix of ${this.args.model.name}` : 'Remix',
+    });
+    this.roomId = roomId;
 
-        const remixSkillCardId = `${baseRealm.url}Skill/remix`;
-        const remixSkillCard = (await this.args.context?.actions?.fetchCard(
-          remixSkillCardId,
-        )) as Skill;
+    const remixSkillCardId = `${baseRealm.url}Skill/remix`;
+    const remixSkillCard = (await this.args.context?.actions?.fetchCard(
+      remixSkillCardId,
+    )) as Skill;
 
-        if (remixSkillCard) {
-          await new AddSkillsToRoomCommand(commandContext).execute({
-            roomId: this.roomId,
-            skills: [remixSkillCard],
-          });
-        }
-        this.roomId = roomId;
-      }
+    if (remixSkillCard) {
+      await new AddSkillsToRoomCommand(commandContext).execute({
+        roomId: this.roomId,
+        skills: [remixSkillCard],
+      });
     }
 
     if (this.roomId) {
@@ -475,7 +463,6 @@ export class ListingFittedTemplate extends Component<typeof Listing> {
                 @kind='primary'
                 @size='extra-small'
                 class='card-remix-button'
-                @disabled={{this.remixButtonDisabled}}
                 {{on 'click' this._stopPropagation}}
                 {{bindings}}
               >
