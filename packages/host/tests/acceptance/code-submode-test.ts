@@ -1771,7 +1771,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-create-file-modal]').doesNotExist();
     });
 
-    test('remembers open RHS panel via local storage', async function (assert) {
+    test('remembers open module inspector panel via local storage', async function (assert) {
       let accordionSelections = {
         [`${testRealmURL}address.gts`]: 'spec',
         [`${testRealmURL}country.gts`]: null,
