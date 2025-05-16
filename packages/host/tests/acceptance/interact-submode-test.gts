@@ -869,15 +869,17 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       id = id!;
 
-      let recentCards: string[] = JSON.parse(
-        window.localStorage.getItem(RecentCards) ?? '[]',
-      );
+      let recentCardsService = this.owner.lookup(
+        'service:recent-cards-service',
+      ) as RecentCardsService;
+
+      let recentCards = recentCardsService.recentCards;
       assert.ok(
-        recentCards.find((i) => i === id),
+        recentCards.find((card) => card.cardId === id),
         `the newly created card's remote id is in recent cards`,
       );
       assert.notOk(
-        recentCards.find((i) => isLocalId(i)),
+        recentCards.find((card) => isLocalId(card.cardId)),
         `no local ID's are in recent cards`,
       );
     });
