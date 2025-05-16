@@ -42,7 +42,7 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
     if (!fileUrl || !searchReplaceBlock) {
       return;
     }
-    let result = await this.cardService.getSource(new URL(fileUrl));
+    let result = (await this.cardService.getSource(new URL(fileUrl))).content;
     this.originalCode = result;
     let applySearchReplaceBlockCommand = new ApplySearchReplaceBlockCommand(
       this.commandService.commandContext,
