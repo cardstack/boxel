@@ -946,7 +946,7 @@ module('Integration | Store', function (hooks) {
 
   test('can patch an unsaved instance', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
-    await store.add(instance, { doNotPersist: true });
+    await store.add(instance, { doNotPersist: true, realm: testRealmURL });
 
     await store.patch(instance[localId], {
       attributes: {
@@ -972,6 +972,11 @@ module('Integration | Store', function (hooks) {
     );
     assert.ok(isCardInstance(queenzy), 'queenzy is in the store');
     assert.ok(isCardInstance(germaine), 'germaine is in the store');
+    assert.strictEqual(
+      instance[realmURL]?.href,
+      testRealmURL,
+      'the realm config on the instance is preserved',
+    );
 
     assert.strictEqual(
       (instance as any).name,

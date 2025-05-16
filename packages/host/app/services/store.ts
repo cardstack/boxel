@@ -418,6 +418,10 @@ export default class StoreService extends Service implements StoreInterface {
     return this.referenceCount.get(id) ?? 0;
   }
 
+  isSameId(a: string, b: string): boolean {
+    return a === b || this.peek(a) === this.peek(b);
+  }
+
   private async wireUpNewReference(url: string) {
     let deferred = new Deferred<void>();
     await this.withTestWaiters(async () => {
