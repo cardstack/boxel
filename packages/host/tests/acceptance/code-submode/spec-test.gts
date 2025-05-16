@@ -620,6 +620,8 @@ module('Acceptance | Spec preview', function (hooks) {
     });
     assert.dom('[data-test-code-mode-panel-item="spec"]').exists();
     assert.dom('[data-test-create-spec-button]').exists();
+
+    await click('[data-test-code-mode-panel-item="spec"]');
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
   });
