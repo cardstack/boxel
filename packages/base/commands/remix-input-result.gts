@@ -22,7 +22,7 @@ class RemixResultView extends Component<typeof RemixResult> {
         {{if @model.success 'Success' 'Failed'}}
       </div>
     </div>
-    <style>
+    <style scoped>
       .remix-result-status {
         font-weight: 500;
         padding: 0.75rem;

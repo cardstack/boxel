@@ -146,7 +146,6 @@ export async function installListing(args: any, realm: string) {
     for (const cardWithNewCodeRef of copyCardsWithCodeRef) {
       const { newCardId } = await args.context?.actions?.copyCard(
         cardWithNewCodeRef.sourceCard,
-        cardWithNewCodeRef.sourceCard,
         realm,
         cardWithNewCodeRef.codeRef,
         localDir,
