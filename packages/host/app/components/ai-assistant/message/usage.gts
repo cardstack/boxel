@@ -1,6 +1,5 @@
 import { fn } from '@ember/helper';
 import { action } from '@ember/object';
-import { htmlSafe } from '@ember/template';
 import Component from '@glimmer/component';
 
 import { tracked } from '@glimmer/tracking';
@@ -54,12 +53,13 @@ export default class AiAssistantMessageUsage extends Component {
             @registerConversationScroller={{this.noop}}
           >
             <AiAssistantMessage
-              @messageHTML={{htmlSafe this.message}}
+              @messageHTML={{this.message}}
               @reasoningContent={{this.reasoningContent}}
               @datetime={{this.datetime}}
               @isFromAssistant={{this.isFromAssistant}}
               @index={{0}}
-              @eventId={{'123'}}
+              @eventId='123'
+              @roomId='!abcd'
               @registerScroller={{this.noop}}
               @profileAvatar={{component
                 Avatar
@@ -136,13 +136,12 @@ export default class AiAssistantMessageUsage extends Component {
             @registerConversationScroller={{this.noop}}
           >
             <AiAssistantMessage
-              @messageHTML={{htmlSafe
-                'Please copy edit this message to make it more human.'
-              }}
+              @messageHTML='Please copy edit this message to make it more human.'
               @datetime={{this.twoMinutesAgo}}
               @isFromAssistant={{false}}
               @index={{0}}
-              @eventId={{'124'}}
+              @eventId='124'
+              @roomId='!abcd'
               @registerScroller={{this.noop}}
               @monacoSDK={{this.noopMonacoSDK}}
               @profileAvatar={{component
@@ -153,11 +152,10 @@ export default class AiAssistantMessageUsage extends Component {
               @isStreaming={{false}}
             />
             <AiAssistantMessage
-              @messageHTML={{htmlSafe
-                'Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
-              }}
+              @messageHTML='Culpa fugiat ex ipsum commodo anim. Cillum reprehenderit eu consectetur laboris dolore in cupidatat. Deserunt ipsum voluptate sit velit aute ad velit exercitation sint. Velit esse velit est et amet labore velit nisi magna ea elit nostrud quis anim..'
               @index={{1}}
               @eventId={{'125'}}
+              @roomId='!abcd'
               @monacoSDK={{this.noopMonacoSDK}}
               @registerScroller={{this.noop}}
               @datetime={{this.oneMinutesAgo}}

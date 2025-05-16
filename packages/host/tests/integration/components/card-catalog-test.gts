@@ -103,7 +103,6 @@ module('Integration | card-catalog', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'blog-post.gts': { BlogPost },

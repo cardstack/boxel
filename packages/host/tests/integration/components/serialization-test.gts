@@ -103,7 +103,6 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -149,7 +148,6 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Item },
@@ -186,7 +184,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -246,7 +243,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -282,7 +278,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -322,7 +317,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -367,7 +361,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -428,7 +421,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { DriverCard },
@@ -474,7 +466,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { DriverCard },
@@ -503,7 +494,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -542,7 +532,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -609,7 +598,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -737,7 +725,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -831,7 +818,6 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet);
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -980,7 +966,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet },
@@ -1089,7 +1074,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet },
@@ -1158,7 +1142,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet },
@@ -1211,7 +1194,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -1328,7 +1310,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -1396,7 +1377,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -1441,7 +1421,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -1543,7 +1522,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -1668,7 +1646,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -1796,7 +1773,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -1908,7 +1884,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -1994,7 +1969,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -2030,7 +2004,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -2093,7 +2066,6 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -2153,7 +2125,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -2207,7 +2178,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Employee, Person, Post },
@@ -2282,7 +2252,6 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Post },
@@ -2337,7 +2306,6 @@ module('Integration | serialization', function (hooks) {
       });
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -2377,7 +2345,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -2470,7 +2437,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -2581,7 +2547,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -2629,7 +2594,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -2677,7 +2641,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -2738,7 +2701,6 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Schedule },
@@ -2794,7 +2756,6 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Appointment, Schedule },
@@ -2839,7 +2800,6 @@ module('Integration | serialization', function (hooks) {
       @field dates = containsMany(DateField);
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Schedule },
@@ -2869,7 +2829,6 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Appointment, Schedule },
@@ -2916,7 +2875,6 @@ module('Integration | serialization', function (hooks) {
       @field published = contains(DatetimeField);
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Post },
@@ -2982,7 +2940,6 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Animal, Person, Post },
@@ -3049,7 +3006,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Employee, Person, Post },
@@ -3145,7 +3101,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Employee, Person, Pet, Post },
@@ -3261,7 +3216,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Employee, Customer, Group },
@@ -3390,7 +3344,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Role, DogWalker, Employee, Group },
@@ -3501,7 +3454,6 @@ module('Integration | serialization', function (hooks) {
       @field pet = linksTo(Pet);
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet, Toy },
@@ -3596,7 +3548,6 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -3665,7 +3616,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -3751,7 +3701,6 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'blog.gts': { Blog },
@@ -3871,7 +3820,6 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Certificate, Person, Post, Blog },
@@ -4142,7 +4090,6 @@ module('Integration | serialization', function (hooks) {
       @field thumbnailURL = contains(StringField, { computeVia: () => null });
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -4207,7 +4154,6 @@ module('Integration | serialization', function (hooks) {
       };
     }
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person },
@@ -4241,7 +4187,6 @@ module('Integration | serialization', function (hooks) {
 
   test('can serialize a card that is constructed by another card (test realm)', async function (assert) {
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'Captain/mango.json': {
@@ -4307,7 +4252,6 @@ module('Integration | serialization', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'test-cards.gts': { Person, Pet },
@@ -4364,7 +4308,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -4460,7 +4403,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -4537,7 +4479,6 @@ module('Integration | serialization', function (hooks) {
         @field pets = linksToMany(Pet);
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -4692,7 +4633,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet, Toy },
@@ -4836,7 +4776,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -4898,7 +4837,6 @@ module('Integration | serialization', function (hooks) {
         @field pets = linksToMany(Pet);
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -4964,7 +4902,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person, Pet },
@@ -5120,7 +5057,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person },
@@ -5200,7 +5136,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Person },
@@ -5315,7 +5250,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -5431,7 +5365,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -5548,7 +5481,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -5598,7 +5530,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -5646,7 +5577,6 @@ module('Integration | serialization', function (hooks) {
         });
       }
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'test-cards.gts': { Friend, Person, Pet },
@@ -5780,7 +5710,6 @@ module('Integration | serialization', function (hooks) {
           @field infinity = contains(NumberField);
         }
         await setupIntegrationTestRealm({
-          loader,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -5838,7 +5767,6 @@ module('Integration | serialization', function (hooks) {
         }
 
         await setupIntegrationTestRealm({
-          loader,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -5883,7 +5811,6 @@ module('Integration | serialization', function (hooks) {
           @field someZeroString = contains(BigIntegerField);
         }
         await setupIntegrationTestRealm({
-          loader,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -5933,7 +5860,6 @@ module('Integration | serialization', function (hooks) {
         }
 
         await setupIntegrationTestRealm({
-          loader,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -5996,7 +5922,6 @@ module('Integration | serialization', function (hooks) {
           // });
         }
         await setupIntegrationTestRealm({
-          loader,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -6038,7 +5963,6 @@ module('Integration | serialization', function (hooks) {
           @field someNull = contains(EthereumAddressField);
         }
         await setupIntegrationTestRealm({
-          loader,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },
@@ -6093,7 +6017,6 @@ module('Integration | serialization', function (hooks) {
         }
 
         await setupIntegrationTestRealm({
-          loader,
           mockMatrixUtils,
           contents: {
             'test-cards.gts': { Sample },

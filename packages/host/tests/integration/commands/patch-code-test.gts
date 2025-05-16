@@ -7,7 +7,6 @@ import type CommandService from '@cardstack/host/services/command-service';
 import type RealmService from '@cardstack/host/services/realm';
 
 import {
-  lookupLoaderService,
   lookupService,
   testRealmURL,
   setupIntegrationTestRealm,
@@ -28,9 +27,7 @@ module('Integration | commands | patch-code', function (hooks) {
   const fileUrl = `${testRealmURL}${testFileName}`;
 
   hooks.beforeEach(async function () {
-    let loader = lookupLoaderService().loader;
     let { adapter } = await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         [testFileName]: `import {
