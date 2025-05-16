@@ -11,6 +11,7 @@ import {
 
 import { triggerEvent } from '@ember/test-helpers';
 
+import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 import stringify from 'safe-stable-stringify';
 
@@ -871,15 +872,15 @@ module('Acceptance | interact submode tests', function (hooks) {
       });
       id = id!;
 
-      let recentCards: string[] = JSON.parse(
+      let recentCards: { cardId: string; timestamp: number }[] = JSON.parse(
         window.localStorage.getItem(RecentCards) ?? '[]',
       );
       assert.ok(
-        recentCards.find((i) => i === id),
+        recentCards.find((c) => c.cardId === id),
         `the newly created card's remote id is in recent cards`,
       );
       assert.notOk(
-        recentCards.find((i) => isLocalId(i)),
+        recentCards.find((c) => isLocalId(c.cardId)),
         `no local ID's are in recent cards`,
       );
     });
