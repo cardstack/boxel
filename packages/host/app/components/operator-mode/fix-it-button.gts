@@ -47,7 +47,7 @@ export default class FixItButton extends Component<Signature> {
 
     await this.matrixService.sendMessage(
       this.matrixService.currentRoomId,
-      `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
+      `In the attached file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
       [],
       this.args.fileToAttach ? [this.args.fileToAttach] : [],
     );
