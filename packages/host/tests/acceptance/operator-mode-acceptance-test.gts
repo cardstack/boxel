@@ -28,9 +28,6 @@ import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
 
 import {
-  PlaygroundSelections,
-  RecentCards,
-  RecentFiles,
   ScrollPositions,
   SessionLocalStorageKey,
 } from '@cardstack/host/utils/local-storage-keys';
@@ -50,6 +47,16 @@ import {
   setupRealmServerEndpoints,
 } from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
+import {
+  getPlaygroundSelections,
+  setPlaygroundSelections,
+} from '../helpers/playground';
+import {
+  getRecentCards,
+  setRecentCards,
+  getRecentFiles,
+  setRecentFiles,
+} from '../helpers/recent-files-cards';
 import { setupApplicationTest } from '../helpers/setup';
 
 let matrixRoomId: string;
@@ -1218,45 +1225,27 @@ module('Acceptance | operator mode tests', function (hooks) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
       });
-      window.localStorage.setItem(
-        RecentCards,
-        JSON.stringify(`${testRealmURL}Pet/mango.json`),
-      );
-      window.localStorage.setItem(
-        RecentFiles,
-        JSON.stringify([
-          [
-            testRealmURL,
-            'Pet/mango.json',
-            {
-              line: 1,
-              column: 2,
-            },
-          ],
-        ]),
-      );
+      setRecentCards([[`${testRealmURL}Pet/mango.json`, Date.now()]]);
+      setRecentFiles([
+        [testRealmURL, 'Pet/mango.json', { line: 1, column: 2 }, Date.now()],
+      ]);
+      setPlaygroundSelections({
+        [`${testRealmURL}Pet/mango.json`]: {
+          cardId: `${testRealmURL}Pet/mango.json`,
+          format: 'edit',
+        },
+      });
       window.localStorage.setItem(
         ScrollPositions,
         JSON.stringify({ 'file-tree': [`${testRealmURL}Pet/mango.json`, 2] }),
       );
-      window.localStorage.setItem(
-        PlaygroundSelections,
-        JSON.stringify({
-          [`${testRealmURL}Pet/mango.json`]: {
-            cardId: `${testRealmURL}Pet/mango.json`,
-            format: 'edit',
-          },
-        }),
-      );
+
       await click('[data-test-profile-icon-button]');
       await click('[data-test-signout-button]');
-      assert.strictEqual(window.localStorage.getItem(RecentCards), null);
-      assert.strictEqual(window.localStorage.getItem(RecentFiles), null);
+      assert.strictEqual(getRecentCards(), null);
+      assert.strictEqual(getRecentFiles(), null);
       assert.strictEqual(window.localStorage.getItem(ScrollPositions), null);
-      assert.strictEqual(
-        window.localStorage.getItem(PlaygroundSelections),
-        null,
-      );
+      assert.strictEqual(getPlaygroundSelections(), null);
 
       assert.dom('[data-test-login-btn]').exists();
     });

@@ -165,6 +165,7 @@ interface Signature {
     createNewIsRunning?: boolean;
     moduleId: string;
     persistSelections?: (cardId: string, format: Format) => void;
+    recentCardIds: string[];
   };
 }
 
@@ -270,15 +271,17 @@ export default class InstanceSelectDropdown extends Component<Signature> {
         </:loading>
         <:response as |cards|>
           {{#if (this.showResults cards)}}
-            <OptionsDropdown
-              @options={{cards}}
-              @selected={{this.findSelectedCard cards}}
-              @selection={{@selection}}
-              @onSelect={{@onSelect}}
-              @chooseCard={{@chooseCard}}
-              @createNew={{@createNew}}
-              @createNewIsRunning={{@createNewIsRunning}}
-            />
+            {{#let (this.getSortedCards cards) as |sortedCards|}}
+              <OptionsDropdown
+                @options={{sortedCards}}
+                @selected={{this.findSelectedCard sortedCards}}
+                @selection={{@selection}}
+                @onSelect={{@onSelect}}
+                @chooseCard={{@chooseCard}}
+                @createNew={{@createNew}}
+                @createNewIsRunning={{@createNewIsRunning}}
+              />
+            {{/let}}
           {{else if @expandedSearchQuery.query}}
             <PrerenderedCardSearch
               @query={{@expandedSearchQuery.query}}
@@ -342,6 +345,21 @@ export default class InstanceSelectDropdown extends Component<Signature> {
       this.args.createNewIsRunning ||
       this.isBaseCardModule // means we do not conduct the expanded search for baseCardModule
     );
+  };
+
+  // sort prerendered-search card results by most recently viewed
+  private getSortedCards = (cards: PrerenderedCard[]) => {
+    if (!this.args.recentCardIds?.length) {
+      return;
+    }
+    let sortedCards: PrerenderedCard[] = [];
+    for (let id of this.args.recentCardIds) {
+      let card = cards.find((c) => trimJsonExtension(c.url) === id);
+      if (card) {
+        sortedCards.push(card);
+      }
+    }
+    return sortedCards;
   };
 
   private get persistedCardId() {

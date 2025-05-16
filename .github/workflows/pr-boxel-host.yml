@@ -1,4 +1,4 @@
-name: CI [boxel-host]
+name: CI Preview Host
 
 on:
   pull_request:

@@ -2,6 +2,7 @@ import {
   type RenderingTestContext,
   waitUntil,
   waitFor,
+  typeIn,
 } from '@ember/test-helpers';
 
 import GlimmerComponent from '@glimmer/component';
@@ -15,6 +16,7 @@ import {
   localId,
   baseCardRef,
   realmURL,
+  Deferred,
   type Loader,
   type Realm,
   type SingleCardDocument,
@@ -28,6 +30,7 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 import { getSearch } from '@cardstack/host/resources/search';
 import type LoaderService from '@cardstack/host/services/loader-service';
+import type MessageService from '@cardstack/host/services/message-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type StoreService from '@cardstack/host/services/store';
@@ -35,6 +38,7 @@ import { type CardErrorJSONAPI } from '@cardstack/host/services/store';
 
 import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 import type * as CardAPI from 'https://cardstack.com/base/card-api';
+import type { RealmEventContent } from 'https://cardstack.com/base/matrix-event';
 
 import {
   lookupLoaderService,
@@ -45,6 +49,7 @@ import {
   setupCardLogs,
   setupIntegrationTestRealm,
   type TestContextWithSave,
+  withSlowSave,
 } from '../helpers';
 import { TestRealmAdapter } from '../helpers/adapter';
 import {
@@ -775,6 +780,60 @@ module('Integration | Store', function (hooks) {
     (instance as any).name = 'Air';
   });
 
+  test<TestContextWithSave>('an instance can debounce auto saves', async function (assert) {
+    assert.expect(5);
+
+    setCardInOperatorModeState(`${testRealmURL}Person/hassan`, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let saveCount = 0;
+    this.onSave((url, doc) => {
+      saveCount++;
+      assert.strictEqual(
+        url.href,
+        `${testRealmURL}Person/hassan`,
+        'correct document is saved',
+      );
+      switch (saveCount) {
+        case 1:
+          assert.strictEqual(
+            (doc as SingleCardDocument).data?.attributes?.name,
+            'Hassan ',
+            'the initial instance mutation event is saved',
+          );
+          break;
+        case 2:
+          assert.strictEqual(
+            (doc as SingleCardDocument).data?.attributes?.name,
+            'Hassan Paper',
+            'the final instance mutation event is saved',
+          );
+          break;
+        default:
+          assert.ok(false, `unexpected number of saves: ${saveCount}`);
+      }
+    });
+
+    // slow down the save so we can get deterministic results
+    await withSlowSave(1000, async () => {
+      // typeIn will fire an event for each character, which in turn results in multiple instance updated events
+      await typeIn(
+        `[data-test-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"] input`,
+        ' Paper',
+      );
+
+      // the leading edge and trailing edge of the key events are saved and the intermediate events are dropped
+      assert.strictEqual(saveCount, 2, 'the number of auto-saves is correct');
+    });
+  });
+
   test<TestContextWithSave>('getSaveState works for initially unsaved instance', async function (assert) {
     let instance = new PersonDef({ name: 'Andrea' });
     await store.add(instance, { doNotPersist: true });
@@ -1250,6 +1309,44 @@ module('Integration | Store', function (hooks) {
     );
   });
 
+  test<TestContextWithSave>('reference count is balanced during auto saving', async function (assert) {
+    let hassan = `${testRealmURL}Person/hassan`;
+
+    setCardInOperatorModeState(hassan, 'edit');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+    // slow down the save so we can get deterministic results
+    await withSlowSave(1000, async () => {
+      // typeIn will fire an event for each character, which in turn results in multiple instance updated events
+      await typeIn(
+        `[data-test-stack-card="${testRealmURL}Person/hassan"] [data-test-field="name"] input`,
+        ' Paper',
+      );
+      assert.strictEqual(
+        store.getReferenceCount(hassan),
+        1,
+        `reference count for ${hassan} is 1`,
+      );
+    });
+    assert.strictEqual(
+      store.getReferenceCount(hassan),
+      1,
+      `reference count for ${hassan} is 1`,
+    );
+  });
+
   test('reference count is balanced when used with CardCollectionResource that is destroyed', async function (assert) {
     class Driver {
       @tracked showComponent = false;
@@ -1414,6 +1511,303 @@ module('Integration | Store', function (hooks) {
       store.getReferenceCount(hassan),
       0,
       `reference count for ${hassan} is 0`,
+    );
+  });
+
+  test('reference count is balanced when used with SearchResource that live updates when there is a index event', async function (assert) {
+    class Driver {
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getSearch(
+        this,
+        () =>
+          driver.id
+            ? {
+                filter: {
+                  on: baseCardRef,
+                  eq: {
+                    id: driver.id,
+                  },
+                },
+              }
+            : undefined,
+        undefined,
+        { isLive: true },
+      );
+      get card() {
+        return this.resource.instances[0];
+      }
+      get renderedCard() {
+        return this.card?.constructor.getComponent(this.card);
+      }
+      <template>
+        {{#if this.card}}
+          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <ResourceConsumer />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let jade = `${testRealmURL}Person/jade`;
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+
+    let deferred = new Deferred<void>();
+    lookupService<MessageService>('message-service')
+      .listenerCallbacks.get(testRealmURL)!
+      .push((ev: RealmEventContent) => {
+        if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          deferred.fulfill();
+        }
+      });
+
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Paper',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await deferred.promise;
+    deferred = new Deferred();
+
+    // for CS-8632, 2 events triggered the reference count leak
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Paper',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+  });
+
+  test('reference count is balanced when used with CardCollectionResource when there is a index event', async function (assert) {
+    class Driver {
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCardCollection(this, () => (driver.id ? [driver.id] : []));
+      get card() {
+        return this.resource.cards[0];
+      }
+      get renderedCard() {
+        return this.card?.constructor.getComponent(this.card);
+      }
+      <template>
+        {{#if this.card}}
+          <this.renderedCard data-test-rendered-card={{this.card.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <ResourceConsumer />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let jade = `${testRealmURL}Person/jade`;
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+
+    let deferred = new Deferred<void>();
+    lookupService<MessageService>('message-service')
+      .listenerCallbacks.get(testRealmURL)!
+      .push((ev: RealmEventContent) => {
+        if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          deferred.fulfill();
+        }
+      });
+
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Paper',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await deferred.promise;
+    deferred = new Deferred();
+
+    // for CS-8632, 2 events triggered the reference count leak
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Paper',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+  });
+
+  test('reference count is balanced when used with CardResource when there is a index event', async function (assert) {
+    class Driver {
+      @tracked id: string | undefined;
+    }
+
+    let driver = new Driver();
+
+    class ResourceConsumer extends GlimmerComponent {
+      resource = getCard(this, () => driver.id);
+      get renderedCard() {
+        return this.resource.card?.constructor.getComponent(this.resource.card);
+      }
+      <template>
+        {{#if this.resource.card}}
+          <this.renderedCard data-test-rendered-card={{this.resource.id}} />
+        {{/if}}
+      </template>
+    }
+
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <ResourceConsumer />
+          <CardPrerender />
+        </template>
+      },
+    );
+
+    let jade = `${testRealmURL}Person/jade`;
+
+    driver.id = jade;
+    await waitFor(`[data-test-rendered-card="${jade}"]`, { timeout: 5_000 });
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
+    );
+
+    let deferred = new Deferred<void>();
+    lookupService<MessageService>('message-service')
+      .listenerCallbacks.get(testRealmURL)!
+      .push((ev: RealmEventContent) => {
+        if (ev.eventName === 'index' && ev.indexType === 'incremental') {
+          deferred.fulfill();
+        }
+      });
+
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Paper',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    await deferred.promise;
+    deferred = new Deferred();
+
+    // for CS-8632, 2 events triggered the reference count leak
+    await testRealm.write(
+      'Person/hassan.json',
+      JSON.stringify({
+        data: {
+          attributes: {
+            name: 'Paper',
+          },
+          meta: {
+            adoptsFrom: {
+              module: `${testRealmURL}person`,
+              name: 'Person',
+            },
+          },
+        },
+      } as LooseSingleCardDocument),
+    );
+
+    assert.strictEqual(
+      store.getReferenceCount(jade),
+      1,
+      `reference count for ${jade} is 1`,
     );
   });
 });
