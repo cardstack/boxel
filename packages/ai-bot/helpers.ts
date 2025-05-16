@@ -721,6 +721,12 @@ export async function getModifyPrompt(
     aiBotUserId,
   );
 
+  let lastMessageEventByUser = history.findLast(
+    (event) => event.sender !== aiBotUserId,
+  );
+
+  let realmUrl = lastMessageEventByUser?.content.data?.context?.realmUrl;
+
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:
 
@@ -728,6 +734,8 @@ Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
 
 Attached files:
 ${attachedFilesToPrompt(attachedFiles)}
+
+The user is operating in a realm with this URL: ${realmUrl}
 `;
 
   if (skillCards.length) {

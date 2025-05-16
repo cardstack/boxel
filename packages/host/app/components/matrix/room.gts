@@ -763,6 +763,7 @@ export default class Room extends Component<Signature> {
       let context = {
         submode: this.operatorModeStateService.state.submode,
         openCardIds: this.makeRemoteIdsList([...openCardIds]),
+        realmUrl: this.operatorModeStateService.realmURL.href,
       };
       try {
         if (files?.length) {
