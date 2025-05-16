@@ -369,7 +369,7 @@ const brokenSource = 'some text to make the code broken' + friendCardSource;
 
 const brokenCountryCardSource = countryCardSource.replace(
   'return this.name',
-  'return formatName(this.name)',
+  'return intentionalError(this.name)',
 );
 
 const brokenAdoptionInstance = `{
@@ -891,7 +891,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert
         .dom('[data-test-error-detail]')
         .includesText(
-          'Encountered error rendering HTML for card: formatName is not defined',
+          'Encountered error rendering HTML for card: intentionalError is not defined',
         );
 
       await percySnapshot(assert);
