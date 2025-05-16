@@ -40,6 +40,7 @@ export function extractCodeData(
   // Decode HTML entities to handle special characters like < and >
   content = unescapeHtml(content);
   let parsedContent = parseSearchReplace(content);
+  tempContainer.remove();
 
   // Transform the incomplete search/replace block into a format for streaming,
   // so that the user can see the search replace block in a human friendly format.
@@ -47,47 +48,58 @@ export function extractCodeData(
   // SEARCH BLOCK
   // // new code ...
   // REPLACE BLOCK
-  let adjustedContentForStreamedContentInMonacoEditor = '';
+  let adjustedCodeForStreamingSearchAndReplaceBlock = '';
   if (parsedContent.searchContent) {
     // get count of leading spaces in the first line of searchContent
     let firstLine = parsedContent.searchContent.split('\n')[0];
     let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
     let emptyString = ' '.repeat(leadingSpaces);
-    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${parsedContent.searchContent.replace(
+    adjustedCodeForStreamingSearchAndReplaceBlock = `// existing code ... \n\n${parsedContent.searchContent.replace(
       new RegExp(emptyString, 'g'),
       '',
     )}`;
 
     if (parsedContent.replaceContent) {
-      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
+      adjustedCodeForStreamingSearchAndReplaceBlock += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
         new RegExp(emptyString, 'g'),
         '',
       )}`;
     }
   }
 
-  const lines = content.split('\n');
+  let lines = content.split('\n');
 
-  let fileUrl: string | null = null;
-  const fileUrlIndex = lines.findIndex((line) =>
-    line.startsWith('// File url: '),
-  );
-  if (fileUrlIndex !== -1) {
-    fileUrl = lines[fileUrlIndex].substring('// File url: '.length).trim();
+  let fileUrl: string | undefined = undefined;
+  let isBeginningOfSearchReplaceBlock =
+    lines.length > 1 && lines[1].startsWith('<<<<<<<');
+
+  if (isBeginningOfSearchReplaceBlock) {
+    fileUrl = lines[0];
   }
 
-  let contentWithoutFileUrl;
-  if (fileUrl) {
-    contentWithoutFileUrl = lines.slice(fileUrlIndex + 1).join('\n');
+  let firstLineIsUrl = lines.length == 1 && lines[0].startsWith('http');
+
+  let codeToDisplay = '';
+  if (
+    firstLineIsUrl ||
+    (isBeginningOfSearchReplaceBlock && !parsedContent.searchContent)
+  ) {
+    codeToDisplay = parsedContent.replaceContent || '';
+  } else {
+    codeToDisplay =
+      adjustedCodeForStreamingSearchAndReplaceBlock ||
+      parsedContent.replaceContent ||
+      content;
   }
 
-  tempContainer.remove();
+  let contentWithoutFirstLine = content.slice(lines[0].length).trimStart();
+
   return {
     language: language ?? '',
-    code: adjustedContentForStreamedContentInMonacoEditor || content,
-    fileUrl,
-    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
-      ? contentWithoutFileUrl
+    code: codeToDisplay,
+    fileUrl: fileUrl ?? null,
+    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFirstLine)
+      ? contentWithoutFirstLine
       : null,
     roomId,
     eventId,

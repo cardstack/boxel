@@ -39,7 +39,10 @@ module('Integration | Component | FormattedAiBotMessage', function (hooks) {
     cardService = this.owner.lookup('service:card-service') as CardService;
 
     cardService.getSource = async () => {
-      return Promise.resolve('let a = 1;\nlet b = 2;');
+      return Promise.resolve({
+        status: 200,
+        content: 'let a = 1;\nlet b = 2;',
+      });
     };
   });
 
@@ -180,7 +183,7 @@ puts "💎"
       htmlParts: parseHtmlContent(
         `
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 let b = 2;
@@ -215,7 +218,7 @@ let a = 3;
       htmlParts: parseHtmlContent(
         `
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 let b = 2;
@@ -225,7 +228,7 @@ let a = 3;
 </pre>
 <p>the above block is now complete, now I am sending you another one:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 let c = 3;
@@ -250,7 +253,7 @@ let c = 3;
       htmlParts: parseHtmlContent(
         `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======
@@ -259,7 +262,7 @@ let a = 2;
 </pre>
 <p>We need to fix this too:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let c = 1;
 =======
@@ -281,7 +284,7 @@ let c = 2;
       htmlParts: parseHtmlContent(
         `<p>We need to fix this:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======
@@ -290,7 +293,7 @@ let a = 2;
 </pre>
 <p>We need to fix this too:</p>
 <pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let c = 1;
 =======
@@ -393,7 +396,7 @@ let c = 2;
     component.isStreaming = true;
     component.htmlParts = parseHtmlContent(
       `<pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======
@@ -413,7 +416,7 @@ let a = 2;`,
     );
     component.htmlParts = parseHtmlContent(
       `<pre data-code-language="typescript">
-// File url: https://example.com/file.ts
+https://example.com/file.ts
 <<<<<<< SEARCH
 let a = 1;
 =======

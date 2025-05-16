@@ -76,9 +76,9 @@ module(
         },
         fieldType: 'contains',
       });
-      let response = await cardService.getSource(
-        new URL('person.gts', testRealmURL),
-      );
+      let response = (
+        await cardService.getSource(new URL('person.gts', testRealmURL))
+      ).content;
       assert.strictEqual(
         response,
         `
@@ -124,9 +124,9 @@ module(
           }`,
       });
 
-      let response = await cardService.getSource(
-        new URL('person.gts', testRealmURL),
-      );
+      let response = (
+        await cardService.getSource(new URL('person.gts', testRealmURL))
+      ).content;
       assert.strictEqual(
         response,
         `

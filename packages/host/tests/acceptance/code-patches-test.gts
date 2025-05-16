@@ -74,7 +74,7 @@ module('Acceptance | Code patches tests', function (hooks) {
     let roomId = getRoomIds().pop()!;
 
     let codeBlock = `\`\`\`
-// File url: http://test-realm/test/hello.txt
+http://test-realm/test/hello.txt
 <<<<<<< SEARCH
 Hello, world!
 =======
@@ -119,7 +119,7 @@ Hi, world!
     // 3. hi.txt: How are you? -> We are one!
 
     let codeBlock = `\`\`\`
-// File url: http://test-realm/test/hello.txt
+http://test-realm/test/hello.txt
 <<<<<<< SEARCH
 Hello, world!
 =======
@@ -130,7 +130,7 @@ Hi, world!
 I will also update the second file per your request.
 
  \`\`\`
-// File url: http://test-realm/test/hi.txt
+http://test-realm/test/hi.txt
 <<<<<<< SEARCH
 Hi, world!
 =======
@@ -139,7 +139,7 @@ Greetings, world!
 \`\`\`
 
 \`\`\`
-// File url: http://test-realm/test/hi.txt
+http://test-realm/test/hi.txt
 <<<<<<< SEARCH
 How are you?
 =======
@@ -205,7 +205,7 @@ We are one!
     // 3. hi.txt: How are you? -> We are one!
 
     let codeBlock = `\`\`\`
-// File url: http://test-realm/test/hello.txt
+http://test-realm/test/hello.txt
 <<<<<<< SEARCH
 Hello, world!
 =======
@@ -214,7 +214,7 @@ Hi, world!
 \`\`\`
 
  \`\`\`
-// File url: http://test-realm/test/hi.txt
+http://test-realm/test/hi.txt
 <<<<<<< SEARCH
 Hi, world!
 =======
@@ -225,7 +225,7 @@ Greetings, world!
 I will also update the second file per your request.
 
 \`\`\`
-// File url: http://test-realm/test/hi.txt
+http://test-realm/test/hi.txt
 <<<<<<< SEARCH
 How are you?
 =======

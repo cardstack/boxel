@@ -158,7 +158,10 @@ export default class CardService extends Service {
         Accept: 'application/vnd.card+source',
       },
     });
-    return response.text();
+    return {
+      status: response.status,
+      content: await response.text(),
+    };
   }
 
   async saveSource(url: URL, content: string, type: string) {
