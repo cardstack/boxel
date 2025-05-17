@@ -1,5 +1,6 @@
 import { fillIn, RenderingTestContext } from '@ember/test-helpers';
 
+import formatISO from 'date-fns/formatISO';
 import parseISO from 'date-fns/parseISO';
 
 import { isAddress } from 'ethers';
@@ -314,6 +315,14 @@ module('Integration | serialization', function (hooks) {
   test('can update an instance from serialized data', async function (assert) {
     class Person extends CardDef {
       @field firstName = contains(StringField);
+      @field nickName = contains(StringField, {
+        computeVia: function (this: Person) {
+          if (!this.firstName) {
+            return;
+          }
+          return this.firstName + '-poo';
+        },
+      });
     }
 
     await setupIntegrationTestRealm({
@@ -353,6 +362,11 @@ module('Integration | serialization', function (hooks) {
       'ID can be updated for unsaved instance',
     );
     assert.strictEqual(card.firstName, 'Van Gogh', 'the field can be updated');
+    assert.strictEqual(
+      card.nickName,
+      'Van Gogh-poo',
+      'the computed field is recomputed',
+    );
   });
 
   test('throws when updating the id of a saved instance from serialized data', async function (assert) {
@@ -2319,6 +2333,90 @@ module('Integration | serialization', function (hooks) {
     assert.strictEqual(serialized.data.attributes?.firstBirthday, '2020-10-30');
   });
 
+  test('can deserialize a computed field', async function (assert) {
+    class Person extends CardDef {
+      @field birthdate = contains(DateField);
+      @field firstBirthday = contains(DateField, {
+        computeVia: function (this: Person) {
+          return new Date(
+            this.birthdate.getFullYear() + 1,
+            this.birthdate.getMonth(),
+            this.birthdate.getDate(),
+          );
+        },
+      });
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person },
+      },
+    });
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: { birthdate: '2019-10-30' },
+        meta: {
+          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+        },
+      },
+    };
+    let instance = await createFromSerialized<typeof Person>(
+      doc.data,
+      doc,
+      undefined,
+    );
+
+    assert.ok(instance instanceof Person, 'card is an instance of person');
+    assert.strictEqual(
+      formatISO(instance.firstBirthday).split('T').shift()!,
+      '2020-10-30',
+      'the computed value is correct',
+    );
+  });
+
+  test('cannot stomp on top of computed field with serialized data', async function (assert) {
+    class Person extends CardDef {
+      @field birthdate = contains(DateField);
+      @field firstBirthday = contains(DateField, {
+        computeVia: function (this: Person) {
+          return new Date(
+            this.birthdate.getFullYear() + 1,
+            this.birthdate.getMonth(),
+            this.birthdate.getDate(),
+          );
+        },
+      });
+    }
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Person },
+      },
+    });
+    let doc: LooseSingleCardDocument = {
+      data: {
+        type: 'card',
+        attributes: { birthdate: '2019-10-30', firstBirthday: '1984-01-01' },
+        meta: {
+          adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
+        },
+      },
+    };
+    let instance = await createFromSerialized<typeof Person>(
+      doc.data,
+      doc,
+      undefined,
+    );
+
+    assert.ok(instance instanceof Person, 'card is an instance of person');
+    assert.strictEqual(
+      formatISO(instance.firstBirthday).split('T').shift()!,
+      '2020-10-30',
+      'the computed value is correct',
+    );
+  });
+
   module('computed linksTo', function () {
     test('can serialize a computed linksTo field', async function (assert) {
       class Pet extends CardDef {
@@ -2653,7 +2751,6 @@ module('Integration | serialization', function (hooks) {
           relationships: {
             pet: { links: { self: null } },
             friend: { links: { self: `${testRealmURL}Person/hassan` } },
-            friendPet: { links: { self: `${testRealmURL}Pet/mango` } },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -2672,8 +2769,8 @@ module('Integration | serialization', function (hooks) {
       } catch (err: any) {
         assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
         assert.strictEqual(
-          `The field Person.friendPet refers to the card instance ${testRealmURL}Pet/mango which is not loaded`,
           err.message,
+          `The field Person.friendPet refers to the card instance ${testRealmURL}Person/hassan which is not loaded`,
           'NotLoaded error describes field not loaded',
         );
       }
@@ -2686,7 +2783,7 @@ module('Integration | serialization', function (hooks) {
       let friendPetRel = relationshipMeta(card, 'friendPet');
       assert.deepEqual(friendPetRel, {
         type: 'not-loaded',
-        reference: `${testRealmURL}Pet/mango`,
+        reference: `${testRealmURL}Person/hassan`,
       });
     });
   });
@@ -4966,7 +5063,7 @@ module('Integration | serialization', function (hooks) {
         assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
         assert.strictEqual(
           err.message,
-          `The field Person.pets refers to the card instance ${testRealmURL}Pet/vanGogh which is not loaded`,
+          `The field Person.pets refers to the card instances in array ["${testRealmURL}Pet/vanGogh"] which are not loaded`,
         );
       }
 
@@ -5541,7 +5638,6 @@ module('Integration | serialization', function (hooks) {
           attributes: { firstName: 'Burcu', title: null },
           relationships: {
             friend: { links: { self: null } },
-            friendPets: { links: { self: null } },
           },
           meta: {
             adoptsFrom: { module: `${testRealmURL}test-cards`, name: 'Person' },
@@ -5570,6 +5666,7 @@ module('Integration | serialization', function (hooks) {
       class Person extends CardDef {
         @field firstName = contains(StringField);
         @field friend = linksTo(Friend);
+        @field ownPets = linksToMany(Pet);
         @field friendPets = linksToMany(Pet, {
           computeVia: function (this: Person) {
             return this.friend?.pets;
@@ -5588,14 +5685,14 @@ module('Integration | serialization', function (hooks) {
           attributes: { firstName: 'Burcu' },
           relationships: {
             friend: { links: { self: `${testRealmURL}Friend/hassan` } },
-            'friendPets.0': {
+            'ownPets.0': {
               links: { self: `${testRealmURL}Pet/mango` },
               data: {
                 id: `${testRealmURL}Pet/mango`,
                 type: 'card',
               },
             },
-            'friendPets.1': {
+            'ownPets.1': {
               links: { self: `${testRealmURL}Pet/vanGogh` },
               data: {
                 id: `${testRealmURL}Pet/vanGogh`,
@@ -5643,12 +5740,24 @@ module('Integration | serialization', function (hooks) {
         assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
         assert.strictEqual(
           err.message,
-          `The field Person.friendPets refers to the card instance ${testRealmURL}Pet/vanGogh which is not loaded`,
+          `The field Person.friendPets refers to the card instance ${testRealmURL}Friend/hassan which is not loaded`,
           'NotLoaded error describes field not loaded',
         );
       }
 
-      let relationships = relationshipMeta(card, 'friendPets');
+      try {
+        card.ownPets;
+        throw new Error(`expected error not thrown`);
+      } catch (err: any) {
+        assert.ok(err instanceof NotLoaded, 'NotLoaded error thrown');
+        assert.strictEqual(
+          err.message,
+          `The field Person.ownPets refers to the card instances in array ["${testRealmURL}Pet/vanGogh"] which are not loaded`,
+          'NotLoaded error describes field not loaded',
+        );
+      }
+
+      let relationships = relationshipMeta(card, 'ownPets');
       if (!Array.isArray(relationships)) {
         assert.ok(false, 'relationshipMeta should be an array');
       } else {
@@ -5677,11 +5786,11 @@ module('Integration | serialization', function (hooks) {
       });
       assert.deepEqual(serialized.data.relationships, {
         friend: { links: { self: `${testRealmURL}Friend/hassan` } },
-        'friendPets.0': {
+        'ownPets.0': {
           links: { self: `${testRealmURL}Pet/mango` },
           data: { type: 'card', id: `${testRealmURL}Pet/mango` },
         },
-        'friendPets.1': {
+        'ownPets.1': {
           links: { self: `${testRealmURL}Pet/vanGogh` },
           data: { type: 'card', id: `${testRealmURL}Pet/vanGogh` },
         },

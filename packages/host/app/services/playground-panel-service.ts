@@ -66,6 +66,21 @@ export default class PlaygroundPanelService extends Service {
     }
   };
 
+  private get resolvedSelections(): Record<string, PlaygroundSelection> {
+    return Object.fromEntries(
+      Object.entries(this.playgroundSelections).flatMap(([id, selections]) => {
+        if (!isLocalId(id)) {
+          return [[id, selections]];
+        }
+        let instance = this.store.peek(id);
+        if (isCardInstance(instance) && instance.id) {
+          return [[instance.id, selections]];
+        }
+        return [];
+      }),
+    );
+  }
+
   private storeWhenIdAssignedTask = task(
     async (
       moduleId: string,
@@ -100,11 +115,8 @@ export default class PlaygroundPanelService extends Service {
   private promoteToRemoteIdTask = task(async (instance: CardDef) => {
     let selections = this.selectionsForNewInstances.get(instance[localId]);
     if (selections) {
-      let { moduleId, format, fieldIndex } = selections;
       this.selectionsForNewInstances.delete(instance[localId]);
-      schedule('afterRender', () =>
-        this.persistSelections(moduleId, instance.id, format, fieldIndex),
-      );
+      schedule('afterRender', () => this.setStorage());
     }
     let api = await this.cardService.getAPI();
     api.unsubscribeFromChanges(instance, this.listenForCardId);
@@ -113,7 +125,7 @@ export default class PlaygroundPanelService extends Service {
   setStorage = () => {
     window.localStorage.setItem(
       PlaygroundSelections,
-      JSON.stringify(this.playgroundSelections),
+      JSON.stringify(this.resolvedSelections),
     );
   };
 
@@ -123,7 +135,7 @@ export default class PlaygroundPanelService extends Service {
 
   removeSelectionsByCardId = (cardId: string) => {
     let foundItems = Object.entries(this.playgroundSelections).filter(
-      ([_key, val]) => val.cardId === cardId,
+      ([_key, val]) => this.store.isSameId(val.cardId, cardId),
     );
     if (foundItems.length) {
       foundItems.map((item) => delete this.playgroundSelections[item[0]]);

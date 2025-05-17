@@ -16,7 +16,7 @@ export class NotLoaded extends Error {
         `The field '${fieldName} does not exist in card ${card.name}'`,
       );
     }
-    if (field.fieldType === 'linksToMany' && reference.length > 1) {
+    if (Array.isArray(reference)) {
       message = `The field ${
         instance.constructor.name
       }.${fieldName} refers to the card instances in array ${JSON.stringify(

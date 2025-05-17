@@ -924,7 +924,7 @@ export class Spec extends CardDef {
       if (!this.ref || !this.ref.module) {
         return undefined;
       }
-      return new URL(this.ref.module, this[relativeTo]).href;
+      return new URL(this.ref.module, this.id ?? this[relativeTo]).href;
     },
   });
   @field linkedExamples = linksToMany(CardDef);
