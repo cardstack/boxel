@@ -470,20 +470,8 @@ class ContainsMany<FieldT extends FieldDefConstructor>
     cardTracking.get(instance);
     let maybeNotLoaded = deserialized.get(this.name);
     // a not loaded error can blow up thru a computed containsMany field that consumes a link
-    if (maybeNotLoaded) {
-      if (isNotLoadedValue(maybeNotLoaded)) {
-        throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
-      }
-
-      let notLoadedRefs: string[] = [];
-      for (let entry of maybeNotLoaded) {
-        if (isNotLoadedValue(entry)) {
-          notLoadedRefs = [...notLoadedRefs, entry.reference];
-        }
-      }
-      if (notLoadedRefs.length > 0) {
-        throw new NotLoaded(instance, notLoadedRefs, this.name);
-      }
+    if (isNotLoadedValue(maybeNotLoaded)) {
+      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
     }
     return getter(instance, this);
   }
