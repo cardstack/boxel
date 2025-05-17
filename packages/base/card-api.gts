@@ -2940,7 +2940,17 @@ function setField(instance: BaseDef, field: Field, value: any) {
   let deserialized = getDataBucket(instance);
   deserialized.set(field.name, value);
   // invalidate all computed fields because we don't know which ones depend on this one
-  markAllComputedsStale(instance);
+  for (let computedFieldName of Object.keys(getComputedFields(instance))) {
+    if (deserialized.has(computedFieldName)) {
+      let currentValue = deserialized.get(computedFieldName);
+      if (!isStaleValue(currentValue)) {
+        deserialized.set(computedFieldName, {
+          type: 'stale',
+          staleValue: currentValue,
+        } as StaleValue);
+      }
+    }
+  }
   notifySubscribers(instance, field.name, value);
   logger.log(recompute(instance));
 }
