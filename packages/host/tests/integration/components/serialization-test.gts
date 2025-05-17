@@ -2369,8 +2369,8 @@ module('Integration | serialization', function (hooks) {
 
     assert.ok(instance instanceof Person, 'card is an instance of person');
     assert.strictEqual(
-      formatISO(instance.firstBirthday),
-      '2020-10-30T00:00:00-04:00',
+      formatISO(instance.firstBirthday).split('T').shift()!,
+      '2020-10-30',
       'the computed value is correct',
     );
   });

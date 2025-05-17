@@ -466,6 +466,25 @@ class ContainsMany<FieldT extends FieldDefConstructor>
   }
 
   getter(instance: BaseDef): BaseInstanceType<FieldT> {
+    let deserialized = getDataBucket(instance);
+    cardTracking.get(instance);
+    let maybeNotLoaded = deserialized.get(this.name);
+    // a not loaded error can blow up thru a computed containsMany field that consumes a link
+    if (maybeNotLoaded) {
+      if (isNotLoadedValue(maybeNotLoaded)) {
+        throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+      }
+
+      let notLoadedRefs: string[] = [];
+      for (let entry of maybeNotLoaded) {
+        if (isNotLoadedValue(entry)) {
+          notLoadedRefs = [...notLoadedRefs, entry.reference];
+        }
+      }
+      if (notLoadedRefs.length > 0) {
+        throw new NotLoaded(instance, notLoadedRefs, this.name);
+      }
+    }
     return getter(instance, this);
   }
 
@@ -722,6 +741,13 @@ class Contains<CardT extends FieldDefConstructor> implements Field<CardT, any> {
   }
 
   getter(instance: BaseDef): BaseInstanceType<CardT> {
+    let deserialized = getDataBucket(instance);
+    cardTracking.get(instance);
+    let maybeNotLoaded = deserialized.get(this.name);
+    // a not loaded error can blow up thru a computed contains field that consumes a link
+    if (isNotLoadedValue(maybeNotLoaded)) {
+      throw new NotLoaded(instance, maybeNotLoaded.reference, this.name);
+    }
     return getter(instance, this);
   }
 
@@ -3116,10 +3142,7 @@ export async function getIfReady<T extends BaseDef, K extends keyof T>(
       }'`,
     );
   }
-  if (
-    field.computeVia &&
-    (isStaleValue(maybeStale) || !deserialized.has(fieldName as string))
-  ) {
+  if (field.computeVia) {
     let { computeVia: _computeVia } = field;
     if (!_computeVia) {
       throw new Error(
