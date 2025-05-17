@@ -462,6 +462,7 @@ export interface CatalogActions {
   allRealmsInfo: () => Promise<
     Record<string, { canWrite: boolean; info: RealmInfo }>
   >;
+  fetchCard: (url: string) => Promise<CardDef | CardErrorJSONAPI>;
 }
 
 export type Actions = CardActions & CatalogActions;

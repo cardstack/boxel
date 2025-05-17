@@ -64,8 +64,8 @@ module('Acceptance | catalog app tests', function (hooks) {
     });
   });
 
-  module('catalog listing', async function () {
-    skip('able to "Use"', async function (assert) {
+  skip('catalog listing', async function () {
+    test('able to "Use"', async function (assert) {
       await visitOperatorMode({
         stacks: [
           [
@@ -82,7 +82,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         .dom('[data-test-catalog-listing-use-button]')
         .containsText('Use', '"Use" button exist in listing');
       await click('[data-test-catalog-listing-use-button]');
-      await click(`[data-test-boxel-menu-item-text="${testRealmURL}"]`);
+      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
 
       await waitFor('[data-test-catalog-listing-use-button]');
 
@@ -132,7 +132,7 @@ module('Acceptance | catalog app tests', function (hooks) {
         timeout: 5_000,
       });
       await click('[data-test-catalog-listing-install-button]');
-      await click(`[data-test-boxel-menu-item-text="${testRealmURL}"]`);
+      await click(`[data-test-boxel-menu-item-text="Test Workspace B"]`);
 
       assert
         .dom('[data-test-catalog-listing-install-button]')
