@@ -455,4 +455,29 @@ let a = 2;
           .innerText == 'let a = 2;\nlet b = 2;',
     );
   });
+
+  test('it will render an error message when file url is missing', async function (assert) {
+    await renderFormattedAiBotMessage({
+      htmlParts: parseHtmlContent(
+        `<pre data-code-language="typescript">
+malformed file url
+<<<<<<< SEARCH
+let a = 1;
+let b = 2;
+=======
+let a = 3;
+>>>>>>> REPLACE
+</pre>`,
+        roomId,
+        eventId,
+      ),
+      isStreaming: false,
+    });
+    await this.pauseTest();
+    assert
+      .dom(
+        `[data-test-error-message="Failed to load code from malformed file url"]`,
+      )
+      .exists();
+  });
 });
