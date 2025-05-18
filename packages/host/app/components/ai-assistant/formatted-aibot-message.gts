@@ -12,6 +12,8 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
+import { FailureBordered } from '@cardstack/boxel-ui/icons';
+
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 import {
@@ -31,7 +33,7 @@ import LoaderService from '@cardstack/host/services/loader-service';
 import { type MonacoSDK } from '@cardstack/host/services/monaco-service';
 
 import { CodePatchStatus } from 'https://cardstack.com/base/matrix-event';
-import { FailureBordered } from '@cardstack/boxel-ui/icons';
+
 import ApplyButton from './apply-button';
 import CodeBlock from './code-block';
 
