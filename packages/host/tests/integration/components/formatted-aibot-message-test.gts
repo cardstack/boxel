@@ -473,7 +473,7 @@ let a = 3;
       ),
       isStreaming: false,
     });
-    await this.pauseTest();
+
     assert
       .dom(
         `[data-test-error-message="Failed to load code from malformed file url"]`,
