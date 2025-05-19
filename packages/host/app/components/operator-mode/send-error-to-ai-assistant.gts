@@ -93,7 +93,6 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
       .send-error-to-ai-assistant:hover:not(:disabled) {
         --boxel-button-color: var(--boxel-ai-purple);
         --boxel-button-border: 1px solid var(--boxel-ai-purple);
-        transform: translateY(-1px);
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
 

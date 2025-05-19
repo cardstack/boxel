@@ -21,10 +21,11 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     type: 'syntax' | 'runtime';
-    message?: string;
-    openDetails?: boolean;
+    message: string;
+    headerText?: string;
     title?: string;
     stack?: string;
+    openDetails?: boolean;
     fileToAttach?: FileDef;
   };
 }
@@ -44,12 +45,16 @@ export default class ErrorDisplay extends Component<Signature> {
     };
   }
 
+  private get headerText() {
+    return this.args.headerText ?? `${this.args.type} Error`;
+  }
+
   <template>
     <div class='error-display' data-test-error-display>
       <div class='error-header'>
-        <div class='error-type'>
+        <div class='error-type' data-test-error-type>
           <ExclamationTriangleFill class='error-icon' />
-          <span>{{@type}} Error</span>
+          <span>{{this.headerText}}</span>
         </div>
         {{#if
           (and
@@ -89,14 +94,12 @@ export default class ErrorDisplay extends Component<Signature> {
 
       {{#if this.showDetails}}
         <div class='error-details' data-test-error-details>
-          {{#if @message}}
-            <div class='detail-item'>
-              <div class='detail-title'>Message:</div>
-              <div class='detail-contents' data-test-error-message>
-                {{@message}}
-              </div>
+          <div class='detail-item'>
+            <div class='detail-title'>Message:</div>
+            <div class='detail-contents' data-test-error-message>
+              {{@message}}
             </div>
-          {{/if}}
+          </div>
           {{#if @stack}}
             <div class='detail-item'>
               <div class='detail-title'>Stack trace:</div>
@@ -172,7 +175,7 @@ export default class ErrorDisplay extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-xxs);
-        width: 100px;
+        width: 95px;
         justify-content: flex-end;
       }
 
@@ -197,7 +200,6 @@ export default class ErrorDisplay extends Component<Signature> {
       }
 
       .detail-contents {
-        white-space: pre-wrap;
         word-break: break-word;
       }
 

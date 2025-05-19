@@ -381,7 +381,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       await click('[data-test-create-card-instance]');
       assert.dom('[data-test-error-container]').exists();
       assert
-        .dom('[data-test-toggle-details]')
+        .dom('[data-test-error-type]')
         .containsText('Error creating card instance');
       assert
         .dom('[data-test-create-file-modal] [data-test-error-title]')
@@ -717,7 +717,7 @@ export class TestCard extends Person {
       await click('[data-test-create-definition]');
       assert.dom('[data-test-error-container]').exists();
       assert
-        .dom('[data-test-toggle-details]')
+        .dom('[data-test-error-type]')
         .containsText('Error creating card definition');
       assert
         .dom('[data-test-create-file-modal] [data-test-error-title]')
