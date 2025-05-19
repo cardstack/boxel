@@ -30,7 +30,6 @@ import {
   specRef,
 } from '@cardstack/runtime-common';
 
-import CardRenderer from '@cardstack/host/components/card-renderer';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
@@ -331,7 +330,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   private get activeSpecId() {
-    return this.specPanelService.specSelection;
+    return this.specPanelService.specSelection ?? undefined;
   }
 
   get activeSpec() {
@@ -599,8 +598,4 @@ export class SpecUpdatedModifier extends Modifier<SpecUpdatedModifierSignature> 
 
     onSpecUpdated(spec);
   }
-}
-
-function getComponent(cardOrField: BaseDef) {
-  return cardOrField.constructor.getComponent(cardOrField);
 }

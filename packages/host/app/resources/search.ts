@@ -43,10 +43,6 @@ export class SearchResource extends Resource<Args> {
   @service declare private realmServer: RealmServerService;
   @service declare private store: StoreService;
   @tracked private realmsToSearch: string[] = [];
-  // Resist the urge to expose this property publicly as that may entice
-  // consumers of this resource  to use it in a non-reactive manner (pluck off
-  // the instances and throw away the resource).
-  private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
@@ -78,7 +74,7 @@ export class SearchResource extends Resource<Args> {
     this.#previousQuery = query;
     this.#previousRealms = realms;
 
-    this.loaded = this.search.perform(query);
+    this.search.perform(query);
 
     if (isLive) {
       // need to unsubscribe the old query before subscribing the new query

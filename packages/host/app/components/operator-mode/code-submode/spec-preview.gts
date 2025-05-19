@@ -76,7 +76,7 @@ import type { WithBoundArgs } from '@glint/template';
 interface Signature {
   Element: HTMLElement;
   Args: {
-    activeSpec: Spec;
+    activeSpec: Spec | undefined;
     isLoadingNewModule: boolean;
     isPanelOpen: boolean;
     searchIsLoading: boolean | undefined;
