@@ -8,6 +8,7 @@ import { isTesting } from '@embroider/macros';
 import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
+import cloneDeep from 'lodash/cloneDeep';
 import mergeWith from 'lodash/mergeWith';
 
 import { stringify } from 'qs';
@@ -407,6 +408,10 @@ export default class StoreService extends Service implements StoreInterface {
   async flush() {
     await this.ready;
     await Promise.allSettled(this.newReferencePromises);
+  }
+
+  async flushSaves() {
+    // TODO this is problematic. let's use a separate flush for auto save
     do {
       await Promise.allSettled(this.autoSavePromises.values());
     } while (
@@ -957,11 +962,6 @@ export default class StoreService extends Service implements StoreInterface {
     opts?: CreateOptions,
   ): Promise<CardDef | CardErrorJSONAPI> {
     return await this.withTestWaiters(async () => {
-      let cardChanged = false;
-      function onCardChange() {
-        cardChanged = true;
-      }
-      let api: typeof CardAPI | undefined;
       let isNew = !instance.id;
       let inflightMutation = this.inflightCardMutations.get(
         instance[localIdSymbol],
@@ -976,8 +976,6 @@ export default class StoreService extends Service implements StoreInterface {
       let deferred = new Deferred<void>();
       this.inflightCardMutations.set(instance[localIdSymbol], deferred.promise);
       try {
-        api = await this.cardService.getAPI();
-        api.subscribeToChanges(instance, onCardChange);
         let doc = await this.cardService.serializeCard(instance, {
           // for a brand new card that has no id yet, we don't know what we are
           // relativeTo because its up to the realm server to assign us an ID, so
@@ -1004,24 +1002,22 @@ export default class StoreService extends Service implements StoreInterface {
           localDir: opts?.localDir,
         });
 
-        // if the card changed while the save was in flight then don't merge the
-        // server state--the next auto save will include these
-        // unsaved changes. also if there are new foreign links we'll hold off
-        // on merging the server state until we have received the new foreign
-        // link ID's from the other realm(s) (handled in this.updateForeignConsumersOf())
-        if (!cardChanged && !this.hasNewForeignLinks(instance)) {
-          await api.updateFromSerialized(instance, json, this.identityContext);
-        } else if (isNew) {
-          // in this case a new card was created, but there is an immediate change
-          // that was made--so we save off the new ID for the card so in the next
-          // save we'll correlate to the correct card ID
-          api.setId(instance, json.data.id!); // resources from the server will always have ID's
-        }
-        if (this.onSaveSubscriber) {
-          this.onSaveSubscriber(new URL(json.data.id!), json);
-        }
-
+        // the store state represents the latest state and the server state is
+        // potentially out-of-date. As such we only merge the server state that
+        // the store does not know about specifically remote ID's and realm
+        // meta. the attributes and relationships state from the server are
+        // thrown away since the store has a more recent version of these.
+        let serverState = cloneDeep(json);
+        delete serverState.data.attributes;
+        delete serverState.data.relationships;
+        let api = await this.cardService.getAPI();
+        await api.updateFromSerialized(
+          instance,
+          serverState,
+          this.identityContext,
+        );
         if (isNew) {
+          api.setId(instance, json.data.id!);
           this.subscribeToRealm(new URL(instance.id));
           this.operatorModeStateService.handleCardIdAssignment(
             instance[localIdSymbol],
@@ -1029,6 +1025,9 @@ export default class StoreService extends Service implements StoreInterface {
           await this.updateForeignConsumersOf(instance);
           this.setIdentityContext(instance);
           await this.startAutoSaving(instance);
+        }
+        if (this.onSaveSubscriber) {
+          this.onSaveSubscriber(new URL(json.data.id!), json);
         }
         return instance;
       } catch (err) {
@@ -1041,29 +1040,9 @@ export default class StoreService extends Service implements StoreInterface {
         this.setIdentityContext(cardError);
         return cardError;
       } finally {
-        api?.unsubscribeFromChanges(instance, onCardChange);
         deferred.fulfill();
       }
     });
-  }
-
-  private async hasNewForeignLinks(instance: CardDef) {
-    let instanceRealm = instance[realmURLSymbol]?.href;
-    if (!instanceRealm) {
-      return;
-    }
-    let deps = this.identityContext.dependenciesOf(
-      await this.cardService.getAPI(),
-      instance,
-    );
-    return Boolean(
-      deps.find(
-        (c) =>
-          !c.id &&
-          c[realmURLSymbol]?.href &&
-          c[realmURLSymbol].href !== instanceRealm,
-      ),
-    );
   }
 
   // in the case we are making a cross realm relationship with a link that
