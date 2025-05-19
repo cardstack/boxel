@@ -41,7 +41,7 @@ import type { CardDef } from 'https://cardstack.com/base/card-api';
 import ApplyButton from '../ai-assistant/apply-button';
 import { type ApplyButtonState } from '../ai-assistant/apply-button';
 import CodeBlock from '../ai-assistant/code-block';
-import Preview from '../preview';
+import CardRenderer from '../card-renderer';
 
 import PreparingRoomMessageCommand from './preparing-room-message-command';
 
@@ -236,7 +236,7 @@ export default class RoomMessageCommand extends Component<Signature> {
               class='header'
               data-test-command-result-header
             />
-            <Preview
+            <CardRenderer
               @card={{this.commandResultCard.card}}
               @format='embedded'
               @displayContainer={{false}}

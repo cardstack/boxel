@@ -21,11 +21,11 @@ import {
   APP_BOXEL_REALMS_EVENT_TYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import type { FileDefManager } from '@cardstack/host/lib/file-def-manager';
 import FileDefManagerImpl from '@cardstack/host/lib/file-def-manager';
-import { RoomResource } from '@cardstack/host/resources/room';
 import type { ExtendedClient } from '@cardstack/host/services/matrix-sdk-loader';
 
 import MatrixService from '@cardstack/host/services/matrix-service';
@@ -475,6 +475,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_REALMS_EVENT_TYPE:
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:
+      case APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE:
       case APP_BOXEL_COMMAND_RESULT_EVENT_TYPE:
       case APP_BOXEL_ACTIVE_LLM:
       case APP_BOXEL_REALM_EVENT_TYPE:
@@ -661,25 +662,6 @@ export class MockClient implements ExtendedClient {
   ): Promise<FileDef[]> {
     return await this.fileDefManager.uploadCommandDefinitions(
       commandDefinitions,
-    );
-  }
-
-  async uploadCardsAndUpdateSkillCommands(
-    cards: CardDef[],
-    roomResource: RoomResource,
-    updateStateEvent: (
-      roomId: string,
-      eventType: string,
-      stateKey: string,
-      transformContent: (
-        content: Record<string, any>,
-      ) => Promise<Record<string, any>>,
-    ) => Promise<void>,
-  ): Promise<FileDef[]> {
-    return await this.fileDefManager.uploadCardsAndUpdateSkillCommands(
-      cards,
-      roomResource,
-      updateStateEvent,
     );
   }
 

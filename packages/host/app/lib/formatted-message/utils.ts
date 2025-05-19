@@ -2,14 +2,17 @@ import { SafeString, htmlSafe } from '@ember/template';
 
 import { unescapeHtml } from '@cardstack/runtime-common/helpers/html';
 
-import { CodeData } from '@cardstack/host/components/ai-assistant/formatted-message';
-
 import {
   isCompleteSearchReplaceBlock,
   parseSearchReplace,
 } from '../search-replace-block-parsing';
 
-export function extractCodeData(preElementString: string): CodeData {
+export function extractCodeData(
+  preElementString: string,
+  roomId: string,
+  eventId: string,
+  codeBlockIndex: number,
+): CodeData {
   // We are creating a new element in the dom
   // so that we can easily parse the content of the top level <pre> tags.
   // Note that <pre> elements can have nested <pre> elements inside them and by querying the dom like that
@@ -25,6 +28,9 @@ export function extractCodeData(preElementString: string): CodeData {
       code: null,
       language: null,
       searchReplaceBlock: null,
+      roomId: '',
+      eventId: '',
+      codeBlockIndex: -1,
     };
   }
 
@@ -34,6 +40,7 @@ export function extractCodeData(preElementString: string): CodeData {
   // Decode HTML entities to handle special characters like < and >
   content = unescapeHtml(content);
   let parsedContent = parseSearchReplace(content);
+  tempContainer.remove();
 
   // Transform the incomplete search/replace block into a format for streaming,
   // so that the user can see the search replace block in a human friendly format.
@@ -41,48 +48,62 @@ export function extractCodeData(preElementString: string): CodeData {
   // SEARCH BLOCK
   // // new code ...
   // REPLACE BLOCK
-  let adjustedContentForStreamedContentInMonacoEditor = '';
+  let adjustedCodeForStreamingSearchAndReplaceBlock = '';
   if (parsedContent.searchContent) {
     // get count of leading spaces in the first line of searchContent
     let firstLine = parsedContent.searchContent.split('\n')[0];
     let leadingSpaces = firstLine.match(/^\s+/)?.[0]?.length ?? 0;
     let emptyString = ' '.repeat(leadingSpaces);
-    adjustedContentForStreamedContentInMonacoEditor = `// existing code ... \n\n${parsedContent.searchContent.replace(
+    adjustedCodeForStreamingSearchAndReplaceBlock = `// existing code ... \n\n${parsedContent.searchContent.replace(
       new RegExp(emptyString, 'g'),
       '',
     )}`;
 
     if (parsedContent.replaceContent) {
-      adjustedContentForStreamedContentInMonacoEditor += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
+      adjustedCodeForStreamingSearchAndReplaceBlock += `\n\n// new code ... \n\n${parsedContent.replaceContent.replace(
         new RegExp(emptyString, 'g'),
         '',
       )}`;
     }
   }
 
-  const lines = content.split('\n');
+  let lines = content.split('\n');
 
-  let fileUrl: string | null = null;
-  const fileUrlIndex = lines.findIndex((line) =>
-    line.startsWith('// File url: '),
-  );
-  if (fileUrlIndex !== -1) {
-    fileUrl = lines[fileUrlIndex].substring('// File url: '.length).trim();
+  let fileUrl: string | undefined = undefined;
+  let isBeginningOfSearchReplaceBlock =
+    lines.length > 1 && lines[1].startsWith('<<<<<<<');
+
+  if (isBeginningOfSearchReplaceBlock) {
+    fileUrl = lines[0];
   }
 
-  let contentWithoutFileUrl;
-  if (fileUrl) {
-    contentWithoutFileUrl = lines.slice(fileUrlIndex + 1).join('\n');
+  let firstLineIsUrl = lines.length == 1 && lines[0].startsWith('http');
+
+  let codeToDisplay = '';
+  if (
+    firstLineIsUrl ||
+    (isBeginningOfSearchReplaceBlock && !parsedContent.searchContent)
+  ) {
+    codeToDisplay = parsedContent.replaceContent || '';
+  } else {
+    codeToDisplay =
+      adjustedCodeForStreamingSearchAndReplaceBlock ||
+      parsedContent.replaceContent ||
+      content;
   }
 
-  tempContainer.remove();
+  let contentWithoutFirstLine = content.slice(lines[0].length).trimStart();
+
   return {
     language: language ?? '',
-    code: adjustedContentForStreamedContentInMonacoEditor || content,
-    fileUrl,
-    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFileUrl)
-      ? contentWithoutFileUrl
+    code: codeToDisplay,
+    fileUrl: fileUrl ?? null,
+    searchReplaceBlock: isCompleteSearchReplaceBlock(contentWithoutFirstLine)
+      ? contentWithoutFirstLine
       : null,
+    roomId,
+    eventId,
+    codeBlockIndex,
   };
 }
 
@@ -115,12 +136,41 @@ export function wrapLastTextNodeInStreamingTextSpan(
   return htmlSafe(doc.body.innerHTML);
 }
 
-export interface HtmlTagGroup {
-  type: 'pre_tag' | 'non_pre_tag';
-  content: string;
+export interface CodeData {
+  fileUrl: string | null;
+  code: string | null;
+  language: string | null;
+  searchReplaceBlock?: string | null;
+  roomId: string;
+  eventId: string;
+  codeBlockIndex: number;
 }
 
-export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
+export type HtmlTagGroup = HtmlPreTagGroup | HtmlNonPreTagGroup;
+
+export interface HtmlPreTagGroup {
+  type: 'pre_tag';
+  content: string;
+  codeData: CodeData;
+}
+
+export interface HtmlNonPreTagGroup {
+  type: 'non_pre_tag';
+  content: string;
+  codeData: null;
+}
+
+export function isHtmlPreTagGroup(
+  htmlTagGroup: HtmlTagGroup,
+): htmlTagGroup is HtmlPreTagGroup {
+  return htmlTagGroup.type === 'pre_tag';
+}
+
+export function parseHtmlContent(
+  htmlString: string,
+  roomId: string,
+  eventId: string,
+): HtmlTagGroup[] {
   let result: HtmlTagGroup[] = [];
 
   // Create a temporary DOM element to parse the HTML string.
@@ -131,6 +181,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
   let doc = document.createElement('div');
   doc.innerHTML = htmlString;
 
+  let codeBlockIndex = 0;
   Array.from(doc.childNodes).forEach((node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       let textContent = node.textContent?.trim() || '';
@@ -138,6 +189,7 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
         result.push({
           type: 'non_pre_tag',
           content: textContent,
+          codeData: null,
         });
       }
     } else if (node.nodeType === Node.ELEMENT_NODE) {
@@ -145,14 +197,22 @@ export function parseHtmlContent(htmlString: string): HtmlTagGroup[] {
       let tagName = element.tagName.toLowerCase();
 
       if (tagName === 'pre') {
+        let codeData = extractCodeData(
+          element.outerHTML,
+          roomId,
+          eventId,
+          codeBlockIndex++,
+        );
         result.push({
           type: 'pre_tag',
           content: element.outerHTML,
+          codeData,
         });
       } else {
         result.push({
           type: 'non_pre_tag',
           content: element.outerHTML,
+          codeData: null,
         });
       }
     }

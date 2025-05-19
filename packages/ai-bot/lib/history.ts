@@ -1,18 +1,23 @@
 import type {
   CardMessageEvent,
+  CodePatchResultEvent,
+  CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
+  MessageEvent,
+  RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { type IRoomEvent } from 'matrix-js-sdk';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
+  APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
-  APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFileDef, downloadFile, MatrixClient } from './matrix/util';
@@ -43,7 +48,8 @@ export async function constructHistory(
   for (let rawEvent of eventlist) {
     if (
       rawEvent.type !== 'm.room.message' &&
-      rawEvent.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+      rawEvent.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+      rawEvent.type !== APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE
     ) {
       continue;
     }
@@ -51,7 +57,12 @@ export async function constructHistory(
     parseContentData(rawEvent);
 
     // make a copy of the event
-    let event = { ...rawEvent };
+    let event = { ...rawEvent } as
+      | CardMessageEvent
+      | CommandResultEvent
+      | CodePatchResultEvent
+      | RealmServerEvent
+      | MessageEvent; // Typescript could have inferred this from the line above
     let eventId = event.event_id!;
 
     // replace events with their replacement
@@ -73,7 +84,9 @@ export async function constructHistory(
       existingEvent.origin_server_ts < event.origin_server_ts
     ) {
       latestEventsMap.set(eventId, event as DiscreteMatrixEvent);
+      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
       if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+        // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
         delete event.content['m.relates_to'];
       }
     }

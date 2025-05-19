@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "CRMTaskStatusField",
+        "module": "../crm-app/shared"
+      },
+      "specType": "field",
+      "containedExamples": [],
+      "title": "CRM Shared Helpers",
+      "description": "Spec for CRM Shared Helpers",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

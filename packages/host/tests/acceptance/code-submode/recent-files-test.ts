@@ -8,15 +8,12 @@ import {
 
 import { waitUntil } from '@ember/test-helpers';
 
-import window from 'ember-window-mock';
 import * as MonacoSDK from 'monaco-editor';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
 import MonacoService from '@cardstack/host/services/monaco-service';
-
-import { RecentFiles } from '@cardstack/host/utils/local-storage-keys';
 
 import {
   percySnapshot,
@@ -28,6 +25,10 @@ import {
   setupUserSubscription,
 } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
+import {
+  getRecentFiles,
+  setRecentFiles,
+} from '../../helpers/recent-files-cards';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const indexCardSource = `
@@ -299,15 +300,20 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     });
   });
 
+  const recentFilesWoTimestamp = () =>
+    getRecentFiles()?.map(([realmURL, filePath, cursorP, _ts]) => [
+      realmURL,
+      filePath,
+      cursorP,
+    ]);
+
   test('recent file links are shown', async function (assert) {
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify([
-        [testRealmURL, 'index.json'],
-        ['http://localhost:4202/test/', 'français.json'],
-        'a-non-url-to-ignore',
-      ]),
-    );
+    setRecentFiles([
+      [testRealmURL, 'index.json'],
+      ['http://localhost:4202/test/', 'français.json'],
+      // @ts-ignore error on purpose
+      'a-non-url-to-ignore',
+    ]);
 
     await visitOperatorMode({
       stacks: [
@@ -387,28 +393,21 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
       .dom('[data-test-recent-file]:nth-child(2)')
       .containsText('Person/1.json');
 
-    assert.deepEqual(
-      JSON.parse(window.localStorage.getItem(RecentFiles) || '[]'),
-      [
-        [testRealmURL, 'index.json', null],
-        [testRealmURL, 'français.json', null],
-        [testRealmURL, 'Person/1.json', null],
-        ['http://localhost:4202/test/', 'français.json', null],
-      ],
-    );
+    assert.deepEqual(recentFilesWoTimestamp(), [
+      [testRealmURL, 'index.json', null],
+      [testRealmURL, 'français.json', null],
+      [testRealmURL, 'Person/1.json', null],
+      ['http://localhost:4202/test/', 'français.json', null],
+    ]);
   });
 
   test('recent files are truncated at 100', async function (assert) {
-    let recentFilesEntries = [];
+    let recentFilesEntries: [string, string][] = [];
 
     for (let i = 0; i < 100; i++) {
       recentFilesEntries.push([testRealmURL, `file-${i}.txt`]);
     }
-
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify(recentFilesEntries),
-    );
+    setRecentFiles(recentFilesEntries);
 
     await visitOperatorMode({
       stacks: [
@@ -508,14 +507,12 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   });
 
   test('displays recent files in base realm', async function (assert) {
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify([
-        ['https://cardstack.com/base/', 'code-ref.gts'],
-        ['https://cardstack.com/base/', 'spec.gts'],
-        'a-non-url-to-ignore',
-      ]),
-    );
+    setRecentFiles([
+      ['https://cardstack.com/base/', 'code-ref.gts'],
+      ['https://cardstack.com/base/', 'spec.gts'],
+      // @ts-ignore error on purpose
+      'a-non-url-to-ignore',
+    ]);
 
     await visitOperatorMode({
       stacks: [
@@ -571,13 +568,9 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert.dom('[data-test-recent-file]:nth-child(3)').containsText('spec.gts');
 
     // the cursor positions seem to be different in CI than locally
-    let removedCursorPositions = (
-      JSON.parse(window.localStorage.getItem(RecentFiles) || '[]') as [
-        string,
-        string,
-        { column: number; line: number } | null,
-      ][]
-    ).map(([mod, name]) => [mod, name]);
+    let removedCursorPositions = recentFilesWoTimestamp()?.map(
+      ([mod, name]) => [mod, name],
+    );
 
     assert.deepEqual(removedCursorPositions, [
       ['https://cardstack.com/base/', 'field-component.gts'],
@@ -588,13 +581,10 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
   });
 
   test('set cursor based on the position in recent file', async function (assert) {
-    window.localStorage.setItem(
-      RecentFiles,
-      JSON.stringify([
-        [testRealmURL, 'index.json', null],
-        [testRealmURL, 'friend.gts', { line: 14, column: 1 }],
-      ]),
-    );
+    setRecentFiles([
+      [testRealmURL, 'index.json', null, Date.now()],
+      [testRealmURL, 'friend.gts', { line: 14, column: 1 }, Date.now()],
+    ]);
 
     await visitOperatorMode({
       stacks: [],
@@ -609,12 +599,9 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     assert.strictEqual(cursorPosition?.column, 1);
 
     monacoService.updateCursorPosition(new MonacoSDK.Position(22, 3));
-    assert.deepEqual(
-      JSON.parse(window.localStorage.getItem(RecentFiles) || '[]'),
-      [
-        [testRealmURL, 'friend.gts', { column: 3, line: 22 }],
-        [testRealmURL, 'index.json', null],
-      ],
-    );
+    assert.deepEqual(recentFilesWoTimestamp(), [
+      [testRealmURL, 'friend.gts', { column: 3, line: 22 }],
+      [testRealmURL, 'index.json', null],
+    ]);
   });
 });

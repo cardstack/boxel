@@ -177,12 +177,12 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
       .showcase-display-container > * + * {
         border-top: 1px solid #999999;
       }
-      .showcase-cards-display :deep(.cards),
-      .featured-cards-display :deep(.cards) {
+      .showcase-cards-display :deep(.cards.grid-view),
+      .featured-cards-display :deep(.cards.grid-view) {
         --grid-view-height: 440px;
         grid-template-columns: repeat(2, 1fr);
       }
-      .new-this-week-cards-display :deep(.cards) {
+      .new-this-week-cards-display :deep(.cards.grid-view) {
         --grid-view-height: 320px;
         grid-template-columns: repeat(4, 1fr);
       }
@@ -198,18 +198,18 @@ class ShowcaseView extends GlimmerComponent<ShowcaseViewArgs> {
       }
 
       @container showcase-display-container (inline-size <= 768px) {
-        .showcase-cards-display :deep(.cards),
-        .featured-cards-display :deep(.cards) {
+        .showcase-cards-display :deep(.cards.grid-view),
+        .featured-cards-display :deep(.cards.grid-view) {
           --grid-view-height: 380px;
         }
-        .new-this-week-cards-display :deep(.cards) {
+        .new-this-week-cards-display :deep(.cards.grid-view) {
           grid-template-columns: repeat(2, 1fr);
         }
 
         @container showcase-display-container (inline-size <= 500px) {
-          .showcase-cards-display :deep(.cards),
-          .new-this-week-cards-display :deep(.cards),
-          .featured-cards-display :deep(.cards) {
+          .showcase-cards-display :deep(.cards.grid-view),
+          .new-this-week-cards-display :deep(.cards.grid-view),
+          .featured-cards-display :deep(.cards.grid-view) {
             grid-template-columns: 1fr;
           }
         }

@@ -104,11 +104,11 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
       );
     }
     if (files?.length) {
-      files = await this.matrixService.uploadFiles(files);
+      files = await matrixService.uploadFiles(files);
     }
-    let cardFileDefs = await matrixService.uploadCardsAndUpdateSkillCommands(
+    await matrixService.updateSkillsAndCommandsIfNeeded(roomId);
+    let cardFileDefs = await matrixService.uploadCards(
       input.attachedCards ?? [],
-      roomId,
     );
 
     let clientGeneratedId = input.clientGeneratedId ?? uuidv4();
@@ -125,6 +125,8 @@ export default class SendAiAssistantMessageCommand extends HostBaseCommand<
           openCardIds: attachedOpenCards.map((c) => c.id),
           tools,
           requireToolCall,
+          realmUrl: input.realmUrl,
+          functions: [],
         },
       },
     } as CardMessageContent);

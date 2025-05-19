@@ -41,6 +41,7 @@ interface Signature {
     fieldChooserIsOpen: boolean;
     moduleId: string;
     persistSelections?: (cardId: string, format: Format) => void;
+    recentCardIds: string[];
   };
 }
 
@@ -74,6 +75,7 @@ export default class PlaygroundTitle extends Component<Signature> {
         @createNewIsRunning={{@createNewIsRunning}}
         @moduleId={{@moduleId}}
         @persistSelections={{@persistSelections}}
+        @recentCardIds={{@recentCardIds}}
       />
     </button>
 

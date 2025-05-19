@@ -3,7 +3,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { Loader, localId } from '@cardstack/runtime-common';
+import { localId } from '@cardstack/runtime-common';
 
 import SwitchSubmodeCommand from '@cardstack/host/commands/switch-submode';
 import type CommandService from '@cardstack/host/services/command-service';
@@ -16,7 +16,6 @@ import { CardDef as CardDefType } from 'https://cardstack.com/base/card-api';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupLoaderService,
   lookupService,
   testRealmURL,
   testRealmInfo,
@@ -25,7 +24,6 @@ import { CardDef, setupBaseRealm } from '../../helpers/base-realm';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let loader: Loader;
 let store: StoreService;
 
 class StubRealmService extends RealmService {
@@ -50,13 +48,11 @@ module('Integration | commands | switch-submode', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    loader = lookupLoaderService().loader;
     store = lookupService<StoreService>('store');
   });
 
   hooks.beforeEach(async function () {
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {},
     });

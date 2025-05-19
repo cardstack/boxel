@@ -142,7 +142,6 @@ module('Integration | card-copy', function (hooks) {
     }
 
     ({ realm: realm1 } = await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },
@@ -217,7 +216,6 @@ module('Integration | card-copy', function (hooks) {
     }));
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       realmURL: testRealm2URL,
       contents: {

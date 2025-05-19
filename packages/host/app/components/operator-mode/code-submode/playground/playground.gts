@@ -97,6 +97,7 @@ interface Signature {
             | 'chooseField'
             | 'moduleId'
             | 'availableRealmURLs'
+            | 'recentCardIds'
           >
         | typeof DefaultTitle
       ),

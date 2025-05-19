@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "ContactRow",
+        "module": "../crm-app/components/contact-row"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Contact Row",
+      "description": "Spec for Contact Row component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

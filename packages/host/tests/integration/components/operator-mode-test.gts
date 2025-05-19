@@ -21,7 +21,6 @@ import {
   Deferred,
   LooseSingleCardDocument,
   Realm,
-  delay,
 } from '@cardstack/runtime-common';
 import { Loader } from '@cardstack/runtime-common/loader';
 
@@ -30,9 +29,6 @@ import OperatorMode from '@cardstack/host/components/operator-mode/container';
 
 import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
-import type StoreService from '@cardstack/host/services/store';
-
-import { type CardDef } from 'https://cardstack.com/base/card-api';
 
 import {
   percySnapshot,
@@ -44,6 +40,7 @@ import {
   type TestContextWithSave,
   lookupLoaderService,
   lookupService,
+  withSlowSave,
 } from '../../helpers';
 import { TestRealmAdapter } from '../../helpers/adapter';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -58,14 +55,12 @@ module('Integration | operator-mode', function (hooks) {
   let testRealm: Realm;
   let testRealmAdapter: TestRealmAdapter;
   let operatorModeStateService: OperatorModeStateService;
-  let store: StoreService;
 
   hooks.beforeEach(function () {
     loader = lookupLoaderService().loader;
     operatorModeStateService = lookupService<OperatorModeStateService>(
       'operator-mode-state-service',
     );
-    store = lookupService<StoreService>('store');
   });
 
   setupLocalIndexing(hooks);
@@ -430,7 +425,6 @@ module('Integration | operator-mode', function (hooks) {
 
     ({ adapter: testRealmAdapter, realm: testRealm } =
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'pet.gts': { Pet },
@@ -860,34 +854,27 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('it does not wait for save to complete before switching from edit to isolated mode', async function (assert) {
-    (store as any)._originalPersist = (store as any).persistAndUpdate;
-    (store as any).persistAndUpdate = async (
-      card: CardDef,
-      defaultRealmHref?: string,
-    ) => {
-      // slow down the save so we can make sure that the format switch is
-      // not tied to the save completion
-      await delay(1000);
-      await (store as any)._originalPersist(card, defaultRealmHref);
-    };
-    try {
-      setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
+    setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
 
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
-          </template>
-        },
-      );
-      await waitFor('[data-test-person]');
-      await click('[data-test-edit-button]');
-      let operationOrder: string[] = [];
-      this.onSave(() => {
-        operationOrder.push('saved');
-      });
-      await fillIn('[data-test-field="firstName"] input', 'FadhlanX');
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    await waitFor('[data-test-person]');
+    await click('[data-test-edit-button]');
+    let operationOrder: string[] = [];
+    this.onSave(() => {
+      operationOrder.push('saved');
+    });
+    // slow down the save so we can make sure that the format switch is
+    // not tied to the save completion
+    await withSlowSave(1000, async () => {
+      // intentionally not awaiting the fillIn so we can ignore the test waiters
+      fillIn('[data-test-field="firstName"] input', 'FadhlanX');
       // intentionally not awaiting the click so we can ignore the test waiters
       click('[data-test-edit-button]');
       await waitFor(
@@ -900,9 +887,7 @@ module('Integration | operator-mode', function (hooks) {
         ['isolated-model', 'saved'],
         'the isolated mode is displayed before save completes',
       );
-    } finally {
-      (store as any).persistAndUpdate = (store as any)._originalPersist;
-    }
+    });
   });
 
   test('an error in auto-save is handled gracefully', async function (assert) {
@@ -932,12 +917,11 @@ module('Integration | operator-mode', function (hooks) {
           .querySelector('[data-test-auto-save-indicator]')
           ?.textContent?.trim() == 'Failed to save: Boom!',
     );
-    setCardInOperatorModeState(`${testRealmURL}BoomPet/paper`);
-
-    await waitFor('[data-test-pet]');
-    // Card still runs (our error was designed to only fire during save)
-    // despite save error
-    assert.dom('[data-test-pet]').includesText('Paper Bad cat!');
+    await click('[data-test-edit-button]');
+    // TODO consider adding a mechanism to go back to edit mode in order to try to fix the error with edit template
+    assert
+      .dom('[data-test-card-error]')
+      .exists('last known good state is displayed in isolated mode');
   });
 
   test('a 403 from Web Application Firewall is handled gracefully when auto-saving', async function (assert) {
@@ -1048,32 +1032,24 @@ module('Integration | operator-mode', function (hooks) {
   });
 
   test<TestContextWithSave>('can optimistically create a card using the cards-grid', async function (assert) {
-    (store as any)._originalPersist = (store as any).persistAndUpdate;
-    (store as any).persistAndUpdate = async (
-      card: CardDef,
-      defaultRealmHref?: string,
-    ) => {
-      // slow down the save so we can see the optimistic save at work
-      await delay(1000);
-      await (store as any)._originalPersist(card, defaultRealmHref);
-    };
-    try {
-      setCardInOperatorModeState(`${testRealmURL}grid`);
-      await renderComponent(
-        class TestDriver extends GlimmerComponent {
-          <template>
-            <OperatorMode @onClose={{noop}} />
-            <CardPrerender />
-          </template>
-        },
-      );
-      let saved = new Deferred<void>();
-      let savedCards = new Set<string>();
-      this.onSave((url) => {
-        savedCards.add(url.href);
-        saved.fulfill();
-      });
+    setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template>
+          <OperatorMode @onClose={{noop}} />
+          <CardPrerender />
+        </template>
+      },
+    );
+    let saved = new Deferred<void>();
+    let savedCards = new Set<string>();
+    this.onSave((url) => {
+      savedCards.add(url.href);
+      saved.fulfill();
+    });
 
+    // slow down the save so we can see the optimistic save at work
+    await withSlowSave(1000, async () => {
       await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
       assert.dom(`[data-test-stack-card-index="0"]`).exists();
 
@@ -1089,7 +1065,8 @@ module('Integration | operator-mode', function (hooks) {
         .exists({ count: 3 });
 
       await click(`[data-test-select="${testRealmURL}Spec/publishing-packet"]`);
-      await click('[data-test-card-catalog-go-button]');
+      // intentionally not awaiting the click so we can ignore the test waiters
+      click('[data-test-card-catalog-go-button]');
       await waitFor('[data-test-stack-card-index="1"]');
       assert
         .dom('[data-test-stack-card-index="1"] [data-test-field="blogPost"]')
@@ -1111,9 +1088,7 @@ module('Integration | operator-mode', function (hooks) {
 
       await waitFor(`[data-test-stack-card="${packetId}"]`);
       assert.dom(`[data-test-stack-card="${packetId}"]`).exists();
-    } finally {
-      (store as any).persistAndUpdate = (store as any)._originalPersist;
-    }
+    });
   });
 
   test('can open a card from the cards-grid and close it', async function (assert) {

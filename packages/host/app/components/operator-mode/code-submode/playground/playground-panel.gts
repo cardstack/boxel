@@ -17,8 +17,8 @@ import {
   loadCardDef,
   specRef,
   trimJsonExtension,
+  localId,
   type Query,
-  type LooseSingleCardDocument,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
 
@@ -27,6 +27,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type PlaygroundPanelService from '@cardstack/host/services/playground-panel-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
+import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
+import type { RecentCard } from '@cardstack/host/services/recent-cards-service';
 import type RecentFilesService from '@cardstack/host/services/recent-files-service';
 import type StoreService from '@cardstack/host/services/store';
 
@@ -83,6 +85,7 @@ interface Signature {
         | 'fieldChooserIsOpen'
         | 'chooseField'
         | 'moduleId'
+        | 'recentCardIds'
       >,
       (
         | WithBoundArgs<
@@ -110,19 +113,18 @@ export default class PlaygroundPanel extends Component<Signature> {
   @service private declare realm: RealmService;
   @service private declare realmServer: RealmServerService;
   @service private declare recentFilesService: RecentFilesService;
+  @service private declare recentCardsService: RecentCardsService;
   @service private declare playgroundPanelService: PlaygroundPanelService;
   @service private declare store: StoreService;
 
   @tracked private cardResource: ReturnType<getCard> | undefined;
   @tracked private fieldChooserIsOpen = false;
-  @tracked private cardCreationError: CardErrorJSONAPI | undefined = undefined;
 
   private get moduleId() {
     return internalKeyFor(this.args.codeRef, undefined);
   }
 
   private get isLoading() {
-    this.clearCardCreationError();
     return this.args.isFieldDef && this.args.isUpdating;
   }
 
@@ -142,12 +144,8 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get cardError(): CardErrorJSONAPI | undefined {
-    return this.cardCreationError ?? this.cardResource?.cardError;
+    return this.cardResource?.cardError;
   }
-
-  private clearCardCreationError = () => {
-    this.cardCreationError = undefined;
-  };
 
   private get specCard(): Spec | undefined {
     let card = this.card;
@@ -167,17 +165,31 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private get recentCardIds() {
-    return this.recentFilesService.recentFiles
-      .map((f) => `${f.realmURL}${f.filePath}`)
-      .filter((id) => id.endsWith('.json'))
-      .map((id) => id.slice(0, -1 * '.json'.length));
+    let cards: RecentCard[] = [];
+    for (let file of this.recentFilesService.recentFiles) {
+      let url = `${file.realmURL}${file.filePath}`;
+      if (url.endsWith('.json') && file.timestamp) {
+        cards.push({
+          cardId: trimJsonExtension(url),
+          timestamp: file.timestamp,
+        });
+      }
+    }
+    let recentCards = this.recentCardsService.recentCards.filter((c) =>
+      Boolean(c.timestamp),
+    );
+    let sortedCards = [...recentCards, ...cards].sort(
+      (a, b) => b.timestamp! - a.timestamp!,
+    );
+    return [...new Set(sortedCards.map((c) => c.cardId))];
   }
 
   private get recentRealms() {
     return [
-      ...new Set(
-        this.recentFilesService.recentFiles.map((f) => f.realmURL.href),
-      ),
+      ...new Set([
+        this.currentRealm,
+        ...this.recentFilesService.recentFiles.map((f) => f.realmURL.href),
+      ]),
     ];
   }
 
@@ -196,12 +208,6 @@ export default class PlaygroundPanel extends Component<Signature> {
           },
         ],
       },
-      sort: [
-        {
-          by: 'lastModified',
-          direction: 'desc',
-        },
-      ],
     };
   }
 
@@ -381,61 +387,41 @@ export default class PlaygroundPanel extends Component<Signature> {
   }
 
   private createNewCard = restartableTask(async () => {
-    this.clearCardCreationError();
-    let newCardJSON: LooseSingleCardDocument;
-    if (this.args.isFieldDef) {
-      let fieldCard = await loadCardDef(this.args.codeRef, {
-        loader: this.loaderService.loader,
-      });
+    let cardClass = await loadCardDef(
       // for field def, create a new spec card instance
-      newCardJSON = {
-        data: {
-          attributes: {
-            specType: 'field',
-            ref: this.args.codeRef,
-            title: this.args.codeRef.name,
-            containedExamples: [new fieldCard()],
-          },
-          meta: {
-            fields: {
-              containedExamples: [
-                {
-                  adoptsFrom: this.args.codeRef,
-                },
-              ],
-            },
-            adoptsFrom: specRef,
-            realmURL: this.currentRealm,
-          },
-        },
-      };
-    } else {
-      newCardJSON = {
-        data: {
-          meta: {
-            adoptsFrom: this.args.codeRef,
-            realmURL: this.currentRealm,
-          },
-        },
-      };
-    }
-    let maybeId: string | CardErrorJSONAPI = await this.store.create(
-      newCardJSON,
+      this.args.isFieldDef ? specRef : this.args.codeRef,
       {
-        realm: this.currentRealm,
+        loader: this.loaderService.loader,
       },
     );
-    if (typeof maybeId !== 'string') {
-      this.cardCreationError = maybeId;
+    let newInstance: CardDef;
+    if (this.args.isFieldDef) {
+      let field = await loadCardDef(this.args.codeRef, {
+        loader: this.loaderService.loader,
+      });
+      newInstance = new cardClass({
+        specType: 'field',
+        ref: this.args.codeRef,
+        title: this.args.codeRef.name,
+        containedExamples: [new field()],
+      }) as Spec;
     } else {
-      let cardId = maybeId;
-      this.recentFilesService.addRecentFileUrl(`${cardId}.json`);
-      this.persistSelections(
-        cardId,
-        'edit',
-        this.args.isFieldDef ? 0 : undefined,
-      ); // open new instance in playground in edit format
+      newInstance = new cardClass() as CardDef;
     }
+
+    await this.store.add(newInstance, {
+      realm: this.currentRealm,
+      doNotWaitForPersist: true,
+    });
+    await this.recentCardsService.addNewCard(newInstance, {
+      addToRecentFiles: true,
+    });
+    this.playgroundPanelService.persistSelections(
+      this.moduleId,
+      newInstance[localId],
+      'edit',
+      this.args.isFieldDef ? 0 : undefined,
+    ); // open new instance in playground in edit format
     this.closeInstanceChooser();
   });
 
@@ -480,6 +466,7 @@ export default class PlaygroundPanel extends Component<Signature> {
         chooseField=this.chooseField
         moduleId=this.moduleId
         persistSelections=this.persistToLocalStorage
+        recentCardIds=this.recentCardIds
       )
       (if
         this.isLoading

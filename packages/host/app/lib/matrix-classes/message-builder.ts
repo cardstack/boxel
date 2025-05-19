@@ -17,10 +17,13 @@ import {
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_CONTINUATION_OF_CONTENT_KEY,
   APP_BOXEL_HAS_CONTINUATION_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_REASONING_CONTENT_KEY,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { RoomSkill } from '@cardstack/host/resources/room';
@@ -33,6 +36,7 @@ import { SerializedFile } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   CardMessageEvent,
+  CodePatchResultEvent,
   CommandResultEvent,
   MatrixEvent as DiscreteMatrixEvent,
   MessageEvent,
@@ -41,6 +45,7 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 
 import { RoomMember } from './member';
 import { Message } from './message';
+import MessageCodePatchResult from './message-code-patch-result';
 import MessageCommand from './message-command';
 
 const ErrorMessage: Record<string, string> = {
@@ -58,6 +63,7 @@ export default class MessageBuilder {
       index: number;
       skills: RoomSkill[];
       events: DiscreteMatrixEvent[];
+      codePatchResultEvent?: CodePatchResultEvent;
       commandResultEvent?: CommandResultEvent;
       skillCardsCache: Map<string, Skill>;
     },
@@ -144,6 +150,7 @@ export default class MessageBuilder {
       if (event.content[APP_BOXEL_COMMAND_REQUESTS_KEY]) {
         message.setCommands(this.buildMessageCommands(message));
       }
+      message.codePatchResults = this.buildMessageCodePatchResults(message);
     } else if (event.content.msgtype === 'm.text') {
       message.setIsStreamingFinished(!!event.content.isStreamingFinished);
     }
@@ -202,18 +209,31 @@ export default class MessageBuilder {
 
     if (this.builderContext.commandResultEvent && message.commands.length > 0) {
       let event = this.builderContext.commandResultEvent;
-      let messageCommand = message.commands.find(
-        (c) => c.commandRequest.id === event.content.commandRequestId,
-      );
-      if (messageCommand) {
-        messageCommand.commandStatus = event.content['m.relates_to']
-          .key as CommandStatus;
-        messageCommand.commandResultFileDef =
-          event.content.msgtype === APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-            ? event.content.data.card
-            : undefined;
+      if (
+        event.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+        event.content.msgtype ===
+          APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE
+      ) {
+        let commandRequestId = event.content.commandRequestId;
+        let messageCommand = message.commands.find(
+          (c) => c.commandRequest.id === commandRequestId,
+        );
+        if (messageCommand) {
+          messageCommand.commandStatus = event.content['m.relates_to']
+            .key as CommandStatus;
+          messageCommand.commandResultFileDef =
+            event.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
+              ? event.content.data.card
+              : undefined;
+        }
       }
     }
+  }
+
+  updateMessageCodePatchResult(message: Message) {
+    message.codePatchResults = this.buildMessageCodePatchResults(message);
   }
 
   private buildMessageCommands(message: Message) {
@@ -282,6 +302,34 @@ export default class MessageBuilder {
       getOwner(this)!,
     );
     return messageCommand;
+  }
+
+  private buildMessageCodePatchResults(message: Message) {
+    let codePatchResultEvents = this.builderContext.events.filter((e: any) => {
+      let r = e.content['m.relates_to'];
+      if (!r) {
+        return false;
+      }
+      return (
+        e.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+        r.rel_type === APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE &&
+        r.event_id === message.eventId
+      );
+    }) as CodePatchResultEvent[];
+
+    let codePatchResults = new TrackedArray<MessageCodePatchResult>();
+    for (let codePatchResultEvent of codePatchResultEvents) {
+      codePatchResults.push(
+        new MessageCodePatchResult(
+          message,
+          this.builderContext.effectiveEventId,
+          codePatchResultEvent.content['m.relates_to'].key,
+          codePatchResultEvent.content.codeBlockIndex,
+          getOwner(this)!,
+        ),
+      );
+    }
+    return codePatchResults;
   }
 }
 

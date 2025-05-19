@@ -60,7 +60,7 @@ import consumeContext from '../../helpers/consume-context';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
-import Preview from '../preview';
+import CardRenderer from '../card-renderer';
 
 import CardError from './card-error';
 
@@ -661,7 +661,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
             {{ContentElement onSetup=this.setupContentEl}}
             data-test-stack-item-content
           >
-            <Preview
+            <CardRenderer
               class='stack-item-preview'
               @card={{this.card}}
               @format={{@item.format}}

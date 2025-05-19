@@ -4,6 +4,7 @@ import {
   isPrimitive,
   isCardInstance,
   isNotLoadedError,
+  isLocalId,
   localId as localIdSymbol,
   type CardErrorJSONAPI as CardError,
 } from '@cardstack/runtime-common';
@@ -296,15 +297,8 @@ export default class IdentityContextWithGarbageCollection
       // the scenario where the instance has a newly assigned remote id
       if (!localId) {
         localId = remoteId.split('/').pop()!;
-        let trackedItem = this.#cards.get(localId);
-        let nonTrackedItem = this.#nonTrackedCards.get(localId);
-        if (trackedItem) {
-          this.set(remoteId, trackedItem);
-        } else if (nonTrackedItem) {
-          this.setNonTracked(remoteId, nonTrackedItem);
-        }
-        item = trackedItem ?? nonTrackedItem;
-        if (item) {
+        item = bucket.get(localId) ?? silentBucket.get(localId);
+        if (item && type === 'instance') {
           item.id = remoteId;
         }
       }
@@ -489,8 +483,4 @@ function setIfDifferent(map: Map<string, unknown>, id: string, value: unknown) {
   if (map.get(id) !== value) {
     map.set(id, value);
   }
-}
-
-export function isLocalId(id: string) {
-  return !id.startsWith('http');
 }

@@ -83,7 +83,9 @@ module('Integration | ai-assistant-panel | codeblocks', function (hooks) {
     let cardService = this.owner.lookup('service:card-service') as CardService;
     cardService.getSource = async (url: URL) => {
       if (url.toString() === 'https://example.com/component.gts') {
-        return Promise.resolve(`import Component from '@glimmer/component';
+        return {
+          status: 200,
+          content: `import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
   a = 1;
@@ -95,9 +97,13 @@ export default class MyComponent extends Component {
       <p>Value of b: {{this.b}}</p>
     </div>
   </template>
-}`);
+}`,
+        };
       }
-      return Promise.resolve('');
+      return {
+        status: 404,
+        content: '',
+      };
     };
 
     class Address extends FieldDef {
@@ -146,7 +152,6 @@ export default class MyComponent extends Component {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'address.gts': { Address },
@@ -578,8 +583,8 @@ And some regular text with <b>HTML tags</b> that should be displayed as actual H
     let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
 
 \`\`\`gts
-// File url: https://example.com/component.gts
-  <<<<<<< SEARCH
+https://example.com/component.gts
+<<<<<<< SEARCH
 import Component from '@glimmer/component';
 
 export default class MyComponent extends Component {
@@ -646,7 +651,7 @@ Above code blocks are now complete`;
     let messageWithSearchAndReplaceBlock = `Here's some HTML inside codeblock with search and replace block:
 
 \`\`\`txt
-// File url: https://example.com/blank.txt
+https://example.com/blank.txt
 <<<<<<< SEARCH
 =======
 hello
@@ -660,7 +665,7 @@ Above code blocks are now complete`;
       '@aibot:localhost',
       {
         body: messageWithSearchAndReplaceBlock,
-        msgtype: 'org.text',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
         isStreamingFinished: true,
       },
