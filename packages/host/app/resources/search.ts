@@ -162,10 +162,13 @@ export class SearchResource extends Resource<Args> {
             }
             let collectionDoc = json;
             for (let data of collectionDoc.data) {
-              await this.store.add(
-                { data },
-                { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
-              );
+              let maybeInstance = this.store.peek(data.id!);
+              if (!maybeInstance) {
+                await this.store.add(
+                  { data },
+                  { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
+                );
+              }
             }
             return collectionDoc.data
               .map((r) => this.store.peek(r.id!)) // all results will have id's
@@ -185,11 +188,7 @@ export class SearchResource extends Resource<Args> {
       //  the array in the correct order synchronously is a stable operation.
       //  glimmer understands the delta and will only rerender the components
       //  tied to the instances that are added (or removed) from the array
-      this._instances.splice(
-        0,
-        this._instances.length,
-        ...results.map((instance) => instance),
-      );
+      this._instances.splice(0, this._instances.length, ...results);
       if (this.#doWhileRefreshing) {
         this.#doWhileRefreshing();
       }
