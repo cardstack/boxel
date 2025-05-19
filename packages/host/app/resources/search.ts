@@ -34,7 +34,7 @@ export interface Args {
     query: Query | undefined;
     realms: string[] | undefined;
     isLive: boolean;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    doWhileRefreshing?: (() => void) | undefined;
   };
 }
 
@@ -50,6 +50,7 @@ export class SearchResource extends Resource<Args> {
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
+  #doWhileRefreshing:(() => void) | undefined;
   #previousQuery: Query | undefined;
   #previousRealms: string[] | undefined;
   #hasRegisteredDestructor = false;
@@ -60,6 +61,7 @@ export class SearchResource extends Resource<Args> {
       return;
     }
     this.#isLive = isLive;
+    this.#doWhileRefreshing = doWhileRefreshing
     this.realmsToSearch =
       realms === undefined || realms.length === 0
         ? this.realmServer.availableRealmURLs
@@ -97,9 +99,6 @@ export class SearchResource extends Resource<Args> {
             return;
           }
           this.search.perform(query);
-          if (doWhileRefreshing) {
-            this.doWhileRefreshing.perform(doWhileRefreshing);
-          }
         }),
       }));
     }
@@ -139,13 +138,6 @@ export class SearchResource extends Resource<Args> {
       .filter((r) => r.cards.length > 0);
   }
 
-  private doWhileRefreshing = restartableTask(
-    async (
-      doWhileRefreshing: (ready: Promise<void> | undefined) => Promise<void>,
-    ) => {
-      await doWhileRefreshing(this.loaded);
-    },
-  );
 
   private search = restartableTask(async (query: Query) => {
     for (let instance of this._instances) {
@@ -203,6 +195,9 @@ export class SearchResource extends Resource<Args> {
         this._instances.length,
         ...results.map((instance) => instance),
       );
+      if(this.#doWhileRefreshing){
+        this.#doWhileRefreshing()
+      }
       for (let instance of this._instances) {
         this.store.addReference(instance.id);
       }
@@ -229,7 +224,7 @@ export function getSearch(
   getRealms?: () => string[] | undefined,
   opts?: {
     isLive?: boolean;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    doWhileRefreshing?: (() => void)| undefined;
   },
 ) {
   return SearchResource.from(parent, () => ({

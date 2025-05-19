@@ -17,6 +17,7 @@ import { eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   type getCards,
+  type getCard,
   type Query,
   isCardDocumentString,
   isFieldDef,
@@ -24,12 +25,14 @@ import {
   CodeRef,
   CardErrorJSONAPI,
   GetCardsContextName,
+  GetCardContextName,
   ResolvedCodeRef,
   specRef,
 } from '@cardstack/runtime-common';
 
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
+import CardRenderer from '@cardstack/host/components/card-renderer';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
 import SchemaEditor, {
@@ -102,8 +105,10 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   @service private declare specPanelService: SpecPanelService;
 
   @consume(GetCardsContextName) private declare getCards: getCards;
+  @consume(GetCardContextName) private declare getCard: getCard;
 
   @tracked private specSearch: ReturnType<getCards<Spec>> | undefined;
+  @tracked private cardResource: ReturnType<getCard> | undefined;
 
   private panelSelections: Record<string, SelectedAccordionItem>;
 
@@ -299,33 +304,38 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     };
   }
 
+  doWhileRefreshing = () => {
+    if (
+      !this.specPanelService.specSelection &&
+      this.specsForSelectedDefinition.length > 0
+    ) {
+      this.specPanelService.setSelection(this.specsForSelectedDefinition[0].id);
+    }
+  };
+
   private findSpecsForSelectedDefinition = () => {
     this.specSearch = this.getCards(
       this,
       () => this.queryForSpecsForSelectedDefinition,
       () => this.realmServer.availableRealmURLs,
-      { isLive: true },
+      { isLive: true, doWhileRefreshing: this.doWhileRefreshing },
     ) as ReturnType<getCards<Spec>>;
+  };
+
+  private makeCardResource = () => {
+    this.cardResource = this.getCard(this, () => this.activeSpecId);
   };
 
   get specsForSelectedDefinition() {
     return this.specSearch?.instances ?? [];
   }
 
-  private get activeSpec() {
-    let selectedSpecId = this.specPanelService.specSelection;
+  private get activeSpecId() {
+    return this.specPanelService.specSelection;
+  }
 
-    if (selectedSpecId) {
-      let selectedSpec = this.specsForSelectedDefinition?.find(
-        (spec) => spec.id === selectedSpecId,
-      );
-
-      if (selectedSpec) {
-        return selectedSpec;
-      }
-    }
-
-    return this.specsForSelectedDefinition?.[0];
+  get activeSpec() {
+    return this.cardResource?.card;
   }
 
   <template>
@@ -358,6 +368,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
         {{this.fileIncompatibilityMessage}}
       </div>
     {{else if @selectedCardOrField.cardOrField}}
+      {{consumeContext this.makeCardResource}}
       {{consumeContext this.findSpecsForSelectedDefinition}}
       <Accordion
         {{SpecUpdatedModifier
@@ -392,7 +403,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             </:content>
           </A.Item>
         </SchemaEditor>
-        <Playground
+        {{!-- <Playground
           @isOpen={{eq this.selectedAccordionItem 'playground'}}
           @codeRef={{@selectedCodeRef}}
           @isUpdating={{@moduleContentsResource.isLoading}}
@@ -413,7 +424,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               {{/if}}
             </:content>
           </A.Item>
-        </Playground>
+        </Playground> --}}
         <SpecPreview
           @selectedDeclaration={{@selectedDeclaration}}
           @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
@@ -451,6 +462,18 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             </:content>
           </A.Item>
         </SpecPreview>
+
+        {{!-- {{#each this.specsForSelectedDefinition as |mod|}}
+          {{#let (getComponent mod) as |CardComponent|}}
+            <CardComponent @format='edit' />
+          {{/let}}
+        {{/each}}
+        {{#if this.activeSpec}}
+          {{#let (getComponent this.activeSpec) as |CardComponent|}}
+            <CardComponent @format='edit' />
+          {{/let}}
+        {{/if}} --}}
+
       </Accordion>
     {{else if @moduleContentsResource.moduleError}}
       <Accordion as |A|>
@@ -576,4 +599,8 @@ export class SpecUpdatedModifier extends Modifier<SpecUpdatedModifierSignature> 
 
     onSpecUpdated(spec);
   }
+}
+
+function getComponent(cardOrField: BaseDef) {
+  return cardOrField.constructor.getComponent(cardOrField);
 }

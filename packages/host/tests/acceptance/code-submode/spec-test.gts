@@ -1,6 +1,6 @@
 import { click, fillIn, triggerEvent, find } from '@ember/test-helpers';
 
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
 
@@ -736,7 +736,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-spec-tag]').hasText('card');
   });
 
-  skip<TestContextWithSave>('spec auto saved (with stability)', async function (assert) {
+  test<TestContextWithSave>('spec auto saved (with stability)', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
