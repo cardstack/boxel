@@ -206,7 +206,6 @@ export class SearchResource extends Resource<Args> {
       for (let instance of this._instances) {
         this.store.addReference(instance.id);
       }
-      // TODO is the flush actually necessary?
       await this.store.flush();
     } finally {
       waiter.endAsync(token);

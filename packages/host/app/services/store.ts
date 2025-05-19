@@ -9,6 +9,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { task } from 'ember-concurrency';
 
 import cloneDeep from 'lodash/cloneDeep';
+import isEqual from 'lodash/isEqual';
 import mergeWith from 'lodash/mergeWith';
 
 import { stringify } from 'qs';
@@ -411,12 +412,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   async flushSaves() {
-    // TODO this is problematic. let's use a separate flush for auto save
-    do {
-      await Promise.allSettled(this.autoSavePromises.values());
-    } while (
-      [...this.autoSaveQueues.values()].find((queue) => queue.length > 1)
-    );
+    await Promise.allSettled(this.autoSavePromises.values());
   }
 
   getReferenceCount(id: string) {
@@ -1002,20 +998,22 @@ export default class StoreService extends Service implements StoreInterface {
           localDir: opts?.localDir,
         });
 
+        let api = await this.cardService.getAPI();
         // the store state represents the latest state and the server state is
         // potentially out-of-date. As such we only merge the server state that
         // the store does not know about specifically remote ID's and realm
         // meta. the attributes and relationships state from the server are
         // thrown away since the store has a more recent version of these.
-        let serverState = cloneDeep(json);
-        delete serverState.data.attributes;
-        delete serverState.data.relationships;
-        let api = await this.cardService.getAPI();
-        await api.updateFromSerialized(
-          instance,
-          serverState,
-          this.identityContext,
-        );
+        if (!needsServerStateMerge(instance, json)) {
+          let serverState = cloneDeep(json);
+          delete serverState.data.attributes;
+          delete serverState.data.relationships;
+          await api.updateFromSerialized(
+            instance,
+            serverState,
+            this.identityContext,
+          );
+        }
         if (isNew) {
           api.setId(instance, json.data.id!);
           this.subscribeToRealm(new URL(instance.id));
@@ -1193,6 +1191,16 @@ function processCardError(
         return formattedError(url, error, undefined);
     }
   }
+}
+
+function needsServerStateMerge(
+  instance: CardDef,
+  serverState: SingleCardDocument,
+): boolean {
+  return (
+    instance.id === serverState.data.id &&
+    isEqual(instance[meta], serverState.data.meta)
+  );
 }
 
 export function asURL(urlOrDoc: string | LooseSingleCardDocument) {
