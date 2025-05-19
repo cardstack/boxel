@@ -461,18 +461,6 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             </:content>
           </A.Item>
         </SpecPreview>
-
-        {{!-- {{#each this.specsForSelectedDefinition as |mod|}}
-          {{#let (getComponent mod) as |CardComponent|}}
-            <CardComponent @format='edit' />
-          {{/let}}
-        {{/each}}
-        {{#if this.activeSpec}}
-          {{#let (getComponent this.activeSpec) as |CardComponent|}}
-            <CardComponent @format='edit' />
-          {{/let}}
-        {{/if}} --}}
-
       </Accordion>
     {{else if @moduleContentsResource.moduleError}}
       <Accordion as |A|>
