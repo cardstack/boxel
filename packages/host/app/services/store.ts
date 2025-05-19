@@ -404,17 +404,19 @@ export default class StoreService extends Service implements StoreInterface {
     return this.autoSaveStates.get(id);
   }
 
-  //Defensively prevent infinte loop 
-  flushAttempts: number | undefined 
+  // Defensively prevent infinte loop
+  flushAttempts: number | undefined;
   async flush() {
     await this.ready;
     await Promise.allSettled(this.newReferencePromises);
-    this.flushAttempts = 0 
+    this.flushAttempts = 0;
     do {
       await Promise.allSettled(this.autoSavePromises.values());
       if (this.flushAttempts++ > 100) {
-        storeLogger.debug([...this.autoSaveQueues.values()])
-        storeLogger.debug(this.autoSavePromises.values())
+        storeLogger.debug('autoSaveQueues values', [
+          ...this.autoSaveQueues.values(),
+        ]);
+        storeLogger.debug('autoSavePromises', this.autoSavePromises.values());
         throw new Error('Flush infinite loop protection triggered');
       }
     } while (
