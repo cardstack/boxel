@@ -622,9 +622,9 @@ function toPromptMessageWithToolResults(
           let cardContent =
             commandResult.content.data.card.content ??
             commandResult.content.data.card.error;
-          content = `Command ${status}, with result card: ${cardContent}.\n`;
+          content = `Tool call ${status == 'applied' ? 'executed' : status}, with result card: ${cardContent}.\n`;
         } else {
-          content = `Command ${status}.\n`;
+          content = `Tool call ${status == 'applied' ? 'executed' : status}.\n`;
         }
       }
       return {

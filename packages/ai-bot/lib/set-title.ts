@@ -126,8 +126,7 @@ export const getLatestCommandApplyMessage = (
   ].find((cr: EncodedCommandRequest) => {
     cr.id === eventContent.commandRequestId;
   });
-  let args = JSON.stringify(commandRequest.content.data.toolCall);
-  let content = `Applying command with args ${args}. Cards shared are: ${attachedCardsToMessage(
+  let content = `Applying tool call ${commandRequest.name} with args ${commandRequest.arguments}. Cards shared are: ${attachedCardsToMessage(
     mostRecentlyAttachedCard,
     attachedCards,
   )}`;
