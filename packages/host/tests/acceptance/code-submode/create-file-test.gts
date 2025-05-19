@@ -797,7 +797,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
       await fillIn('[data-test-file-name-field]', 'test-fetch-failure-card');
       await click('[data-test-create-definition]');
       assert
-        .dom('[data-test-toggle-details]')
+        .dom('[data-test-error-type]')
         .containsText('Error creating field definition');
       assert
         .dom('[data-test-create-file-modal] [data-test-error-title]')
