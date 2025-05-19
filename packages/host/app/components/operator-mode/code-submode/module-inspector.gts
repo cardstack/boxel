@@ -334,7 +334,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
   }
 
   get activeSpec() {
-    return this.cardResource?.card;
+    return this.cardResource?.card as Spec;
   }
 
   <template>
