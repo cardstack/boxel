@@ -1004,7 +1004,7 @@ export default class StoreService extends Service implements StoreInterface {
         // the store does not know about specifically remote ID's and realm
         // meta. the attributes and relationships state from the server are
         // thrown away since the store has a more recent version of these.
-        if (!needsServerStateMerge(instance, json)) {
+        if (needsServerStateMerge(instance, json)) {
           let serverState = cloneDeep(json);
           delete serverState.data.attributes;
           delete serverState.data.relationships;
@@ -1198,8 +1198,8 @@ function needsServerStateMerge(
   serverState: SingleCardDocument,
 ): boolean {
   return (
-    instance.id === serverState.data.id &&
-    isEqual(instance[meta]?.realmInfo, serverState.data.meta.realmInfo)
+    instance.id !== serverState.data.id ||
+    !isEqual(instance[meta]?.realmInfo, serverState.data.meta.realmInfo)
   );
 }
 
