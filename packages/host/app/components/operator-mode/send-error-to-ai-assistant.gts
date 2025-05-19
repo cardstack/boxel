@@ -24,7 +24,7 @@ interface Signature {
   };
 }
 
-export default class FixItButton extends Component<Signature> {
+export default class SendErrorToAIAssistant extends Component<Signature> {
   @service private declare matrixService: MatrixService;
   @service private declare aiAssistantPanelService: AiAssistantPanelService;
 
@@ -47,7 +47,7 @@ export default class FixItButton extends Component<Signature> {
 
     await this.matrixService.sendMessage(
       this.matrixService.currentRoomId,
-      `In the attached file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
+      `In the attachment file, I encountered an error that needs fixing:\n\n${this.errorMessage}.`,
       [],
       this.args.fileToAttach ? [this.args.fileToAttach] : [],
     );
@@ -55,18 +55,18 @@ export default class FixItButton extends Component<Signature> {
 
   <template>
     <Button
-      class='fix-it-button'
+      class='send-error-to-ai-assistant'
       @kind='primary'
       @size='small'
       @disabled={{this.sendToAiAssistant.isRunning}}
       {{on 'click' this.sendToAiAssistant.perform}}
-      data-test-fix-it-button
+      data-test-send-error-to-ai-assistant
     >
       {{if this.sendToAiAssistant.isRunning 'Sending...' 'Fix it'}}
     </Button>
 
     <style scoped>
-      .fix-it-button {
+      .send-error-to-ai-assistant {
         --boxel-button-color: var(--boxel-error-300);
         --boxel-button-border: 1px solid var(--boxel-error-300);
         --boxel-button-text-color: var(--boxel-light);
@@ -80,19 +80,19 @@ export default class FixItButton extends Component<Signature> {
         text-wrap: nowrap;
       }
 
-      .fix-it-button:hover:not(:disabled) {
+      .send-error-to-ai-assistant:hover:not(:disabled) {
         --boxel-button-color: var(--boxel-error-200);
         --boxel-button-border: 1px solid var(--boxel-error-200);
         transform: translateY(-1px);
         box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
       }
 
-      .fix-it-button:disabled {
+      .send-error-to-ai-assistant:disabled {
         opacity: 0.6;
         cursor: not-allowed;
       }
 
-      .fix-it-button :deep(svg) {
+      .send-error-to-ai-assistant :deep(svg) {
         width: 14px;
         height: 14px;
       }

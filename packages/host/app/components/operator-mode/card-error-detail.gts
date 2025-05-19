@@ -16,7 +16,7 @@ import type { FileDef } from 'https://cardstack.com/base/file-api';
 import SwitchSubmodeCommand from '../../commands/switch-submode';
 import { type CardErrorJSONAPI } from '../../services/store';
 
-import FixItButton from './fix-it-button';
+import SendErrorToAIAssistant from './send-error-to-ai-assistant';
 
 import type CommandService from '../../services/command-service';
 
@@ -74,7 +74,7 @@ export default class CardErrorDetail extends Component<Signature> {
               {{if @title @title @error.title}}
             </span>
             {{#if @fileToFixWithAi}}
-              <FixItButton
+              <SendErrorToAIAssistant
                 @error={{this.errorObject}}
                 @errorType='card'
                 @fileToAttach={{@fileToFixWithAi}}
@@ -123,7 +123,7 @@ export default class CardErrorDetail extends Component<Signature> {
         width: 100%;
         gap: var(--boxel-sp-xs);
       }
-      .title :deep(.fix-it-button) {
+      .title :deep(.send-error-to-ai-assistant) {
         margin-left: auto;
       }
       .error-detail {

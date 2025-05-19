@@ -868,7 +868,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assert.dom('[data-test-module-error-panel] > button').isDisabled();
 
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
-      await click('[data-test-fix-it-button]');
+      await click('[data-test-send-error-to-ai-assistant]');
       assert.dom('[data-test-ai-assistant-panel]').exists();
       assertMessages(assert, [
         {
@@ -927,7 +927,7 @@ module('Acceptance | code submode tests', function (_hooks) {
         );
 
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
-      await click('[data-test-fix-it-button]');
+      await click('[data-test-send-error-to-ai-assistant]');
       assert.dom('[data-test-ai-assistant-panel]').exists();
       assertMessages(assert, [
         {

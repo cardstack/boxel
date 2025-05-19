@@ -6,7 +6,8 @@ import { CopyButton } from '@cardstack/boxel-ui/components';
 import MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import FixItButton from './fix-it-button';
+import SendErrorToAIAssistant from './send-error-to-ai-assistant';
+
 interface Signature {
   Element: HTMLElement;
   Args: {
@@ -94,7 +95,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
               @textToCopy={{this.removeSourceMappingURL @syntaxErrors}}
             />
             {{#if this.fileToAttach}}
-              <FixItButton
+              <SendErrorToAIAssistant
                 @error={{this.errorObject}}
                 @errorType='syntax'
                 @fileToAttach={{this.fileToAttach}}
