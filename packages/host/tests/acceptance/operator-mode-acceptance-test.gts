@@ -769,8 +769,8 @@ module('Acceptance | operator mode tests', function (hooks) {
       .exists();
 
     await click('[data-test-workspace-chooser-toggle]');
-    await click('[data-test-workspace="Boxel Catalog"]');
-    assert.dom(`[data-test-realm-name]`).hasText('In Boxel Catalog');
+    await click('[data-test-workspace="Cardstack Catalog"]');
+    assert.dom(`[data-test-realm-name]`).hasText('In Cardstack Catalog');
     assert.dom(`[data-test-file="index.json"]`).hasClass('selected');
     assert.dom('[data-test-recent-file]').exists({ count: 4 });
     assert
