@@ -50,7 +50,7 @@ export class SearchResource extends Resource<Args> {
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
-  #doWhileRefreshing:(() => void) | undefined;
+  #doWhileRefreshing: (() => void) | undefined;
   #previousQuery: Query | undefined;
   #previousRealms: string[] | undefined;
   #hasRegisteredDestructor = false;
@@ -61,7 +61,7 @@ export class SearchResource extends Resource<Args> {
       return;
     }
     this.#isLive = isLive;
-    this.#doWhileRefreshing = doWhileRefreshing
+    this.#doWhileRefreshing = doWhileRefreshing;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
         ? this.realmServer.availableRealmURLs
@@ -138,7 +138,6 @@ export class SearchResource extends Resource<Args> {
       .filter((r) => r.cards.length > 0);
   }
 
-
   private search = restartableTask(async (query: Query) => {
     for (let instance of this._instances) {
       this.store.dropReference(instance.id);
@@ -195,8 +194,8 @@ export class SearchResource extends Resource<Args> {
         this._instances.length,
         ...results.map((instance) => instance),
       );
-      if(this.#doWhileRefreshing){
-        this.#doWhileRefreshing()
+      if (this.#doWhileRefreshing) {
+        this.#doWhileRefreshing();
       }
       for (let instance of this._instances) {
         this.store.addReference(instance.id);
@@ -224,7 +223,7 @@ export function getSearch(
   getRealms?: () => string[] | undefined,
   opts?: {
     isLive?: boolean;
-    doWhileRefreshing?: (() => void)| undefined;
+    doWhileRefreshing?: (() => void) | undefined;
   },
 ) {
   return SearchResource.from(parent, () => ({
