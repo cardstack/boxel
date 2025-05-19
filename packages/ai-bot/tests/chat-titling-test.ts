@@ -23,7 +23,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -45,7 +45,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -61,7 +61,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'conversation',
         },
@@ -140,7 +140,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -156,7 +156,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'conversation',
         },
@@ -172,7 +172,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '3',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Response',
         },
@@ -188,7 +188,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '4',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Response',
         },
@@ -205,7 +205,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '5',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Response',
         },
@@ -221,7 +221,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '6',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -243,7 +243,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -259,7 +259,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '2',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'conversation',
         },
@@ -275,7 +275,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '3',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Response',
         },
@@ -291,7 +291,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '4',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -308,7 +308,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '5',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -324,7 +324,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '6',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey',
         },
@@ -346,7 +346,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey please perform an action',
         },
@@ -403,7 +403,7 @@ module('shouldSetRoomTitle', () => {
         event_id: '1',
         origin_server_ts: 1234567890,
         content: {
-          msgtype: 'm.text',
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
           format: 'org.matrix.custom.html',
           body: 'Hey please perform an action',
         },
