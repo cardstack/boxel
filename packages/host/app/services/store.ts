@@ -1199,7 +1199,7 @@ function needsServerStateMerge(
 ): boolean {
   return (
     instance.id === serverState.data.id &&
-    isEqual(instance[meta], serverState.data.meta)
+    isEqual(instance[meta]?.realmInfo, serverState.data.meta.realmInfo)
   );
 }
 
