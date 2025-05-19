@@ -155,7 +155,9 @@ export async function constructHistory(
   for (let rawEvent of eventlist) {
     if (rawEvent.content.data) {
       try {
-        rawEvent.content.data = JSON.parse(rawEvent.content.data);
+        if (typeof rawEvent.content.data === 'string') {
+          rawEvent.content.data = JSON.parse(rawEvent.content.data);
+        }
       } catch (e) {
         Sentry.captureException(e, {
           attachments: [
