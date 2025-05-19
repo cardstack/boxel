@@ -213,7 +213,7 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   save(id: string) {
-    this.doAutoSave(id, { isImmediate: true });
+    this.doAutoSave.perform(id, { isImmediate: true });
   }
 
   async add<T extends CardDef>(
@@ -660,7 +660,7 @@ export default class StoreService extends Service implements StoreInterface {
     if (isCardInstance(instance)) {
       let autoSaveState = this.initOrGetAutoSaveState(instance);
       autoSaveState.hasUnsavedChanges = true;
-      this.doAutoSave(instance);
+      this.doAutoSave.perform(instance);
     }
   };
 
@@ -803,10 +803,10 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private doAutoSave(
+  private doAutoSave = task({restartable: true},async(    
     idOrInstance: string | CardDef,
-    opts?: { isImmediate?: true },
-  ) {
+    opts?: { isImmediate?: true }
+  ) =>{
     let instance: CardDef | undefined;
     if (typeof idOrInstance === 'string') {
       instance = this.identityContext.get(idOrInstance);
@@ -827,7 +827,7 @@ export default class StoreService extends Service implements StoreInterface {
     autoSaveState.isSaving = true;
     autoSaveState.lastSaveError = undefined;
     this.drainAutoSaveQueue(queueName);
-  }
+  })
 
   private async drainAutoSaveQueue(queueName: string) {
     return await this.withTestWaiters(async () => {
@@ -845,7 +845,6 @@ export default class StoreService extends Service implements StoreInterface {
         new Promise<void>((r) => (done = r)),
       );
       let autoSaves = [...(this.autoSaveQueues.get(queueName) ?? [])];
-      this.autoSaveQueues.set(queueName, []);
       if (autoSaves && autoSaves.length > 0) {
         let autoSaveState = this.initOrGetAutoSaveState(instance);
         // favor isImmediate saves
@@ -866,6 +865,7 @@ export default class StoreService extends Service implements StoreInterface {
             autoSaveState.lastSaveError = error as Error;
           }
         } finally {
+          this.autoSaveQueues.set(queueName, []);
           autoSaveState.isSaving = false;
           this.calculateLastSavedMsg(autoSaveState);
           if (isLocalId(queueName) && instance.id) {
@@ -882,17 +882,15 @@ export default class StoreService extends Service implements StoreInterface {
       instance.id ?? instance[localIdSymbol],
     );
     if (!autoSaveState) {
-      autoSaveState = new TrackedObject({
+      let freshAutoSaveState = new TrackedObject({
         isSaving: false,
         hasUnsavedChanges: false,
         lastSaved: undefined,
         lastSavedErrorMsg: undefined,
         lastSaveError: undefined,
       });
-      this.autoSaveStates.set(instance[localIdSymbol], autoSaveState);
-    }
-    if (instance.id && !this.autoSaveStates.get(instance.id)) {
-      this.autoSaveStates.set(instance.id, autoSaveState);
+      this.autoSaveStates.set(instance[localIdSymbol], freshAutoSaveState);
+      return freshAutoSaveState
     }
     return autoSaveState;
   }
