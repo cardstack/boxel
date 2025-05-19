@@ -639,19 +639,13 @@ export async function getModifyPrompt(
     if (isCommandResultEvent(event)) {
       continue; // we'll include these with the tool calls
     }
-    let content;
-    if (event.unsigned?.['m.relations']?.['m.replace']) {
-      content = event.unsigned['m.relations']['m.replace'].content;
-    } else {
-      content = event.content;
-    }
     if (
-      'isStreamingFinished' in content &&
-      content.isStreamingFinished === false
+      'isStreamingFinished' in event.content &&
+      event.content.isStreamingFinished === false
     ) {
       continue;
     }
-    let body = content.body;
+    let body = event.content.body;
 
     if (event.sender === aiBotUserId) {
       let toolCalls = toToolCalls(event as CardMessageEvent);
@@ -672,12 +666,12 @@ export async function getModifyPrompt(
     }
     if (body && event.sender !== aiBotUserId) {
       if (
-        content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
-        content.data?.context?.openCardIds
+        event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE &&
+        event.content.data?.context?.openCardIds
       ) {
         body = `User message: ${body}
           Context: the user has the following cards open: ${JSON.stringify(
-            content.data.context.openCardIds,
+            event.content.data.context.openCardIds,
           )}`;
       } else {
         body = `User message: ${body}
@@ -840,12 +834,6 @@ export function isInDebugMode(
   aiBotUserId: string,
 ): boolean {
   let lastUserMessage = getLastUserMessage(eventList, aiBotUserId);
-  console.log('lastUserMessage', lastUserMessage);
-  console.log('lastUserMessage.content', lastUserMessage?.content);
-  console.log(
-    'lastUserMessage.content.context',
-    lastUserMessage?.content?.context,
-  );
   if (
     !lastUserMessage ||
     !lastUserMessage.content ||
