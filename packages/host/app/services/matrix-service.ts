@@ -42,6 +42,9 @@ import {
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import {
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -74,6 +77,8 @@ import { type FileDef } from 'https://cardstack.com/base/file-api';
 import type {
   CardMessageContent,
   MatrixEvent as DiscreteMatrixEvent,
+  CodePatchResultContent,
+  CodePatchStatus,
   CommandResultWithNoOutputContent,
   CommandResultWithOutputContent,
   RealmEventContent,
@@ -619,6 +624,7 @@ export default class MatrixService extends Service {
     eventType: string,
     content:
       | CardMessageContent
+      | CodePatchResultContent
       | CommandResultWithNoOutputContent
       | CommandResultWithOutputContent,
   ) {
@@ -769,7 +775,7 @@ export default class MatrixService extends Service {
     await this.client.cacheContentHashIfNeeded(event);
   }
 
-  async sendCommandResultEvent(
+  async sendToolCallCommandResultEvent(
     roomId: string,
     invokedToolFromEventId: string,
     toolCallId: string,
@@ -815,6 +821,36 @@ export default class MatrixService extends Service {
     } catch (e) {
       throw new Error(
         `Error sending command result event: ${
+          'message' in (e as Error) ? (e as Error).message : e
+        }`,
+      );
+    }
+  }
+
+  async sendCodePatchResultEvent(
+    roomId: string,
+    eventId: string,
+    codeBlockIndex: number,
+    resultKey: CodePatchStatus,
+  ) {
+    let content: CodePatchResultContent = {
+      msgtype: APP_BOXEL_CODE_PATCH_RESULT_MSGTYPE,
+      codeBlockIndex,
+      'm.relates_to': {
+        event_id: eventId,
+        key: resultKey,
+        rel_type: APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+      },
+    };
+    try {
+      return await this.sendEvent(
+        roomId,
+        APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+        content,
+      );
+    } catch (e) {
+      throw new Error(
+        `Error sending code patch result event: ${
           'message' in (e as Error) ? (e as Error).message : e
         }`,
       );

@@ -53,7 +53,6 @@ module('Integration | loading', function (hooks) {
     `;
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'card-with-broken-icon.gts': cardWithBrokenIconDefSource,

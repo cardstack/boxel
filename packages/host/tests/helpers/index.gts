@@ -132,6 +132,26 @@ export async function getDbAdapter() {
   return dbAdapter;
 }
 
+export async function withSlowSave(
+  delayMs: number,
+  cb: () => Promise<void>,
+): Promise<void> {
+  let store = lookupService('store') as StoreService;
+  (store as any)._originalPersist = (store as any).persistAndUpdate;
+  (store as any).persistAndUpdate = async (
+    card: CardDef,
+    defaultRealmHref?: string,
+  ) => {
+    await delay(delayMs);
+    await (store as any)._originalPersist(card, defaultRealmHref);
+  };
+  try {
+    return cb();
+  } finally {
+    (store as any).persistAndUpdate = (store as any)._originalPersist;
+  }
+}
+
 export async function waitForSyntaxHighlighting(
   textContent: string,
   color: string,
@@ -271,6 +291,7 @@ export function setupLocalIndexing(hooks: NestedHooks) {
     // Without this, we have been experiencing test failures related to a destroyed owner, e.g.
     // "Cannot call .factoryFor('template:index-card_error') after the owner has been destroyed"
     await settled();
+    await lookupService<StoreService>('store').flush();
   });
 }
 
@@ -318,7 +339,6 @@ export async function setupIntegrationTestRealm({
   realmURL,
   mockMatrixUtils,
 }: {
-  loader: Loader;
   contents: RealmContents;
   realmURL?: string;
   mockMatrixUtils: MockUtils;
@@ -344,6 +364,15 @@ export function lookupService<T extends Service>(name: string): T {
 export function lookupNetworkService(): NetworkService {
   let owner = (getContext() as TestContext).owner;
   return owner.lookup('service:network') as NetworkService;
+}
+
+export async function withoutLoaderMonitoring<T>(cb: () => Promise<T>) {
+  (globalThis as any).__disableLoaderMonitoring = true;
+  try {
+    return (await cb()) as T;
+  } finally {
+    (globalThis as any).__disableLoaderMonitoring = undefined;
+  }
 }
 
 export const testRealmSecretSeed = "shhh! it's a secret";

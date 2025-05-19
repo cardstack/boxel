@@ -3,7 +3,7 @@ import { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { type Loader, skillCardRef } from '@cardstack/runtime-common';
+import { skillCardRef } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_MESSAGE_MSGTYPE,
@@ -23,7 +23,6 @@ import type { Skill } from 'https://cardstack.com/base/skill';
 import {
   setupIntegrationTestRealm,
   setupLocalIndexing,
-  lookupLoaderService,
   lookupService,
   testRealmURL,
   testRealmInfo,
@@ -32,7 +31,7 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupRenderingTest } from '../../helpers/setup';
 
-let loader: Loader, commandService: CommandService;
+let commandService: CommandService;
 
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
@@ -58,12 +57,10 @@ module('Integration | commands | ai-assistant', function (hooks) {
 
   hooks.beforeEach(function (this: RenderingTestContext) {
     getOwner(this)!.register('service:realm', StubRealmService);
-    loader = lookupLoaderService().loader;
   });
 
   hooks.beforeEach(async function () {
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'empty1.json': {

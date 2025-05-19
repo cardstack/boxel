@@ -11,14 +11,12 @@ import { module, test } from 'qunit';
 
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 
-import { Loader, CardContextName } from '@cardstack/runtime-common';
+import { CardContextName } from '@cardstack/runtime-common';
 
 import { getSearch } from '@cardstack/host/resources/search';
-import LoaderService from '@cardstack/host/services/loader-service';
 
 import {
   CardDocFiles,
-  lookupLoaderService,
   setupIntegrationTestRealm,
   setupLocalIndexing,
   testRealmURL,
@@ -72,15 +70,7 @@ class CardContextConsumer extends GlimmerComponent<CardContextConsumerSignature>
 }
 
 module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
-  let loader: Loader;
-  let loaderService: LoaderService;
-
   setupRenderingTest(hooks);
-  hooks.beforeEach(function () {
-    loaderService = lookupLoaderService();
-    loader = loaderService.loader;
-  });
-
   setupLocalIndexing(hooks);
 
   let mockMatrixUtils = setupMockMatrix(hooks);
@@ -148,7 +138,6 @@ module('Integration | card api (Usage of publicAPI actions)', function (hooks) {
         },
       };
       await setupIntegrationTestRealm({
-        loader,
         mockMatrixUtils,
         contents: {
           'author.gts': { Author },

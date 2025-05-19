@@ -22,6 +22,7 @@ import {
   Deferred,
   SingleCardDocument,
   type LooseSingleCardDocument,
+  isLocalId,
 } from '@cardstack/runtime-common';
 import { Realm } from '@cardstack/runtime-common/realm';
 
@@ -180,7 +181,7 @@ module('Acceptance | interact submode tests', function (hooks) {
 
           <div data-test-editable-meta>
             {{#if @canEdit}}
-              address is editable.
+              address is editable
             {{else}}
               address is NOT editable.
             {{/if}}
@@ -677,10 +678,8 @@ module('Acceptance | interact submode tests', function (hooks) {
         'service:recent-cards-service',
       ) as RecentCardsService;
 
-      let firstStack = operatorModeStateService.state.stacks[0];
-      // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      recentCardsService.ascendingRecentCardIds = firstStack.map(
-        (item) => item.id,
+      operatorModeStateService.state.stacks[0].map((item) =>
+        recentCardsService.add(item.id),
       );
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
@@ -784,9 +783,9 @@ module('Acceptance | interact submode tests', function (hooks) {
         'service:recent-cards-service',
       ) as RecentCardsService;
 
-      // @ts-ignore Property '#private' is missing in type 'Card[]' but required in type 'TrackedArray<Card>'.glint(2741) - don't care about this error here, just stubbing
-      recentCardsService.ascendingRecentCardIds =
-        operatorModeStateService.state.stacks[0].map((item) => item.id);
+      operatorModeStateService.state.stacks[0].map((item) =>
+        recentCardsService.add(item.id),
+      );
 
       assert.dom('[data-test-operator-mode-stack]').exists({ count: 1 });
       assert.dom('[data-test-add-card-left-stack]').exists();
@@ -833,12 +832,13 @@ module('Acceptance | interact submode tests', function (hooks) {
     });
 
     test<TestContextWithSave>('can create a card from the index stack item', async function (assert) {
-      assert.expect(5);
+      assert.expect(7);
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
       });
       let deferred = new Deferred<void>();
-      this.onSave((_, json) => {
+      let id: string | undefined;
+      this.onSave((url, json) => {
         if (typeof json === 'string') {
           throw new Error('expected JSON save data');
         }
@@ -846,6 +846,7 @@ module('Acceptance | interact submode tests', function (hooks) {
           // Because we create an empty card, upon choosing a catalog item, we must skip the scenario where attributes null
           return;
         }
+        id = url.href;
         assert.strictEqual(json.data.attributes?.firstName, 'Hassan');
         assert.strictEqual(json.data.meta.realmURL, testRealmURL);
         deferred.fulfill();
@@ -866,6 +867,22 @@ module('Acceptance | interact submode tests', function (hooks) {
       await click('[data-test-stack-card-index="1"] [data-test-close-button]');
 
       await deferred.promise;
+      await waitUntil(() => id, {
+        timeoutMessage: 'waiting for id to be assigned to new card',
+      });
+      id = id!;
+
+      let recentCards: { cardId: string; timestamp: number }[] = JSON.parse(
+        window.localStorage.getItem(RecentCards) ?? '[]',
+      );
+      assert.ok(
+        recentCards.find((c) => c.cardId === id),
+        `the newly created card's remote id is in recent cards`,
+      );
+      assert.notOk(
+        recentCards.find((c) => isLocalId(c.cardId)),
+        `no local ID's are in recent cards`,
+      );
     });
 
     // TODO we don't yet support viewing an unsaved card in code mode since it has no URL
@@ -1806,10 +1823,10 @@ module('Acceptance | interact submode tests', function (hooks) {
 
     test('Clicking search panel (without left and right buttons activated) replaces all cards in the rightmost stack', async function (assert) {
       // creates a recent search
-      window.localStorage.setItem(
-        RecentCards,
-        JSON.stringify([`${testRealmURL}Person/fadhlan`]),
-      );
+      let recentCardsService = this.owner.lookup(
+        'service:recent-cards-service',
+      ) as RecentCardsService;
+      recentCardsService.add(`${testRealmURL}Person/fadhlan`);
 
       await visitOperatorMode({
         stacks: [

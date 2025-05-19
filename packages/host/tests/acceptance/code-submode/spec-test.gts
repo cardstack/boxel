@@ -18,10 +18,10 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
   getPlaygroundSelections,
-  getRecentFiles,
   assertCardExists,
   selectDeclaration,
 } from '../../helpers/playground';
+import { getRecentFiles } from '../../helpers/recent-files-cards';
 
 import { setupApplicationTest } from '../../helpers/setup';
 
@@ -935,11 +935,13 @@ module('Acceptance | Spec preview', function (hooks) {
     await click(`[data-test-card="${petId}"]`);
 
     // Verify the card was added to recent files
-    assert.deepEqual(
-      getRecentFiles()?.[0],
-      [testRealmURL, 'Pet/mango.json', null],
+    let recentFile = getRecentFiles()?.[0];
+    assert.strictEqual(
+      `${recentFile?.[0]}${recentFile?.[1]}`,
+      `${testRealmURL}Pet/mango.json`,
       'Card is added to recent files storage',
     );
+
     // Verify the card appears in the playground
     assertCardExists(
       assert,
