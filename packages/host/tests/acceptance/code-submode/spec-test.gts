@@ -1,8 +1,16 @@
-import { click, fillIn, triggerEvent, find } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  triggerEvent,
+  find,
+  settled,
+} from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
+
+import MessageService from '@cardstack/host/services/message-service';
 
 import {
   setupLocalIndexing,
@@ -11,6 +19,7 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
+  lookupService,
   type TestContextWithSave,
   setupOnSave,
 } from '../../helpers';
@@ -622,6 +631,44 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-button]').exists();
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
+  });
+  test('does not lose input field focus when editing spec', async function (assert) {
+    const receivedEventDeferred = new Deferred<void>();
+    const messageService = lookupService<MessageService>('message-service');
+
+    messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
+      if (
+        e.eventName === 'index' &&
+        e.indexType === 'incremental-index-initiation'
+      ) {
+        return; // ignore the index initiation event
+      }
+      receivedEventDeferred.fulfill();
+    });
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    // intentionally not awaiting fillIn
+    fillIn('[data-test-readme] textarea', 'Hello World');
+    let textArea = find('[data-test-readme] textarea') as HTMLTextAreaElement;
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, 3);
+    await receivedEventDeferred.promise;
+    await settled();
+    textArea = find('[data-test-readme] textarea') as HTMLTextAreaElement;
+    assert.strictEqual(
+      document.activeElement,
+      textArea,
+      'focus is preserved on the input element',
+    );
+    assert.strictEqual(
+      document.getSelection()?.anchorOffset,
+      3,
+      'select is preserved',
+    );
   });
   test('view when users cannot write but has NO spec instance', async function (assert) {
     await visitOperatorMode({

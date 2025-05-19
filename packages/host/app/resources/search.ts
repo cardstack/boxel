@@ -46,6 +46,7 @@ export class SearchResource extends Resource<Args> {
   // Resist the urge to expose this property publicly as that may entice
   // consumers of this resource  to use it in a non-reactive manner (pluck off
   // the instances and throw away the resource).
+  // @ts-ignore we use this.loaded for test instrumentation.
   private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<CardDef>();
