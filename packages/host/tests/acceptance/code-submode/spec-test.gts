@@ -254,6 +254,7 @@ module('Acceptance | Spec preview', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL, testRealm2URL],
+    autostart: true,
   });
 
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
