@@ -73,6 +73,7 @@ export interface Signature {
     type?: InputType;
     value: string | number | null | undefined;
     variant?: 'large' | 'default';
+    autocomplete?: string;
   };
   Element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement;
 }
@@ -161,6 +162,7 @@ export default class BoxelInput extends Component<Signature> {
           max={{@max}}
           required={{@required}}
           disabled={{@disabled}}
+          autocomplete={{@autocomplete}}
           aria-describedby={{if
             @helperText
             (concat 'helper-text-' this.guid)
