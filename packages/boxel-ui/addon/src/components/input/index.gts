@@ -55,6 +55,7 @@ export type InputBottomTreatment = Values<typeof InputBottomTreatments>;
 
 export interface Signature {
   Args: {
+    autocomplete?: string;
     bottomTreatment?: InputBottomTreatment;
     disabled?: boolean;
     errorMessage?: string;
@@ -73,7 +74,6 @@ export interface Signature {
     type?: InputType;
     value: string | number | null | undefined;
     variant?: 'large' | 'default';
-    autocomplete?: string;
   };
   Element: HTMLInputElement | HTMLTextAreaElement | HTMLDivElement;
 }
