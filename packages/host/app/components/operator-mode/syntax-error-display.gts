@@ -1,12 +1,10 @@
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 
-import { CopyButton } from '@cardstack/boxel-ui/components';
-
 import MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
-import SendErrorToAIAssistant from './send-error-to-ai-assistant';
+import ErrorDisplay from './error-display';
 
 interface Signature {
   Element: HTMLElement;
@@ -23,12 +21,6 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
     return syntaxErrors.replace(/\/\/# sourceMappingURL=.*/g, '');
   }
 
-  private get errorObject() {
-    return {
-      message: this.removeSourceMappingURL(this.args.syntaxErrors),
-    };
-  }
-
   private get fileToAttach() {
     let codePath = this.operatorModeStateService.state.codePath?.href;
     if (!codePath) return undefined;
@@ -40,6 +32,14 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
   }
 
   <template>
+    <div class='syntax-error-container' data-test-syntax-error>
+      <ErrorDisplay
+        @type='syntax'
+        @message={{this.removeSourceMappingURL @syntaxErrors}}
+        @fileToAttach={{this.fileToAttach}}
+      />
+    </div>
+
     <style scoped>
       .syntax-error-container {
         background: var(--boxel-100);
@@ -47,68 +47,6 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
         border-radius: var(--boxel-radius);
         height: 100%;
       }
-
-      .syntax-error-box {
-        border-radius: var(--boxel-border-radius);
-        padding: var(--boxel-sp);
-        background: var(--boxel-200);
-      }
-
-      .syntax-error-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-      }
-
-      .syntax-error-text {
-        color: red;
-        font-weight: 600;
-      }
-
-      hr {
-        width: calc(100% + var(--boxel-sp) * 2);
-        margin-left: calc(var(--boxel-sp) * -1);
-        margin-top: calc(var(--boxel-sp-sm) + 1px);
-      }
-
-      pre {
-        overflow: hidden;
-        text-wrap: auto;
-      }
-
-      .syntax-error-actions {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xxs);
-        margin-left: auto;
-      }
     </style>
-
-    <div class='syntax-error-container' data-test-syntax-error>
-      <div class='syntax-error-box'>
-        <div class='syntax-error-header'>
-          <div class='syntax-error-text'>
-            Syntax Error
-          </div>
-          <div class='syntax-error-actions'>
-            <CopyButton
-              @textToCopy={{this.removeSourceMappingURL @syntaxErrors}}
-            />
-            {{#if this.fileToAttach}}
-              <SendErrorToAIAssistant
-                @error={{this.errorObject}}
-                @errorType='syntax'
-                @fileToAttach={{this.fileToAttach}}
-              />
-            {{/if}}
-          </div>
-        </div>
-
-        <hr />
-        <pre data-test-syntax-errors>{{this.removeSourceMappingURL
-            @syntaxErrors
-          }}</pre>
-      </div>
-    </div>
   </template>
 }
