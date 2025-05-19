@@ -103,7 +103,7 @@ export default class Monaco extends Modifier<Signature> {
   }: Omit<Signature['Args']['Named'], 'initialCursorPosition'> & {
     element: HTMLElement;
   }) {
-    monacoSDK.editor.defineTheme('boxel-dark-theme', {
+    monacoSDK.editor.defineTheme('boxel-monaco-dark-theme', {
       base: 'vs-dark', // base themes: vs, vs-dark
       inherit: true,
       rules: [],
@@ -122,7 +122,7 @@ export default class Monaco extends Modifier<Signature> {
       minimap: {
         enabled: false,
       },
-      theme: 'boxel-dark-theme',
+      theme: 'boxel-monaco-dark-theme',
       ...editorDisplayOptions,
     };
 

@@ -713,7 +713,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
         window
           .getComputedStyle(find('.monaco-editor-background')!)
           .getPropertyValue('background-color')!,
-        'rgb(235, 234, 237)', // equivalent to #ebeaed
+        'rgb(96, 96, 96)', // equivalent to #606060
         'monaco editor is greyed out when read-only',
       );
 
