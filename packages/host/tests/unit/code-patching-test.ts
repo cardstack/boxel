@@ -6,7 +6,7 @@ module(
   'Unit | code patching | parse search replace blocks',
   function (_assert) {
     test('will parse a search replace block when search block is incomplete', async function (assert) {
-      let block = `// File url: paste.txt
+      let block = `paste.txt
 <<<<<<< SEARCH
             <div class='detail-item'>
               <span class='label'>What:</span>
@@ -25,7 +25,7 @@ module(
     });
 
     test('will parse a search replace block when replace block is complete', async function (assert) {
-      let block = `// File url: paste.txt
+      let block = `paste.txt
 <<<<<<< SEARCH
             <div class='detail-item'>
               <span class='label'>What:</span>
@@ -88,7 +88,7 @@ module(
     });
 
     test('will parse a complete search replace block', async function (assert) {
-      let block = `// File url: paste.txt
+      let block = `paste.txt
 <<<<<<< SEARCH
             <div class='detail-item'>
               <span class='label'>What:</span>

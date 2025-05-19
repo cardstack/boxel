@@ -55,6 +55,7 @@ export type InputBottomTreatment = Values<typeof InputBottomTreatments>;
 
 export interface Signature {
   Args: {
+    autocomplete?: string;
     bottomTreatment?: InputBottomTreatment;
     disabled?: boolean;
     errorMessage?: string;
@@ -161,6 +162,7 @@ export default class BoxelInput extends Component<Signature> {
           max={{@max}}
           required={{@required}}
           disabled={{@disabled}}
+          autocomplete={{@autocomplete}}
           aria-describedby={{if
             @helperText
             (concat 'helper-text-' this.guid)
