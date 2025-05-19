@@ -174,6 +174,7 @@ export interface CardMessageContent {
     attachedCards?: (SerializedFile & { content?: string; error?: string })[];
     context: {
       openCardIds?: string[];
+      realmUrl?: string;
       tools?: Tool[];
       toolChoice?: ToolChoice;
       submode?: string;
