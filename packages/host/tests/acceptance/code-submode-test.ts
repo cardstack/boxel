@@ -932,7 +932,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Card Error: Encountered error rendering HTML for card: formatName is not defined Stack trace: Error: Encountered error rendering HTML for card: formatName is not defined`,
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error: Internal Server Error Encountered error rendering HTML for card: formatName is not defined Stack trace: Error: Encountered error rendering HTML for card: formatName is not defined at render`,
           files: [
             {
               name: 'broken-country.gts',

@@ -2,6 +2,7 @@ import {
   type RenderingTestContext,
   waitUntil,
   waitFor,
+  click,
   typeIn,
 } from '@ember/test-helpers';
 
@@ -1080,6 +1081,7 @@ module('Integration | Store', function (hooks) {
     );
 
     await waitFor('[data-test-card-error]');
+    await click('[data-test-toggle-details]');
     assert
       .dom('[data-test-error-details]')
       .includesText('intentional error thrown');

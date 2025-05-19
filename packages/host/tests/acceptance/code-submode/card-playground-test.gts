@@ -1419,7 +1419,7 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.dom('[data-test-format-chooser]').doesNotExist();
 
       await click('[data-test-toggle-details]');
-      assert.dom('[data-test-error-details]').hasText('Boom!');
+      assert.dom('[data-test-error-details]').hasText('Message: Boom!');
     });
 
     test('it renders error info when creating new instance causes error after file was created in realm', async function (assert) {

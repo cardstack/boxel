@@ -1067,7 +1067,7 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     assert.dom('[data-test-boxel-copy-button]').exists();
     await triggerEvent(`[data-test-boxel-copy-button]`, 'mouseenter');
     assert.dom('[data-test-tooltip-content]').hasText('Copy to clipboard');
-    assert.dom('[data-test-error-details]').hasText('File is empty');
+    assert.dom('[data-test-error-details]').hasText('Message: File is empty');
   });
 
   test<TestContextWithSave>('updates cursor position in monaco editor when field row clicked', async function (assert) {
