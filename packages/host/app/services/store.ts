@@ -803,31 +803,31 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
-  private doAutoSave = task({restartable: true},async(    
-    idOrInstance: string | CardDef,
-    opts?: { isImmediate?: true }
-  ) =>{
-    let instance: CardDef | undefined;
-    if (typeof idOrInstance === 'string') {
-      instance = this.identityContext.get(idOrInstance);
-      if (!instance) {
-        return;
+  private doAutoSave = task(
+    { restartable: true },
+    async (idOrInstance: string | CardDef, opts?: { isImmediate?: true }) => {
+      let instance: CardDef | undefined;
+      if (typeof idOrInstance === 'string') {
+        instance = this.identityContext.get(idOrInstance);
+        if (!instance) {
+          return;
+        }
+      } else {
+        instance = idOrInstance;
       }
-    } else {
-      instance = idOrInstance;
-    }
-    let autoSaveState = this.initOrGetAutoSaveState(instance);
-    let queueName = instance.id ?? instance[localIdSymbol];
-    let autoSaveQueue = this.autoSaveQueues.get(queueName);
-    if (!autoSaveQueue) {
-      autoSaveQueue = [];
-      this.autoSaveQueues.set(queueName, autoSaveQueue);
-    }
-    autoSaveQueue.push({ ...opts });
-    autoSaveState.isSaving = true;
-    autoSaveState.lastSaveError = undefined;
-    this.drainAutoSaveQueue(queueName);
-  })
+      let autoSaveState = this.initOrGetAutoSaveState(instance);
+      let queueName = instance.id ?? instance[localIdSymbol];
+      let autoSaveQueue = this.autoSaveQueues.get(queueName);
+      if (!autoSaveQueue) {
+        autoSaveQueue = [];
+        this.autoSaveQueues.set(queueName, autoSaveQueue);
+      }
+      autoSaveQueue.push({ ...opts });
+      autoSaveState.isSaving = true;
+      autoSaveState.lastSaveError = undefined;
+      this.drainAutoSaveQueue(queueName);
+    },
+  );
 
   private async drainAutoSaveQueue(queueName: string) {
     return await this.withTestWaiters(async () => {
@@ -890,7 +890,7 @@ export default class StoreService extends Service implements StoreInterface {
         lastSaveError: undefined,
       });
       this.autoSaveStates.set(instance[localIdSymbol], freshAutoSaveState);
-      return freshAutoSaveState
+      return freshAutoSaveState;
     }
     return autoSaveState;
   }
