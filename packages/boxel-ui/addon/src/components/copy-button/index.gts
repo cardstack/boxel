@@ -11,9 +11,9 @@ import Tooltip from '../tooltip/index.gts';
 
 interface Signature {
   Args: {
+    height?: string;
     textToCopy: string;
     width?: string;
-    height?: string;
   };
   Element: HTMLElement;
 }

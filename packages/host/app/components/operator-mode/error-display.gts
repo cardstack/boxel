@@ -1,12 +1,17 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import { CopyButton } from '@cardstack/boxel-ui/components';
-import { ExclamationTriangleFill } from '@cardstack/boxel-ui/icons';
-import { DropdownArrowDown, DropdownArrowUp } from '@cardstack/boxel-ui/icons';
+import { and, bool, not } from '@cardstack/boxel-ui/helpers';
+import {
+  DropdownArrowDown,
+  DropdownArrowUp,
+  ExclamationTriangleFill,
+} from '@cardstack/boxel-ui/icons';
+
+import OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import type { FileDef } from 'https://cardstack.com/base/file-api';
 
@@ -16,7 +21,8 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     type: 'syntax' | 'runtime';
-    message: string;
+    message?: string;
+    openDetails?: boolean;
     title?: string;
     stack?: string;
     fileToAttach?: FileDef;
@@ -24,13 +30,15 @@ interface Signature {
 }
 
 export default class ErrorDisplay extends Component<Signature> {
-  @tracked private showDetails = false;
+  @tracked private showDetails = this.args.openDetails ?? false;
+
+  @service private declare operatorModeStateService: OperatorModeStateService;
 
   private toggleDetails = () => (this.showDetails = !this.showDetails);
 
   private get errorObject() {
     return {
-      message: this.args.message,
+      message: this.args.message ?? '',
       stack: this.args.stack,
       title: this.args.title,
     };
@@ -43,7 +51,12 @@ export default class ErrorDisplay extends Component<Signature> {
           <ExclamationTriangleFill class='error-icon' />
           <span>{{@type}} Error</span>
         </div>
-        {{#if @fileToAttach}}
+        {{#if
+          (and
+            (bool @fileToAttach)
+            (not this.operatorModeStateService.aiAssistantOpen)
+          )
+        }}
           <SendErrorToAIAssistant
             @error={{this.errorObject}}
             @errorType={{@type}}
@@ -75,13 +88,15 @@ export default class ErrorDisplay extends Component<Signature> {
       </div>
 
       {{#if this.showDetails}}
-        <div class='error-details'>
-          <div class='detail-item'>
-            <div class='detail-title'>Message:</div>
-            <div class='detail-contents' data-test-error-message>
-              {{@message}}
+        <div class='error-details' data-test-error-details>
+          {{#if @message}}
+            <div class='detail-item'>
+              <div class='detail-title'>Message:</div>
+              <div class='detail-contents' data-test-error-message>
+                {{@message}}
+              </div>
             </div>
-          </div>
+          {{/if}}
           {{#if @stack}}
             <div class='detail-item'>
               <div class='detail-title'>Stack trace:</div>
@@ -96,9 +111,15 @@ export default class ErrorDisplay extends Component<Signature> {
       .error-display {
         background: #ffba00;
         border-radius: var(--boxel-border-radius-lg);
-        padding: var(--boxel-sp);
+        padding-bottom: var(--boxel-sp-xs);
         color: black;
         min-width: fit-content;
+        width: 100%;
+        box-shadow: var(--boxel-box-shadow);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
       }
 
       .error-header {
@@ -108,6 +129,7 @@ export default class ErrorDisplay extends Component<Signature> {
         margin-bottom: var(--boxel-sp-xs);
         flex-wrap: wrap;
         gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp) var(--boxel-sp) 0 var(--boxel-sp);
       }
 
       .error-type {
@@ -125,17 +147,18 @@ export default class ErrorDisplay extends Component<Signature> {
       }
 
       .error-title {
-        font-weight: 500;
+        font-size: var(--boxel-font-size-sm);
+        padding: 0 var(--boxel-sp) 0
+          calc(var(--boxel-sp) + 20px + var(--boxel-sp-xs));
       }
 
       .error-actions {
         display: flex;
         justify-content: flex-end;
         margin-top: var(--boxel-sp);
+        padding: 0 var(--boxel-sp);
 
-        margin-bottom: calc(-1 * var(--boxel-sp-xs));
-
-        --boxel-icon-button-width: 20px;
+        --boxel-icon-button-height: 20px;
         --boxel-icon-button-width: 20px;
       }
 
@@ -154,9 +177,10 @@ export default class ErrorDisplay extends Component<Signature> {
       }
 
       .error-details {
-        background: rgba(0, 0, 0, 0.1);
-        border-radius: var(--boxel-border-radius);
+        background: white;
         padding: var(--boxel-sp);
+        width: 100%;
+        margin-bottom: calc(-1 * var(--boxel-sp));
       }
 
       .detail-item {

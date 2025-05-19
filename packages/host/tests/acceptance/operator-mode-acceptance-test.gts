@@ -628,9 +628,9 @@ module('Acceptance | operator mode tests', function (hooks) {
       )
       .exists('the error state of the card is displayed');
     assert.dom('[data-test-error-title]').includesText('Link Not Found');
-    await click('[data-test-error-detail-toggle] button');
+    await click('[data-test-toggle-details]');
     assert
-      .dom('[data-test-error-detail]')
+      .dom('[data-test-error-details]')
       .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
   });
 

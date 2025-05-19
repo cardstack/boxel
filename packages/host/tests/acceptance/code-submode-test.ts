@@ -861,9 +861,9 @@ module('Acceptance | code submode tests', function (_hooks) {
           operatorModeStateParam,
         )}`,
       );
-      await waitFor('[data-test-syntax-errors]');
+      await waitFor('[data-test-error-details]');
       assert
-        .dom('[data-test-syntax-errors]')
+        .dom('[data-test-error-details]')
         .includesText('Parse Error at broken.gts:1:6: 1:10');
       assert.dom('[data-test-module-error-panel] > button').isDisabled();
 
@@ -889,9 +889,9 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await waitFor('[data-test-card-error]');
 
-      await click('[data-test-error-detail-toggle] button');
+      await click('[data-test-toggle-details]');
       assert
-        .dom('[data-test-error-detail]')
+        .dom('[data-test-error-details]')
         .includesText(`${testRealmURL}non-card not found`);
 
       await visitOperatorMode({
@@ -901,9 +901,9 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await waitFor('[data-test-card-error]');
 
-      await click('[data-test-error-detail-toggle] button');
+      await click('[data-test-toggle-details]');
       assert
-        .dom('[data-test-error-detail]')
+        .dom('[data-test-error-details]')
         .includesText(
           'Encountered error rendering HTML for card: formatName is not defined',
         );
@@ -919,9 +919,9 @@ module('Acceptance | code submode tests', function (_hooks) {
 
       await click('[data-test-accordion-item="playground"] button');
       await waitFor('[data-test-card-error]');
-      await click('[data-test-error-detail-toggle] button');
+      await click('[data-test-toggle-details]');
       assert
-        .dom('[data-test-error-detail]')
+        .dom('[data-test-error-details]')
         .includesText(
           `Encountered error rendering HTML for card: formatName is not defined`,
         );
@@ -932,7 +932,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Card Error: Internal Server Error Encountered error rendering HTML for card: formatName is not defined Stack trace:`,
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error: Encountered error rendering HTML for card: formatName is not defined Stack trace: Error: Encountered error rendering HTML for card: formatName is not defined`,
           files: [
             {
               name: 'broken-country.gts',

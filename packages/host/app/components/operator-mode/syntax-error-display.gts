@@ -37,6 +37,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
         @type='syntax'
         @message={{this.removeSourceMappingURL @syntaxErrors}}
         @fileToAttach={{this.fileToAttach}}
+        @openDetails={{true}}
       />
     </div>
 

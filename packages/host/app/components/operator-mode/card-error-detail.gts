@@ -1,8 +1,11 @@
-import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { service } from '@ember/service';
 
 import Component from '@glimmer/component';
+
+import { dropTask } from 'ember-concurrency';
+
+import perform from 'ember-concurrency/helpers/perform';
 
 import { Button } from '@cardstack/boxel-ui/components';
 
@@ -39,13 +42,20 @@ export default class CardErrorDetail extends Component<Signature> {
     });
   });
 
+  private get message() {
+    return this.args.error.message ?? undefined;
+  }
+
+  private get stack() {
+    return this.args.error.meta.stack ?? undefined;
+  }
+
   <template>
     <div class='error-detail' ...attributes>
       <ErrorDisplay
         @type='runtime'
-        @message={{@error.message}}
-        @title={{if @title @title @error.title}}
-        @stack={{@error.meta.stack}}
+        @title={{this.message}}
+        @stack={{this.stack}}
         @fileToAttach={{@fileToFixWithAi}}
       />
 
@@ -66,6 +76,7 @@ export default class CardErrorDetail extends Component<Signature> {
         overflow: auto;
         margin-top: auto;
         max-height: fit-content;
+        padding: var(--boxel-sp);
       }
       @media (min-height: 800px) {
         .error-detail {

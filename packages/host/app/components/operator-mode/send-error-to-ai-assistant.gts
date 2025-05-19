@@ -19,8 +19,8 @@ interface Signature {
       stack?: string;
       title?: string;
     };
-    errorType: 'syntax' | 'card';
-    fileToAttach: FileDef;
+    errorType: 'syntax' | 'runtime';
+    fileToAttach?: FileDef;
   };
 }
 
