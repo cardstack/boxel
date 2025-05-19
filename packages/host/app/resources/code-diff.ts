@@ -55,8 +55,12 @@ export class CodeDiffResource extends Resource<CodeDiffResourceArgs> {
       return;
     }
     try {
-      let result = (await this.cardService.getSource(new URL(fileUrl))).content;
-      this.originalCode = result;
+      let result = await this.cardService.getSource(new URL(fileUrl));
+      if (result.status === 404) {
+        this.originalCode = ''; // We are creating a new file, so we don't have the original code
+      } else {
+        this.originalCode = result.content;
+      }
     } catch (error) {
       this.errorMessage = `Failed to load code from ${fileUrl}`;
       return;
