@@ -403,7 +403,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
             </:content>
           </A.Item>
         </SchemaEditor>
-        {{!-- <Playground
+        <Playground
           @isOpen={{eq this.selectedAccordionItem 'playground'}}
           @codeRef={{@selectedCodeRef}}
           @isUpdating={{@moduleContentsResource.isLoading}}
@@ -424,7 +424,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
               {{/if}}
             </:content>
           </A.Item>
-        </Playground> --}}
+        </Playground>
         <SpecPreview
           @selectedDeclaration={{@selectedDeclaration}}
           @isLoadingNewModule={{@moduleContentsResource.isLoadingNewModule}}
