@@ -30,9 +30,9 @@ import {
   specRef,
 } from '@cardstack/runtime-common';
 
+import CardRenderer from '@cardstack/host/components/card-renderer';
 import CardError from '@cardstack/host/components/operator-mode/card-error';
 import CardRendererPanel from '@cardstack/host/components/operator-mode/card-renderer-panel/index';
-import CardRenderer from '@cardstack/host/components/card-renderer';
 import Playground from '@cardstack/host/components/operator-mode/code-submode/playground/playground';
 
 import SchemaEditor, {
