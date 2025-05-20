@@ -18,6 +18,7 @@ import {
   isCardInstance,
   type ResolvedCodeRef,
   internalKeyFor,
+  isLocalId,
 } from '@cardstack/runtime-common';
 
 import { Submode, Submodes } from '@cardstack/host/components/submode-switcher';
@@ -41,7 +42,6 @@ import { Format } from 'https://cardstack.com/base/card-api';
 import { type Stack } from '../components/operator-mode/interact-submode';
 
 import { removeFileExtension } from '../components/search-sheet/utils';
-import { isLocalId } from '../lib/gc-identity-context';
 
 import MatrixService from './matrix-service';
 import NetworkService from './network';
@@ -49,6 +49,7 @@ import NetworkService from './network';
 import type CardService from './card-service';
 import type { RecentFile } from './recent-files-service';
 import type ResetService from './reset';
+import type SpecPanelService from './spec-panel-service';
 import type StoreService from './store';
 
 import type IndexController from '../controllers';
@@ -117,6 +118,7 @@ export default class OperatorModeStateService extends Service {
   @service declare private matrixService: MatrixService;
   @service declare private store: StoreService;
   @service declare private playgroundPanelService: PlaygroundPanelService;
+  @service declare private specPanelService: SpecPanelService;
 
   constructor(owner: Owner) {
     super(owner);
@@ -433,6 +435,7 @@ export default class OperatorModeStateService extends Service {
     this.state.codePath = codePath;
     this.updateOpenDirsForNestedPath();
     this.schedulePersist();
+    this.specPanelService.setSelection(null);
   }
 
   replaceCodePath(codePath: URL | null) {

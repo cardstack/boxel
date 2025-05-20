@@ -463,9 +463,9 @@ module('Acceptance | code submode | schema editor tests', function (hooks) {
     });
 
     await waitForCodeEditor();
-    await waitFor('[data-test-code-mode-card-preview-body]');
+    await waitFor('[data-test-code-mode-card-renderer-body]');
     assert
-      .dom('[data-test-code-mode-card-preview-body]')
+      .dom('[data-test-code-mode-card-renderer-body]')
       .containsText('Hassan');
     await waitFor(`button[data-test-clickable-definition-container`);
     await click(`button[data-test-clickable-definition-container`);

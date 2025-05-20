@@ -2,6 +2,7 @@ import cn from './helpers/cn.ts';
 import compact from './helpers/compact.ts';
 import { getContrastColor } from './helpers/contrast-color.ts';
 import cssVar from './helpers/css-var.ts';
+import currencyFormat from './helpers/currency-format.ts';
 import dayjsFormat from './helpers/dayjs-format.ts';
 import element from './helpers/element.ts';
 import { add, subtract } from './helpers/math-helpers.ts';
@@ -18,6 +19,7 @@ export {
   cn,
   compact,
   cssVar,
+  currencyFormat,
   dayjsFormat,
   element,
   eq,

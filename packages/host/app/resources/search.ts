@@ -6,6 +6,8 @@ import { tracked, cached } from '@glimmer/tracking';
 
 import { restartableTask } from 'ember-concurrency';
 import { Resource } from 'ember-resources';
+
+import difference from 'lodash/difference';
 import flatMap from 'lodash/flatMap';
 import isEqual from 'lodash/isEqual';
 
@@ -34,7 +36,7 @@ export interface Args {
     query: Query | undefined;
     realms: string[] | undefined;
     isLive: boolean;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    doWhileRefreshing?: (() => void) | undefined;
   };
 }
 
@@ -46,10 +48,12 @@ export class SearchResource extends Resource<Args> {
   // Resist the urge to expose this property publicly as that may entice
   // consumers of this resource  to use it in a non-reactive manner (pluck off
   // the instances and throw away the resource).
+  // @ts-ignore we use this.loaded for test instrumentation.
   private loaded: Promise<void> | undefined;
   private subscriptions: { url: string; unsubscribe: () => void }[] = [];
   private _instances = new TrackedArray<CardDef>();
   #isLive = false;
+  #doWhileRefreshing: (() => void) | undefined;
   #previousQuery: Query | undefined;
   #previousRealms: string[] | undefined;
   #hasRegisteredDestructor = false;
@@ -60,6 +64,7 @@ export class SearchResource extends Resource<Args> {
       return;
     }
     this.#isLive = isLive;
+    this.#doWhileRefreshing = doWhileRefreshing;
     this.realmsToSearch =
       realms === undefined || realms.length === 0
         ? this.realmServer.availableRealmURLs
@@ -75,10 +80,6 @@ export class SearchResource extends Resource<Args> {
     }
     this.#previousQuery = query;
     this.#previousRealms = realms;
-
-    for (let instance of this._instances) {
-      this.store.dropReference(instance.id);
-    }
 
     this.loaded = this.search.perform(query);
 
@@ -101,9 +102,6 @@ export class SearchResource extends Resource<Args> {
             return;
           }
           this.search.perform(query);
-          if (doWhileRefreshing) {
-            this.doWhileRefreshing.perform(doWhileRefreshing);
-          }
         }),
       }));
     }
@@ -143,15 +141,9 @@ export class SearchResource extends Resource<Args> {
       .filter((r) => r.cards.length > 0);
   }
 
-  private doWhileRefreshing = restartableTask(
-    async (
-      doWhileRefreshing: (ready: Promise<void> | undefined) => Promise<void>,
-    ) => {
-      await doWhileRefreshing(this.loaded);
-    },
-  );
-
   private search = restartableTask(async (query: Query) => {
+    let oldReferences = this._instances.map((i) => i.id);
+
     // we cannot use the `waitForPromise` test waiter helper as that will cast
     // the Task instance to a promise which makes it uncancellable. When this is
     // uncancellable it results in a flaky test.
@@ -175,10 +167,13 @@ export class SearchResource extends Resource<Args> {
             }
             let collectionDoc = json;
             for (let data of collectionDoc.data) {
-              await this.store.add(
-                { data },
-                { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
-              );
+              let maybeInstance = this.store.peek(data.id!);
+              if (!maybeInstance) {
+                await this.store.add(
+                  { data },
+                  { doNotPersist: true, relativeTo: new URL(data.id!) }, // search results always have id's
+                );
+              }
             }
             return collectionDoc.data
               .map((r) => this.store.peek(r.id!)) // all results will have id's
@@ -198,13 +193,18 @@ export class SearchResource extends Resource<Args> {
       //  the array in the correct order synchronously is a stable operation.
       //  glimmer understands the delta and will only rerender the components
       //  tied to the instances that are added (or removed) from the array
-      this._instances.splice(
-        0,
-        this._instances.length,
-        ...results.map((instance) => instance),
-      );
-      for (let instance of this._instances) {
-        this.store.addReference(instance.id);
+      this._instances.splice(0, this._instances.length, ...results);
+      if (this.#doWhileRefreshing) {
+        this.#doWhileRefreshing();
+      }
+      let newReferences = this._instances.map((i) => i.id);
+      let referencesToDrop = difference(oldReferences, newReferences);
+      for (let id of referencesToDrop) {
+        this.store.dropReference(id);
+      }
+      let referencesToAdd = difference(newReferences, oldReferences);
+      for (let id of referencesToAdd) {
+        this.store.addReference(id);
       }
       await this.store.flush();
     } finally {
@@ -229,7 +229,7 @@ export function getSearch(
   getRealms?: () => string[] | undefined,
   opts?: {
     isLive?: boolean;
-    doWhileRefreshing?: (ready: Promise<void> | undefined) => Promise<void>;
+    doWhileRefreshing?: (() => void) | undefined;
   },
 ) {
   return SearchResource.from(parent, () => ({

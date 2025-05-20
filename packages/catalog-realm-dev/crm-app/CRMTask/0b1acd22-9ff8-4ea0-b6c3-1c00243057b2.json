@@ -1,0 +1,68 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "status": {
+        "index": 1,
+        "label": "In Progress",
+        "color": "#FFB74D",
+        "completed": false
+      },
+      "dateRange": {
+        "start": null,
+        "end": null
+      },
+      "priority": {
+        "index": null,
+        "label": null
+      },
+      "name": "Call on discussion about next step",
+      "details": null,
+      "description": null,
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": null
+        }
+      },
+      "subtasks": {
+        "links": {
+          "self": null
+        }
+      },
+      "assignee": {
+        "links": {
+          "self": null
+        }
+      },
+      "contact": {
+        "links": {
+          "self": null
+        }
+      },
+      "account": {
+        "links": {
+          "self": "../Account/be0192c4-e566-40ee-8a57-f88f7ab37e53"
+        }
+      },
+      "deal": {
+        "links": {
+          "self": null
+        }
+      },
+      "tags": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../task",
+        "name": "CRMTask"
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shippingAddress": {
+        "addressLine1": "234 Veterinary Lane",
+        "addressLine2": null,
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98103",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": "234 Veterinary Lane",
+        "addressLine2": null,
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98103",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "urgencyTag": {
+        "index": 5,
+        "label": "Pending Contract",
+        "foregroundColor": "#512DA8",
+        "backgroundColor": "#EDE7F6"
+      },
+      "description": "Proposal sent for website redesign and booking system integration",
+      "thumbnailURL": null
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/e1856419-27b0-4ce3-98fe-759d21c7144f"
+        }
+      },
+      "primaryContact": {
+        "links": {
+          "self": "../Customer/0c71bda7-f4d8-451a-97cb-567a8fa31763"
+        }
+      },
+      "contacts": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../account",
+        "name": "Account"
+      }
+    }
+  }
+}

@@ -8,6 +8,7 @@ import { restartableTask } from 'ember-concurrency';
 
 import { Resource } from 'ember-resources';
 
+import difference from 'lodash/difference';
 import isEqual from 'lodash/isEqual';
 
 import { TrackedArray } from 'tracked-built-ins';
@@ -42,13 +43,15 @@ export class CardCollectionResource<
   modify(_positional: never[], named: Args['named']) {
     let { ids } = named;
     if (!isEqual(ids, this.#ids)) {
-      if (this.#ids) {
-        for (let id of this.#ids) {
-          this.store.dropReference(id);
-        }
-      }
+      let oldReferences = [...(this.#ids ?? [])];
+      let newReferences = [...(ids ?? [])];
       this.#ids = ids;
-      for (let id of this.#ids ?? []) {
+      let referencesToDrop = difference(oldReferences, newReferences);
+      for (let id of referencesToDrop) {
+        this.store.dropReference(id);
+      }
+      let referencesToAdd = difference(newReferences, oldReferences);
+      for (let id of referencesToAdd) {
         this.store.addReference(id);
       }
       this.load.perform();

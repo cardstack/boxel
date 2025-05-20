@@ -1,8 +1,17 @@
-import { click, fillIn, triggerEvent, find } from '@ember/test-helpers';
+import {
+  click,
+  fillIn,
+  triggerEvent,
+  find,
+  settled,
+  waitFor,
+} from '@ember/test-helpers';
 
-import { module, test, skip } from 'qunit';
+import { module, test } from 'qunit';
 
-import { baseRealm } from '@cardstack/runtime-common';
+import { baseRealm, Deferred } from '@cardstack/runtime-common';
+
+import MessageService from '@cardstack/host/services/message-service';
 
 import {
   setupLocalIndexing,
@@ -11,6 +20,7 @@ import {
   visitOperatorMode,
   setupUserSubscription,
   percySnapshot,
+  lookupService,
   type TestContextWithSave,
   setupOnSave,
 } from '../../helpers';
@@ -18,10 +28,10 @@ import {
 import { setupMockMatrix } from '../../helpers/mock-matrix';
 import {
   getPlaygroundSelections,
-  getRecentFiles,
   assertCardExists,
   selectDeclaration,
 } from '../../helpers/playground';
+import { getRecentFiles } from '../../helpers/recent-files-cards';
 
 import { setupApplicationTest } from '../../helpers/setup';
 
@@ -245,6 +255,7 @@ module('Acceptance | Spec preview', function (hooks) {
   let mockMatrixUtils = setupMockMatrix(hooks, {
     loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL, testRealm2URL],
+    autostart: true,
   });
 
   let { setRealmPermissions, setActiveRealms, createAndJoinRoom } =
@@ -623,6 +634,73 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-create-spec-intent-message]').exists();
     await percySnapshot(assert);
   });
+  test('spec updates when different declaration selected in the module', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+    await click('[data-boxel-selector-item-text="DifferentField"]');
+    assert
+      .dom('[data-test-boxel-input-id="spec-title"]')
+      .hasValue('DifferentField');
+    await click('[data-boxel-selector-item-text="Person"]');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+  });
+  test('spec updates when different module selected in file tree', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+    await click('[data-test-file-browser-toggle]');
+    await waitFor('[data-test-file="pet.gts"]');
+    await click('[data-test-file="pet.gts"]');
+    await click('[data-test-accordion-item="spec-preview"] button');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Pet2');
+    await click('[data-test-file="person.gts"]');
+    assert.dom('[data-test-boxel-input-id="spec-title"]').hasValue('Person');
+  });
+  test('does not lose input field focus when editing spec', async function (assert) {
+    const receivedEventDeferred = new Deferred<void>();
+    const messageService = lookupService<MessageService>('message-service');
+
+    messageService.listenerCallbacks.get(testRealmURL)!.push((e) => {
+      if (
+        e.eventName === 'index' &&
+        e.indexType === 'incremental-index-initiation'
+      ) {
+        return; // ignore the index initiation event
+      }
+      receivedEventDeferred.fulfill();
+    });
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await click('[data-test-accordion-item="spec-preview"] button');
+    // intentionally not awaiting fillIn
+    fillIn('[data-test-readme] textarea', 'Hello World');
+    let textArea = find('[data-test-readme] textarea') as HTMLTextAreaElement;
+    textArea.focus();
+    textArea.select();
+    textArea.setSelectionRange(0, 3);
+    await receivedEventDeferred.promise;
+    await settled();
+    textArea = find('[data-test-readme] textarea') as HTMLTextAreaElement;
+    assert.strictEqual(
+      document.activeElement,
+      textArea,
+      'focus is preserved on the input element',
+    );
+    assert.strictEqual(
+      document.getSelection()?.anchorOffset,
+      3,
+      'select is preserved',
+    );
+  });
   test('view when users cannot write but has NO spec instance', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
@@ -736,7 +814,7 @@ module('Acceptance | Spec preview', function (hooks) {
     assert.dom('[data-test-spec-tag]').hasText('card');
   });
 
-  skip<TestContextWithSave>('spec auto saved (with stability)', async function (assert) {
+  test<TestContextWithSave>('spec auto saved (with stability)', async function (assert) {
     await visitOperatorMode({
       submode: 'code',
       codePath: `${testRealmURL}person.gts`,
@@ -935,11 +1013,13 @@ module('Acceptance | Spec preview', function (hooks) {
     await click(`[data-test-card="${petId}"]`);
 
     // Verify the card was added to recent files
-    assert.deepEqual(
-      getRecentFiles()?.[0],
-      [testRealmURL, 'Pet/mango.json', null],
+    let recentFile = getRecentFiles()?.[0];
+    assert.strictEqual(
+      `${recentFile?.[0]}${recentFile?.[1]}`,
+      `${testRealmURL}Pet/mango.json`,
       'Card is added to recent files storage',
     );
+
     // Verify the card appears in the playground
     assertCardExists(
       assert,

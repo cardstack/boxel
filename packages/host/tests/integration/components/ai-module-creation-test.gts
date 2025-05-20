@@ -116,7 +116,6 @@ module('Integration | create app module via ai-assistant', function (hooks) {
   // This doesn’t work when the generator is in experiments instead of catalog
   skip('it can create a module using a tool call', async function (assert) {
     let { realm } = await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'PRD/1.json': {

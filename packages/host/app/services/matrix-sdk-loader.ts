@@ -273,10 +273,6 @@ function extendedClient({
           return loginWithEmail.bind(extendedTarget, fetch);
         case 'createRealmSession':
           return createRealmSession.bind(extendedTarget, fetch);
-        case 'uploadCardsAndUpdateSkillCommands':
-          return fileDefManager.uploadCardsAndUpdateSkillCommands.bind(
-            fileDefManager,
-          );
         case 'uploadCards':
           return fileDefManager.uploadCards.bind(fileDefManager);
         case 'uploadCommandDefinitions':

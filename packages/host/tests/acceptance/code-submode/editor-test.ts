@@ -422,7 +422,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
 
     await waitForCodeEditor();
     assert
-      .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
       .containsText('Mango');
 
     this.onSave((url, content) => {
@@ -437,7 +437,7 @@ module('Acceptance | code submode | editor tests', function (hooks) {
     await settled();
 
     assert
-      .dom('[data-test-code-mode-card-preview-body] [data-test-field="name"]')
+      .dom('[data-test-code-mode-card-renderer-body] [data-test-field="name"]')
       .containsText('MangoXXX');
   });
 

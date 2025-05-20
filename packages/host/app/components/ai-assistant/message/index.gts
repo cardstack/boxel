@@ -12,7 +12,7 @@ import Modifier from 'ember-modifier';
 import throttle from 'lodash/throttle';
 
 import { Button } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { and, cn, eq } from '@cardstack/boxel-ui/helpers';
 import { FailureBordered } from '@cardstack/boxel-ui/icons';
 
 import {
@@ -22,7 +22,11 @@ import {
 
 import CardPill from '@cardstack/host/components/card-pill';
 import FilePill from '@cardstack/host/components/file-pill';
+<<<<<<< HEAD
 import downloadAsFileInBrowser from '@cardstack/host/helpers/download-file';
+=======
+import { type HtmlTagGroup } from '@cardstack/host/lib/formatted-message/utils';
+>>>>>>> main
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import type CardService from '@cardstack/host/services/card-service';
@@ -32,7 +36,8 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 
 import { type FileDef } from 'https://cardstack.com/base/file-api';
 
-import FormattedMessage from '../formatted-message';
+import FormattedAiBotMessage from '../formatted-aibot-message';
+import FormattedUserMessage from '../formatted-user-message';
 
 import type { ComponentLike } from '@glint/template';
 
@@ -40,7 +45,8 @@ interface Signature {
   Element: HTMLDivElement;
   Args: {
     reasoningContent?: string | null;
-    messageHTML: SafeString;
+    messageHTML?: string;
+    messageHTMLParts?: HtmlTagGroup[];
     datetime: Date;
     isFromAssistant: boolean;
     isStreaming: boolean;
@@ -48,6 +54,7 @@ interface Signature {
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
     index: number;
+    roomId: string;
     eventId: string;
     monacoSDK: MonacoSDK;
     registerScroller: (args: {
@@ -220,6 +227,8 @@ export default class AiAssistantMessage extends Component<Signature> {
     } catch (error) {
       console.error('Error downloading file:', error);
     }
+  get hasMessageHTMLParts() {
+    return !!this.args.messageHTMLParts;
   }
 
   <template>
@@ -286,12 +295,17 @@ export default class AiAssistantMessage extends Component<Signature> {
             </div>
           {{/if}}
 
-          <FormattedMessage
-            @renderCodeBlocks={{@isFromAssistant}}
-            @monacoSDK={{@monacoSDK}}
-            @html={{@messageHTML}}
-            @isStreaming={{@isStreaming}}
-          />
+          {{#if (and @isFromAssistant this.hasMessageHTMLParts)}}
+            <FormattedAiBotMessage
+              @monacoSDK={{@monacoSDK}}
+              @htmlParts={{@messageHTMLParts}}
+              @roomId={{@roomId}}
+              @eventId={{@eventId}}
+              @isStreaming={{@isStreaming}}
+            />
+          {{else}}
+            <FormattedUserMessage @html={{@messageHTML}} />
+          {{/if}}
 
           {{yield}}
 

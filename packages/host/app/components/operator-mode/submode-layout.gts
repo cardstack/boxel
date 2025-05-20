@@ -339,8 +339,10 @@ export default class SubmodeLayout extends Component<Signature> {
               @onClose={{this.operatorModeStateService.closeAiAssistant}}
               @resizeHandle={{ResizeHandle}}
               @selectedCardRef={{@selectedCardRef}}
-              class='ai-assistant-panel
-                {{if this.workspaceChooserOpened "left-border"}}'
+              class={{cn
+                'ai-assistant-panel'
+                left-border=this.workspaceChooserOpened
+              }}
             />
           </ResizablePanel>
         {{/if}}

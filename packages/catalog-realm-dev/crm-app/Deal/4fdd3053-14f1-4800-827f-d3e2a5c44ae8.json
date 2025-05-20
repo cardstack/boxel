@@ -1,0 +1,108 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "TechFlow Digital Marketing Package",
+      "status": {
+        "index": 3,
+        "label": "Closed Won",
+        "foregroundColor": "#000000",
+        "backgroundColor": "#E8F5E9"
+      },
+      "priority": {
+        "index": 1,
+        "label": "Medium Priority",
+        "foregroundColor": "#000000",
+        "backgroundColor": "#FFF0B3"
+      },
+      "closeDate": "2024-04-30",
+      "currentValue": {
+        "amount": 15000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "predictedRevenue": {
+        "amount": 180000,
+        "currency": {
+          "code": "USD"
+        }
+      },
+      "healthScore": 75,
+      "notes": "Startup needs complete digital presence setup. Initial meeting showed strong interest in SEO and content marketing. Budget confirmed by CEO.",
+      "valueBreakdown": [
+        {
+          "name": "Website Optimization",
+          "value": {
+            "amount": 40000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "name": "SEO Package",
+          "value": {
+            "amount": 60000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "name": "Content Marketing",
+          "value": {
+            "amount": 50000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        },
+        {
+          "name": "Social Media Management",
+          "value": {
+            "amount": 30000,
+            "currency": {
+              "code": "USD"
+            }
+          }
+        }
+      ],
+      "description": "",
+      "thumbnailURL": "https://picsum.photos/id/3/200/300"
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "account": {
+        "links": {
+          "self": null
+        }
+      },
+      "event": {
+        "links": {
+          "self": "../DealEvent/60cf6fcf-10ec-4d04-b6a8-e409679ccc0a"
+        }
+      },
+      "primaryStakeholder": {
+        "links": {
+          "self": "../Lead/9d7b2f20-c7da-4ddc-8e77-b75d88c97b48"
+        }
+      },
+      "stakeholders.0": {
+        "links": {
+          "self": "../Lead/4e70a791-dd4e-4b39-99a1-bb8070392437"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../deal",
+        "name": "Deal"
+      }
+    }
+  }
+}

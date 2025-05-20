@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "DealEvent",
+        "module": "../crm-app/deal-event"
+      },
+      "specType": "card",
+      "containedExamples": [],
+      "title": "Deal Event",
+      "description": "Spec for Deal Event",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}

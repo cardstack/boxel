@@ -96,6 +96,8 @@ interface Signature {
             | 'fieldChooserIsOpen'
             | 'chooseField'
             | 'moduleId'
+            | 'availableRealmURLs'
+            | 'recentCardIds'
           >
         | typeof DefaultTitle
       ),
@@ -109,6 +111,7 @@ interface Signature {
             | 'createNew'
             | 'createNewIsRunning'
             | 'isFieldDef'
+            | 'availableRealmURLs'
           >
         | WithBoundArgs<typeof LoadingIndicator, 'color'>
         | WithBoundArgs<typeof UnsupportedMessage, 'codeRef' | 'cardOrField'>

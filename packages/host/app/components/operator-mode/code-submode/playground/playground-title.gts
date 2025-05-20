@@ -7,7 +7,7 @@ import ToElsewhere from 'ember-elsewhere/components/to-elsewhere';
 
 import { cardTypeDisplayName } from '@cardstack/runtime-common';
 
-import type { Query } from '@cardstack/runtime-common';
+import type { Format, Query } from '@cardstack/runtime-common';
 
 import consumeContext from '@cardstack/host/helpers/consume-context';
 
@@ -24,7 +24,9 @@ interface Signature {
   Args: {
     makeCardResource: () => void;
     query: Query | undefined;
+    expandedQuery?: Query;
     recentRealms: string[];
+    availableRealmURLs: string[];
     fieldOptions: FieldOption[] | undefined;
     selection: SelectedInstance | undefined;
     onSelect: (item: PrerenderedCard | FieldOption) => void;
@@ -38,6 +40,8 @@ interface Signature {
     closeFieldChooser: () => void;
     fieldChooserIsOpen: boolean;
     moduleId: string;
+    persistSelections?: (cardId: string, format: Format) => void;
+    recentCardIds: string[];
   };
 }
 
@@ -59,6 +63,10 @@ export default class PlaygroundTitle extends Component<Signature> {
     >
       <InstanceSelectDropdown
         @prerenderedCardQuery={{hash query=@query realms=@recentRealms}}
+        @expandedSearchQuery={{hash
+          query=@expandedQuery
+          realms=@availableRealmURLs
+        }}
         @fieldOptions={{@fieldOptions}}
         @selection={{@selection}}
         @onSelect={{@onSelect}}
@@ -66,6 +74,8 @@ export default class PlaygroundTitle extends Component<Signature> {
         @createNew={{if @canWriteRealm @createNew}}
         @createNewIsRunning={{@createNewIsRunning}}
         @moduleId={{@moduleId}}
+        @persistSelections={{@persistSelections}}
+        @recentCardIds={{@recentCardIds}}
       />
     </button>
 

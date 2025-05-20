@@ -104,7 +104,6 @@ module('Integration | ai-assistant-panel | sending', function (hooks) {
     }
 
     await setupIntegrationTestRealm({
-      loader,
       mockMatrixUtils,
       contents: {
         'person.gts': { Person },

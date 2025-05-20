@@ -1,0 +1,11 @@
+{
+  "data": {
+    "type": "card",
+    "meta": {
+      "adoptsFrom": {
+        "module": "./multiple-default-exports-card",
+        "name": "MultipleDefaultExportsCard"
+      }
+    }
+  }
+}

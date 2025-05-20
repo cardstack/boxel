@@ -1,0 +1,66 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "shippingAddress": {
+        "addressLine1": "789 Athletic Avenue",
+        "addressLine2": "Building B",
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98102",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "billingAddress": {
+        "addressLine1": "789 Athletic Avenue",
+        "addressLine2": "Building B",
+        "city": "Seattle",
+        "state": "WA",
+        "postalCode": "98102",
+        "country": {
+          "name": "United States",
+          "code": "US"
+        },
+        "poBoxNumber": null
+      },
+      "urgencyTag": {
+        "label": "Follow-Up Required",
+        "foregroundColor": "#1976D2",
+        "backgroundColor": "#E3F2FD"
+      },
+      "description": "Multi-location gym chain with comprehensive digital transformation needs",
+      "thumbnailURL": "https://picsum.photos/id/416/200/300"
+    },
+    "relationships": {
+      "crmApp": {
+        "links": {
+          "self": "../CrmApp/4e73712d-2a31-4ffe-9c22-d3de277257a6"
+        }
+      },
+      "company": {
+        "links": {
+          "self": "../Company/9203c173-3420-44b3-863d-90defd7c57c8"
+        }
+      },
+      "primaryContact": {
+        "links": {
+          "self": "../Customer/dddaeabf-1e95-480c-b158-0873e31fc66c"
+        }
+      },
+      "contacts": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../account",
+        "name": "Account"
+      }
+    }
+  }
+}

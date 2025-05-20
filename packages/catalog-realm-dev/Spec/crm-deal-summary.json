@@ -1,0 +1,24 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "readMe": null,
+      "ref": {
+        "name": "DealSummary",
+        "module": "../crm-app/deal-summary"
+      },
+      "specType": "component",
+      "containedExamples": [],
+      "title": "Deal Summary",
+      "description": "Spec for Deal Summary component",
+      "thumbnailURL": null
+    },
+    "relationships": {},
+    "meta": {
+      "adoptsFrom": {
+        "module": "https://cardstack.com/base/spec",
+        "name": "Spec"
+      }
+    }
+  }
+}
