@@ -447,6 +447,13 @@ export default class MatrixService extends Service {
       refreshRoutes?: true;
     } = {},
   ) {
+    // End any existing timer to prevent the "Timer already exists" warning
+    try {
+      console.timeEnd('matrix-client-start-total');
+    } catch (e) {
+      // Ignore error if timer doesn't exist
+    }
+
     console.time('matrix-client-start-total');
     let { auth, refreshRoutes } = opts;
     if (!auth) {
@@ -499,9 +506,11 @@ export default class MatrixService extends Service {
     console.timeEnd('matrix-client-creation');
 
     if (this.client.isLoggedIn()) {
+      console.time('matrix-client-pre-init');
       this.realmServer.setClient(this.client);
       saveAuth(auth);
       this.bindEventListeners();
+      console.timeEnd('matrix-client-pre-init');
 
       try {
         console.time('matrix-client-device-info');
