@@ -21,9 +21,8 @@ interface Signature {
   Element: HTMLElement;
   Args: {
     type: 'syntax' | 'runtime';
-    message: string;
     headerText?: string;
-    title?: string;
+    message?: string;
     stack?: string;
     openDetails?: boolean;
     fileToAttach?: FileDef;
@@ -41,7 +40,6 @@ export default class ErrorDisplay extends Component<Signature> {
     return {
       message: this.args.message ?? '',
       stack: this.args.stack,
-      title: this.args.title,
     };
   }
 
@@ -70,9 +68,9 @@ export default class ErrorDisplay extends Component<Signature> {
         {{/if}}
       </div>
 
-      {{#if @title}}
-        <div class='error-title' data-test-error-title>
-          {{@title}}
+      {{#if @message}}
+        <div class='error-message' data-test-error-message>
+          {{@message}}
         </div>
       {{/if}}
 
@@ -95,17 +93,16 @@ export default class ErrorDisplay extends Component<Signature> {
       {{#if this.showDetails}}
         <div class='error-details' data-test-error-details>
           <div class='detail-item'>
-            <div class='detail-title'>Message:</div>
-            <div class='detail-contents' data-test-error-message>
-              {{@message}}
-            </div>
-          </div>
-          {{#if @stack}}
-            <div class='detail-item'>
-              <div class='detail-title'>Stack trace:</div>
+            <div class='detail-title'>Stack trace:</div>
+            {{#if @stack}}
               <pre data-test-error-stack>{{@stack}}</pre>
-            </div>
-          {{/if}}
+            {{else}}
+              <p class='no-stack-message'>No stack trace is available. This
+                could be because the error occurred in a context where stack
+                traces are not captured, or the error was handled before a stack
+                trace could be generated.</p>
+            {{/if}}
+          </div>
         </div>
       {{/if}}
     </div>
@@ -149,7 +146,7 @@ export default class ErrorDisplay extends Component<Signature> {
         color: black;
       }
 
-      .error-title {
+      .error-message {
         font-size: var(--boxel-font-size-sm);
         padding: 0 var(--boxel-sp) 0
           calc(var(--boxel-sp) + 20px + var(--boxel-sp-xs));
@@ -207,6 +204,12 @@ export default class ErrorDisplay extends Component<Signature> {
         margin: 0;
         white-space: pre-wrap;
         word-break: break-all;
+      }
+
+      .no-stack-message {
+        color: var(--boxel-purple-700);
+        font-style: italic;
+        margin: 0;
       }
     </style>
   </template>

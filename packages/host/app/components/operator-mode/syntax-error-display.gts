@@ -35,7 +35,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
     <div class='syntax-error-container' data-test-syntax-error>
       <ErrorDisplay
         @type='syntax'
-        @message={{this.removeSourceMappingURL @syntaxErrors}}
+        @stack={{this.removeSourceMappingURL @syntaxErrors}}
         @fileToAttach={{this.fileToAttach}}
         @openDetails={{true}}
       />

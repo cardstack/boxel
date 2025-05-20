@@ -55,8 +55,7 @@ export default class CardErrorDetail extends Component<Signature> {
       <ErrorDisplay
         @type='runtime'
         @headerText={{@headerText}}
-        @title={{if this.message this.message @error.title}}
-        @message={{this.message}}
+        @message={{if this.message this.message @error.title}}
         @stack={{this.stack}}
         @fileToAttach={{@fileToFixWithAi}}
       />

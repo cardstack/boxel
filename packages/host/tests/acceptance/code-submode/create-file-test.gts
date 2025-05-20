@@ -384,7 +384,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         .dom('[data-test-error-type]')
         .containsText('Error creating card instance');
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .dom('[data-test-create-file-modal] [data-test-error-message]')
         .hasText('A deliberate constructor error');
       await click('[data-test-toggle-details]');
       assert
@@ -720,7 +720,7 @@ export class TestCard extends Person {
         .dom('[data-test-error-type]')
         .containsText('Error creating card definition');
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .dom('[data-test-create-file-modal] [data-test-error-message]')
         .hasText('A deliberate fetch error');
       await click('[data-test-toggle-details]');
       assert
@@ -800,7 +800,7 @@ export class FieldThatExtendsFromBigInt extends BigInteger {
         .dom('[data-test-error-type]')
         .containsText('Error creating field definition');
       assert
-        .dom('[data-test-create-file-modal] [data-test-error-title]')
+        .dom('[data-test-create-file-modal] [data-test-error-message]')
         .hasText('A deliberate fetch error');
       await click('[data-test-toggle-details]');
       assert

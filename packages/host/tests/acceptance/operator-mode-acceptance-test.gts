@@ -569,7 +569,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         );
 
         assert.dom(`[data-test-card-error]`).exists();
-        assert.dom(`[data-test-error-title]`).includesText('missing file');
+        assert.dom(`[data-test-error-message]`).includesText('missing file');
       });
 
       test('can delete a card', async function (assert) {
@@ -627,7 +627,7 @@ module('Acceptance | operator mode tests', function (hooks) {
       )
       .exists('the error state of the card is displayed');
     assert
-      .dom('[data-test-error-title]')
+      .dom('[data-test-error-message]')
       .includesText(`missing file ${testRealmURL}Person/missing-link.json`);
     await click('[data-test-toggle-details]');
     assert

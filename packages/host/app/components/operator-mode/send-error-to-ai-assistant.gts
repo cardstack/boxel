@@ -17,7 +17,6 @@ interface Signature {
     error: {
       message: string;
       stack?: string;
-      title?: string;
     };
     errorType: 'syntax' | 'runtime';
     fileToAttach?: FileDef;
@@ -31,11 +30,10 @@ export default class SendErrorToAIAssistant extends Component<Signature> {
   private get errorMessage() {
     let { error, errorType } = this.args;
     let prefix = errorType === 'syntax' ? 'Syntax Error' : 'Card Error';
-    let title = error.title ? `: ${error.title}` : '';
     let message = error.message;
     let stack = error.stack ? `\n\nStack trace:\n${error.stack}` : '';
 
-    return `${prefix}${title}\n\n${message}${stack}`;
+    return `${prefix}\n\n${message}${stack}`;
   }
 
   private sendToAiAssistant = restartableTask(async () => {

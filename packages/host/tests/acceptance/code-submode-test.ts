@@ -873,7 +873,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Parse Error at broken.gts:1:6: 1:10. broken.gts`,
+          message: `In the attachment file, I encountered an error that needs fixing: Syntax Error Stack trace: Parse Error at broken.gts:1:6: 1:10. broken.gts`,
           files: [
             { name: 'broken.gts', sourceUrl: `${testRealmURL}broken.gts` },
           ],
@@ -902,9 +902,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await waitFor('[data-test-card-error]');
 
       await click('[data-test-toggle-details]');
-      assert
-        .dom('[data-test-error-details]')
-        .includesText('intentionalError is not defined');
+      assert.dom('[data-test-error-details]').includesText('No stack trace');
 
       await percySnapshot(assert);
     });
@@ -918,9 +916,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-accordion-item="playground"] button');
       await waitFor('[data-test-card-error]');
       await click('[data-test-toggle-details]');
-      assert
-        .dom('[data-test-error-details]')
-        .includesText(`intentionalError is not defined`);
+      assert.dom('[data-test-error-details]').includesText('No stack trace');
 
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
       await click('[data-test-send-error-to-ai-assistant]');
@@ -928,7 +924,7 @@ module('Acceptance | code submode tests', function (_hooks) {
       assertMessages(assert, [
         {
           from: 'testuser',
-          message: `In the attachment file, I encountered an error that needs fixing: Card Error: intentionalError is not defined`,
+          message: `In the attachment file, I encountered an error that needs fixing: Card Error intentionalError is not defined`,
           files: [
             {
               name: 'broken-country.gts',
