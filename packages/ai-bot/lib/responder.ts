@@ -1,6 +1,5 @@
-import { cleanContent } from '../helpers';
 import { logger } from '@cardstack/runtime-common';
-import { MatrixClient, sendErrorEvent, sendMessageEvent } from './matrix';
+import type { MatrixClient } from './matrix/util';
 
 import * as Sentry from '@sentry/node';
 import { OpenAIError } from 'openai/error';
@@ -8,8 +7,6 @@ import throttle from 'lodash/throttle';
 import { ISendEventResponse } from 'matrix-js-sdk/lib/matrix';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
-import { CommandRequest } from '@cardstack/runtime-common/commands';
-import { thinkingMessage } from '../constants';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import {
@@ -17,10 +14,14 @@ import {
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common/matrix-constants';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
+import MatrixResponsePublisher from './matrix/response-publisher';
+import ResponseState from './response-state';
 
 let log = logger('ai-bot');
 
 export class Responder {
+  matrixResponsePublisher: MatrixResponsePublisher;
+
   static eventMayTriggerResponse(event: DiscreteMatrixEvent) {
     // If it's a message, we should respond unless it's a card fragment
     if (event.getType() === 'm.room.message') {
@@ -47,25 +48,30 @@ export class Responder {
     );
   }
 
-  constructor(
-    readonly client: MatrixClient,
-    readonly roomId: string,
-  ) {}
+  constructor(client: MatrixClient, roomId: string) {
+    this.matrixResponsePublisher = new MatrixResponsePublisher(
+      client,
+      roomId,
+      this.responseState,
+    );
+  }
 
   messagePromises: Promise<
     ISendEventResponse | void | { errorMessage: string }
   >[] = [];
 
-  initialMessageSent = false;
-  responseEventId: string | undefined;
-  latestReasoning = '';
-  latestContent = '';
-  toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
-  toolCallsJson: string | undefined;
-  isStreamingFinished = false;
+  responseState = new ResponseState();
+
   needsMessageSend = false;
 
+  async ensureThinkingMessageSent() {
+    await this.matrixResponsePublisher.ensureThinkingMessageSent();
+  }
+
   sendMessageEventWithThrottling = () => {
+    if (this.needsMessageSend) {
+      return; // already scheduled
+    }
     this.needsMessageSend = true;
     this.sendMessageEventWithThrottlingInternal();
   };
@@ -76,86 +82,41 @@ export class Responder {
   }, 250);
 
   sendMessageEvent = async () => {
-    const messagePromise = sendMessageEvent(
-      this.client,
-      this.roomId,
-      this.latestContent,
-      this.responseEventId,
-      {
-        isStreamingFinished: this.isStreamingFinished,
-      },
-      this.toolCalls.map((toolCall) =>
-        this.toCommandRequest(toolCall as ChatCompletionMessageToolCall),
-      ),
-      this.latestReasoning,
-    ).catch((e) => {
-      return {
-        errorMessage: e.message,
-      };
-    });
+    const messagePromise = this.matrixResponsePublisher
+      .sendMessage()
+      .catch((e) => {
+        return {
+          errorMessage: e.message,
+        };
+      });
     this.messagePromises.push(messagePromise);
     await messagePromise;
   };
-
-  async ensureThinkingMessageSent() {
-    if (!this.initialMessageSent) {
-      let initialMessage = await sendMessageEvent(
-        this.client,
-        this.roomId,
-        '',
-        undefined,
-        { isStreamingFinished: false },
-        [],
-        thinkingMessage,
-      );
-      this.responseEventId = initialMessage.event_id;
-      this.initialMessageSent = true;
-    }
-  }
 
   async onChunk(
     chunk: OpenAI.Chat.Completions.ChatCompletionChunk,
     snapshot: ChatCompletionSnapshot,
   ) {
-    const toolCallsSnapshot = snapshot.choices?.[0]?.message?.tool_calls;
-    if (toolCallsSnapshot?.length) {
-      let latestToolCallsJson = JSON.stringify(toolCallsSnapshot);
-      if (this.toolCallsJson !== latestToolCallsJson) {
-        this.toolCalls = toolCallsSnapshot;
-        this.toolCallsJson = latestToolCallsJson;
-        await this.sendMessageEventWithThrottling();
-      }
-    }
-
-    let contentSnapshot = snapshot.choices?.[0]?.message?.content;
-    if (contentSnapshot?.length) {
-      contentSnapshot = cleanContent(contentSnapshot);
-      if (this.latestContent !== contentSnapshot) {
-        if (this.latestReasoning === thinkingMessage) {
-          this.latestReasoning = '';
-        }
-        this.latestContent = contentSnapshot;
-        await this.sendMessageEventWithThrottling();
-      }
-    }
-
     // reasoning does not support snapshots, so we need to handle the delta
-    let newReasoningContent = (
+    const newReasoningContent = (
       chunk.choices?.[0]?.delta as { reasoning?: string }
     )?.reasoning;
-    if (newReasoningContent?.length) {
-      if (this.latestReasoning === thinkingMessage) {
-        this.latestReasoning = '';
-      }
-      this.latestReasoning = this.latestReasoning + newReasoningContent;
-      await this.sendMessageEventWithThrottling();
-    }
 
-    if (snapshot.choices?.[0]?.finish_reason === 'stop') {
-      if (!this.isStreamingFinished) {
-        this.isStreamingFinished = true;
-        await this.sendMessageEventWithThrottling();
-      }
+    const responseStateChanged = this.responseState.update(
+      newReasoningContent,
+      snapshot.choices?.[0]?.message?.content,
+      snapshot.choices?.[0]?.message?.tool_calls,
+      chunk.choices?.[0]?.finish_reason === 'stop',
+    );
+    log.debug('onChunk', {
+      reasoning: this.responseState.latestReasoning,
+      content: this.responseState.latestContent,
+      toolCalls: this.responseState.toolCalls,
+      isStreamingFinished: this.responseState.isStreamingFinished,
+      responseStateChanged,
+    });
+    if (responseStateChanged) {
+      await this.sendMessageEventWithThrottling();
     }
 
     // This usage value is set *once* and *only once* at the end of the conversation
@@ -181,38 +142,9 @@ export class Responder {
     };
   }
 
-  toCommandRequest(
-    toolCall: ChatCompletionMessageToolCall,
-  ): Partial<CommandRequest> {
-    let { id, function: f } = toolCall;
-    let result = {} as Partial<CommandRequest>;
-    if (id) {
-      result['id'] = id;
-    }
-    if (f.name) {
-      result['name'] = f.name;
-    }
-    if (f.arguments) {
-      try {
-        result['arguments'] = JSON.parse(f.arguments);
-      } catch (error) {
-        // If the arguments are not valid JSON, we'll just return an empty object
-        // This will happen during streaming, when the tool call is not yet complete
-        // and the arguments are not yet available
-        result['arguments'] = {};
-      }
-    }
-    return result;
-  }
-
   async onError(error: OpenAIError | string) {
     Sentry.captureException(error);
-    return await sendErrorEvent(
-      this.client,
-      this.roomId,
-      error,
-      this.responseEventId,
-    );
+    return await this.matrixResponsePublisher.sendError(error);
   }
 
   async flush() {
@@ -233,10 +165,19 @@ export class Responder {
       }
     }
   }
-
+  isFinalized = false;
   async finalize() {
-    if (!this.isStreamingFinished) {
-      this.isStreamingFinished = true;
+    if (this.isFinalized) {
+      return;
+    }
+    this.isFinalized = true;
+
+    let isStreamingFinishedChanged =
+      this.responseState.updateIsStreamingFinished(true);
+    log.debug('finalize', {
+      isStreamingFinishedChanged,
+    });
+    if (isStreamingFinishedChanged) {
       await this.sendMessageEventWithThrottling();
     }
     await this.flush();
