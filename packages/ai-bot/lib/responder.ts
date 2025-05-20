@@ -9,10 +9,7 @@ import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions
 import { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
-import {
-  APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
-  APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
-} from '@cardstack/runtime-common/matrix-constants';
+import { APP_BOXEL_COMMAND_RESULT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
 import MatrixResponsePublisher from './matrix/response-publisher';
 import ResponseState from './response-state';
@@ -28,16 +25,12 @@ export class Responder {
       return true;
     }
 
-    // If it's a command result with output, we might respond
-    if (
-      event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
-      event.getContent().msgtype ===
-        APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE
-    ) {
+    // If it's a command result, we might respond
+    if (event.getType() === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE) {
       return true;
     }
 
-    // If it's a different type, or a command result without output, we should not respond
+    // If it's a different type
     return false;
   }
 
