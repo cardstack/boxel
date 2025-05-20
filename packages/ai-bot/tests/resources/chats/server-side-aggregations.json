@@ -1,0 +1,535 @@
+[
+  {
+    "type": "m.room.create",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "room_version": "10",
+      "creator": "@admin:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565838,
+    "unsigned": {
+      "membership": "leave",
+      "age": 82046
+    },
+    "event_id": "$6cxWIFTJ4gcGr4KrE4VFPg6Ni2ewvcB9npFngYyILHU",
+    "user_id": "@admin:localhost",
+    "age": 82046
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "displayname": "admin",
+      "membership": "join"
+    },
+    "state_key": "@admin:localhost",
+    "origin_server_ts": 1747730565878,
+    "unsigned": {
+      "membership": "leave",
+      "age": 82006
+    },
+    "event_id": "$rLbvkTMaMAAfInOj3bfR2FedFflJvMwazNaO0r18sSk",
+    "user_id": "@admin:localhost",
+    "age": 82006
+  },
+  {
+    "type": "m.room.power_levels",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "users": {
+        "@admin:localhost": 100,
+        "@aibot:localhost": 50
+      },
+      "users_default": 0,
+      "events": {
+        "m.room.name": 50,
+        "m.room.power_levels": 100,
+        "m.room.history_visibility": 100,
+        "m.room.canonical_alias": 50,
+        "m.room.avatar": 50,
+        "m.room.tombstone": 100,
+        "m.room.server_acl": 100,
+        "m.room.encryption": 100
+      },
+      "events_default": 0,
+      "state_default": 50,
+      "ban": 50,
+      "kick": 50,
+      "redact": 50,
+      "invite": 0,
+      "historical": 100
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565908,
+    "unsigned": {
+      "membership": "leave",
+      "age": 81976
+    },
+    "event_id": "$o9I7KCF6yiQ95fKnadP2-RB5A3imikuystf4ozqPm9I",
+    "user_id": "@admin:localhost",
+    "age": 81976
+  },
+  {
+    "type": "m.room.canonical_alias",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "alias": "#New%20AI%20Assistant%20Chat%20-%202025-05-20T09%3A42%3A45.822%2B01%3A00%20-%20%40admin%3Alocalhost:localhost"
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565919,
+    "unsigned": {
+      "membership": "leave",
+      "age": 81965
+    },
+    "event_id": "$OGNIaywwPj9mlrqXg64LH1f5lnq_hyTwzq14jsquzzg",
+    "user_id": "@admin:localhost",
+    "age": 81965
+  },
+  {
+    "type": "m.room.join_rules",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "join_rule": "invite"
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565920,
+    "unsigned": {
+      "membership": "leave",
+      "age": 81964
+    },
+    "event_id": "$mu0no4VxX0NmOuSHg5UVeJcIy1dRMT2wTS0YKTYWlls",
+    "user_id": "@admin:localhost",
+    "age": 81964
+  },
+  {
+    "type": "m.room.history_visibility",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "history_visibility": "shared"
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565921,
+    "unsigned": {
+      "membership": "leave",
+      "age": 81963
+    },
+    "event_id": "$2d3pHh5Ej-5mehSyKx8b0upARwIbmnoX41nl72GrGFg",
+    "user_id": "@admin:localhost",
+    "age": 81963
+  },
+  {
+    "type": "m.room.guest_access",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "guest_access": "can_join"
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565921,
+    "unsigned": {
+      "membership": "leave",
+      "age": 81963
+    },
+    "event_id": "$FTFsGJkpp3RoD1KFyew6SQ83-ABpIm5JyaXKj5H4uzo",
+    "user_id": "@admin:localhost",
+    "age": 81963
+  },
+  {
+    "type": "app.boxel.active-llm",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "model": "openai/gpt-4o"
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565922,
+    "unsigned": {
+      "membership": "leave",
+      "age": 81962
+    },
+    "event_id": "$OdWxbMge-U9RqsHd6ZflkQJQnfHjj_QjXM0cR7-poTs",
+    "user_id": "@admin:localhost",
+    "age": 81962
+  },
+  {
+    "type": "app.boxel.room.skills",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "enabledSkillCards": [
+        {
+          "sourceUrl": "https://cardstack.com/base/Skill/card-editing",
+          "url": "mxc://mock-server/skill_card_v1",
+          "name": "Card Editing",
+          "contentType": "text/plain",
+          "contentHash": "8965965c8c0a6fe5f73bb1bb41d2b86b"
+        }
+      ],
+      "disabledSkillCards": [],
+      "commandDefinitions": []
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565922,
+    "unsigned": {
+      "membership": "leave",
+      "age": 81962
+    },
+    "event_id": "$mvGsR_6AVDogyCLC9igc-XBZvJ-6L_QBqojNEv1LfVA",
+    "user_id": "@admin:localhost",
+    "age": 81962
+  },
+  {
+    "type": "m.room.name",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "name": "New AI Assistant Chat"
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730565922,
+    "unsigned": {
+      "membership": "leave",
+      "age": 81962
+    },
+    "event_id": "$NLJOvOOw26eI_-MM9jjM1EHND-mEhO22HVDiPQFU-FY",
+    "user_id": "@admin:localhost",
+    "age": 81962
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "displayname": "aibot",
+      "membership": "invite"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1747730566014,
+    "unsigned": {
+      "membership": "invite",
+      "age": 81870
+    },
+    "event_id": "$hSJjUK4_z45Qi6O978KNnDWnx_1D4kPlt25-RGRPkXU",
+    "user_id": "@admin:localhost",
+    "age": 81870
+  },
+  {
+    "type": "m.room.member",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "displayname": "aibot",
+      "membership": "join"
+    },
+    "state_key": "@aibot:localhost",
+    "origin_server_ts": 1747730566688,
+    "unsigned": {
+      "replaces_state": "$hSJjUK4_z45Qi6O978KNnDWnx_1D4kPlt25-RGRPkXU",
+      "prev_content": {
+        "displayname": "aibot",
+        "membership": "invite"
+      },
+      "prev_sender": "@admin:localhost",
+      "membership": "join",
+      "age": 81196
+    },
+    "event_id": "$aXcgabksysO44GC_nmjKSczZjIA_tcFkZnPA-GQJxCI",
+    "user_id": "@aibot:localhost",
+    "age": 81196,
+    "replaces_state": "$hSJjUK4_z45Qi6O978KNnDWnx_1D4kPlt25-RGRPkXU",
+    "prev_content": {
+      "displayname": "aibot",
+      "membership": "invite"
+    }
+  },
+  {
+    "type": "app.boxel.active-llm",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "model": "openai/gpt-4.1-nano"
+    },
+    "state_key": "",
+    "origin_server_ts": 1747730570260,
+    "unsigned": {
+      "replaces_state": "$OdWxbMge-U9RqsHd6ZflkQJQnfHjj_QjXM0cR7-poTs",
+      "prev_content": {
+        "model": "openai/gpt-4o"
+      },
+      "prev_sender": "@admin:localhost",
+      "membership": "join",
+      "age": 77624
+    },
+    "event_id": "$mYiBY5KUiDMwcSK7fP7cvNbaJBHkPbuI-4cqWjop8DM",
+    "user_id": "@admin:localhost",
+    "age": 77624,
+    "replaces_state": "$OdWxbMge-U9RqsHd6ZflkQJQnfHjj_QjXM0cR7-poTs",
+    "prev_content": {
+      "model": "openai/gpt-4o"
+    }
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "what card do you see?",
+      "format": "org.matrix.custom.html",
+      "clientGeneratedId": "5a90850b-7d1c-40c2-bbf9-505933371688",
+      "data": "{\"attachedFiles\":[],\"attachedCards\":[{\"sourceUrl\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"url\":\"mxc://mock-server/card_v1\",\"name\":null,\"contentType\":\"text/plain\",\"contentHash\":\"171c5c525b6d0b52618417e10c5393fc\"}],\"context\":{\"openCardIds\":[\"http://localhost:4201/admin/personal/BusinessCard/business_card\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCardInstance\",\"description\":\"Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"jobTitle\":{\"type\":\"string\"},\"company\":{\"type\":\"string\"},\"email\":{\"type\":\"string\"},\"phone\":{\"type\":\"object\",\"properties\":{\"number\":{\"type\":\"string\"},\"countryCode\":{\"type\":\"string\"}}},\"website\":{\"type\":\"string\"},\"address\":{\"type\":\"object\",\"properties\":{\"addressLine1\":{\"type\":\"string\"},\"addressLine2\":{\"type\":\"string\"},\"city\":{\"type\":\"string\"},\"state\":{\"type\":\"string\"},\"postalCode\":{\"type\":\"string\"},\"country\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"}}},\"poBoxNumber\":{\"type\":\"string\"}}},\"logo\":{\"type\":\"object\",\"properties\":{\"altText\":{\"type\":\"string\"},\"height\":{\"type\":\"number\"},\"width\":{\"type\":\"number\"},\"base64\":{\"type\":\"string\"}}},\"profilePhoto\":{\"type\":\"object\",\"properties\":{\"altText\":{\"type\":\"string\"},\"height\":{\"type\":\"number\"},\"width\":{\"type\":\"number\"},\"base64\":{\"type\":\"string\"}}},\"primaryColor\":{\"type\":\"string\"},\"secondaryColor\":{\"type\":\"string\"},\"linkedin\":{\"type\":\"string\"},\"twitter\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}}}}}},\"required\":[\"attributes\",\"description\"]}}}],\"submode\":\"interact\"}}"
+    },
+    "origin_server_ts": 1747730574928,
+    "unsigned": {
+      "membership": "join",
+      "age": 72956
+    },
+    "event_id": "$YEijCnpmO7n5xlTaUR1d-bIrzEazPP8AXR__gs8W9X0",
+    "user_id": "@admin:localhost",
+    "age": 72956
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "",
+      "msgtype": "app.boxel.message",
+      "format": "org.matrix.custom.html",
+      "app.boxel.reasoning": "Thinking...",
+      "app.boxel.commandRequests": [],
+      "isStreamingFinished": false
+    },
+    "origin_server_ts": 1747730574976,
+    "unsigned": {
+      "membership": "join",
+      "age": 72908,
+      "m.relations": {
+        "m.replace": {
+          "type": "m.room.message",
+          "room_id": "!kPfqCQancBpffSwcNk:localhost",
+          "sender": "@aibot:localhost",
+          "content": {
+            "body": "I see a card with the ID \"http://localhost:4201/admin/personal/BusinessCard/business_card\". It appears to be a business card for Jane Smith, a Senior Software Architect at Innovative Solutions Inc.",
+            "msgtype": "app.boxel.message",
+            "format": "org.matrix.custom.html",
+            "app.boxel.reasoning": "",
+            "app.boxel.commandRequests": [],
+            "isStreamingFinished": true,
+            "m.relates_to": {
+              "rel_type": "m.replace",
+              "event_id": "$x7diOHIm13DugikxbJVb59WwyAE_IAqbnRGs3dIv5Ys"
+            }
+          },
+          "origin_server_ts": 1747730576426,
+          "unsigned": {
+            "age": 71458
+          },
+          "event_id": "$liEbthPDIFnSxCuIv78KPdMJoRiFP0tp2S_lcaajm3E",
+          "user_id": "@aibot:localhost",
+          "age": 71458
+        }
+      }
+    },
+    "event_id": "$x7diOHIm13DugikxbJVb59WwyAE_IAqbnRGs3dIv5Ys",
+    "user_id": "@aibot:localhost",
+    "age": 72908
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "change the name to stephanie",
+      "format": "org.matrix.custom.html",
+      "clientGeneratedId": "ceddcb02-2570-4433-b1e8-20e977be4a3c",
+      "data": "{\"attachedFiles\":[],\"attachedCards\":[{\"sourceUrl\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"url\":\"mxc://mock-server/card_v1\",\"name\":null,\"contentType\":\"text/plain\",\"contentHash\":\"171c5c525b6d0b52618417e10c5393fc\"}],\"context\":{\"openCardIds\":[\"http://localhost:4201/admin/personal/BusinessCard/business_card\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCardInstance\",\"description\":\"Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"jobTitle\":{\"type\":\"string\"},\"company\":{\"type\":\"string\"},\"email\":{\"type\":\"string\"},\"phone\":{\"type\":\"object\",\"properties\":{\"number\":{\"type\":\"string\"},\"countryCode\":{\"type\":\"string\"}}},\"website\":{\"type\":\"string\"},\"address\":{\"type\":\"object\",\"properties\":{\"addressLine1\":{\"type\":\"string\"},\"addressLine2\":{\"type\":\"string\"},\"city\":{\"type\":\"string\"},\"state\":{\"type\":\"string\"},\"postalCode\":{\"type\":\"string\"},\"country\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"}}},\"poBoxNumber\":{\"type\":\"string\"}}},\"logo\":{\"type\":\"object\",\"properties\":{\"altText\":{\"type\":\"string\"},\"height\":{\"type\":\"number\"},\"width\":{\"type\":\"number\"},\"base64\":{\"type\":\"string\"}}},\"profilePhoto\":{\"type\":\"object\",\"properties\":{\"altText\":{\"type\":\"string\"},\"height\":{\"type\":\"number\"},\"width\":{\"type\":\"number\"},\"base64\":{\"type\":\"string\"}}},\"primaryColor\":{\"type\":\"string\"},\"secondaryColor\":{\"type\":\"string\"},\"linkedin\":{\"type\":\"string\"},\"twitter\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}}}}}},\"required\":[\"attributes\",\"description\"]}}}],\"submode\":\"interact\"}}"
+    },
+    "origin_server_ts": 1747730581662,
+    "unsigned": {
+      "membership": "join",
+      "age": 66222
+    },
+    "event_id": "$FLXKvDojgkj2L6vrw7a3_8vq2w0zv4HGu9pps0ibu3I",
+    "user_id": "@admin:localhost",
+    "age": 66222
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "",
+      "msgtype": "app.boxel.message",
+      "format": "org.matrix.custom.html",
+      "app.boxel.reasoning": "Thinking...",
+      "app.boxel.commandRequests": [],
+      "isStreamingFinished": false
+    },
+    "origin_server_ts": 1747730581708,
+    "unsigned": {
+      "membership": "join",
+      "age": 66176,
+      "m.relations": {
+        "m.replace": {
+          "type": "m.room.message",
+          "room_id": "!kPfqCQancBpffSwcNk:localhost",
+          "sender": "@aibot:localhost",
+          "content": {
+            "body": "",
+            "msgtype": "app.boxel.message",
+            "format": "org.matrix.custom.html",
+            "app.boxel.reasoning": "",
+            "app.boxel.commandRequests": [
+              {
+                "id": "call_jEowBofOsQLw0DfVGLCs7q7d",
+                "name": "patchCardInstance",
+                "arguments": "{\"description\":\"Change the name to Stephanie\",\"attributes\":{\"cardId\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"patch\":{\"attributes\":{\"name\":\"Stephanie\"}}}}"
+              }
+            ],
+            "isStreamingFinished": true,
+            "m.relates_to": {
+              "rel_type": "m.replace",
+              "event_id": "$JvAlylrXjQAhFnESGUP90KMBHMNpm-i9vJ-pRyShhfs"
+            }
+          },
+          "origin_server_ts": 1747730583562,
+          "unsigned": {
+            "age": 64322
+          },
+          "event_id": "$ODFzWdUmTwWoppszqtnnYfgv-yA6jnSkAk0XUrr0OkE",
+          "user_id": "@aibot:localhost",
+          "age": 64322
+        }
+      }
+    },
+    "event_id": "$JvAlylrXjQAhFnESGUP90KMBHMNpm-i9vJ-pRyShhfs",
+    "user_id": "@aibot:localhost",
+    "age": 66176
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithNoOutput",
+      "commandRequestId": "call_jEowBofOsQLw0DfVGLCs7q7d",
+      "m.relates_to": {
+        "event_id": "$JvAlylrXjQAhFnESGUP90KMBHMNpm-i9vJ-pRyShhfs",
+        "key": "applied",
+        "rel_type": "app.boxel.commandAnnotation"
+      }
+    },
+    "origin_server_ts": 1747730587177,
+    "unsigned": {
+      "membership": "join",
+      "age": 60707
+    },
+    "event_id": "$RnLi46No4tOlf-xqQ4gv7BOcQDtfHb2ljt-1uKkFJDY",
+    "user_id": "@admin:localhost",
+    "age": 60707
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.message",
+      "body": "and come up with sample data for the address",
+      "format": "org.matrix.custom.html",
+      "clientGeneratedId": "8ff10c5e-593e-4687-a227-5052149206d5",
+      "data": "{\"attachedFiles\":[],\"attachedCards\":[{\"sourceUrl\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"url\":\"mxc://mock-server/card_v2\",\"name\":null,\"contentType\":\"text/plain\",\"contentHash\":\"6697d999aef7b325e86144a4ff5919c2\"}],\"context\":{\"openCardIds\":[\"http://localhost:4201/admin/personal/BusinessCard/business_card\"],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"patchCardInstance\",\"description\":\"Propose a patch to an existing card instance to change its contents. Any attributes specified will be fully replaced, return the minimum required to make the change. If a relationship field value is removed, set the self property of the specific item to null. When editing a relationship array, display the full array in the patch code. Ensure the description explains what change you are making.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"description\":{\"type\":\"string\"},\"attributes\":{\"type\":\"object\",\"properties\":{\"cardId\":{\"type\":\"string\",\"const\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\"},\"patch\":{\"type\":\"object\",\"properties\":{\"attributes\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"jobTitle\":{\"type\":\"string\"},\"company\":{\"type\":\"string\"},\"email\":{\"type\":\"string\"},\"phone\":{\"type\":\"object\",\"properties\":{\"number\":{\"type\":\"string\"},\"countryCode\":{\"type\":\"string\"}}},\"website\":{\"type\":\"string\"},\"address\":{\"type\":\"object\",\"properties\":{\"addressLine1\":{\"type\":\"string\"},\"addressLine2\":{\"type\":\"string\"},\"city\":{\"type\":\"string\"},\"state\":{\"type\":\"string\"},\"postalCode\":{\"type\":\"string\"},\"country\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"code\":{\"type\":\"string\"}}},\"poBoxNumber\":{\"type\":\"string\"}}},\"logo\":{\"type\":\"object\",\"properties\":{\"altText\":{\"type\":\"string\"},\"height\":{\"type\":\"number\"},\"width\":{\"type\":\"number\"},\"base64\":{\"type\":\"string\"}}},\"profilePhoto\":{\"type\":\"object\",\"properties\":{\"altText\":{\"type\":\"string\"},\"height\":{\"type\":\"number\"},\"width\":{\"type\":\"number\"},\"base64\":{\"type\":\"string\"}}},\"primaryColor\":{\"type\":\"string\"},\"secondaryColor\":{\"type\":\"string\"},\"linkedin\":{\"type\":\"string\"},\"twitter\":{\"type\":\"string\"},\"title\":{\"type\":\"string\"},\"description\":{\"type\":\"string\"},\"thumbnailURL\":{\"type\":\"string\"}}},\"relationships\":{\"type\":\"object\",\"properties\":{}}}}}}},\"required\":[\"attributes\",\"description\"]}}}],\"submode\":\"interact\"}}"
+    },
+    "origin_server_ts": 1747730606183,
+    "unsigned": {
+      "membership": "join",
+      "age": 41701
+    },
+    "event_id": "$w5vRLj-em4sFtR6-G3EfqqKdSQ8DBSS5kTkcRldp7BE",
+    "user_id": "@admin:localhost",
+    "age": 41701
+  },
+  {
+    "type": "m.room.message",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@aibot:localhost",
+    "content": {
+      "body": "",
+      "msgtype": "app.boxel.message",
+      "format": "org.matrix.custom.html",
+      "app.boxel.reasoning": "Thinking...",
+      "app.boxel.commandRequests": [],
+      "isStreamingFinished": false
+    },
+    "origin_server_ts": 1747730606245,
+    "unsigned": {
+      "membership": "join",
+      "age": 41639,
+      "m.relations": {
+        "m.replace": {
+          "type": "m.room.message",
+          "room_id": "!kPfqCQancBpffSwcNk:localhost",
+          "sender": "@aibot:localhost",
+          "content": {
+            "body": "",
+            "msgtype": "app.boxel.message",
+            "format": "org.matrix.custom.html",
+            "app.boxel.reasoning": "",
+            "app.boxel.commandRequests": [
+              {
+                "id": "call_wk06TY9njoAOlIIDGACh478c",
+                "name": "patchCardInstance",
+                "arguments": "{\"description\":\"Add sample data for the address\",\"attributes\":{\"cardId\":\"http://localhost:4201/admin/personal/BusinessCard/business_card\",\"patch\":{\"attributes\":{\"address\":{\"addressLine1\":\"456 Example Street\",\"addressLine2\":\"Apt 789\",\"city\":\"Los Angeles\",\"state\":\"CA\",\"postalCode\":\"90001\",\"country\":{\"name\":\"United States\",\"code\":\"US\"}}}}}}"
+              }
+            ],
+            "isStreamingFinished": true,
+            "m.relates_to": {
+              "rel_type": "m.replace",
+              "event_id": "$lOf5XJv-ndpwIsv01G7OKq1J_odLcMG4FlF2dCy56HI"
+            }
+          },
+          "origin_server_ts": 1747730609749,
+          "unsigned": {
+            "age": 38135
+          },
+          "event_id": "$_FHf9AvjyyYSI-hkRPbLGX4BlRFMsOyDxPQri4M_j7E",
+          "user_id": "@aibot:localhost",
+          "age": 38135
+        }
+      }
+    },
+    "event_id": "$lOf5XJv-ndpwIsv01G7OKq1J_odLcMG4FlF2dCy56HI",
+    "user_id": "@aibot:localhost",
+    "age": 41639
+  },
+  {
+    "type": "app.boxel.commandResult",
+    "room_id": "!kPfqCQancBpffSwcNk:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.commandResultWithNoOutput",
+      "commandRequestId": "call_wk06TY9njoAOlIIDGACh478c",
+      "m.relates_to": {
+        "event_id": "$lOf5XJv-ndpwIsv01G7OKq1J_odLcMG4FlF2dCy56HI",
+        "key": "applied",
+        "rel_type": "app.boxel.commandAnnotation"
+      }
+    },
+    "origin_server_ts": 1747730612623,
+    "unsigned": {
+      "membership": "join",
+      "age": 35261
+    },
+    "event_id": "$mjZrsRHrkvO5rLeZ8mbbTNDjArWqncvRmxRLDvjaNnQ",
+    "user_id": "@admin:localhost",
+    "age": 35261
+  }
+]

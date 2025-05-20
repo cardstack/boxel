@@ -102,3 +102,4 @@ templates:
 
 experimental_features:
   msc3575_enabled: true
+  msc3874_enabled: true
