@@ -2778,6 +2778,107 @@ Attached files:
         '[Omitting previously suggested and rejected code change]\n',
     );
   });
+
+  test('Correctly handles server-side aggregations', async () => {
+    // sending older codeblocks back to the model just confuses it and wastes tokens
+    // so we need to remove them from the prompt
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/server-side-aggregations.json'),
+        'utf-8',
+      ),
+    );
+
+    // Set up mock responses for skill card downloads
+    mockResponses.set('mxc://mock-server/skill_card_v1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          attributes: {
+            instructions: 'Test skill instructions',
+            title: 'Test Skill',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: skillCardRef,
+          },
+        },
+      }),
+    });
+
+    // Set up mock responses for card downloads
+    mockResponses.set('mxc://mock-server/card_v1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/admin/personal/BusinessCard/business_card',
+          attributes: {
+            title: 'Business Card V1',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: skillCardRef,
+          },
+        },
+      }),
+    });
+
+    // Set up mock responses for card downloads
+    mockResponses.set('mxc://mock-server/card_v2', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/admin/personal/BusinessCard/business_card',
+          attributes: {
+            title: 'Business Card V2',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: skillCardRef,
+          },
+        },
+      }),
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages!.length, 9);
+    assert.equal(messages![0].role, 'system');
+    assert.true(messages![0].content!.includes('Business Card V2'));
+    assert.false(messages![0].content!.includes('Business Card V1'));
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(
+      messages![2].content,
+      'I see a card with the ID "http://localhost:4201/admin/personal/BusinessCard/business_card". It appears to be a business card for Jane Smith, a Senior Software Architect at Innovative Solutions Inc.',
+    );
+    assert.equal(messages![3].role, 'user');
+    assert.true(
+      messages![3].content!.startsWith(
+        'User message: change the name to stephanie',
+      ),
+    );
+    assert.equal(messages![4].role, 'assistant');
+    assert.equal(
+      messages![4].tool_calls!.length,
+      1,
+      'Should have one tool call',
+    );
+    assert.equal(
+      messages![4].tool_calls![0].function.name,
+      'patchCardInstance',
+      'Should have patchCardInstance tool call',
+    );
+  });
 });
 
 module('set model in prompt', (hooks) => {
