@@ -6,7 +6,6 @@ import {
   getPromptParts,
   getRelevantCards,
   getTools,
-  OMIT_CODE_CHANGE_PLACEHOLDER,
   SKILL_INSTRUCTIONS_MESSAGE,
 } from '../helpers';
 import {
@@ -2734,13 +2733,150 @@ Attached files:
       messages![2].content,
       'Right, let us make a tic tac toe game.\n' +
         '\n' +
-        '// File url: https://test.com/tic-tac.gts\n' +
-        OMIT_CODE_CHANGE_PLACEHOLDER +
+        'https://test.com/tic-tac.gts\n' +
+        '[Omitting previously suggested code change]' +
         '\n\n' +
-        '// File url: https://test.com/tac-toe.gts\n' +
-        OMIT_CODE_CHANGE_PLACEHOLDER +
+        'https://test.com/tac-toe.gts\n' +
+        '[Omitting previously suggested code change]' +
         '\n\n' +
         'I can add some more whiz bang if you want. Let me know!',
+    );
+  });
+
+  test('Elided code blocks reflect their results', async () => {
+    // Set up mock responses for file downloads
+    mockResponses.set('http://test.com/spaghetti-recipe.gts', {
+      ok: true,
+      text: 'this is the riveting content of the spaghetti-recipe.gts file',
+    });
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(
+          __dirname,
+          'resources/chats/connect-code-blocks-to-results.json',
+        ),
+        'utf-8',
+      ),
+    );
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages!.length, 3);
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(
+      messages![2].content,
+      'Updating the file...\n' +
+        'http://test.com/spaghetti-recipe.gts\n' +
+        '[Omitting previously suggested and applied code change]\n' +
+        '\n' +
+        'I will also create a file for rigatoni:\n' +
+        '\n' +
+        'http://test.com/rigatoni-recipe.gts\n' +
+        '[Omitting previously suggested and rejected code change]\n',
+    );
+  });
+
+  test('Correctly handles server-side aggregations', async () => {
+    // This test uses the /messages api with a filter removing
+    // m.replace messages, relying on server side aggregation
+    const eventList: DiscreteMatrixEvent[] = JSON.parse(
+      readFileSync(
+        path.join(__dirname, 'resources/chats/server-side-aggregations.json'),
+        'utf-8',
+      ),
+    );
+
+    // Set up mock responses for skill card downloads
+    mockResponses.set('mxc://mock-server/skill_card_v1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'https://cardstack.com/base/Skill/skill_card_v1',
+          attributes: {
+            instructions: 'Test skill instructions',
+            title: 'Test Skill',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: skillCardRef,
+          },
+        },
+      }),
+    });
+
+    // Set up mock responses for card downloads
+    mockResponses.set('mxc://mock-server/card_v1', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/admin/personal/BusinessCard/business_card',
+          attributes: {
+            title: 'Business Card V1',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: skillCardRef,
+          },
+        },
+      }),
+    });
+
+    // Set up mock responses for card downloads
+    mockResponses.set('mxc://mock-server/card_v2', {
+      ok: true,
+      text: JSON.stringify({
+        data: {
+          type: 'card',
+          id: 'http://localhost:4201/admin/personal/BusinessCard/business_card',
+          attributes: {
+            title: 'Business Card V2',
+            description: null,
+            thumbnailURL: null,
+          },
+          meta: {
+            adoptsFrom: skillCardRef,
+          },
+        },
+      }),
+    });
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.equal(messages!.length, 9);
+    assert.equal(messages![0].role, 'system');
+    assert.true(messages![0].content!.includes('Business Card V2'));
+    assert.false(messages![0].content!.includes('Business Card V1'));
+    assert.equal(messages![2].role, 'assistant');
+    assert.equal(
+      messages![2].content,
+      'I see a card with the ID "http://localhost:4201/admin/personal/BusinessCard/business_card". It appears to be a business card for Jane Smith, a Senior Software Architect at Innovative Solutions Inc.',
+    );
+    assert.equal(messages![3].role, 'user');
+    assert.true(
+      messages![3].content!.startsWith(
+        'User message: change the name to stephanie',
+      ),
+    );
+    assert.equal(messages![4].role, 'assistant');
+    assert.equal(
+      messages![4].tool_calls!.length,
+      1,
+      'Should have one tool call',
+    );
+    assert.equal(
+      messages![4].tool_calls![0].function.name,
+      'patchCardInstance',
+      'Should have patchCardInstance tool call',
     );
   });
 });

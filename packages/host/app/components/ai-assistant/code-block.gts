@@ -15,7 +15,7 @@ import Modifier from 'ember-modifier';
 
 import { Copy as CopyIcon } from '@cardstack/boxel-ui/icons';
 
-import type { CodeData } from '@cardstack/host/lib/formatted-message/utils';
+import { CodeData } from '@cardstack/host/lib/formatted-message/utils';
 import { MonacoEditorOptions } from '@cardstack/host/modifiers/monaco';
 
 import { MonacoSDK } from '@cardstack/host/services/monaco-service';
@@ -450,6 +450,7 @@ let CodeBlockActionsComponent: TemplateOnlyComponent<CodeBlockActionsSignature> 
             ApplyCodePatchButton
             codePatch=@codeData.searchReplaceBlock
             fileUrl=@codeData.fileUrl
+            index=@codeData.codeBlockIndex
           )
         )
       }}

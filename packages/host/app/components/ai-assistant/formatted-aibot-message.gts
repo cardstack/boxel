@@ -12,13 +12,15 @@ import perform from 'ember-concurrency/helpers/perform';
 
 import { and, bool } from '@cardstack/boxel-ui/helpers';
 
+import { FailureBordered } from '@cardstack/boxel-ui/icons';
+
 import { sanitizeHtml } from '@cardstack/runtime-common/dompurify-runtime';
 
 import {
   type HtmlTagGroup,
   wrapLastTextNodeInStreamingTextSpan,
-  CodeData,
   HtmlPreTagGroup,
+  CodeData,
 } from '@cardstack/host/lib/formatted-message/utils';
 
 import {
@@ -39,6 +41,8 @@ interface FormattedAiBotMessageSignature {
   Element: HTMLDivElement;
   Args: {
     htmlParts?: HtmlTagGroup[];
+    roomId: string;
+    eventId: string;
     monacoSDK: MonacoSDK;
     isStreaming: boolean;
   };
@@ -281,6 +285,18 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
   <template>
     <CodeBlock @monacoSDK={{@monacoSDK}} @codeData={{@codeData}} as |codeBlock|>
       {{#if (bool @codeData.searchReplaceBlock)}}
+        {{#if this.codeDiffResource.errorMessage}}
+          <div
+            class='error-message'
+            data-test-error-message={{this.codeDiffResource.errorMessage}}
+          >
+            <FailureBordered class='error-icon' />
+            <div class='error-message-content'>
+              <b>Code could not be displayed: </b>
+              {{this.codeDiffResource.errorMessage}}
+            </div>
+          </div>
+        {{/if}}
         {{#if this.codeDiffResource.isDataLoaded}}
           <codeBlock.actions as |actions|>
             <actions.copyCode @code={{this.codeDiffResource.modifiedCode}} />
@@ -305,5 +321,26 @@ class HtmlGroupCodeBlock extends Component<HtmlGroupCodeBlockSignature> {
         <codeBlock.editor />
       {{/if}}
     </CodeBlock>
+
+    <style scoped>
+      .error-message {
+        background-color: var(--boxel-danger);
+        color: var(--boxel-light);
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        margin-bottom: var(--boxel-sp-xs);
+      }
+
+      .error-message > svg {
+        margin-top: 0px;
+      }
+
+      .error-icon {
+        --icon-background-color: var(--boxel-light);
+        --icon-color: var(--boxel-danger);
+        margin-top: var(--boxel-sp-5xs);
+      }
+    </style>
   </template>
 }

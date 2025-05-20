@@ -9,27 +9,33 @@ import {
 import { ToolChoice } from '@cardstack/runtime-common/helpers/ai';
 import type {
   MatrixEvent as DiscreteMatrixEvent,
-  Tool,
-  SkillsConfigEvent,
   ActiveLLMEvent,
-  CardMessageEvent,
-  CommandResultEvent,
   CardMessageContent,
+  CardMessageEvent,
+  MessageEvent,
+  CommandResultEvent,
   EncodedCommandRequest,
+  SkillsConfigEvent,
+  Tool,
+  CodePatchResultEvent,
+  RealmServerEvent,
 } from 'https://cardstack.com/base/matrix-event';
 import { MatrixEvent, type IRoomEvent } from 'matrix-js-sdk';
 import { ChatCompletionMessageToolCall } from 'openai/resources/chat/completions';
 import * as Sentry from '@sentry/node';
 import { logger } from '@cardstack/runtime-common';
 import {
-  APP_BOXEL_MESSAGE_MSGTYPE,
-  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
-  DEFAULT_LLM,
   APP_BOXEL_ACTIVE_LLM,
+  APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE,
+  APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_REQUESTS_KEY,
   APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   APP_BOXEL_COMMAND_RESULT_REL_TYPE,
+  APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE,
   APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE,
+  APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_LLM,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import { SerializedFileDef, downloadFile, MatrixClient } from './lib/matrix';
@@ -131,6 +137,62 @@ export async function getPromptParts(
   };
 }
 
+function getAggregatedReplacement(event: IRoomEvent) {
+  /**
+   * When replacements are applied, the server aggregates
+   * them into a single event.
+   *
+   * The latest version is placed within the unsigned
+   * section of the event.
+   *
+   * Here we extract any replacement and return the
+   * latest version, but with *the original id*
+   */
+  let finalRawEvent: IRoomEvent;
+  const originalEventId = event.event_id;
+  let replacedRawEvent: IRoomEvent =
+    event.unsigned?.['m.relations']?.['m.replace'];
+  if (replacedRawEvent) {
+    finalRawEvent = replacedRawEvent;
+    finalRawEvent.event_id = originalEventId;
+  } else {
+    finalRawEvent = event;
+  }
+  return finalRawEvent;
+}
+
+function applyAllReplacements(eventlist: IRoomEvent[]): IRoomEvent[] {
+  // First apply any server-side aggregations
+  let eventsWithAggregatedReplacements = eventlist.map(
+    getAggregatedReplacement,
+  );
+  // Now if the event list we have doesn't have aggregations but still
+  // has replacements, we need to apply them manually
+  // TODO: remove this as part of #CS-8662
+  let eventsMap = new Map<string, IRoomEvent>();
+  for (let event of eventsWithAggregatedReplacements) {
+    let canonicalEventId;
+    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
+      canonicalEventId = event.content['m.relates_to'].event_id!;
+    } else {
+      canonicalEventId = event.event_id!;
+    }
+    if (eventsMap.has(canonicalEventId)) {
+      let existingEvent = eventsMap.get(canonicalEventId)!;
+      // Events can be replaced multiple times, we only want the latest version
+      if (existingEvent.origin_server_ts < event.origin_server_ts) {
+        event.event_id = canonicalEventId;
+        eventsMap.set(canonicalEventId, event);
+      }
+    } else {
+      eventsMap.set(canonicalEventId, event);
+    }
+  }
+  let updatedEvents = Array.from(eventsMap.values());
+  updatedEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
+  return updatedEvents;
+}
+
 export async function constructHistory(
   eventlist: IRoomEvent[],
   client: MatrixClient,
@@ -144,12 +206,20 @@ export async function constructHistory(
    * This function is to construct the chat as a user
    * would see it - with only the latest event for each
    * message.
+   *
+   * When replacements are applied, the server aggregates
+   * them into a single event.
    */
-  const latestEventsMap = new Map<string, DiscreteMatrixEvent>();
-  for (let rawEvent of eventlist) {
+  let latestEvents: DiscreteMatrixEvent[] = [];
+
+  const eventListWithReplacementsApplied = applyAllReplacements(eventlist);
+
+  for (let rawEvent of eventListWithReplacementsApplied) {
     if (rawEvent.content.data) {
       try {
-        rawEvent.content.data = JSON.parse(rawEvent.content.data);
+        if (typeof rawEvent.content.data === 'string') {
+          rawEvent.content.data = JSON.parse(rawEvent.content.data);
+        }
       } catch (e) {
         Sentry.captureException(e, {
           attachments: [
@@ -165,12 +235,20 @@ export async function constructHistory(
     }
     let event = { ...rawEvent } as DiscreteMatrixEvent;
     if (
-      event.type !== 'm.room.message' &&
-      event.type !== APP_BOXEL_COMMAND_RESULT_EVENT_TYPE
+      ![
+        'm.room.message',
+        APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
+        APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE,
+      ].includes(event.type)
     ) {
       continue;
     }
-    let eventId = event.event_id!;
+    event = event as
+      | CardMessageEvent
+      | CommandResultEvent
+      | CodePatchResultEvent
+      | RealmServerEvent
+      | MessageEvent; // Typescript could have inferred this from the line above
     if (event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE) {
       let { attachedCards } = event.content.data ?? {};
       if (attachedCards && attachedCards.length > 0) {
@@ -206,27 +284,8 @@ export async function constructHistory(
         };
       }
     }
-
-    // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-    if (event.content['m.relates_to']?.rel_type === 'm.replace') {
-      // @ts-ignore Fix type related issues in ai bot after introducing linting (CS-8468)
-      eventId = event.content['m.relates_to']!.event_id!;
-      event.event_id = eventId;
-    }
-    const existingEvent = latestEventsMap.get(eventId);
-    if (
-      !existingEvent ||
-      // we check the timestamps of the events because the existing event may
-      // itself be an already replaced event. The idea is that you can perform
-      // multiple replacements on an event. In order to prevent backing out a
-      // subsequent replacement we also assert that the replacement timestamp is
-      // after the event that it is replacing
-      existingEvent.origin_server_ts < event.origin_server_ts
-    ) {
-      latestEventsMap.set(eventId, event);
-    }
+    latestEvents.push(event);
   }
-  let latestEvents = Array.from(latestEventsMap.values());
   latestEvents.sort((a, b) => a.origin_server_ts - b.origin_server_ts);
   return latestEvents;
 }
@@ -252,6 +311,10 @@ function getShouldRespond(history: DiscreteMatrixEvent[]): boolean {
       return history.slice(lastEventIndex).some((event) => {
         return (
           event.type === APP_BOXEL_COMMAND_RESULT_EVENT_TYPE &&
+          (event.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+            event.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
           event.content.commandRequestId === commandRequest.id
         );
       });
@@ -545,6 +608,22 @@ function getCommandResults(
   return commandResultEvents;
 }
 
+function getCodePatchResults(
+  cardMessageEvent: CardMessageEvent,
+  history: DiscreteMatrixEvent[],
+) {
+  let codePatchResultEvents = history.filter((e) => {
+    if (
+      isCodePatchResultEvent(e) &&
+      e.content['m.relates_to']?.event_id === cardMessageEvent.event_id
+    ) {
+      return true;
+    }
+    return false;
+  }) as CodePatchResultEvent[];
+  return codePatchResultEvents;
+}
+
 function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
   const content = event.content as CardMessageContent;
   return (content[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
@@ -563,15 +642,18 @@ function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
 
 function toPromptMessageWithToolResults(
   event: CardMessageEvent,
-  history: DiscreteMatrixEvent[],
+  commandResults: CommandResultEvent[] = [],
 ): OpenAIPromptMessage[] {
-  let commandResults = getCommandResults(event, history);
   const messageContent = event.content as CardMessageContent;
   return (messageContent[APP_BOXEL_COMMAND_REQUESTS_KEY] ?? []).map(
     (commandRequest: Partial<EncodedCommandRequest>) => {
       let content = 'pending';
       let commandResult = commandResults.find(
         (commandResult) =>
+          (commandResult.content.msgtype ===
+            APP_BOXEL_COMMAND_RESULT_WITH_OUTPUT_MSGTYPE ||
+            commandResult.content.msgtype ===
+              APP_BOXEL_COMMAND_RESULT_WITH_NO_OUTPUT_MSGTYPE) &&
           commandResult.content.commandRequestId === commandRequest.id,
       );
       if (commandResult) {
@@ -629,9 +711,17 @@ export async function getModifyPrompt(
     let body = event.content.body;
     if (event.sender === aiBotUserId) {
       let toolCalls = toToolCalls(event as CardMessageEvent);
+      let commandResults = getCommandResults(
+        event as CardMessageEvent,
+        history,
+      );
+      let codePatchReults = getCodePatchResults(
+        event as CardMessageEvent,
+        history,
+      );
       let historicalMessage: OpenAIPromptMessage = {
         role: 'assistant',
-        content: elideCodeBlocks(body),
+        content: elideCodeBlocks(body, codePatchReults),
       };
       if (toolCalls.length) {
         historicalMessage.tool_calls = toolCalls;
@@ -640,7 +730,7 @@ export async function getModifyPrompt(
       if (toolCalls.length) {
         toPromptMessageWithToolResults(
           event as CardMessageEvent,
-          history,
+          commandResults,
         ).forEach((message) => historicalMessages.push(message));
       }
     }
@@ -675,6 +765,13 @@ export async function getModifyPrompt(
     aiBotUserId,
   );
 
+  let lastMessageEventByUser = history.findLast(
+    (event) => event.sender !== aiBotUserId,
+  );
+
+  let realmUrl = (lastMessageEventByUser as CardMessageEvent).content.data
+    ?.context?.realmUrl;
+
   let systemMessage = `${MODIFY_SYSTEM_MESSAGE}
 The user currently has given you the following data to work with:
 
@@ -682,6 +779,8 @@ Cards: ${attachedCardsToMessage(mostRecentlyAttachedCard, attachedCards)}
 
 Attached files:
 ${attachedFilesToPrompt(attachedFiles)}
+
+The user is operating in a realm with this URL: ${realmUrl}
 `;
 
   if (skillCards.length) {
@@ -772,9 +871,46 @@ export function isCommandResultEvent(
   );
 }
 
-export const OMIT_CODE_CHANGE_PLACEHOLDER: string =
-  '[Omitting previously suggested code change]';
-function elideCodeBlocks(content: string) {
+export function isCodePatchResultEvent(
+  event?: DiscreteMatrixEvent,
+): event is CodePatchResultEvent {
+  if (event === undefined) {
+    return false;
+  }
+  return (
+    event.type === APP_BOXEL_CODE_PATCH_RESULT_EVENT_TYPE &&
+    event.content['m.relates_to']?.rel_type ===
+      APP_BOXEL_CODE_PATCH_RESULT_REL_TYPE
+  );
+}
+
+function elideCodeBlocks(
+  content: string,
+  codePatchResults: CodePatchResultEvent[],
+) {
+  const DEFAULT_PLACEHOLDER: string =
+    '[Omitting previously suggested code change]';
+  const PLACEHOLDERS = {
+    applied: '[Omitting previously suggested and applied code change]',
+    rejected: '[Omitting previously suggested and rejected code change]',
+    failed: '[Omitting previously suggested code change that failed to apply]',
+  };
+
+  function getPlaceholder(codeBlockIndex: number) {
+    let codePatchResult = codePatchResults.find((codePatchResult) => {
+      return codePatchResult.content.codeBlockIndex === codeBlockIndex;
+    });
+    if (codePatchResult) {
+      return (
+        PLACEHOLDERS[codePatchResult.content['m.relates_to'].key] ??
+        DEFAULT_PLACEHOLDER
+      );
+    }
+    return DEFAULT_PLACEHOLDER;
+  }
+
+  let codeBlockIndex = 0;
+
   while (
     content.includes(SEARCH_MARKER) &&
     content.includes(SEPARATOR_MARKER) &&
@@ -793,8 +929,10 @@ function elideCodeBlocks(content: string) {
     // replace the content between the markers with a placeholder
     content =
       content.substring(0, searchStartIndex) +
-      OMIT_CODE_CHANGE_PLACEHOLDER +
+      getPlaceholder(codeBlockIndex) +
       content.substring(replaceEndIndex + REPLACE_MARKER.length);
+
+    codeBlockIndex++;
   }
   return content;
 }

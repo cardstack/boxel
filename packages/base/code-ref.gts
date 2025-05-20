@@ -146,6 +146,7 @@ export default class CodeRefField extends FieldDef {
   static async [deserialize]<T extends BaseDefConstructor>(
     this: T,
     codeRef: ResolvedCodeRef | {},
+    _relativeTo: URL | undefined,
   ): Promise<BaseInstanceType<T>> {
     return { ...codeRef } as BaseInstanceType<T>; // return a new object so that the model cannot be mutated from the outside
   }
@@ -164,6 +165,21 @@ export default class CodeRefField extends FieldDef {
   static embedded = class Embedded extends BaseView {};
 
   static edit = EditView;
+}
+
+export class AbsoluteCodeRefField extends CodeRefField {
+  static async [deserialize]<T extends BaseDefConstructor>(
+    this: T,
+    codeRef: ResolvedCodeRef | {},
+    relativeTo: URL | undefined,
+  ): Promise<BaseInstanceType<T>> {
+    return {
+      ...codeRef,
+      ...codeRefAdjustments(codeRef, relativeTo?.toString(), {
+        useAbsoluteURL: true,
+      }),
+    } as BaseInstanceType<T>;
+  }
 }
 
 function maybeSerializeCodeRef(

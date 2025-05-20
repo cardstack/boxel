@@ -138,7 +138,7 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@admin:localhost",
     "content": {
-      "name": "Writing Some Code"
+      "name": "Weather Travel Advice"
     },
     "state_key": "",
     "origin_server_ts": 1736864362810,
@@ -302,10 +302,10 @@
     "sender": "@admin:localhost",
     "content": {
       "msgtype": "app.boxel.message",
-      "body": "Write me some code to play tic tac toe",
+      "body": "Please update this file to be less riveting and more engagaing.",
       "format": "org.matrix.custom.html",
       "clientGeneratedId": "4a3d6e7f-f492-48de-b3e5-7ef8c5bda696",
-      "data": "{\"attachedCards\":[{\"sourceUrl\":\"http://test-realm-server/my-realm/tic-tac.gts\",\"url\":\"http://test.com/tic-tac.gts\",\"name\":\"tic-tac.gts\",\"contentType\":\"text/plain\"}],\"context\":{\"tools\":[],\"requireToolCall\":false}}"
+      "data": "{\"context\":{\"tools\":[],\"functions\":[]},\"attachedFiles\":[{\"sourceUrl\":\"http://test-realm-server/my-realm/spaghetti-recipe.gts\",\"url\":\"http://test.com/spaghetti-recipe.gts\",\"name\":\"spaghetti-recipe.gts\",\"contentType\":\"text/plain\"}]}"
     },
     "origin_server_ts": 1736864363324,
     "unsigned": {
@@ -322,7 +322,8 @@
     "content": {
       "body": "Thinking...",
       "msgtype": "m.text",
-      "format": "org.matrix.custom.html"
+      "format": "org.matrix.custom.html",
+      "isStreamingFinished": true
     },
     "origin_server_ts": 1736864365020,
     "unsigned": {
@@ -337,11 +338,10 @@
     "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
     "sender": "@aibot:localhost",
     "content": {
-      "body": "Right, let us make a tic tac toe game.\n\nhttps://test.com/tic-tac.gts\n<<<<<<< SEARCH\nlet a = 1;\n=======\nlet a = 2;\n>>>>>>> REPLACE\n\nhttps://test.com/tac-toe.gts\n<<<<<<< SEARCH\nlet b = 2;\n=======\nlet b = 3;\n>>>>>>> REPLACE\n\nI can add some more whiz bang if you want. Let me know!",
+      "body": "Updating the file...\nhttp://test.com/spaghetti-recipe.gts\n<<<<<<< SEARCH\nthis is the riveting content of the spaghetti-recipe.gts file\n=======\nthis is the engaging content of the spaghetti-recipe.gts file\n>>>>>>> REPLACE\n\nI will also create a file for rigatoni:\n\nhttp://test.com/rigatoni-recipe.gts\n<<<<<<< SEARCH\n=======\nthis is the holy content of the rigatoni-recipe.gts file\n>>>>>>> REPLACE\n",
       "msgtype": "app.boxel.message",
       "format": "org.matrix.custom.html",
-      "data": "{}",
-      "app.boxel.commandRequests": [],
+      "isStreamingFinished": true,
       "m.relates_to": {
         "rel_type": "m.replace",
         "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE"
@@ -354,5 +354,47 @@
     "event_id": "$V4k751dVMZphpB6P7OJ3Q-vRbTihn5KekUpTNL1LVpE",
     "user_id": "@aibot:localhost",
     "age": 63517
+  },
+  {
+    "type": "app.boxel.codePatchResult",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.codePatchResult",
+      "m.relates_to": {
+        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
+        "key": "applied",
+        "rel_type": "app.boxel.codePatchAnnotation"
+      },
+      "codeBlockIndex": 0
+    },
+    "origin_server_ts": 1736864370892,
+    "unsigned": {
+      "age": 63267
+    },
+    "event_id": "$92DJh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOEJTk",
+    "user_id": "@admin:localhost",
+    "age": 63267
+  },
+  {
+    "type": "app.boxel.codePatchResult",
+    "room_id": "!EtlFgGnAaFCLoozHPV:localhost",
+    "sender": "@admin:localhost",
+    "content": {
+      "msgtype": "app.boxel.codePatchResult",
+      "m.relates_to": {
+        "event_id": "$VyCYG0DAuudwMGN8hStuSVfXrjMVZu2ZcJgIs9sIwLE",
+        "key": "rejected",
+        "rel_type": "app.boxel.codePatchAnnotation"
+      },
+      "codeBlockIndex": 1
+    },
+    "origin_server_ts": 1736864370893,
+    "unsigned": {
+      "age": 63267
+    },
+    "event_id": "$000Jh6JsIg0z0GmnkylmSz9BWPLcrN8pWnk1fiOE111",
+    "user_id": "@admin:localhost",
+    "age": 63267
   }
 ]

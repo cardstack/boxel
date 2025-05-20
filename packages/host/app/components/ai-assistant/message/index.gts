@@ -48,6 +48,7 @@ interface Signature {
     collectionResource?: ReturnType<getCardCollection>;
     files?: FileDef[] | undefined;
     index: number;
+    roomId: string;
     eventId: string;
     monacoSDK: MonacoSDK;
     registerScroller: (args: {
@@ -269,6 +270,8 @@ export default class AiAssistantMessage extends Component<Signature> {
             <FormattedAiBotMessage
               @monacoSDK={{@monacoSDK}}
               @htmlParts={{@messageHTMLParts}}
+              @roomId={{@roomId}}
+              @eventId={{@eventId}}
               @isStreaming={{@isStreaming}}
             />
           {{else}}
