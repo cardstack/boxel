@@ -417,7 +417,7 @@ export default class CodeEditor extends Component<Signature> {
         --vscode-scrollbar-shadow: rgba(0 0 0 / 20%);
       }
       .monaco-container :deep(.monaco-editor .sticky-widget) {
-        box-shadow: 0 1px 25px -2px var(--vscode-editorStickyScroll-shadow);
+        box-shadow: 0 1px 15px -2px var(--vscode-editorStickyScroll-shadow);
       }
       .monaco-container.readonly
         :deep(.monaco-editor .view-overlays .current-line-exact) {
