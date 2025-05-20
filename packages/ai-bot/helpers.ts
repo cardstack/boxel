@@ -168,6 +168,7 @@ function applyAllReplacements(eventlist: IRoomEvent[]): IRoomEvent[] {
   );
   // Now if the event list we have doesn't have aggregations but still
   // has replacements, we need to apply them manually
+  // TODO: remove this as part of #CS-8662
   let eventsMap = new Map<string, IRoomEvent>();
   for (let event of eventsWithAggregatedReplacements) {
     let canonicalEventId;
