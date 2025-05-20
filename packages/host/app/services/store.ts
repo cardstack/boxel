@@ -338,7 +338,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     let linkedCards = await this.loadPatchedInstances(
       patch,
-      new URL(instance.id),
+      instance.id ? new URL(instance.id) : undefined,
     );
     for (let [field, value] of Object.entries(linkedCards)) {
       if (field.includes('.')) {
@@ -417,6 +417,10 @@ export default class StoreService extends Service implements StoreInterface {
 
   getReferenceCount(id: string) {
     return this.referenceCount.get(id) ?? 0;
+  }
+
+  isSameId(a: string, b: string): boolean {
+    return a === b || this.peek(a) === this.peek(b);
   }
 
   private async wireUpNewReference(url: string) {
@@ -1112,7 +1116,7 @@ export default class StoreService extends Service implements StoreInterface {
 
   private async loadPatchedInstances(
     patchData: PatchData,
-    relativeTo: URL,
+    relativeTo: URL | undefined,
   ): Promise<{
     [fieldName: string]: CardDef | CardDef[];
   }> {
@@ -1144,7 +1148,10 @@ export default class StoreService extends Service implements StoreInterface {
     return result;
   }
 
-  private async loadRelationshipInstance(rel: Relationship, relativeTo: URL) {
+  private async loadRelationshipInstance(
+    rel: Relationship,
+    relativeTo: URL | undefined,
+  ) {
     if (!rel.links?.self) {
       return;
     }
